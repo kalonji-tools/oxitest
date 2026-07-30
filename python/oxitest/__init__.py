@@ -131,6 +131,7 @@ from oxitest._bridge._debugger import (
 from oxitest._bridge._errors import (
     ArrangeError as ArrangeError,
     AutouseRegistrationError as AutouseRegistrationError,
+    BoundaryError as BoundaryError,
     SharedFixtureMutationError as SharedFixtureMutationError,
 )
 from oxitest._bridge._fixture_decorator import fixture as fixture
@@ -177,6 +178,7 @@ __all__ = [
     "AsyncSession",
     "AutouseRegistrationError",
     "Both",
+    "BoundaryError",
     "CaptureResult",
     "Cli",
     "CliExtension",

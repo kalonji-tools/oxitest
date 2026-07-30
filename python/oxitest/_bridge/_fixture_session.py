@@ -20,6 +20,8 @@ from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge._errors import (
     AsyncFixtureAccessError,
+    BoundaryError,
+    FixtureError,
     FixtureNotFoundError,
     FixtureTypeNotFoundError,
     UnannotatedFixtureParamError,
@@ -133,6 +135,8 @@ class _SessionProtocol(Protocol):
     ) -> Any: ...
 
     def has_namespace(self, namespace: str) -> bool: ...
+
+    def has_visible_namespace(self, namespace: str, module_path: str) -> bool: ...
 
     def get_fixture_timings(self) -> tuple[FixtureTiming, ...]: ...
 
@@ -757,6 +761,47 @@ class FixtureSession:
         """Return True if any registered fixture belongs to the given namespace."""
         return self._registry.has_namespace(namespace)
 
+    def has_visible_namespace(self, namespace: str, module_path: str) -> bool:
+        """Whether *namespace* holds anything reachable from *module_path*."""
+        return self._registry.has_visible_namespace(namespace, module_path)
+
+    def fixture_lookup_error(
+        self, name: str, namespace: str, module_path: str
+    ) -> FixtureError:
+        """The right error for a failed *visible* lookup: boundary or not-found.
+
+        The error type is a function of the **segment** alone, never the leaf:
+
+        - segment reachable from here → ``FixtureNotFoundError``. The access is
+          legal; the name is wrong.
+        - segment unreachable but declared somewhere → ``BoundaryError``. Stated
+          first even when the leaf is also misspelled, because the boundary
+          statement is true either way and a leaf-first message implies that
+          fixing the spelling makes the access work.
+        - segment unknown anywhere → ``FixtureNotFoundError``.
+
+        A namespace built only from conftest ``Fixtures()`` instances reports no
+        anchors and therefore never reaches the ``BoundaryError`` branch — the
+        legacy API is exempt from B1 until #1720 retires it (#1760).
+
+        The guarantee is scoped to directory anchors. Inline declarations are
+        registered on module import, so their presence in the full catalog
+        depends on worker assignment, ``-k`` selection, and import order; a
+        ``BoundaryError`` for one would be a diagnostic that changes with the
+        schedule. They fall through to ``FixtureNotFoundError``, whose hint
+        names the inline cap unconditionally (#1759).
+        """
+        if self._registry.has_visible_namespace(namespace, module_path):
+            return FixtureNotFoundError(name, namespace=namespace)
+        anchors = self._registry.namespace_anchors(namespace)
+        if not anchors:
+            return FixtureNotFoundError(name, namespace=namespace)
+        defn = self._registry.get_in_namespace(name, namespace)
+        anchor = (defn.anchor if defn is not None else None) or anchors[0]
+        return BoundaryError(
+            name, namespace, anchor, module_path, leaf_exists=defn is not None
+        )
+
     # ── Resolution ────────────────────────────────────────────────────────────
 
     def resolve_for_test(
@@ -822,7 +867,7 @@ class FixtureSession:
         self, name: str, module_path: str, fn_teardowns: list[Callable[[], None]]
     ) -> Any:
         ctx = _ResolutionContext(
-            module_path, fn_teardowns, frozenset(), self._scope_for
+            module_path, fn_teardowns, frozenset(), self._scope_for, module_path
         )
         return self._instantiator.resolve_fixture(name, ctx)
 
@@ -864,11 +909,11 @@ class FixtureSession:
         *,
         test_is_async: bool = True,
     ) -> Any:
-        defn = self._registry.get_in_namespace(name, namespace)
-        if defn is None or not defn.is_visible_from(module_path):
-            raise FixtureNotFoundError(name, namespace=namespace)
+        defn = self._registry.get_visible_in_namespace(name, namespace, module_path)
+        if defn is None:
+            raise self.fixture_lookup_error(name, namespace, module_path)
         ctx = _ResolutionContext(
-            module_path, fn_teardowns, frozenset(), self._scope_for
+            module_path, fn_teardowns, frozenset(), self._scope_for, module_path
         )
         if defn.is_async:
             # ADR-0006's illegal cell, on the proxy path. Raised here rather

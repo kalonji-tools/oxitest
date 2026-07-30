@@ -11,6 +11,7 @@ from oxitest._bridge._builtins._capture import FdCapture, StdCapture
 from oxitest._bridge._builtins._logcapture import LogCapture
 from oxitest._bridge._builtins._patch import Patcher
 from oxitest._bridge._builtins._tempdir import TempDir, TempDirFactory
+from oxitest._bridge._errors import FixtureNotFoundError
 from oxitest._bridge._test_meta import TestMeta
 
 if TYPE_CHECKING:
@@ -200,6 +201,11 @@ class FixturesProxy(_CachingProxy):
             raise AttributeError(name)
 
         def _resolve() -> Any:
+            # Segment precedence, in order. #1714 inserts the top-level
+            # fixture-name branch immediately BELOW the namespace branch: a
+            # package segment wins over a same-named fixture, which is
+            # reachable only by its qualified path. There is no fixture branch
+            # here yet, so that rule is currently true vacuously.
             if name == "oxi":
                 return OxiNamespaceProxy(
                     self._session,
@@ -207,18 +213,25 @@ class FixturesProxy(_CachingProxy):
                     self._fn_teardowns,
                     self._fn_name,
                 )
-            if not self._session.has_namespace(name):
-                msg = (
-                    f"no fixture namespace '{name}' — did you define a "
-                    f"Fixtures() instance named '{name}' in conftest.py?"
+            if self._session.has_namespace(name):
+                # Deliberately the FULL-catalog query. A segment this test
+                # cannot reach still yields a proxy — inert, like every other
+                # proxy here, until a leaf is touched. Refusing at the segment
+                # would mean never learning WHICH fixture was wanted, and the
+                # BoundaryError has to name the fixture's anchor.
+                return NamespaceProxy(
+                    name,
+                    self._session,
+                    self._module_path,
+                    self._fn_teardowns,
+                    test_is_async=self._test_is_async,
                 )
-                raise AttributeError(msg)
-            return NamespaceProxy(
-                name,
-                self._session,
-                self._module_path,
-                self._fn_teardowns,
-                test_is_async=self._test_is_async,
+            msg = (
+                f"no fixture namespace '{name}'.\n"
+                f"  Hint: a namespace is the directory name of the package "
+                f"whose __fixtures__.py declares the fixture, or the name of a "
+                f"Fixtures() instance. Check the spelling."
             )
+            raise FixtureNotFoundError(name, message=msg)
 
         return self._get_cached(name, _resolve)

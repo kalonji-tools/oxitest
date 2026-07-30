@@ -15,6 +15,7 @@ from oxitest._bridge._fixture_instantiator import (
     DispatchContext,
     FixtureInstantiator,
     ScopeRefs,
+    _boundary_for,
     _ResolutionContext,
 )
 from oxitest._bridge._fixture_registry import (
@@ -22,8 +23,10 @@ from oxitest._bridge._fixture_registry import (
     FixtureDef,
     FixtureRegistry,
     FixtureScope,
+    ModuleSource,
     PluginSource,
 )
+from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.plugin_loader import PluginRegistry
 
@@ -50,7 +53,7 @@ def test_resolve_simple_fixture() -> None:
     teardowns: list = []
 
     ctx = _ResolutionContext(
-        "test.py", teardowns, frozenset(), lambda _defn, _mod: None
+        "test.py", teardowns, frozenset(), lambda _defn, _mod: None, "test.py"
     )
     result = inst.resolve_fixture("db", ctx)
 
@@ -74,7 +77,9 @@ def test_resolve_cycle_raises() -> None:
     with raises(FixtureCycleError):
         inst.resolve_fixture(
             "a",
-            _ResolutionContext("test.py", [], frozenset(), lambda _defn, _mod: None),
+            _ResolutionContext(
+                "test.py", [], frozenset(), lambda _defn, _mod: None, "test.py"
+            ),
         )
 
 
@@ -85,7 +90,9 @@ def test_resolve_not_found_raises() -> None:
     with raises(FixtureNotFoundError):
         inst.resolve_fixture(
             "nope",
-            _ResolutionContext("test.py", [], frozenset(), lambda _defn, _mod: None),
+            _ResolutionContext(
+                "test.py", [], frozenset(), lambda _defn, _mod: None, "test.py"
+            ),
         )
 
 
@@ -102,7 +109,9 @@ def test_resolve_shared_uses_scope_refs() -> None:
     shared_misses: dict = {}
     scope_refs = ScopeRefs(shared_cache, shared_teardowns, shared_hits, shared_misses)
 
-    ctx = _ResolutionContext("test.py", [], frozenset(), lambda _defn, _mod: scope_refs)
+    ctx = _ResolutionContext(
+        "test.py", [], frozenset(), lambda _defn, _mod: scope_refs, "test.py"
+    )
     inst.resolve_fixture("shared_db", ctx)
 
     assert "shared_db" in shared_cache, (
@@ -117,7 +126,10 @@ def test_timing_recorded() -> None:
     )
 
     inst.resolve_fixture(
-        "fast", _ResolutionContext("test.py", [], frozenset(), lambda _defn, _mod: None)
+        "fast",
+        _ResolutionContext(
+            "test.py", [], frozenset(), lambda _defn, _mod: None, "test.py"
+        ),
     )
 
     timings = inst.get_fixture_timings()
@@ -174,7 +186,7 @@ def test_resolve_param_by_type_not_name() -> None:
         resolve_user_fixture=lambda n: inst.resolve_fixture(
             n,
             _ResolutionContext(
-                "t.py", teardowns, frozenset(), lambda _defn, _mod: None
+                "t.py", teardowns, frozenset(), lambda _defn, _mod: None, "t.py"
             ),
         ),
     )
@@ -208,7 +220,7 @@ def test_resolve_param_type_miss_name_fallback() -> None:
         resolve_user_fixture=lambda n: inst.resolve_fixture(
             n,
             _ResolutionContext(
-                "t.py", teardowns, frozenset(), lambda _defn, _mod: None
+                "t.py", teardowns, frozenset(), lambda _defn, _mod: None, "t.py"
             ),
         ),
     )
@@ -318,4 +330,92 @@ def test_resolve_by_source_plugin() -> None:
     )
     assert len(teardowns) == 1, (
         "should register provider.teardown in teardowns list for cleanup"
+    )
+
+
+# ─── B1 boundary descent ─────────────────────────────────────────────────────
+
+
+def test_boundary_switches_to_the_fixture_anchor_and_stops_at_unanchored_sources() -> (
+    None
+):
+    """_boundary_for: ModuleSource replaces the boundary, everything else keeps it."""
+    # Arrange
+    anchored = FixtureDef(
+        name="conn",
+        fixture_type=object,
+        scope=FixtureScope.EACH,
+        source=ModuleSource(
+            func=lambda: None,
+            defining_module_path="/t/api/__fixtures__.py",
+            anchor_package_path="/t/api",
+            lifetime=Lifetime.FUNCTION,
+        ),
+        namespace="api",
+    )
+    unanchored = FixtureDef(
+        name="legacy",
+        fixture_type=object,
+        scope=FixtureScope.EACH,
+        source=ConftestSource(func=lambda: None, conftest_path="/t/conftest.py"),
+    )
+    ctx = _ResolutionContext(
+        "/t/api/v1/test_v1.py",
+        [],
+        frozenset(),
+        lambda _defn, _mod: None,
+        "/t/api/v1/test_v1.py",
+    )
+
+    # Act
+    anchored_boundary = _boundary_for(anchored, ctx)
+    unanchored_boundary = _boundary_for(unanchored, ctx)
+
+    # Assert
+    assert anchored_boundary == "/t/api", (
+        "descending into a package fixture's dependencies must narrow the "
+        "boundary to that package, which is ADR-0009 line 209's 'at "
+        "declaration time' clause"
+    )
+    assert unanchored_boundary == "/t/api/v1/test_v1.py", (
+        "conftest, plugin and builtin fixtures are exempt from B1, so they must "
+        "leave the boundary alone rather than widening it to nothing or "
+        "collapsing it to a path they do not have"
+    )
+
+
+def test_a_fixture_cannot_reach_a_dependency_below_its_own_anchor() -> None:
+    """The narrowed boundary is what refuses the illegal dependency."""
+    # Arrange — `thing` is anchored at /t/api/v1, one level below `conn`'s /t/api
+    registry = FixtureRegistry()
+    registry.register(
+        FixtureDef(
+            name="thing",
+            fixture_type=object,
+            scope=FixtureScope.EACH,
+            source=ModuleSource(
+                func=object,
+                defining_module_path="/t/api/v1/__fixtures__.py",
+                anchor_package_path="/t/api/v1",
+                lifetime=Lifetime.FUNCTION,
+            ),
+            namespace="v1",
+        )
+    )
+
+    # Act — the calling test lives in v1 and may use `thing` directly; a fixture
+    # anchored at /t/api, resolving its own dependencies, may not.
+    visible_to_test = registry.get_visible("thing", "/t/api/v1/test_v1.py")
+    visible_to_conn = registry.get_visible("thing", "/t/api")
+
+    # Assert
+    assert visible_to_test is not None, (
+        "the control: a test that genuinely lives in v1 must keep resolving "
+        "v1's fixtures, or the fix has banned legal access along with illegal"
+    )
+    assert visible_to_conn is None, (
+        "a fixture anchored at /t/api cannot legally declare a dependency on a "
+        "fixture one level below it; resolving through the calling test's "
+        "location let it acquire one anyway, and at lifetime='package' the "
+        "cached value would then embed a value from the narrower boundary"
     )

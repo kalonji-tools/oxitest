@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from oxitest import Fixture, helpers, raises
 from oxitest._bridge._errors import (
     AmbiguousFixtureError,
     FixtureNotFoundError,
 )
-from oxitest._bridge._fixture_registry import FixtureRegistry
+from oxitest._bridge._fixture_registry import (
+    ConftestSource,
+    FixtureDef,
+    FixtureRegistry,
+    FixtureScope,
+    ModuleSource,
+)
+from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge.result import Diagnostic, ViolationKind
 
 # ── FixtureRegistry ───────────────────────────────────────────────────────────
@@ -464,4 +473,126 @@ def test_registry_override_precedence() -> None:
     result = reg.resolve(DBSession)
     assert result.conftest_path == "/tests/conftest.py", (
         "leaf conftest should override root"
+    )
+
+
+# ── FixtureRegistry: anchor-aware filtered queries (B1, #1713) ────────────────
+
+
+def _module_def(name: str, namespace: str, anchor: str) -> FixtureDef[Any]:
+    """A package-anchored FixtureDef, the only source B1 constrains."""
+    return FixtureDef(
+        name=name,
+        fixture_type=object,
+        scope=FixtureScope.EACH,
+        source=ModuleSource(
+            func=lambda: None,
+            defining_module_path=f"{anchor}/__fixtures__.py",
+            anchor_package_path=anchor,
+            lifetime=Lifetime.FUNCTION,
+        ),
+        namespace=namespace,
+    )
+
+
+def test_same_basename_siblings_resolve_to_their_own_anchor() -> None:
+    """`tests/api/v1` and `tests/admin/v1` both derive the namespace 'v1'."""
+    # Arrange
+    registry = FixtureRegistry()
+    registry.register(_module_def("conn", "v1", "/t/api/v1"))
+    registry.register(_module_def("conn", "v1", "/t/admin/v1"))
+
+    # Act
+    from_api = registry.get_visible_in_namespace("conn", "v1", "/t/api/v1/test_a.py")
+    from_admin = registry.get_visible_in_namespace(
+        "conn", "v1", "/t/admin/v1/test_a.py"
+    )
+
+    # Assert
+    assert from_api is not None and from_api.anchor == "/t/api/v1", (
+        "an anchor-blind lookup returns whichever def registered last, so which "
+        "'conn' a test receives would be decided by filesystem walk order"
+    )
+    assert from_admin is not None and from_admin.anchor == "/t/admin/v1", (
+        "the second package must get its own 'conn' — the whole point of "
+        "filtering before picking is that disjoint subtrees never interfere"
+    )
+
+
+def test_nested_anchors_resolve_to_the_deepest_visible_one() -> None:
+    """Both are visible from below; the nearer declaration overrides."""
+    # Arrange — register the deep one FIRST so a `defs[-1]` implementation loses
+    registry = FixtureRegistry()
+    registry.register(_module_def("conn", "shared", "/t/api/v1"))
+    registry.register(_module_def("conn", "shared", "/t"))
+
+    # Act
+    resolved = registry.get_visible_in_namespace(
+        "conn", "shared", "/t/api/v1/test_a.py"
+    )
+
+    # Assert
+    assert resolved is not None and resolved.anchor == "/t/api/v1", (
+        "deepest-visible-wins is the locality rule conftest already had; "
+        "registering parent-last must not flip the winner, or the answer "
+        "depends on the order the collector happened to walk the tree in"
+    )
+
+
+def test_unanchored_defs_keep_last_registered_wins() -> None:
+    """With no ModuleSource in play the ordering must be exactly as before."""
+    # Arrange
+    registry = FixtureRegistry()
+    first = FixtureDef(
+        name="conn",
+        fixture_type=object,
+        scope=FixtureScope.EACH,
+        source=ConftestSource(func=lambda: None, conftest_path="/t/conftest.py"),
+    )
+    second = FixtureDef(
+        name="conn",
+        fixture_type=object,
+        scope=FixtureScope.EACH,
+        source=ConftestSource(func=lambda: None, conftest_path="/t/api/conftest.py"),
+    )
+    registry.register(first)
+    registry.register(second)
+
+    # Act
+    resolved = registry.get_visible("conn", "/t/api/test_a.py")
+
+    # Assert
+    assert resolved is second, (
+        "conftest fixtures are exempt from B1, so introducing anchor-depth "
+        "ordering must not disturb pytest's most-local-conftest-wins semantics "
+        "for the legacy API that slices 6-12 still run alongside"
+    )
+
+
+def test_namespace_visibility_and_anchors_are_separate_queries() -> None:
+    """The two query modes: 'reachable from here' and 'known anywhere'."""
+    # Arrange
+    registry = FixtureRegistry()
+    registry.register(_module_def("api_conn", "api", "/t/api"))
+
+    # Act
+    visible_here = registry.has_visible_namespace("api", "/t/api/v1/test_a.py")
+    visible_elsewhere = registry.has_visible_namespace("api", "/t/admin/test_a.py")
+    known_anywhere = registry.has_namespace("api")
+    anchors = registry.namespace_anchors("api")
+
+    # Assert
+    assert visible_here is True and visible_elsewhere is False, (
+        "the filtered query is what decides resolution — without it every "
+        "namespace is reachable from every test and B1 does not exist"
+    )
+    assert known_anywhere is True, (
+        "the full query must keep answering yes from outside the boundary; it "
+        "is the only thing that lets the diagnostic say 'exists, elsewhere' "
+        "instead of 'no such fixture'"
+    )
+    assert anchors == ("/t/api",), (
+        "the BoundaryError message names where the namespace actually lives, "
+        "so the registry has to be able to report it to a test that cannot "
+        "see it"
     )

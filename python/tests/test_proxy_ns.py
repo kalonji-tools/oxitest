@@ -5,14 +5,17 @@ from __future__ import annotations
 import oxitest
 from oxitest import Fixture, LogCapture, Patcher, StdCapture, TempDir, helpers
 from oxitest._bridge._builtin_context import TestContext as OxiTestContext
+from oxitest._bridge._errors import BoundaryError, FixtureNotFoundError
 from oxitest._bridge._fixture_registry import (
     ConftestSource,
     FixtureDef,
     FixtureRegistry,
     FixtureScope,
+    ModuleSource,
 )
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._helper_registry import HelperDef, HelperRegistry
+from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge._read_fixtures import _fixtures_registry_var, _FixturesProxy
 from oxitest._bridge._read_helpers import _helpers_registry_var, _HelpersProxy
 from oxitest._bridge.conftest_loader import load_fixtures_from_conftest
@@ -97,14 +100,87 @@ def test_fixtures_proxy_getattr_returns_oxi_proxy() -> None:
 
 
 def test_fixtures_proxy_unknown_namespace_raises() -> None:
-    """Accessing an unregistered namespace on FixturesProxy raises AttributeError."""
+    """Accessing an unregistered namespace on FixturesProxy raises FixtureNotFoundError.
+
+    Was AttributeError before #1713 — a silent False from hasattr(fx, name) is
+    how a boundary violation becomes a mystery, so this segment now raises the
+    same taxonomy as the rest of fixture lookup.
+    """
     session = helpers.common.make_session()
     proxy = FixturesProxy(session, "/fake/test.py", [])
-    with oxitest.raises(AttributeError, match="unknown_ns") as exc:
+    with oxitest.raises(FixtureNotFoundError, match="unknown_ns"):
         _ = proxy.unknown_ns
-    assert "conftest.py" in str(exc.value), (
-        f"AttributeError should mention 'conftest.py' for guidance, got: {exc.value}"
+
+
+def _api_session() -> FixtureSession:
+    """A session whose only fixture is anchored at /t/api.
+
+    Replicated from test_fixture_session.py's helper of the same name and
+    shape — python/tests has no cross-module imports between test files, so
+    this mirrors the fixture rather than sharing it.
+    """
+    registry = FixtureRegistry()
+    registry.register(
+        FixtureDef(
+            name="api_conn",
+            fixture_type=object,
+            scope=FixtureScope.EACH,
+            source=ModuleSource(
+                func=object,
+                defining_module_path="/t/api/__fixtures__.py",
+                anchor_package_path="/t/api",
+                lifetime=Lifetime.FUNCTION,
+            ),
+            namespace="api",
+        )
     )
+    return FixtureSession(registry)
+
+
+def test_unknown_segment_names_the_modern_declaration_route() -> None:
+    """The stale hint pointed at conftest.py, which slice 1 displaced."""
+    # Arrange
+    session = _api_session()
+    proxy = FixturesProxy(session, "/t/api/test_a.py", [])
+
+    # Act
+    with oxitest.raises(FixtureNotFoundError) as exc_info:
+        _ = proxy.nope
+
+    # Assert
+    message = str(exc_info.value)
+    assert "conftest.py" not in message, (
+        "the old message told users to define a Fixtures() instance in "
+        "conftest.py — not the primary declaration route since slice 1, so it "
+        "sends them to the wrong file"
+    )
+    assert "nope" in message, (
+        "the message must name the segment the user actually typed, or they "
+        "cannot tell which part of fx.nope.x was wrong"
+    )
+
+
+def test_an_unreachable_segment_is_inert_until_a_leaf_is_touched() -> None:
+    """Segment access is lazy; the boundary verdict belongs to the leaf.
+
+    Refusing at the segment would mean never learning WHICH fixture was wanted,
+    and BoundaryError has to name the fixture's anchor.
+    """
+    # Arrange
+    session = _api_session()
+    proxy = FixturesProxy(session, "/t/admin/test_admin.py", [])
+
+    # Act — reaching the segment from outside its package must not raise
+    namespace_proxy = proxy.api
+
+    # Assert
+    assert namespace_proxy is not None, (
+        "a segment known anywhere must yield a proxy even from outside its "
+        "boundary; raising here would strand the diagnostic without the leaf "
+        "name it needs to report the fixture's anchor"
+    )
+    with oxitest.raises(BoundaryError):
+        _ = namespace_proxy.api_conn
 
 
 # ── OxiNamespaceProxy ──────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ __all__ = [
     "AsyncFixtureAccessError",
     "AutouseRegistrationError",
     "BackendNotFoundError",
+    "BoundaryError",
     "BroadFixtureTypeError",
     "CollectionError",
     "ConflictingBackendError",
@@ -52,18 +53,29 @@ class ExecutionError(OxitestError):
 
 
 def _default_fixture_not_found_message(name: str, namespace: str) -> str:
-    """Build the default error message for a missing fixture lookup by name."""
+    """Build the default error message for a missing fixture lookup by name.
+
+    The inline clause is unconditional rather than catalog-driven. Inline
+    declarations register on module import, so whether this process knows about
+    one depends on worker assignment and import order — a hint that appeared
+    only sometimes would be worse than one that is always true and sometimes
+    irrelevant (#1759).
+    """
     if namespace:
         return (
             f"fixture '{name}' not found in namespace '{namespace}'.\n"
-            f"  Hint: check that a Fixtures() instance in conftest.py "
-            f"defines a fixture named '{name}', or verify the spelling."
+            f"  Hint: check that '{namespace}' declares a fixture named "
+            f"'{name}' — in its package's __fixtures__.py, or in a Fixtures() "
+            f"instance of that name — or verify the spelling.\n"
+            f"  If '{name}' is declared inline in another test module it is "
+            f"capped at 'module' lifetime and cannot be used here; move it to "
+            f"__fixtures__.py to share it."
         )
     return (
         f"fixture '{name}' not found.\n"
-        f"  Hint: ensure the fixture is defined in a Fixtures() "
-        f"instance in conftest.py or provided by a plugin, and "
-        f"annotated with Fixture[<type>] in the test signature."
+        f"  Hint: declare it with @oxi.fixture in a __fixtures__.py, or have a "
+        f"plugin provide it, and annotate the parameter with Fixture[<type>] "
+        f"in the test signature."
     )
 
 
@@ -99,6 +111,78 @@ class FixtureTypeNotFoundError(FixtureNotFoundError):
             f"return annotation."
         )
         super().__init__(type_name, message=msg)
+
+
+class BoundaryError(FixtureError):
+    """Raised when a test reaches a fixture outside its anchor package.
+
+    When it fires:
+        ADR-0009's B1 strict boundary — a fixture is usable only by tests in
+        its anchor package or a descendant of it. A sibling or unrelated
+        package reaching in raises here, at access time. Collection time cannot
+        do it: the prescan extracts fixture *declarations*, never *usages*, and
+        ``getattr(fx, name)`` would defeat a static gate anyway (#1758).
+
+        Distinct from ``FixtureNotFoundError`` on purpose. The fixture exists —
+        reporting "not found" would send the user hunting for a typo in a name
+        that is spelled correctly.
+
+    How to fix:
+        Three legal restructurings, all listed in the message: move the
+        declaration up to a common ancestor package, move the test into the
+        fixture's package, or declare a matching fixture in the test's own package.
+        There is no allow-comment escape hatch and no ``strict = "warn"``
+        softening.
+
+    See Also:
+        - ``FixtureNotFoundError`` — the segment is unknown anywhere in the run.
+
+    Examples:
+        >>> from oxitest import BoundaryError, raises
+        >>> with raises(BoundaryError):
+        ...     raise BoundaryError("conn", "api", "/t/api", "/t/admin/test_a.py")
+
+    """
+
+    #: Stable diagnostic code. Mirrors ``fixture-shortcut-in-strict`` from
+    #: ADR-0009 Rule 5 — what lets the docs link this failure and CI grep for it
+    #: without matching on prose that may be reworded.
+    CODE = "fixture-boundary"
+
+    def __init__(
+        self,
+        name: str,
+        namespace: str,
+        anchor: str,
+        module_path: str,
+        *,
+        leaf_exists: bool = True,
+    ) -> None:
+        qualified = f"{namespace}.{name}" if namespace else name
+        anchor_rel = _relpath(anchor)
+        test_rel = _relpath(module_path)
+        message = (
+            f"[{self.CODE}] fixture '{qualified}' is not visible from this test.\n"
+            f"  Fixture anchor: {anchor_rel}\n"
+            f"  This test:      {test_rel}\n"
+            f"  B1: a fixture is usable only by tests in its anchor package or\n"
+            f"      below (ADR-0009 Rule 3).\n"
+            f"  Three ways forward:\n"
+            f"    1. Move the declaration to a package that is an ancestor of both\n"
+            f"    2. Move the test into {anchor_rel} or a package below it\n"
+            f"    3. Declare a fixture of the same shape in this test's own package\n"
+        )
+        if not leaf_exists:
+            message += (
+                f"  Also: namespace '{namespace}' has no fixture named "
+                f"'{name}' — fixing the spelling alone "
+                f"will not make this access legal.\n"
+            )
+        super().__init__(message)
+        self.fixture_name = name
+        self.namespace = namespace
+        self.anchor = anchor
+        self.module_path = module_path
 
 
 class FixtureCycleError(FixtureError):
