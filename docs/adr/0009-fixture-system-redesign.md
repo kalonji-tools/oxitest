@@ -5,7 +5,7 @@
 
 The fixture system was designed with a single-location assumption: fixtures live in `conftest.py`, declared via a `Fixtures()` instance whose `.fixture` decorator accumulates definitions during conftest loading. Wayfinder map [#1703](https://github.com/kalonji-tools/oxitest/issues/1703) opened the debate on where fixtures may live — grilling [#1706](https://github.com/kalonji-tools/oxitest/issues/1706) named **Position 4**: promote test-file top-level to first-class, keep the existing `Fixtures()` machinery, add a `ModuleSource` variant on top of the current registry, drop `registrar-in-test-module`, add a new `registrar-in-class-body` violation.
 
-A follow-on first-principles brainstorming session (recorded in the redirect comment on [#1707](https://github.com/kalonji-tools/oxitest/issues/1707#issuecomment-5101919212)) reasoned that Position 4 was a **retrofit** onto machinery built around a single-location assumption. Asking instead "what is the framework's actual job in the fixture system?" produced a structurally different answer, validated with a runnable prototype under `scripts/prototype_fixture_redesign/`. This ADR codifies that answer.
+A follow-on first-principles brainstorming session (recorded in the redirect comment on [#1707](https://github.com/kalonji-tools/oxitest/issues/1707#issuecomment-5101919212)) reasoned that Position 4 was a **retrofit** onto machinery built around a single-location assumption. Asking instead "what is the framework's actual job in the fixture system?" produced a structurally different answer, validated with a runnable prototype under `scripts/prototype_fixture_redesign/` — **an uncommitted local design exercise, not a path in this repository** (Amendment 4). This ADR codifies that answer.
 
 The core reframe is one sentence: **visibility is Python's job; lifecycle is the framework's job.** Python's package/module hierarchy already decides who can see what — the framework doesn't need to redo that. What only the framework can do is track when a value gets instantiated and when it gets disposed. Everything else — location, discovery mechanism, declaration syntax — falls out of that split.
 
@@ -19,13 +19,15 @@ The core reframe is one sentence: **visibility is Python's job; lifecycle is the
 
 ## Decision
 
-Option 3. The principle below governs the fixture system; the eight rules below define the surface. Follow-on impl work is enumerated in **Consequences** (24 tickets in 5 phases); this ADR lists them but does not file them.
+Option 3. The principle below governs the fixture system; the eight rules below define the surface. Follow-on impl work is enumerated in **Consequences** (23 items in 7 phases); this ADR listed them but did not file them. They were filed post-merge as [#1708](https://github.com/kalonji-tools/oxitest/issues/1708)–[#1722](https://github.com/kalonji-tools/oxitest/issues/1722) and [#1727](https://github.com/kalonji-tools/oxitest/issues/1727), so that enumeration is now a record of the plan as accepted, not the live work list.
 
 ### Principle
 
 > **Visibility is Python's job; lifecycle is the framework's job.** A fixture is a Python callable with a declared **lifetime boundary** — the code-structural unit whose exit triggers teardown. Instantiation is lazy: creation is deferred until a test inside the boundary requests the value. Where the callable lives, who can import it, and what namespace it appears under are determined by Python's package/module hierarchy — the framework's only fixture responsibility is deciding *when* the value gets built and torn down.
 
 ### Rule 1 — Declaration files
+
+**Status:** the fixtures column is shipped (#1708, #1710, #1711, #1712) and the file convention was amended by Amendment 1; the helpers column and `__helpers__.py` are not yet built (#1715).
 
 Fixtures and helpers may be declared only in four file kinds. The Rust AST prescan (`rustpython-parser`) scans these files; everything else is invisible to the framework by design.
 
@@ -38,7 +40,15 @@ Fixtures and helpers may be declared only in four file kinds. The Rust AST presc
 
 A fixture accidentally placed in `helpers.py` or `utils.py` is invisible to the framework — dead code by design. Enforced by convention, not by walking every module. Declaration API is a pure decorator with zero import-time side effects: `@oxi.fixture(lifetime=...)` (required kwarg) and `@oxi.helper` (no lifetime), both writing marker attributes directly on the wrapped function.
 
+> **Not yet built** — #1715. Prescan scans exactly `__fixtures__.py` and
+> `__init__.py` (`src/pipeline/collection.rs:436`); `__helpers__.py` occurs
+> nowhere in the repository outside this ADR, and `@oxi.helper` is currently a
+> sentinel that raises (`python/oxitest/__init__.py:227`). Every helper cell in
+> the table above is forward-looking.
+
 ### Rule 2 — Lifetime tiers and boundaries
+
+**Status:** shipped (#1710, #1711, #1745); amended by Amendment 1, and its `session` row corrected by Amendment 4.
 
 `Lifetime` is a `StrEnum` with four values, ordered by the **breadth of the code-structural unit** they name — not by the strength of the guarantee they offer. Under parallel execution the ladder is deliberately non-monotonic in guarantee strength; see *Lifetimes under parallel execution* below. Each tier has exactly one boundary — the code-structural unit whose exit triggers teardown.
 
@@ -47,7 +57,7 @@ A fixture accidentally placed in `helpers.py` or `utils.py` is invisible to the 
 | `function` | The individual test | After the test completes | No effect |
 | `module` | The Python module (test file) | After all tests in the module complete | No effect |
 | `package` | The directory subtree containing the declaration | After all tests in the subtree complete | **Exactly once per run** — collapses the subtree onto one worker |
-| `session` | One worker process | At worker teardown | **Once per worker process** — no scheduling constraint |
+| `session` | The worker task group | At task-group teardown | **Once per task group** — no scheduling constraint of its own; the grouping is whatever `package` declarations produce |
 
 **A package is any directory.** `__init__.py` is not required and its absence does not make a directory ineligible. What the framework needs from a package is a subtree to bound disposal, to filter the B1 catalog, and to derive a namespace segment — a directory supplies all three. PEP 420 namespace packages are the norm in modern Python, so requiring the marker file would make oxitest stricter than the language itself, and would contradict this ADR's own principle that visibility is Python's job. `__init__.py` remains a legal and recommended *declaration home* for package-lifetime fixtures (Rule 1); it is not what *defines* the boundary. The two roles were originally conflated.
 
@@ -60,9 +70,9 @@ oxitest distributes work across worker subprocesses by default (`min_parallel_te
 `function` and `module` are unaffected — the scheduler never splits a module across workers, so both tiers are exact for free. The two wide tiers each take one side of a trade the framework cannot avoid:
 
 - **`package` guarantees exactly one instance per run**, and pays for it by co-locating the declaring directory's entire subtree onto a single worker. The guarantee is *structural*, not a caching hint: the scheduler is constrained so that the situation in which a second instance could exist never arises.
-- **`session` guarantees one instance per worker process**, and constrains the scheduler not at all. It is the tier for a per-process resource — a connection pool, a compiled-artifact cache — rather than a global singleton.
+- **`session` guarantees one instance per worker *task group***, and constrains the scheduler not at all. Because it constrains nothing it also earns nothing of its own: a worker pops task groups in a loop (`src/worker_session.rs:271`–`272`) and every task builds a fresh fixture session (`python/oxitest/_bridge/worker.py:265`), while only `package` declarations merge modules into a group (`src/filter.rs:270`–`292`). Absent one, a task group is a single module and `session` is `module` under a wider name. It is the tier for a resource that is safe to rebuild and unsafe to share across processes — a connection pool, a compiled-artifact cache — never a global singleton.
 
-The ladder is non-monotonic on purpose. `package` buys exactness and charges parallelism; `session` buys parallelism and charges exactness. Neither dominates the other, so the choice stays with the user. Naming a wide tier after the process rather than the code structure has precedent: Playwright's `scope: 'worker'` and Vitest's `scope: 'worker'` both do it. oxitest keeps the structural name `session` for continuity and pins the process semantics here.
+The ladder is non-monotonic on purpose. `package` buys exactness and charges parallelism; `session` buys parallelism and charges exactness. Neither dominates the other, so the choice stays with the user. `session`'s side of that trade is weaker than it looks, though, and this is the one asymmetry worth stating plainly: it is the only tier whose instance count is set by *another* tier's declarations rather than by its own boundary. Playwright's `scope: 'worker'` and Vitest's `scope: 'worker'` do name the process, and this ADR originally borrowed that precedent for `session` — it should not, because oxitest's `session` is not per-process (Amendment 4). Whether it *should* be given real per-process semantics, which would require the scheduler to carry fixture state across task groups, is left open rather than settled here.
 
 **A module belongs to its outermost declaring ancestor.** Where declarations nest, the shallowest wins: a fixture declared higher up already spans the whole subtree, so anchoring on a deeper declaration would still let the scheduler split the outer package across workers and rebuild its value.
 
@@ -71,6 +81,8 @@ The ladder is non-monotonic on purpose. `package` buys exactness and charges par
 **Builtin fixtures do not trigger the collapse.** Only user-declared `@oxi.fixture` lifetimes do. `_TempDirFactoryFixture` (`_builtins/_tempdir.py`) declares session scope and would otherwise serialise every oxitest run.
 
 ### Rule 3 — B1 strict boundary
+
+**Status:** shipped (#1713); amended by Amendment 2.
 
 A fixture is usable only by tests in its **anchor package** or descendant packages. The anchor package is the directory containing the declaration file (Rule 2 — `__init__.py` not required). For a test at `a.b.c.test_x`, the ancestor chain is `[a, a.b, a.b.c]`; the test may use fixtures anchored anywhere in that chain plus its own module.
 
@@ -90,9 +102,9 @@ The amendment is not a weakening of the loud-rejection principle, because a coll
 
 **A fixture's dependencies are governed by the fixture's own anchor**, not by the location of the test that triggered resolution. Otherwise a fixture anchored at `tests/api/` could acquire a dependency anchored at `tests/api/v1/` whenever it happens to be resolved by a test living there — a dependency it could never legally declare — and, at `lifetime="package"`, cache a value that embeds one from a narrower boundary. This is the "declaration time" half of enforcement referred to in the Consequences.
 
-Implemented in [#1713](https://github.com/kalonji-tools/oxitest/issues/1713).
-
 ### Rule 4 — Lifetime cap
+
+**Status:** shipped (#1711); amended by Amendment 1, whose retraction of the `package`/`session` equivalence is itself re-grounded by Amendment 4.
 
 Declared `lifetime` cannot exceed the declaration site's boundary.
 
@@ -101,7 +113,7 @@ Declared `lifetime` cannot exceed the declaration site's boundary.
 | Inline in `test_*.py` | `module` |
 | `__fixtures__.py` or `__helpers__.py` at package X | `package` (anchored at X) |
 | `__init__.py` at package X | `package` (anchored at X) |
-| Any of the above at the rootdir package (`tests/`) | `package` (exactly once per run) or `session` (once per worker) |
+| Any of the above at the rootdir package (`tests/`) | `package` (exactly once per run) or `session` (once per task group) |
 
 Anything else is a **declaration error at prescan time** with three legal-exit hints (move to `__fixtures__.py` at package level; drop to `module` lifetime; restructure as a rootdir fixture).
 
@@ -109,13 +121,17 @@ Anything else is a **declaration error at prescan time** with three legal-exit h
 
 > `session` is available only at rootdir because below root, `package(root)` and `session` collapse to the same runtime behavior (the fixture's visibility subtree is smaller than the run — either it's never referenced outside the anchor package under B1 and equals `package`, or it would leak). At rootdir the two ARE the same thing; the framework accepts `session` as the idiomatic name for the run-lifetime tier.
 
-That equivalence is **retracted**. It was sound under the single-process model this ADR was written against, and it does not hold under the real scheduler: rootdir `package` is exactly-once and serialises the run, while `session` is once-per-worker and does not. They are genuinely different tiers, and offering both is strictly more expressive than declaring them synonyms.
+That equivalence is **retracted** — though not for the reason Amendment 1 gave. Amendment 1 replaced it with "`session` is one instance per worker process", which is itself wrong; Amendment 4 retracts the replacement.
+
+The two tiers differ because their guarantees have different *sources*. Rootdir `package` is exactly-once **structurally**: it collapses the whole suite onto one worker and pays for the guarantee in parallelism. `session` constrains the scheduler not at all and takes whatever grouping it happens to find, so in a suite with no `package` declaration a rootdir `session` fixture is built once per module. In a suite that does declare one at rootdir the two coincide — but only because `package` did the work. Offering both is still more expressive than declaring them synonyms; what a reader must not do is read `session` as a guarantee.
 
 The *restriction* of `session` to rootdir survives, for the half of the original argument the retraction does not touch: declared below root, a `session` fixture would outlive the subtree that is allowed to see it, which is exactly what Rule 4 exists to prevent.
 
-**A per-worker `session` fixture cannot be a true singleton.** Anything that must happen exactly once per run — a database migration, a schema create, a shared artifact build — belongs at rootdir `package` and pays the parallelism cost. Frameworks that do offer a cross-process once-per-run hook restrict it to serialised handles rather than live objects; Jest is explicit that "any global variables that are defined through `globalSetup` can only be read in `globalTeardown`. You cannot retrieve globals defined here in your test suites."
+**A `session` fixture cannot be a true singleton.** Anything that must happen exactly once per run — a database migration, a schema create, a shared artifact build — belongs at rootdir `package` and pays the parallelism cost. Frameworks that do offer a cross-process once-per-run hook restrict it to serialised handles rather than live objects; Jest is explicit that "any global variables that are defined through `globalSetup` can only be read in `globalTeardown`. You cannot retrieve globals defined here in your test suites."
 
 ### Rule 5 — Access via `fx` / `hlp` proxies
+
+**Status:** the `fx` half is shipped (#1708, #1713, #1714) and amended by Amendments 2 and 3; the `hlp` half and helper namespace derivation are not yet built (#1715). The `namespace=` override this rule names is unbuilt for **both** fixtures and helpers — `@oxi.fixture` accepts only `lifetime=` — so it is not a helpers-only gap.
 
 Tests receive fixtures and helpers via two synthesized proxy parameters — the type annotations `Fixtures` and `Helpers` reappear here as access proxies (the old instance-registry meaning is retired, see Rule 8):
 
@@ -148,7 +164,14 @@ The constraint is about *reachability of both views*, not about object count. Th
 
 **Namespace derivation.** Default namespace = the anchor-package segment name; overridable via `namespace=` on the decorator. Use overrides sparingly.
 
+> **Not yet built** — #1715. `@oxi.fixture` accepts only `lifetime=` today
+> (`python/oxitest/_bridge/_fixture_decorator.py:25`); there is no `namespace=`
+> kwarg and no working `@oxi.helper` decorator. The `hlp` proxy, `HelpersProxy`,
+> and the helper half of the naming-clash rule are all forward-looking with it.
+
 ### Rule 6 — Plugin convergence
+
+**Status:** not yet built (#1717, #1718); amended by Amendment 4.
 
 Plugins register fixtures via the **same decorator path as user code**. A plugin package with a `__fixtures__.py` file declares fixtures with `@oxi.fixture` exactly as users do; the framework treats each activated plugin as an ambient ancestor, making plugin fixtures visible session-wide under the plugin's declared namespace (e.g., `fx.postgres.pg_session` for a `postgres` plugin).
 
@@ -156,7 +179,33 @@ Plugins that need to generate fixtures at runtime (5% case — e.g., one fixture
 
 `FixtureProvider` and `HelperProvider` protocols retire. Migration from `FixtureProvider.register_fixtures(reg)` to the module-level `register_fixtures(registry)` hook is mechanical — the shape is close, only the entry point changes.
 
+> **Not yet built** — #1717 (static path), #1718 (runtime hook). Four statements
+> above are also **drifted**, corrected in Amendment 4. (a) "session-wide" mixes
+> two things that Amendment 1 separated. Plugin fixture *visibility* genuinely
+> **is** run-wide: plugin fixtures are ambient (`_fixture_registry.py:152`, whose
+> docstring cites this rule by name) and are registered into every worker session
+> (`_fixture_session.py:403`, called per session at `:343`). But *lifetime*
+> `session` is one instance **per task group** — narrower still than the
+> per-worker reading Amendment 1 gave it, see Rule 2 and Amendment 4
+> (`python/oxitest/_bridge/worker.py:265`) — so the phrase cannot mean run-wide
+> instantiation under either reading. **Read the sentence above as "ambient in
+> every fixture session"** — the rule's own wording is left as accepted, per this
+> sweep's convention of marking unshipped rules rather than rewriting text
+> #1717 will replace. The restatement is **not** a narrowing of the visibility claim, which
+> would replace this drift with a new one. (b) `register_fixtures` is typed on `FixtureRegistry`, which no
+> public module exports. (c) A runtime-registered `FixtureDef` does not get
+> "identical semantics" for free: semantics are keyed on its source variant, and
+> only the module-anchored variant is B1-anchored, so the hook's signature has to
+> say which variant a dynamically-added fixture carries. (d) The migration is not
+> "mechanical" — `FixtureProvider` has no `register_fixtures` method at all, and
+> its actual shape is a type-matched per-fixture provider object rather than a
+> registry-mutating callback. Note that the *ambient* half of "ambient ancestor"
+> already holds, per (a); it is the *ancestor* half that is unbuilt. The API shape
+> is a decision rather than an implementation — see #1773.
+
 ### Rule 7 — Autouse
+
+**Status:** not yet built (#1716); the autouse table was amended by Amendment 1 and again by Amendment 4.
 
 `@oxi.fixture(autouse=True, lifetime="...")` fires for every test in the fixture's B1 boundary without being explicitly requested. Same shape as today; the lifetime cap from Rule 4 applies unchanged.
 
@@ -165,11 +214,105 @@ Plugins that need to generate fixtures at runtime (5% case — e.g., one fixture
 | `function` | Once per test in the fixture's B1 scope |
 | `module` | Once per module boundary in scope |
 | `package` | Once per package boundary in scope — exactly once per run (Rule 2) |
-| `session` | Once per worker process. For autouse work that must happen exactly once per run, declare at rootdir with `lifetime="package"` |
+| `session` | Once per task group — one module unless a `package` declaration merges the subtree (Rule 2). For autouse work that must happen exactly once per run, declare at rootdir with `lifetime="package"` |
 
 Autouse fixtures remain accessible by explicit request (`Fixture[T]` or `fx.<name>`); autouse is additive, not exclusive. The invisibility concern historically raised against autouse is solved by tooling, not by removing the feature: `oxitest inspect` shows autouse-firing per test as a first-class view (a follow-on impl item — see Consequences).
 
+> **Not yet built** — #1716. `@oxi.fixture` has no `autouse` kwarg
+> (`python/oxitest/_bridge/_fixture_decorator.py:25` is
+> `def fixture(*, lifetime: str)`), and `src/prescan.rs:1500` carries a test
+> asserting `@oxi.fixture(lifetime="function", autouse=True)` is *rejected*, so
+> the table above describes surface slice 9 will build;
+> `docs/user/how-to/use-fixtures.md:436` already tells users so. Four further
+> statements need Amendment 4, three of them **drifted**.
+>
+> **(a) "Same shape as today" is retracted**, on three independent grounds.
+> Today's autouse is the `Fixtures()` registrar kwarg
+> (`_fixtures.py:256`–`262`) that Rule 8 retires. Its shape is **run-wide
+> ambient**, not B1-scoped: the only two source variants that can carry `autouse`
+> today have no anchor field — `ConftestSource` (`_fixture_registry.py:79`) and
+> `PluginSource` (`:85`, reached at `_fixture_session.py:407`, `:417`) — so
+> `is_visible_from` falls through to `case _: return True`
+> (`_fixture_registry.py:193`, "everything unanchored is ambient"), and
+> `docs/user/how-to/use-fixtures.md:429` promises users it "runs for every test".
+> And the candidate enumeration is not B1-filtered at all — see (b). Rule 7's
+> shape is strictly *narrower* than today's, not the same. What does carry over,
+> so this is not over-corrected: the fire-without-request **mechanic** is
+> unchanged (`_fixture_session.py:843`–`845`). Vehicle and scope are what fail.
+>
+> **(b) Slice 9 must B1-filter the enumeration, not merely anchor autouse** — see
+> [#1774](https://github.com/kalonji-tools/oxitest/issues/1774).
+> `get_autouse()` (`_fixture_registry.py:405`) iterates `_by_name` and takes no
+> `module_path`, while resolution applies B1 and **raises** on a filtered-out
+> candidate (`_fixture_instantiator.py:374`–`376`). This is inert today only
+> because every autouse-capable source is anchorless. The moment `autouse=True`
+> reaches `ModuleSource`, every test outside the fixture's boundary errors with
+> `FixtureNotFoundError` naming a fixture it never requested and cannot see.
+> Read the direction carefully: this is the **inverse** of a boundary leak, a
+> spurious hard error rather than over-permissive access. B1 itself holds on both
+> resolution routes and needs no change.
+>
+> **(c) The `session` row is drifted — `session` is once per _task group_, not
+> once per worker process.** A worker pops task groups in a loop until the shared
+> queue drains (`src/worker_session.rs:271`–`272`) and every task builds a fresh
+> session (`python/oxitest/_bridge/worker.py:265`, inside `run(task)` at `:238`,
+> called per stdin line at `:366`) with a fresh per-instance session scope
+> (`_fixture_session.py:298`); nothing caches across tasks. Measured on `main`:
+> eight single-test modules over two workers built a `lifetime="session"` fixture
+> **eight** times across two PIDs, and adding one `lifetime="package"`
+> declaration to co-locate the subtree into a single task group brought it to
+> **one**. Absent a `package` declaration a task group is one module
+> (`src/filter.rs:275`) and a `session` declaration does not trigger co-location
+> (`src/pipeline/collection.rs:274` filters on `package` only), so `session`
+> degrades to per-module — the failure Amendment 1's point 1 described as
+> pre-#1745. Amendment 4 should restate the count as "once per task group, which
+> is one module unless a `package` declaration merges the subtree". The row's
+> **advice holds and is load-bearing**: rootdir `lifetime="package"` is the only
+> construct that actually delivers exactly-once. The same "per worker process"
+> phrasing also appeared in Rule 2, Rule 4, Amendment 1, and in the shipped
+> `lifetime=` docstring — all corrected here, which is what opened this sweep's
+> scope from docs-only. The **legacy** `shared=True` surface repeats the claim in
+> its own vocabulary (`python/oxitest/plugin.py:135`,
+> `docs/user/how-to/run-in-parallel.md:92`,
+> `docs/user/how-to/use-fixtures.md:422`–`424`, and the Rust warning text);
+> that surface is on Rule 8's retirement list and is corrected under
+> [#1778](https://github.com/kalonji-tools/oxitest/issues/1778), not here — it
+> has an auto-arrange mechanism `lifetime=` does not
+> (`src/pipeline/arrange.rs:232`–`255`), so its numbers cannot be carried across
+> from this measurement.
+>
+> **(d) "Autouse is additive, not exclusive" holds only for `Fixture[T]`.** The
+> autouse loop dedupes against annotation-derived names alone
+> (`_fixture_session.py:844`), and function lifetime has no scope cache to dedupe
+> through (`_scope_for` returns `None` for function scope,
+> `_fixture_session.py:468`–`469`; caching is gated on that at
+> `_fixture_instantiator.py:408` and stated at `:484`–`485`). So reaching an
+> autouse fixture through **either** proxy route builds it twice in one test —
+> measured on `main`, and once only when the fixture is `shared`. Additive, but
+> duplicative, and for autouse-with-side-effects the side effect happens twice.
+> Slice 9 inherits this; (b)'s enumeration filter does not fix it, because a
+> fixture inside its own boundary still double-builds.
+>
+> **Confirmed as holding — do not re-open.** The Rule 4 lifetime cap genuinely is
+> autouse-independent: enforcement keys on `decl.lifetime` alone
+> (`src/pipeline/collection.rs:200`–`218`, `:288`–`312`) and
+> `PrescanDeclaration` (`src/prescan.rs:85`–`90`) has no autouse field. The
+> `package` row's "exactly once per run" holds structurally (`src/filter.rs:260`
+> merges the subtree into one task group). The tooling justification is
+> forward-looking **with a home** —
+> [#1722](https://github.com/kalonji-tools/oxitest/issues/1722), slice 15 — and
+> its per-*fixture* half already ships across the detail pane
+> (`src/inspect/detail/fixture.rs:22`), the `UnusedFixtures` signal
+> (`src/inspect/signals.rs:94`), the `autouse()` query predicate, and `--tree -v`
+> tags; only the per-*test* view is unbuilt, so fix the tense, not the argument.
+> Separately, Rule 7 does not mention the other autouse × lifetime constraint
+> `main` already enforces — `AutouseRegistrationError` refusing async non-shared
+> autouse (`_fixtures.py:255`, `docs/user/reference/errors.md:316`) — which slice
+> 9 owns.
+
 ### Rule 8 — Retirements
+
+**Status:** nothing retired yet — retirement is slice 13 (#1720), preceded by the own-suite migration (#1719); amended by Amendment 4.
 
 The redesign retires the following surface. Each entry names what goes and why.
 
@@ -179,6 +322,70 @@ The redesign retires the following surface. Each entry names what goes and why.
 - **`ConftestSource` variant** in `_fixture_registry.py` — replaced by a location-agnostic source variant carrying `defining_module_path` + `anchor_package_path`.
 - **`FixtureProvider` and `HelperProvider` plugin protocols** — plugins converge with the user path via `@oxi.fixture` + `register_fixtures` hook (Rule 6).
 - **[ADR-0005](0005-immutable-by-default-interfaces.md) Rule 4's `Fixtures` / `Helpers` `&mut` exception** — no mutable registrar exists; the decorator writes marker attributes directly at import time, no accumulation phase.
+
+> **Conformance sweep ([#1769](https://github.com/kalonji-tools/oxitest/issues/1769), 2026-07-30).** Nothing above is
+> retired yet — the own-suite migration is [#1719](https://github.com/kalonji-tools/oxitest/issues/1719) and the
+> retirement itself is [#1720](https://github.com/kalonji-tools/oxitest/issues/1720). All six targets are live on
+> `main`. That is the expected state for a retirement plan, so the list is correctly forward-looking; four claims
+> *about* the list are not, and are corrected here.
+>
+> **1. The list conflates two operations of very different cost.** Only **`ConftestSource`** is internal — its
+> retirement really is a delete. Everything else is documented user-facing surface: **`conftest.py`** (14
+> `docs/user/` pages, including one whose title is the retired concept), **`Fixtures()`** (8), **`Helpers()`** (6),
+> and **`FixtureProvider`/`HelperProvider`**, which are *stable public API since 1.0.0*
+> (`docs/user/explanation/provisional-apis.md:22`, `:26`) and pinned by conformance tests
+> (`python/tests/docs/how-to/test_write_plugins.py:353`, `:382`). **`registrar-in-test-module` belongs on the
+> documented side too** — the kebab-case id is absent from `docs/user/`, but the rule is documented under its prose
+> name at `docs/user/explanation/strict-mode.md:182`, inside the section "The nine checks" (`:21`), which retiring it
+> makes stale. Sharpest of all: **`docs/user/reference/stability.md:11` lists `Fixtures` as semver-protected**, and
+> `:16` extends that to "`Plugin` dataclass and protocol interfaces" — so two entries here are surfaces the project
+> has promised not to remove outside a major version. `Helpers` is *not* on that list, so the pair does not carry the
+> same promise. **And `Fixtures` is not removed but *repurposed*** — Rule 5 reuses the name as a proxy type
+> annotation, so a user's `fixtures = oxitest.Fixtures()` does not fail with a clean `AttributeError`; it becomes a
+> call on a name that now means something else. That is a nastier migration than deletion, and a deprecation shim
+> cannot simply alias it. **Amendment 4 should split this list in two** and give the public half a major-version
+> story.
+>
+> **2. "The old instance usage no longer exists" is false.** Both registries are live and exported: `Fixtures`
+> (`python/oxitest/_bridge/_fixtures.py:107`, exported `python/oxitest/__init__.py:194`) and `Helpers`
+> (`_helpers.py:15`, exported `__init__.py:195`). The clause contradicts this rule's own Status line. **The last
+> bullet repeats the defect** — "no mutable registrar exists; … no accumulation phase" is also present tense for a
+> future state, while [ADR-0005](0005-immutable-by-default-interfaces.md) still carries both `&mut` entries (`:44`,
+> `:45`). **Correction: sweep Rule 8's tense to "will be removed in slice 13 ([#1720](https://github.com/kalonji-tools/oxitest/issues/1720))"**;
+> the same edit fixes Rule 5's parallel claim that the name `Helpers` is free to reuse. Of the two reused
+> annotations, only `Fixtures` is real today (`proxy_ns.py:158`); `Helpers`/`hlp` has no injection path.
+>
+> **3. The helper *read* surface is missing from the list.** These bullets retire the *registration* pattern, but
+> Rule 5 replaces the *read* surface, and none of it is named: `oxitest.helpers` (`python/oxitest/__init__.py:223`,
+> `_read_helpers.py:34`) — the accessor `CLAUDE.md:246` mandates for oxitest's own suite; the `oxitest.helper`
+> sentinel (`__init__.py:227`), whose `AttributeError` text steers users into `Helpers()` *and* `conftest.py`, both
+> retired here — so it must be **converted** into the real decorator, not deleted; and the documented-but-nonexistent
+> `fx.helpers` route (`_helpers.py:24`). A second steering site sits at `_read_helpers.py:51`.
+>
+> **4. The ADR-0008 citation does not hold.** [ADR-0008](0008-config-fail-closed-narrow-scope.md) scopes itself
+> explicitly and narrowly to deserialization errors inside the `[tool.oxitest]` table; a source-line
+> `# oxitest: allow[…]` comment is not config and cannot violate it. **Correction: cite instead ADR-0008's own
+> rejection of `--allow-config-drift`** (option 3, `:16`: "escape hatches mean the guarantee isn't real") **and the
+> loud-rejection DNA it invokes at option 4** (`:18` — [ADR-0006](0006-async-organizational-strategy.md) async
+> hard-break, [ADR-0007](0007-none-by-exception.md) None-by-exception). Those are two different options and the
+> argument needs both. The removal case survives; only its authority changes. Two details for
+> [#1720](https://github.com/kalonji-tools/oxitest/issues/1720): the escape hatch has exactly one consumer
+> (`importer.py:499`) but the parser is generic (`_allow_comment.py:10`), so the delete must reach the parser or the
+> mechanism outlives its only rule; and while the *syntax* is undocumented — learned only from the error text at
+> `importer.py:521`, never from `docs/user/` — the **term is documented twice**, at
+> `docs/user/how-to/use-fixtures.md:242` and `docs/user/reference/errors.md:409`, both promising "There is no
+> allow-comment escape hatch" for B1. Deleting the mechanism leaves those two sentences promising the absence of
+> something that no longer exists, so they join the blast radius in point 1.
+>
+> **Two facts [#1720](https://github.com/kalonji-tools/oxitest/issues/1720) needs and this rule does not carry.**
+> (a) `ModuleSource` **already ships** with exactly the `defining_module_path` + `anchor_package_path` fields named
+> as `ConftestSource`'s replacement (`python/oxitest/_bridge/_fixture_registry.py:96`, already in the `FixtureSource`
+> union at `:105`) — that successor is built, not pending. The counterweight, so this is not undersized in the other
+> direction: `ConftestSource` is referenced across a dozen further `_bridge/` modules and a dozen test modules, so it
+> is not a one-file delete either. (b) `FixtureProvider` has a **real, named downstream implementer**: `HostProvider`
+> in `oxi-nixinfra`, which tracks oxitest `main` through an unpinned flake input, so
+> retirement breaks it the day it lands rather than at a version bump. `HelperProvider` has zero implementers
+> anywhere. The two protocols must therefore be sequenced separately, and only one needs a migration path.
 
 ### Reconciliation with prior ADRs
 
@@ -197,9 +404,16 @@ This ADR was written against a single-process mental model. Neither the document
 
 1. **The lifetime ladder said nothing about parallelism.** Under the real scheduler a fixture session is created and torn down per task, so the widest *effective* tier was the module — narrower than every framework surveyed. Rule 2 now states, per tier, what happens when work spans processes, and `package` earns its exactly-once guarantee structurally by collapsing its subtree onto one worker.
 2. **`package` was defined as "the Python package (directory with `__init__.py`)".** That made the tier unreachable in oxitest's own test suite, in which no directory holding real test modules carries an `__init__.py`. Rule 2 now defines a package as any directory; `__init__.py` keeps its role as a declaration home.
-3. **Rootdir `package` and `session` were declared the same thing.** They are not, once instances can exist per process. Rule 4 carries the retraction with the original argument quoted in full.
+3. **Rootdir `package` and `session` were declared the same thing.** They are not. Rule 4 carries the retraction with the original argument quoted in full.
 
-Rule 7's autouse table follows from (1) and (3): a `session` autouse fixture fires once per worker process, not "once for the whole run".
+> **Point 3's replacement is itself retracted by Amendment 4.** This amendment
+> said "once instances can exist per process", and Rules 2, 4, and 7 were then
+> written against "`session` is one instance per worker process". Measured on
+> `main`, it is one instance per **task group** — narrower again, and equal to
+> `module` in any suite with no `package` declaration. The retraction of the
+> equivalence survives; the reason given for it does not.
+
+Rule 7's autouse table follows from (1) and (3): a `session` autouse fixture fires once per task group, not "once for the whole run" — as amended.
 
 **Evidence.** A [primary-source survey of ten frameworks](https://github.com/kalonji-tools/oxitest/issues/1710#issuecomment-5119280622) found that **no surveyed framework ships a code-structural tier wider than the file that is also process-shared.** pytest is alone in offering a `package` scope, and `pytest-xdist` has no package-level `--dist` mode, so that scope degrades silently under distribution. oxitest can do better only because it owns both the static prescan and the scheduler. The seven decisions behind this amendment are recorded in the [grilling outcome](https://github.com/kalonji-tools/oxitest/issues/1710#issuecomment-5119666710).
 
@@ -250,15 +464,88 @@ The enforcement-point question the milestone flagged as this slice's tail risk d
 
 The decisions behind this amendment are recorded in the [grilling outcome](https://github.com/kalonji-tools/oxitest/issues/1714#issuecomment-5131149592).
 
+### Amendment 4 — the unshipped rules, checked (2026-07-30)
+
+Tracked by [#1769](https://github.com/kalonji-tools/oxitest/issues/1769). Amends Rules 2, 4, 6, 7, 8, the Consequences section, and Amendment 1. The principle, the declaration-file convention, the lifetime ladder's *shape*, B1, proxy access, and plugin convergence all stand as accepted — as they did through the first three amendments.
+
+**This is the first amendment that is not reactive.** Amendments 1, 2, and 3 were each triggered at slice-pickup time, after the cost of a grilling: this ADR was written against a single-process model, then against a throwaway prototype, then against a configuration surface that does not exist. Three amendments in three days from one root cause made drift a pattern rather than an incident. This one sweeps every unshipped normative claim at once, before slice 8, instead of paying that cost eight more times.
+
+Each rule now carries a `**Status:**` line, and statements specifying future surface rather than describing `main` carry an inline *Not yet built* marker recording the evidence. **That is the durable half of this amendment**: the previous three all drifted because a reader could not tell a description of oxitest from a specification of it.
+
+#### 1. `session` is once per *task group* — and this retracts Amendment 1
+
+The sweep was scoped to exclude Rules 1–4, on the premise that Amendments 1–3 had already checked them. **That premise failed, because Amendment 1 is the source of the error.** Its point 3 retracted "rootdir `package` and `session` are the same thing" and replaced it with "`session` is one instance per worker process" — trading one wrong description for another. Rules 2, 4, and 7 were then written against the replacement, and slices 3 and 4 were built against Rules 2 and 4.
+
+A worker pops task groups in a loop until the shared queue drains (`src/worker_session.rs:271`–`272`) and every task builds a fresh fixture session (`python/oxitest/_bridge/worker.py:265`, inside `run(task)` at `:238`, called per stdin line at `:366`). Only `package` declarations merge modules into a group (`src/filter.rs:270`–`292`); a `session` declaration triggers no co-location (`src/pipeline/collection.rs:274` filters on `package` alone). Measured: eight single-test modules over two workers built a `lifetime="session"` fixture **eight** times across two PIDs; adding one `lifetime="package"` declaration brought it to **one**.
+
+So `session` is one instance per task group, which is **one module unless a `package` declaration merges the subtree** — the exact failure Amendment 1's point 1 believed [#1745](https://github.com/kalonji-tools/oxitest/issues/1745) had fixed. #1745 widened a *task*; it did not make sessions per-process. It follows that `session` is the only tier whose instance count is set by another tier's declarations rather than by its own boundary, and that this ADR should not have borrowed Playwright's and Vitest's `scope: 'worker'` as precedent for it.
+
+The phrase was wrong in six places, two of them shipped surface: Rule 2's tier table and parallel-execution bullets, Rule 4's reasoning, Rule 7's table row, Amendment 1's point 3, `_fixture_decorator.py`'s `lifetime` docstring, and `docs/user/how-to/use-fixtures.md`. All are corrected. **This makes the conformance sweep a code-and-docs change rather than the docs-only one it was specified as.**
+
+**This corrects the description, not the semantics.** Whether `session` *should* be per-process — and what the scheduler would have to change to make it so — is a design question deserving its own grilling. It is not settled by a conformance sweep, and this amendment does not imply today's behaviour is intended. The legacy `shared=True` surface repeats the same claim in its own vocabulary and is handled separately at [#1778](https://github.com/kalonji-tools/oxitest/issues/1778); its numbers cannot be carried across, because it has an auto-arrange mechanism `lifetime=` does not.
+
+#### 2. Rule 6 — "session-wide" and a public hook typed on a private class
+
+Plugin fixture *visibility* genuinely is run-wide: plugin fixtures are ambient and registered into every fixture session. But *lifetime* `session` is per task group, so "session-wide" cannot mean run-wide instantiation under any reading. **The phrase must be read as "ambient in every fixture session"** — deliberately *not* a narrowing of the visibility claim, which would have replaced one drift with another. Rule 6's own wording is left as accepted and carries the correction in its inline marker: this sweep marks unshipped rules rather than rewriting prose that [#1717](https://github.com/kalonji-tools/oxitest/issues/1717) will replace outright.
+
+Separately, `register_fixtures(registry: FixtureRegistry) -> None` is advertised as plugin-facing while `FixtureRegistry` is exported from neither `oxitest` nor `oxitest.plugin`, and exposing it is a standing deferral — the Result-variant factories shipped on `oxitest.plugin` in v2.4.0 while `PluginRegistry` and `FixtureSession` were held back pending evidence from a real plugin. The rule's claim that migration is "mechanical — only the entry point changes" does not survive either: `FixtureProvider` has no `register_fixtures` method at all, and its actual shape is a type-matched per-fixture provider object rather than a registry-mutating callback. **The API shape is recorded and deferred to [#1773](https://github.com/kalonji-tools/oxitest/issues/1773)**, for slice 10's grilling with plugin context this sweep does not have.
+
+#### 3. Rule 7 — "same shape as today" is retracted, and autouse has a latent trap
+
+Today's autouse is the `Fixtures()` registrar kwarg that Rule 8 retires, and its shape is **run-wide ambient**, not B1-scoped — the only two source variants that can carry `autouse` have no anchor field, so visibility falls through to "everything unanchored is ambient". Rule 7's shape is strictly *narrower* than today's, not the same. What does carry over, so this is not over-corrected: the fire-without-request mechanic is unchanged.
+
+Underneath that: `get_autouse()` iterates an unfiltered by-name index and takes no `module_path`, while resolution applies B1 and **raises** on a filtered-out candidate. This is inert today only because every autouse-capable source is anchorless. The moment `autouse=True` reaches an anchored source, every test outside the fixture's boundary errors with `FixtureNotFoundError` naming a fixture it never requested and cannot see — the **inverse** of a boundary leak, a spurious hard error rather than over-permissive access. Filed as [#1774](https://github.com/kalonji-tools/oxitest/issues/1774), blocking [#1716](https://github.com/kalonji-tools/oxitest/issues/1716). This is the third unfiltered index after the `_by_type` hazard in [#1768](https://github.com/kalonji-tools/oxitest/issues/1768). **The recurring shape — a convenience index that predates B1 and does not know about it — is the finding worth carrying forward, more than any single instance of it.**
+
+#### 4. Rule 8 — the retirement list conflates internal deletes with semver-protected surface
+
+Only `ConftestSource` is internal; its retirement really is a delete. Everything else is documented user-facing surface, and two entries are listed on `stability.md` as semver-protected. "The old instance usage no longer exists" is false — both registries are live and exported — and the same present-tense-for-future-state defect runs through the rule. The helper *read* surface is missing from the list entirely, though Rule 5 replaces it. And the ADR-0008 citation does not hold: that ADR scopes itself narrowly to deserialization errors inside `[tool.oxitest]`, so a source-line allow-comment cannot violate it; the removal case survives on ADR-0008's rejection of `--allow-config-drift` and the loud-rejection DNA it invokes, which are two different options and the argument needs both.
+
+The full scope for [#1720](https://github.com/kalonji-tools/oxitest/issues/1720), including the two facts the rule did not carry — `ModuleSource` already ships the named replacement fields, and `FixtureProvider` has a real downstream implementer while `HelperProvider` has none — is in Rule 8's inline marker rather than repeated here.
+
+#### 5. Rule 5 / the helpers surface — three live spellings where the ADR reasoned about one
+
+Rule 5 introduces `hlp` as *the* helper access proxy, and Rule 8 says the name `Helpers` is free to reuse. Neither statement accounts for what is already there:
+
+| Spelling | State |
+|---|---|
+| `oxitest.helpers`, as `helpers.common.<fn>()` | **Live**, backed by `_HelpersProxy` (`_read_helpers.py:34`) — and `CLAUDE.md` mandates it as the way oxitest's own suite reaches shared utilities |
+| `helpers.<name>()` on a `Helpers()` instance | **Live** — the registrar Rule 8 retires |
+| `fx.helpers` | **Phantom** — documented at `_helpers.py:24`, and that docstring is its only occurrence in the repository; `proxy_ns.py` has zero helper references |
+| `hlp` | **Proposed** by Rule 5 |
+
+A fifth adjacent name, `oxitest.helper`, is occupied by a sentinel that raises and steers users into the very `Helpers()`-in-`conftest.py` surface Rule 8 retires — so it must be *converted* into the real decorator rather than deleted. Slice 8 must decide the fate of the incumbents before introducing `hlp` as one more.
+
+**One pre-seeded finding is retracted here.** The sweep's own worklist claimed Rule 5's `HelpersProxy` name was already taken by `_HelpersProxy`. It is not: `_FixturesProxy` and `FixturesProxy` already coexist on `main` as private-read-accessor beside public-injection-proxy, and the ADR names `HelpersProxy` without the underscore — so slice 8 reproduces a working pattern rather than colliding. What survives is a readability hazard, not drift: two classes one underscore apart with unrelated responsibilities.
+
+#### 6. Consequences — drifted from its own amendments, and from itself
+
+Two bullets still stated claims Amendment 2 retracted: that proxies "carry" two catalog objects, and that B1 violations fire at prescan. The editor-squiggle promise rests on collection-time usage extraction, which [#1758](https://github.com/kalonji-tools/oxitest/issues/1758) records as unbuilt. The Python-import fallback bullet turned out to be **split** — it holds for tests and is false for declaration files, whose path chose loud rejection instead — and that is a real disagreement with the bullet rather than an oversight, so it is routed to [#1727](https://github.com/kalonji-tools/oxitest/issues/1727) rather than resolved here. Three of the five "deferred design questions" were no longer open, and the one genuinely open item with no filed home anywhere is now [#1779](https://github.com/kalonji-tools/oxitest/issues/1779). The section carried no breaking-change consequence at all despite retiring semver-protected surface; one is added. The "throwaway prototype" bullet ordered the deletion of a directory that **was never committed** — `git log --all -- 'scripts/prototype*'` is empty — so the design's stated validation basis cannot be consulted by anyone; that bullet is struck rather than actioned.
+
+And the pointer to the follow-on enumeration miscounted it twice: the Decision said "24 tickets in 5 phases", Consequences said "23 tickets in 5 phases", and the document contains **23 tickets in 7 phases**. That is the cheapest conformance failure available — the only claim in this ADR checkable without reading a line of oxitest — and it went unchecked through three amendments.
+
+#### What this amendment does not do
+
+It adds no principle and reverses no decision except Amendment 1's point 3, which it replaces with a measured one. It settles neither what `session` should mean, nor the plugin registration API shape ([#1773](https://github.com/kalonji-tools/oxitest/issues/1773)), nor the fallback-versus-loud-rejection tension ([#1727](https://github.com/kalonji-tools/oxitest/issues/1727)). It fixes no behavioural bug it found: [#1774](https://github.com/kalonji-tools/oxitest/issues/1774) and [#1778](https://github.com/kalonji-tools/oxitest/issues/1778) are filed, not fixed.
+
+**The sweep also miscounted itself.** Six `Holds` citations were caught stale and corrected during execution, three of them in its own pre-seeded findings; one pre-seeded finding was retracted outright (point 5); and one was corrected on its central claim before landing. A conformance sweep shipping a stale citation would reproduce the exact failure it exists to fix, so the tally belongs in the record rather than in a private log.
+
+The full statement-by-statement verdict record — every in-scope claim with `Holds` plus a `file:line` citation, `Drifted`, or `Forward-looking` plus its slice issue — is posted on [PR #1772](https://github.com/kalonji-tools/oxitest/pull/1772) rather than tracked in-repo, per the project's convention that surveys live on the issue tracker.
+
 ## Consequences
 
-- **New declaration surface for users.** All fixture and helper declarations move to module-level `@oxi.fixture(lifetime=...)` / `@oxi.helper` in one of four reserved file kinds. Existing users need a migration path (see follow-on impl, Documentation phase). Green-field users see only the new surface.
-- **Two catalogs on every proxy.** `FixturesProxy` and `HelpersProxy` implementations carry both the B1-filtered catalog and the full catalog — filtered for resolution decisions, full for diagnostic attribution. Skipping the second catalog produces misleading diagnostics (`FixtureNotFoundError` in place of `BoundaryError`).
-- **Prescan-time errors replace collection-time errors for a broader class of violations.** B1 boundary violations and lifetime-cap violations both fire at prescan (before any Python import, before any fixture instantiation). This is faster failure and enables better tooling (e.g., editor squiggles on illegal declarations).
-- **Fallback to Python-import discovery survives.** If AST prescan encounters dynamic decoration patterns it cannot statically parse (e.g., `if flag: dec = fixture; @dec def x(): ...`), it emits `PrescanResult::Unavailable` and the file falls through to Python-import-based discovery — the same three-tier collection model already used for tests.
-- **Deferred design questions.** The following are real design questions this ADR does not fully resolve; they belong to the impl-plan phase or a follow-on spec: IDE / type-checker stub generation for the `fx` / `hlp` proxies (auto-generated `.pyi` vs. dynamic-only vs. user-declared Protocol overlay); `FixtureRegistry.add()` runtime API details (ordering guarantees, duplicate-name handling); the migration story from the current design to this one (incremental coexistence vs. hard cutover); `FixtureRef[T]` internals under the new source variant; `oxitest inspect` updates for the new source variant and autouse-firing view.
-- **Prototype is throwaway.** `scripts/prototype_fixture_redesign/` is a 300-line Python-only simulation with six interactive scenarios. Delete it once the follow-on impl issues are filed, or fold pieces into test fixtures for the real implementation.
-- **Follow-on impl work (23 tickets in 5 phases).** This ADR **lists** the follow-on work; it does **not** file the tickets. Filing happens post-merge per the standard project pipeline (grill → spec → PR). Enumeration:
+- **New declaration surface for users.** All fixture and helper declarations move to module-level `@oxi.fixture(lifetime=...)` / `@oxi.helper` in one of four reserved file kinds. Existing users need a migration path (see follow-on impl, Documentation phase). Green-field users will see only the new surface **once [#1720](https://github.com/kalonji-tools/oxitest/issues/1720) retires the legacy one** — not before. Amendment 4 corrects the original present tense: both surfaces are live today, and the legacy registrar is still what a newcomer meets first.
+- **Both catalog views reachable from every proxy.** `FixturesProxy` and `HelpersProxy` must be able to consult the **B1-filtered** view for resolution decisions and the **full** view for diagnostic attribution. Losing the second view produces misleading diagnostics (`FixtureNotFoundError` in place of `BoundaryError`). This bullet originally read "**Two catalogs on every proxy** … carry both the B1-filtered catalog and the full catalog"; Amendment 2 retracted that object-count reading, and Rule 5 now states the constraint as reachability. The shipped implementation asks the single `FixtureRegistry` two questions rather than materialising a per-test catalog — `has_visible_anchor` (`python/oxitest/_bridge/_fixture_registry.py:466`, filtered) beside `has_namespace` (`:462`, full), which is exactly the pair the `BoundaryError`-vs-`FixtureNotFoundError` decision consults (`python/oxitest/_bridge/_fixture_session.py:809`).
+- **Prescan-time errors replace collection-time errors for lifetime-cap violations.** Lifetime-cap violations fire at prescan, before any Python import and before any fixture instantiation — the inline cap at `src/pipeline/collection.rs:188` and the rootdir-`session` rule at `:288`. **B1 boundary violations do not.** This bullet originally claimed both fired at prescan; Amendment 2 moved B1 enforcement to access time, because prescan extracts *declarations* and never *usages*, so nothing at collection time knows a test intends to reach `fx.admin.conn`. The "better tooling (e.g., editor squiggles on illegal declarations)" this bullet promises therefore depends on collection-time usage extraction, which is unbuilt and tracked by [#1758](https://github.com/kalonji-tools/oxitest/issues/1758) — it is not a consequence already purchased by the lifetime-cap gate.
+- **Fallback to Python-import discovery survives — for *tests*, not for *fixtures*.** If AST prescan cannot parse a test file it emits `PrescanResult::Unavailable` and the file falls through to Python-import-based discovery (`src/pipeline/transitions/files_collected.rs:114`–`:125`), the same three-tier collection model already used for tests. **Declaration files have no such fallback**: an unparsable one raises `CollectError::PyError` and a parseable one carrying unrecognised decorators is rejected outright (`src/pipeline/collection.rs:329`–`:352`), and the bullet's original illustration — `if flag: dec = fixture; @dec def x(): ...` — parses fine and so takes exactly that rejecting path. Amendment 4 records this as a **live disagreement rather than an oversight**: the fixture path chose the loud rejection [ADR-0006](0006-async-organizational-strategy.md) mandates and Rules 1 and 3 invoke by name, while this bullet promises a silent fallback, and Considered Option 2 rejected an import hook partly *because* it "breaks under the standard three-tier collection fallback". Which principle wins is a triage question, routed to [#1727](https://github.com/kalonji-tools/oxitest/issues/1727) and deliberately not settled here.
+- **Deferred design questions.** Five were listed; Amendment 4 finds three of them no longer open and gives all five a home.
+    - IDE / type-checker stub generation for the `fx` / `hlp` proxies (auto-generated `.pyi` vs. dynamic-only vs. user-declared Protocol overlay) — **still open**, and until Amendment 4 the only item in this ADR with no filed home at all. Now [#1779](https://github.com/kalonji-tools/oxitest/issues/1779).
+    - `FixtureRegistry.add()` runtime API details (ordering guarantees, duplicate-name handling) — **has a home**: [#1718](https://github.com/kalonji-tools/oxitest/issues/1718), with the prior API-shape decision at [#1773](https://github.com/kalonji-tools/oxitest/issues/1773).
+    - The migration story, incremental coexistence vs. hard cutover — **answered by what shipped.** Slices 1–7 ran the new declaration path alongside the legacy `Fixtures()` path; that *is* incremental coexistence, with [#1720](https://github.com/kalonji-tools/oxitest/issues/1720) as the cutover.
+    - `FixtureRef[T]` internals under the new source variant — **answered by construction, pending coverage.** The `FixtureRef` path resolves by name and namespace through the same B1-filtered route as everything else (`executor.py:225`–`:238` → `_fixture_session.py:881`–`:887` → `_fixture_instantiator.py:374`), so it is source-agnostic and needs no `ModuleSource`-specific work. No test exercises `FixtureRef[T]` against an `@oxi.fixture` declaration, so it is recorded as answered-pending-coverage rather than closed.
+    - `oxitest inspect` updates for the new source variant and the autouse-firing view — **has a home**: [#1722](https://github.com/kalonji-tools/oxitest/issues/1722).
+- **Completing this ADR requires a major version.** Added by Amendment 4; the original Consequences carried no breaking-change consequence at all. `docs/user/reference/stability.md:11` lists `Fixtures` under "Stable (semver-protected)" — surface that "will not change in backward-incompatible ways without a major version bump" (`:7`) — and `:16` extends the same promise to "`Plugin` dataclass and protocol interfaces". Rule 8 retires both. `Fixtures` is not even removed cleanly: Rule 5 reuses the name as a proxy type annotation, so a user's `fixtures = oxitest.Fixtures()` does not fail with a clean `AttributeError` but becomes a call on a name that now means something else. And `FixtureProvider` has a named downstream implementer — `HostProvider` in `oxi-nixinfra`, tracking oxitest `main` through an unpinned flake input — so retirement breaks it the day it lands rather than at a version bump. A second, separate gap for [#1721](https://github.com/kalonji-tools/oxitest/issues/1721): **the replacement surface carries no stability promise either.** `oxitest.fixture` appears on none of `stability.md`'s three tiers, while the legacy registrar it replaces is semver-protected. The docs rewrite must tier the new surface, not merely untier the old one.
+- ~~**Prototype is throwaway.** `scripts/prototype_fixture_redesign/` is a 300-line Python-only simulation with six interactive scenarios. Delete it once the follow-on impl issues are filed, or fold pieces into test fixtures for the real implementation.~~ **Struck by Amendment 4.** That directory was never committed — `git log --all -- 'scripts/prototype*'` is empty — so there is nothing to delete and no reader can consult the design's stated validation basis. The prototype was an uncommitted local exercise; this ADR, and Amendments 2 and 3 which both reason against it, should be read accordingly.
+- **Follow-on impl work (23 items in 7 phases) — a record of the plan as accepted, not a live work list.** This ADR **listed** the follow-on work; it did **not** file the tickets. Filing happened post-merge per the standard project pipeline (grill → spec → PR), as slices 1–15 ([#1708](https://github.com/kalonji-tools/oxitest/issues/1708)–[#1722](https://github.com/kalonji-tools/oxitest/issues/1722)) plus [#1727](https://github.com/kalonji-tools/oxitest/issues/1727). **Per-item status is deliberately not maintained below** — those tickets are authoritative for what is shipped and what is left, and this enumeration is left as accepted, annotated only where a later amendment names an item. Enumeration:
 
   **Foundation (v0 — non-shipping):**
   1. `PrescanDeclaration` in `src/prescan.rs` — extend `PrescanItem` with fixture/helper declaration extraction.
@@ -297,4 +584,26 @@ The decisions behind this amendment are recorded in the [grilling outcome](https
   22. `oxitest inspect` — autouse-firing view per test.
   23. IDE / type-checker stub generation for `fx` / `hlp` proxies (may spawn its own spec).
 
-- **Wayfinder map [#1703](https://github.com/kalonji-tools/oxitest/issues/1703) reaches its destination on merge of this ADR.** The map's remaining work was tracked by [#1707](https://github.com/kalonji-tools/oxitest/issues/1707), whose task was drafting this document. Once merged, the map closes; the follow-on impl tickets above are filed as fresh project work, not resumed map tickets.
+- **Wayfinder map [#1703](https://github.com/kalonji-tools/oxitest/issues/1703) reaches its destination on merge of this ADR.** The map's remaining work was tracked by [#1707](https://github.com/kalonji-tools/oxitest/issues/1707), whose task was drafting this document. Once merged, the map closes; the follow-on impl tickets above are filed as fresh project work, not resumed map tickets. *(Held: both issues are closed, and #1708–#1722 were filed as fresh project work.)*
+
+> **Consequences audit — the evidence behind the corrections above ([#1769](https://github.com/kalonji-tools/oxitest/issues/1769)).**
+>
+> **All findings below are now applied or routed** — Amendment 4 summarises them; this block is kept as the audit record, since the evidence is what makes each correction checkable rather than merely asserted.
+>
+> **Applied inline above:** the self-count (23 items in 7 phases — the Decision said "24 tickets in 5 phases" and this section said "23 tickets in 5 phases", and both were wrong); the two-catalogs bullet, which still asserted the object-count reading Amendment 2 retracted; the prescan-time-errors bullet, which still placed B1 enforcement at prescan after Amendment 2 moved it to access time; the green-field bullet, now conditional on #1720; the Python-import fallback bullet, now split with the tension routed to #1727; the "deferred design questions" bullet, now with a home per entry; the struck prototype bullet; and the new major-version bullet.
+>
+> **The six findings, with the evidence for each.**
+>
+> 1. **The enumeration is a historical record, and the lead-in now says so.** It read as a live work list — "This ADR **lists** the follow-on work; it does **not** file the tickets" — while functioning as a record: all 23 items were filed post-merge and seven slices have merged. Items **1, 5, 6, 7, 9** are shipped outright; items **2, 3, 4, 8, 10** are half-shipped, in every case with the fixtures half shipped and the helpers half open on [#1715](https://github.com/kalonji-tools/oxitest/issues/1715); items **11–18, 20–22** are unstarted; item **19** (`use-fixtures.md`) is substantially done already, ahead of its own "Documentation (v1)" phase, with the legacy registrar demoted to a marked section at `docs/user/how-to/use-fixtures.md:361`. Two structural notes for Amendment 4: item **17** (ADR-0005 Rule 4) sits in the "Retirement" phase here but was filed into the docs slice [#1721](https://github.com/kalonji-tools/oxitest/issues/1721), so the phase grouping does not match the filed shape; and **two items have no filed home at all** — the `namespace=` decorator override in item **10** (unbuilt for fixtures *and* helpers, as Rule 5's Status line records, and not covered by #1715) and item **23** (IDE / type-checker stub generation, which the "Deferred design questions" bullet also lists). Amendment 4 should file or explicitly defer those two, and should **not** restate per-item status in this document — that is what rotted the first time.
+>
+> 2. **The "Deferred design questions" bullet is stale in three of its five entries.** `FixtureRegistry.add()` runtime API details now belong to [#1718](https://github.com/kalonji-tools/oxitest/issues/1718), with the prior API-shape decision on [#1773](https://github.com/kalonji-tools/oxitest/issues/1773). The `oxitest inspect` updates belong to [#1722](https://github.com/kalonji-tools/oxitest/issues/1722). The migration story is **answered by what shipped**: slices 1–7 ran the new declaration path alongside the legacy `Fixtures()` path, which is incremental coexistence, with [#1720](https://github.com/kalonji-tools/oxitest/issues/1720) as the cutover — so the question should be closed out, not carried. Of the remaining two, `FixtureRef[T]` internals appear **answered by construction**: the FixtureRef path resolves by name and namespace through the same B1-filtered route as everything else (`python/oxitest/_bridge/executor.py:225`–`:238` → `_fixture_session.py:881`–`:887` → `_fixture_instantiator.py:374`), so it is source-agnostic and needs no `ModuleSource`-specific work — but no test exercises `FixtureRef[T]` against an `@oxi.fixture` declaration, so Amendment 4 should record it as answered-pending-coverage rather than resolved. Stub generation stays genuinely open and unfiled (point 1).
+>
+> 3. **The Python-import fallback bullet is Split, and the fixtures half is wrong — as is the example it uses for both.** The *tests* half **holds**: `PrescanResult::Unavailable` pushes an empty `PrescanModule` and the file falls through to import-based discovery (`src/pipeline/transitions/files_collected.rs:114`–`:125`). The *fixtures* half has **no fallback at all**. An unparsable declaration file raises `CollectError::PyError` — "fixtures in this file will not be registered" (`src/pipeline/collection.rs:329`–`:337`) — and a parseable file carrying unrecognised decorators raises "has @-decorated functions but no recognized `@oxi.fixture` declarations" (`:339`–`:352`). The bullet's own illustration, `if flag: dec = fixture; @dec def x(): ...`, **parses fine** and therefore takes that second path and errors: `prescan_fixture_module` returns `Unavailable` only on a read or parse failure (`src/prescan.rs:788`–`:792`, `:800`–`:803`), never for dynamic decoration. Two precision points while correcting it: the fixture-side enum is `PrescanFixtureResult`, not the `PrescanResult` the bullet names, and [#1727](https://github.com/kalonji-tools/oxitest/issues/1727) cites this as "Consequence #4" meaning the fourth *bullet*, not enumeration item 4 (which is file-convention scanning).
+>
+>    **Amendment 4 must not simply restate this to match `main`.** The two paths encode a real disagreement rather than an oversight: the fixture path chose **loud rejection**, which [ADR-0006](0006-async-organizational-strategy.md) mandates and Rules 1 and 3 invoke by name, while this bullet promises a **silent fallback**, and Considered Option 2 rejected an import hook partly *because* it "breaks under the standard three-tier collection fallback". #1727 exists to build the silent fallback and is still `needs-triage`. Which principle wins is a triage question, so record the tension and route it to #1727 — do not resolve it here.
+>
+> 4. **The prototype this ADR rests on was never committed.** The opening paragraph cites the design as "validated with a runnable prototype under `scripts/prototype_fixture_redesign/`", the "Prototype is throwaway" bullet orders that directory deleted, and Amendments 2 and 3 both reason against "the prototype". The path has no history: `git log --all -- 'scripts/prototype*'` is empty, `git ls-files` matches nothing under it, and `scripts/` holds only `check_bridge_sync.py` and `check-tag-version.sh`. There is nothing to clean up, so the throwaway bullet should be **struck rather than actioned**, and the opening paragraph and both amendments should name it an uncommitted design exercise so no reader goes hunting for the validation basis.
+>
+> 5. **Consequences carries no breaking-change consequence, and should.** `docs/user/reference/stability.md:11` lists `Fixtures` under "Stable (semver-protected)", defined at `:7` as surface that "will not change in backward-incompatible ways without a major version bump", and `:16` extends the same promise to "`Plugin` dataclass and protocol interfaces". Rule 8 therefore retires surface the project has undertaken not to remove outside a major version, and `oxi-nixinfra` implements `FixtureProvider` against an unpinned `oxitest` flake input. Rule 8's own marker records the scope for #1720; what is missing *here* is the release consequence of the redesign as a whole. Amendment 4 should add a Consequences bullet stating that completing this ADR requires a major version. A second and separate gap on the same page, for [#1721](https://github.com/kalonji-tools/oxitest/issues/1721)'s sizing: **the replacement surface carries no stability promise at all.** `oxitest.fixture` — the new decorator — appears on none of `stability.md`'s three tiers (Stable `:5`, Experimental `:31`, Internal `:39`, the last an enumerated list of `_bridge` internals rather than a catch-all), while the legacy `Fixtures` registrar it replaces is semver-protected at `:11`. The docs rewrite should tier the new surface, not only untier the old one.
+>
+> 6. **"Green-field users see only the new surface" is Drifted — both surfaces are live, and the legacy one is still what a newcomer meets first.** `docs/user/how-to/use-fixtures.md:364` tells users the legacy route "still works and is not deprecated" (under the heading at `:361`, "## Legacy: `Fixtures()` in `conftest.py`"); the `oxitest.helper` sentinel actively instructs a new user into the retired API — *"Helpers in oxitest are declared via a Helpers() registry… Define your Helpers() instance in conftest.py"* (`python/oxitest/__init__.py:227`–`:238`); and the package's own module docstring leads its "Public API" section with the legacy registrar — `:3`–`:5`, "Public API / ---------- / `Fixtures` — Instance-based fixture registry. Create one per conftest.py" — while `@oxi.fixture`, `__fixtures__.py` and `lifetime` appear **nowhere in that file at all**, docstring (`:1`–`:101`) or code. Coexistence is deliberate and correct for an incrementally-shipped redesign; what Drifts is the present-tense claim that it is already over, and it ends at [#1720](https://github.com/kalonji-tools/oxitest/issues/1720), not before. Amendment 4 should restate the bullet as conditional on #1720; the sentinel text and the module docstring belong in [#1721](https://github.com/kalonji-tools/oxitest/issues/1721)'s scope. **Note for the Rule 8 tense sweep:** this is the same present-tense-for-future-state defect Rule 8 carries, pointing the *other* way — Rule 8 says the old surface is already gone, this bullet says the new one already stands alone, and both are false for one reason. A sweep scoped to Rule 8 will not reach this one.
