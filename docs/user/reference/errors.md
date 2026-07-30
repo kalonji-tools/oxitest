@@ -341,17 +341,85 @@ tests). See
 ---
 
 ```text
-FixtureNotFoundError: fixture '<name>' not found
+FixtureNotFoundError: fixture '<name>' not found.
+  Hint: declare it with @oxi.fixture in a __fixtures__.py, or have a plugin provide it, and annotate the parameter with Fixture[<type>] in the test signature.
 ```
 
-**Cause:** A test parameter is annotated with `Fixture[T]` but no fixture
-with binding type `T` is registered — neither in `conftest.py`, via a plugin
-`FixtureProvider`, nor as a built-in fixture.
+**Cause:** A test parameter is annotated with `Fixture[T]` but no fixture with
+binding type `T` is reachable — nothing declares it with `@oxi.fixture` in a
+`__fixtures__.py` on this test's ancestor chain, nor in a `conftest.py`, nor
+via a plugin `FixtureProvider`, nor as a built-in fixture. The bare-name route
+also reports this error when the fixture *is* declared but is anchored outside
+the test's package: unlike the `fx` proxy, it has no namespace segment to
+attribute the failure to, so it cannot raise `BoundaryError`.
 
-**Fix:** Register a fixture that returns type `T` via `@fixtures.fixture` in
-your `conftest.py`, or verify that the plugin providing the fixture is declared
-in `pyproject.toml`. Check that the fixture has a return type annotation
-matching `T`.
+**Fix:** Declare a fixture returning type `T` with `@oxi.fixture(lifetime=...)`
+in the `__fixtures__.py` of the test's own package or an ancestor of it. Check
+that the fixture has a return type annotation matching `T`. If the fixture is
+supposed to come from elsewhere, verify that the `conftest.py` defining it is
+on the walk-up path, or that the plugin providing it is declared in
+`pyproject.toml`.
+
+When the namespace is known, the message names it and adds an unconditional
+note about inline declarations:
+
+```text
+FixtureNotFoundError: fixture '<name>' not found in namespace '<namespace>'.
+  Hint: check that '<namespace>' declares a fixture named '<name>' — in its package's __fixtures__.py, or in a Fixtures() instance of that name — or verify the spelling.
+  If '<name>' is declared inline in another test module it is capped at 'module' lifetime and cannot be used here; move it to __fixtures__.py to share it.
+```
+
+The inline note is always printed, whether or not such a declaration exists.
+Inline fixtures register on module import, so whether this process has seen one
+depends on worker assignment and import order — a hint that appeared only
+sometimes would be worse than one that is always true and sometimes irrelevant.
+
+---
+
+```text
+BoundaryError: [fixture-boundary] fixture 'api.api_conn' is not visible from this test.
+  Fixture anchor: tests/api
+  This test:      tests/admin/test_admin.py
+  B1: a fixture is usable only by tests in its anchor package or
+      below (ADR-0009 Rule 3).
+  Three ways forward:
+    1. Move the declaration to a package that is an ancestor of both
+    2. Move the test into tests/api or a package below it
+    3. Declare a fixture of the same shape in this test's own package
+```
+
+**Cause:** A test reached a `@oxi.fixture` declaration through the `fx` proxy
+that lies outside its own anchor package and outside every ancestor of it —
+the [B1 boundary](../how-to/use-fixtures.md#understand-fixture-visibility-the-b1-boundary).
+The fixture exists; it is simply not visible from here. Sibling packages and
+prefix-lookalike siblings (`tests/apiv2` against an anchor at `tests/api`) are
+both outside. The same check runs when a fixture resolves *its own*
+dependencies, against the fixture's anchor rather than the calling test's
+location.
+
+This is deliberately a distinct error from `FixtureNotFoundError`. Reporting
+"not found" for a correctly-spelled name would send you hunting for a typo that
+is not there. The stable code `fixture-boundary` is part of the message so
+documentation can link the failure and CI can grep for it without matching on
+prose.
+
+**Fix:** Pick one of the three restructurings the diagnostic names — move the
+declaration up to a package that is an ancestor of both, move the test into the
+fixture's package or below it, or declare a fixture of the same shape in the
+test's own package. There is no allow-comment escape hatch and no
+`strict = "warn"` softening; the boundary is not configurable.
+
+When the leaf name is also wrong, the boundary is still reported first, with the
+missing leaf appended:
+
+```text
+  Also: namespace 'api' has no fixture named 'typo' — fixing the spelling alone will not make this access legal.
+```
+
+!!! note "Two visibility regimes"
+    `conftest.py` fixtures are registered run-wide and are exempt from B1, so a
+    cross-directory `conftest.py` fixture resolves where a `@oxi.fixture` one
+    would not. Both regimes are live until `conftest.py` support is retired.
 
 ---
 
