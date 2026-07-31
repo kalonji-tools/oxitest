@@ -1,0 +1,7 @@
+[tool.oxitest]
+testpaths = ["rootdir_import"]
+python_files = ["test_*.py"]
+strict = "abort"
+
+[tool.oxitest.doctest]
+scope = ["rootdir_import/helpers.py::describe"]
