@@ -509,10 +509,7 @@ impl InspectApp {
         // Spawn phase-2 in background.
         let (tx, rx) = std::sync::mpsc::channel();
         super::spawn_phase2(
-            conftest_files,
-            test_files_for_phase2,
-            rargs.config.features.plugins.clone(),
-            rargs.config.features.plugin_settings.clone(),
+            super::phase2_args(&rargs.config, conftest_files, test_files_for_phase2),
             tx,
         );
 
