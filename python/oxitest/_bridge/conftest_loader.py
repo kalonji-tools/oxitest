@@ -36,6 +36,7 @@ from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._helper_registry import HelperRegistry
 from oxitest._bridge._helpers import Helpers
 from oxitest._bridge._namespace_validation import validate_namespace_name
+from oxitest._bridge._syspath import ensure_rootdir_importable
 from oxitest._bridge.result import DiagnosticSeverity
 
 if TYPE_CHECKING:
@@ -266,13 +267,29 @@ def create_conftest_fixtures(
 
 def create_session(
     conftest_paths: Sequence[str],
+    *,
+    rootdir: str | None = None,
 ) -> SessionResult:
     """Build a FixtureSession from all conftest paths.
 
     Returns a ``SessionResult`` named tuple of (session, violations,
     diagnostics) where diagnostics contains any Diagnostic instances
     emitted during conftest loading.
+
+    Args:
+        conftest_paths: Conftest files to load, root-first.
+        rootdir: Project rootdir to append to ``sys.path`` so test modules can
+            import sibling utility modules (#1780). ``None`` skips the append
+            entirely — the default. oxitest's own test runner calls
+            ``create_session([])`` with no rootdir during its own bootstrap;
+            making the parameter required would crash the runner on startup,
+            not just leak an entry into unit tests.
     """
+    # Must precede create_conftest_fixtures — a declaration file may itself
+    # import from the test tree.
+    if rootdir is not None:
+        ensure_rootdir_importable(rootdir)
+
     # If no diagnostic collector is active, set up a temporary one so that
     # diagnostics emitted during conftest loading (before the session exists)
     # are captured.  When a collector is already active (e.g. in unit tests
