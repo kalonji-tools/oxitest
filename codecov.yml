@@ -40,6 +40,14 @@ ignore:
   # by python/tests/test_fixtures_redesign_slice1.py, which drives the runner
   # as a subprocess and contributes nothing to the Rust flag.
   - "src/pipeline/collection.rs"
+  # init_session() meets the same criteria as collection.rs above: it takes
+  # Python<'_>, calls FixtureSession::new (which imports oxitest into the
+  # interpreter), and is reachable only from transitions/session_ready.rs.
+  # Listed after #1780, when a one-argument change caused `cargo fmt` to reflow
+  # the surrounding match block — re-stamping eleven already-uncovered lines as
+  # "added" and dropping patch coverage to 53% with no change in tested
+  # behaviour. Reflow of untestable code should not read as coverage rot.
+  - "src/pipeline/helpers.rs"
   # Python: only exercised through the Rust pipeline, not by Python unit tests
   - "python/oxitest/_bridge/worker.py"
   - "python/oxitest/__main__.py"
