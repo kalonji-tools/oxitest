@@ -69,7 +69,7 @@ Each line on stdin is a JSON object:
 
 ```json
 {
-    "protocol_version": 5,
+    "protocol_version": 6,
     "modules": [
         {
             "module_path": "tests/test_math.py",
@@ -82,6 +82,7 @@ Each line on stdin is a JSON object:
     "conftest_paths": ["tests/conftest.py", "conftest.py"],
     "timeout_secs": 30,
     "keep_tmp": "failed",
+    "rootdir": "/path/to/project",
     "show_locals": true,
     "show_internals": false
 }
@@ -98,6 +99,7 @@ Each line on stdin is a JSON object:
 | `conftest_paths` | array of strings | Conftest files to load for fixture resolution |
 | `timeout_secs` | int \| null | Per-test timeout in seconds, or null for no timeout |
 | `keep_tmp` | `string \| null` | Optional. `"failed"`, `"always"`, or omitted. Controls TempDir preservation. |
+| `rootdir` | string | Project rootdir, appended to the worker's `sys.path` so test modules can import sibling utility modules (#1780). |
 | `show_locals` | `bool \| null` | Optional. When `true`, worker captures local variables in traceback frames. |
 | `show_internals` | `bool \| null` | Optional. When `true`, worker includes internal (oxitest) frames in tracebacks. |
 
@@ -266,6 +268,7 @@ pub(crate) struct WorkerTask<'a> {
     pub fixture_modules: &'a serde_json::value::RawValue,
     pub timeout_secs: Option<u64>,
     pub keep_tmp: &'a str,
+    pub rootdir: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub show_locals: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -354,7 +357,7 @@ Steps:
 
 - Use `#[serde(default)]` on every new `WireResult` variant field so older workers work.
 - Use `#[serde(skip_serializing_if = "Option::is_none")]` on new `WorkerTask` fields.
-- The `PROTOCOL_VERSION` constant (currently `5`) in both `src/worker_result/wire.rs` and
+- The `PROTOCOL_VERSION` constant (currently `6`) in both `src/worker_result/wire.rs` and
   `python/oxitest/_bridge/result.py` should be bumped when adding, removing, or
   renaming wire fields.
 

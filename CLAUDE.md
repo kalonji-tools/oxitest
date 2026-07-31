@@ -206,7 +206,7 @@ Both the serial PyO3 path (`bridge.rs`) and the parallel JSON path (`worker_resu
 
 ### Parallel execution
 
-The Rust scheduler spawns `python -m oxitest._bridge.worker` subprocesses. Each worker receives a JSON task (modules + their items + conftest paths) via stdin and writes LDJSON lines to stdout (wire protocol v5). Each line has a `"type"` discriminator: `"result"` (test outcome), `"diagnostic"` (user-facing message), or `"trace"` (developer log). The drain loop in `parallel/drain.rs` dispatches on this field. The worker is persistent within a run — it processes tasks until stdin is closed.
+The Rust scheduler spawns `python -m oxitest._bridge.worker` subprocesses. Each worker receives a JSON task (modules + their items + conftest paths + `rootdir`) via stdin and writes LDJSON lines to stdout (wire protocol v6). Each line has a `"type"` discriminator: `"result"` (test outcome), `"diagnostic"` (user-facing message), or `"trace"` (developer log). The drain loop in `parallel/drain.rs` dispatches on this field. The worker is persistent within a run — it processes tasks until stdin is closed.
 
 ### Fixture injection protocol
 
