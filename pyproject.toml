@@ -141,6 +141,10 @@ affected_base = "main"
 
 [tool.oxitest.doctest]
 scope = "public"
+# python/tests/helpers/ is test infrastructure, not public API — the same
+# reason conftest.py is excluded in src/pipeline/collection.rs. These files
+# only exist outside conftest.py because #1700 retired the helper registry.
+skip = ["python/tests/helpers/"]
 
 [tool.coverage.run]
 source = ["python/oxitest"]
