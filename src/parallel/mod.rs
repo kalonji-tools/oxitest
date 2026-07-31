@@ -99,6 +99,7 @@ pub(crate) fn run_phase_parallel(
     let fixture_modules_raw = serialize_fixture_modules(fixture_modules);
     let timeout_secs = cfg.exec.timeout_secs;
     let keep_tmp: Arc<str> = Arc::from(cfg.output.keep_tmp.as_str());
+    let rootdir: Arc<str> = Arc::from(cfg.rootdir.as_str());
     let show_locals = cfg.output.show_locals;
     let show_internals = cfg.output.show_internals;
     let python_bin: Arc<str> = Arc::from(python_bin);
@@ -117,6 +118,7 @@ pub(crate) fn run_phase_parallel(
                 fixture_modules_json: std::sync::Arc::clone(&fixture_modules_raw),
                 timeout_secs,
                 keep_tmp: keep_tmp.clone(),
+                rootdir: rootdir.clone(),
                 show_locals,
                 show_internals,
                 tx: tx.clone(),

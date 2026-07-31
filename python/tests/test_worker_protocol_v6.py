@@ -1,4 +1,4 @@
-"""Wire protocol v5 — task-side version check and multi-module tasks (#1745)."""
+"""Wire protocol v6 — task-side version check and multi-module tasks (#1745, #1780)."""
 
 import json
 import os
@@ -13,7 +13,7 @@ from oxitest._bridge.worker import _check_task_protocol, _end_task_session
 
 
 def _task(**overrides: Any) -> dict[str, Any]:
-    """Build a minimal well-formed v5 task; override single keys per test."""
+    """Build a minimal well-formed v6 task; override single keys per test."""
     task: dict[str, Any] = {
         "protocol_version": PROTOCOL_VERSION,
         "modules": [],
@@ -21,6 +21,7 @@ def _task(**overrides: Any) -> dict[str, Any]:
         "fixture_modules": [],
         "timeout_secs": None,
         "keep_tmp": "cleanup",
+        "rootdir": "/rootdir",
     }
     task.update(overrides)
     return task
@@ -221,6 +222,56 @@ def test_worker_subprocess_rejects_a_stale_task() -> None:
     assert "just build" in diagnostics[0]["message"], (
         "the emitted diagnostic must carry the actionable message, not just the "
         "SystemExit text the user never sees"
+    )
+
+
+def test_worker_accepts_a_task_missing_rootdir(tmp: oxi.Fixture[oxi.TempDir]) -> None:
+    """A task without a `rootdir` key is still accepted and runs to completion.
+
+    A pre-#1780 coordinator (or an in-process unit test building a task dict
+    by hand) never sends this key at all. `worker.py:259` reads it with
+    `task.get("rootdir")`, which tolerates absence by returning `None` — that
+    is the documented contract this test pins, not merely "rootdir has some
+    value".
+    """
+    # Arrange
+    solo = tmp.path / "test_solo.py"
+    solo.write_text("def test_only():\n    assert True, 'must pass'\n")
+    task = _task(
+        modules=[
+            {
+                "module_path": str(solo),
+                "items": [
+                    {
+                        "fn_name": "test_only",
+                        "param_id": None,
+                        "node_id": f"{solo}::test_only",
+                        "markers": [],
+                    }
+                ],
+            }
+        ]
+    )
+    del task["rootdir"]
+
+    # Act
+    proc = _run_worker(task)
+
+    # Assert
+    results = [
+        parsed
+        for line in proc.stdout.splitlines()
+        if line.strip()
+        for parsed in [json.loads(line)]
+        if parsed.get("type") == "result"
+    ]
+    assert proc.returncode == 0, (
+        f"a task omitting rootdir must not crash the worker — worker.py uses "
+        f".get() specifically so an absent field degrades to no sys.path "
+        f"append instead of a KeyError. stderr: {proc.stderr}"
+    )
+    assert len(results) == 1 and results[0]["node_id"] == f"{solo}::test_only", (
+        "the test itself must still run and report, not just avoid crashing"
     )
 
 

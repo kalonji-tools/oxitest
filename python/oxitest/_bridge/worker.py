@@ -3,7 +3,7 @@
 Reads a single JSON task from stdin, runs each test item using executor.run_test,
 and writes one JSON result line per test to stdout.
 
-Task schema (stdin, protocol v5):
+Task schema (stdin, protocol v6):
     {
         "protocol_version": int,
         "modules": [{
@@ -19,6 +19,7 @@ Task schema (stdin, protocol v5):
         "fixture_modules": [{"module": str, "anchor": str}],
         "timeout_secs": int | null,
         "keep_tmp": str,
+        "rootdir": str,
         "show_locals": bool | null,
         "show_internals": bool | null
     }
@@ -142,6 +143,7 @@ class WorkerTask(TypedDict):
     fixture_modules: list[WorkerFixtureModule]
     timeout_secs: int | None
     keep_tmp: str
+    rootdir: NotRequired[str]
     show_locals: NotRequired[bool]
     show_internals: NotRequired[bool]
 
@@ -251,6 +253,10 @@ def run(task: WorkerTask) -> None:
     conftest_paths: list[str] = task.get("conftest_paths", [])
     timeout_secs: int | None = task.get("timeout_secs")
     keep_tmp: str = task.get("keep_tmp", "cleanup")
+    # Optional on the Python side purely so in-process unit tests can build a
+    # task dict without mutating the interpreter's sys.path. The coordinator
+    # always sends it.
+    rootdir: str | None = task.get("rootdir")
     debug = DebugContext(
         show_locals=task.get("show_locals", False),
         show_internals=task.get("show_internals", False),
@@ -262,7 +268,7 @@ def run(task: WorkerTask) -> None:
     # whatever exception was already in flight.
     module_paths = [module["module_path"] for module in modules]
 
-    session, _violations, _diagnostics = create_session(conftest_paths)
+    session, _violations, _diagnostics = create_session(conftest_paths, rootdir=rootdir)
     _register_fixture_modules(session, task.get("fixture_modules", []))
 
     # Register fixtures declared in the test module itself (e.g. a Fixtures()

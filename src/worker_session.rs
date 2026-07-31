@@ -170,6 +170,8 @@ pub(crate) struct WorkerParams {
     pub timeout_secs: Option<u64>,
     /// How to handle temp directories: "cleanup", "failed", or "always".
     pub keep_tmp: std::sync::Arc<str>,
+    /// Project rootdir sent to each worker so test-tree imports resolve (#1780).
+    pub rootdir: std::sync::Arc<str>,
     /// Whether to include local variables in failure tracebacks.
     pub show_locals: bool,
     /// Whether to include oxitest-internal frames in tracebacks.
@@ -185,12 +187,14 @@ pub(crate) struct WorkerParams {
 /// Extracted from [`run_worker_loop`] so it is reachable by `cargo test`: the
 /// loop itself needs a live subprocess and a scheduler, so coverage could never
 /// enter it — which is why `codecov/patch/rust` failed on #1747.
+#[allow(clippy::too_many_arguments)]
 fn build_task<'a>(
     group: &'a scheduler::TaskGroup,
     conftest_json: &'a serde_json::value::RawValue,
     fixture_modules_json: &'a serde_json::value::RawValue,
     timeout_secs: Option<u64>,
     keep_tmp: &'a str,
+    rootdir: &'a str,
     show_locals: bool,
     show_internals: bool,
 ) -> WorkerTask<'a> {
@@ -217,6 +221,7 @@ fn build_task<'a>(
         fixture_modules: fixture_modules_json,
         timeout_secs,
         keep_tmp,
+        rootdir,
         show_locals: if show_locals { Some(true) } else { None },
         show_internals: if show_internals { Some(true) } else { None },
     }
@@ -248,6 +253,7 @@ fn run_worker_loop(
         fixture_modules_json,
         timeout_secs,
         keep_tmp,
+        rootdir,
         show_locals,
         show_internals,
         tx,
@@ -277,6 +283,7 @@ fn run_worker_loop(
             &fixture_modules_json,
             timeout_secs,
             keep_tmp.as_ref(),
+            &rootdir,
             show_locals,
             show_internals,
         );
@@ -451,6 +458,7 @@ mod worker_session_tests {
             fixture_modules,
             timeout_secs: None,
             keep_tmp: "cleanup",
+            rootdir: "/rootdir",
             show_locals: None,
             show_internals: None,
         }
@@ -483,7 +491,9 @@ mod worker_session_tests {
         };
 
         // Act
-        let task = build_task(&group, &conftest, &fixtures, None, "cleanup", false, false);
+        let task = build_task(
+            &group, &conftest, &fixtures, None, "cleanup", "/rootdir", false, false,
+        );
 
         // Assert
         assert_eq!(
@@ -513,7 +523,9 @@ mod worker_session_tests {
         let group = crate::scheduler::TaskGroup::single(task_module("tests/test_a.py", 1));
 
         // Act
-        let task = build_task(&group, &conftest, &fixtures, None, "cleanup", false, false);
+        let task = build_task(
+            &group, &conftest, &fixtures, None, "cleanup", "/rootdir", false, false,
+        );
 
         // Assert — an unstamped task is rejected by every worker, so forgetting
         // this would fail the whole run rather than degrade quietly.
@@ -566,6 +578,12 @@ mod worker_session_tests {
         );
         assert_eq!(parsed["conftest_paths"], serde_json::json!([]));
         assert!(parsed["timeout_secs"].is_null());
+        assert_eq!(
+            parsed["rootdir"], "/rootdir",
+            "the worker inherits nothing from the coordinator's sys.path — a \
+             dropped rootdir field means every parallel test-tree import fails \
+             three layers away in a subprocess"
+        );
 
         drop(session);
         let _ = child.wait();
@@ -592,6 +610,7 @@ mod worker_session_tests {
             fixture_modules: &no_fixtures,
             timeout_secs: Some(30),
             keep_tmp: "cleanup",
+            rootdir: "/rootdir",
             show_locals: None,
             show_internals: None,
         };

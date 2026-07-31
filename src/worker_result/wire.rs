@@ -7,7 +7,7 @@ use camino::Utf8PathBuf;
 ///
 /// Bump when adding, removing, or changing fields in [`WorkerTask`] or
 /// [`WireResult`]. The coordinator warns on version mismatch.
-pub(crate) const PROTOCOL_VERSION: u32 = 5;
+pub(crate) const PROTOCOL_VERSION: u32 = 6;
 
 /// A JSON task sent to a worker subprocess over stdin.
 ///
@@ -30,6 +30,10 @@ pub(crate) struct WorkerTask<'a> {
     pub fixture_modules: &'a serde_json::value::RawValue,
     pub timeout_secs: Option<u64>,
     pub keep_tmp: &'a str,
+    /// Project rootdir, appended to the worker's `sys.path` so test modules can
+    /// import sibling utility modules (#1780). Always sent — the Python side
+    /// tolerates its absence only for in-process unit tests.
+    pub rootdir: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub show_locals: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
