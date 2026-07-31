@@ -57,13 +57,19 @@ impl FixtureSession {
     ///
     /// Returns the session and any strict-mode violations detected during
     /// fixture registration (e.g. missing return type annotations).
+    ///
+    /// `rootdir` is appended to `sys.path` so test modules can import sibling
+    /// utility modules (#1780).
     pub fn new(
         py: Python<'_>,
         conftest_paths: &[Utf8PathBuf],
+        rootdir: &camino::Utf8Path,
     ) -> PyResult<(Self, Vec<RawViolation>)> {
         let loader = py.import("oxitest._bridge.conftest_loader")?;
         let paths: Vec<&str> = conftest_paths.iter().map(|p| p.as_str()).collect();
-        let result = loader.call_method1("create_session", (paths,))?;
+        let kwargs = pyo3::types::PyDict::new(py);
+        kwargs.set_item("rootdir", rootdir.as_str())?;
+        let result = loader.call_method("create_session", (paths,), Some(&kwargs))?;
         let (session, violations, _diagnostics): (
             Bound<'_, PyAny>,
             Vec<RawViolation>,

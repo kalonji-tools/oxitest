@@ -107,6 +107,39 @@ pub(crate) fn build_phase1_graph(
     Ok(builder.build())
 }
 
+/// Parameters [`spawn_phase2`] needs to build its background Python session.
+///
+/// Bundles the fields that both call sites (`run` and `InspectApp::refresh`)
+/// must assemble so they build a struct instead of passing a long positional
+/// argument list — and so the field-picking logic (which parts come from
+/// `Config`, which are supplied directly by the caller) is reachable by
+/// `cargo test` without a thread or a live Python session. Same rationale as
+/// `build_task` in `worker_session.rs:187`-`:189`.
+pub(crate) struct Phase2Args {
+    pub(crate) conftest_files: Vec<Utf8PathBuf>,
+    pub(crate) test_files: Vec<Utf8PathBuf>,
+    pub(crate) plugins: Vec<String>,
+    pub(crate) plugin_settings: std::collections::HashMap<String, toml::Value>,
+    pub(crate) rootdir: Utf8PathBuf,
+}
+
+/// Build [`Phase2Args`] from a `Config` plus the file lists the caller already
+/// collected. `conftest_files` and `test_files` come from `collect_files`, not
+/// `Config`, so they are supplied separately rather than cloned off `cfg`.
+pub(crate) fn phase2_args(
+    cfg: &config::Config,
+    conftest_files: Vec<Utf8PathBuf>,
+    test_files: Vec<Utf8PathBuf>,
+) -> Phase2Args {
+    Phase2Args {
+        conftest_files,
+        test_files,
+        plugins: cfg.features.plugins.clone(),
+        plugin_settings: cfg.features.plugin_settings.clone(),
+        rootdir: cfg.rootdir.clone(),
+    }
+}
+
 /// Phase 2: spawn a background thread that initializes the Python session and
 /// collects fixture, plugin, helper, and test→fixture dependency entries.
 ///
@@ -114,21 +147,22 @@ pub(crate) fn build_phase1_graph(
 /// Python session fails, the sender is simply dropped, which causes the
 /// receiver to see `Disconnected` — the TUI then transitions to
 /// `LoadingState::Complete` with whatever data it already has.
-pub(crate) fn spawn_phase2(
-    conftest_files: Vec<Utf8PathBuf>,
-    test_files: Vec<Utf8PathBuf>,
-    plugins: Vec<String>,
-    plugin_settings: std::collections::HashMap<String, toml::Value>,
-    tx: mpsc::Sender<Phase2Data>,
-) {
+pub(crate) fn spawn_phase2(args: Phase2Args, tx: mpsc::Sender<Phase2Data>) {
+    let Phase2Args {
+        conftest_files,
+        test_files,
+        plugins,
+        plugin_settings,
+        rootdir,
+    } = args;
     thread::spawn(move || {
         pyo3::Python::attach(|py| {
             let result = (|| -> Result<Phase2Data, String> {
                 use crate::bridge::FixtureSession;
                 use crate::query::resource::QueryEntry;
 
-                let (session, _violations) =
-                    FixtureSession::new(py, &conftest_files).map_err(|e| e.to_string())?;
+                let (session, _violations) = FixtureSession::new(py, &conftest_files, &rootdir)
+                    .map_err(|e| e.to_string())?;
 
                 // Load plugins if configured.
                 if !plugins.is_empty() {
@@ -206,10 +240,7 @@ pub(crate) fn run(
     // Phase 1 parses ASTs, so fixture/plugin data is ready sooner.
     let (tx, rx) = mpsc::channel();
     spawn_phase2(
-        conftest_files.clone(),
-        test_files_for_phase2,
-        cfg.features.plugins.clone(),
-        cfg.features.plugin_settings.clone(),
+        phase2_args(cfg, conftest_files.clone(), test_files_for_phase2),
         tx,
     );
 
@@ -238,10 +269,32 @@ pub(crate) fn run(
 
 #[cfg(test)]
 mod tests {
+    use super::phase2_args;
+    use crate::config::Config;
     use crate::config::FailedMode;
     use crate::config::cli::{FailedFilterArgs, FilteringArgs, InspectArgs};
     use crate::query::resource::QueryEntry;
     use std::collections::HashMap;
+
+    #[test]
+    fn phase2_args_carries_the_configs_rootdir() {
+        // Arrange — both spawn_phase2 call sites (`run` and `InspectApp::refresh`)
+        // pass `cfg.rootdir` through unmodified; the realistic bug is a call site
+        // passing the wrong path, or a future third call site forgetting it.
+        let cfg = Config::default();
+
+        // Act
+        let args = phase2_args(&cfg, Vec::new(), Vec::new());
+
+        // Assert
+        assert_eq!(
+            args.rootdir, cfg.rootdir,
+            "spawn_phase2 forwards rootdir to FixtureSession::new so worker-less \
+             (serial-in-thread) fixture collection resolves test-tree imports; a \
+             mismatched rootdir here would silently break inspect's fixture pane \
+             without failing any test that exercises the TUI directly"
+        );
+    }
 
     /// Create a [`QueryEntry`] from key-value pairs.
     fn entry(pairs: &[(&str, &str)]) -> QueryEntry {
