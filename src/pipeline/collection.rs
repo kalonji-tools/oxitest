@@ -1800,6 +1800,150 @@ mod tests {
     }
 
     #[test]
+    fn stale_symbol_entry_naming_a_missing_function_is_stale() {
+        // The `NoSubjects` verdict itself: file on disk, file scanned, named
+        // symbol absent. Every other `stale_count` assertion either uses an
+        // empty scanned set (static rule only) or expects zero, so before this
+        // test a `classify` that returned `Fresh` here passed the whole suite.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        // Documented on purpose: a bare `def` would raise a missing-`Examples:`
+        // coverage violation, and the fixture must isolate the stale verdict.
+        let module_source = concat!(
+            "def real_thing():\n",
+            "    \"\"\"The subject that does exist.\n",
+            "\n",
+            "    Examples:\n",
+            "        >>> real_thing()\n",
+            "    \"\"\"\n",
+        );
+        root.child("mod.py")
+            .write_str(module_source)
+            .expect("write the symbol entry's file");
+        // Built inline rather than via `cfg_for_stale`: the fixture's entry is
+        // overwritten wholesale below, so passing it a path would be dead.
+        let mut cfg = crate::config::Config::default();
+        cfg.markers.strict = Some(crate::config::StrictMode::Abort);
+        cfg.rootdir = rootdir.to_owned();
+        cfg.doctest = Some(crate::config::DoctestConfig {
+            scope: Some(crate::config::DoctestScope::Public),
+            // `typo_thing` is the typo under test -- `mod.py` defines
+            // `real_thing`, so nothing can ever match this entry.
+            skip: vec![crate::config::ScopeEntry::Symbol {
+                file: Utf8PathBuf::from("mod.py"),
+                name: "typo_thing".to_string(),
+            }],
+        });
+        assert_eq!(
+            stale_count(&cfg, &[rootdir.join("mod.py")]),
+            1,
+            "sub-file typo detection is the entire reason ADR-0010 kept a \
+             hit-based half instead of the simpler pure-static design it \
+             measured and rejected -- if this entry passes silently, the \
+             hit-based half is dead weight and the ADR's rationale is void",
+        );
+    }
+
+    #[test]
+    fn stale_member_entry_naming_a_missing_method_is_stale() {
+        // First unit coverage of `Member` in any form -- until now it was
+        // exercised only by the slower Python integration suite. `Member`
+        // shares `classify`'s arm with `Symbol` today, so this guards against
+        // a future `cls`-aware split silently losing the verdict.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        let module_source = concat!(
+            "class Widget:\n",
+            "    \"\"\"The class that does exist.\n",
+            "\n",
+            "    Examples:\n",
+            "        >>> Widget()\n",
+            "    \"\"\"\n",
+            "\n",
+            "    def real_method(self):\n",
+            "        \"\"\"The method that does exist.\n",
+            "\n",
+            "        Examples:\n",
+            "            >>> Widget().real_method()\n",
+            "        \"\"\"\n",
+        );
+        root.child("mod.py")
+            .write_str(module_source)
+            .expect("write the member entry's file");
+        // Built inline rather than via `cfg_for_stale`: the fixture's entry is
+        // overwritten wholesale below, so passing it a path would be dead.
+        let mut cfg = crate::config::Config::default();
+        cfg.markers.strict = Some(crate::config::StrictMode::Abort);
+        cfg.rootdir = rootdir.to_owned();
+        cfg.doctest = Some(crate::config::DoctestConfig {
+            scope: Some(crate::config::DoctestScope::Public),
+            // `typo_method` is the typo under test -- `Widget` defines
+            // `real_method`, so nothing can ever match this entry.
+            skip: vec![crate::config::ScopeEntry::Member {
+                file: Utf8PathBuf::from("mod.py"),
+                cls: "Widget".to_string(),
+                name: "typo_method".to_string(),
+            }],
+        });
+        assert_eq!(
+            stale_count(&cfg, &[rootdir.join("mod.py")]),
+            1,
+            "a mistyped method name is exactly as unfixable as a mistyped \
+             function name, so `Member` must reach the same verdict `Symbol` \
+             does -- letting it pass would leave per-method opt-in as the one \
+             corner of the grammar where typos stay invisible",
+        );
+    }
+
+    #[test]
+    fn stale_member_entry_abstains_when_its_file_was_not_scanned() {
+        // The abstention half of the `Member` pair. Without it, a mutation
+        // that made the `Member` verdict unconditional would be caught only on
+        // the `Symbol` arm, which is precisely the divergence the pair exists
+        // to detect once `Member` stops sharing `classify`'s arm with `Symbol`.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        let module_source = concat!(
+            "class Widget:\n",
+            "    \"\"\"The class that does exist.\n",
+            "\n",
+            "    Examples:\n",
+            "        >>> Widget()\n",
+            "    \"\"\"\n",
+            "\n",
+            "    def real_method(self):\n",
+            "        \"\"\"The method that does exist.\n",
+            "\n",
+            "        Examples:\n",
+            "            >>> Widget().real_method()\n",
+            "        \"\"\"\n",
+        );
+        root.child("mod.py")
+            .write_str(module_source)
+            .expect("write the member entry's file");
+        // Built inline rather than via `cfg_for_stale`: the fixture's entry is
+        // overwritten wholesale below, so passing it a path would be dead.
+        let mut cfg = crate::config::Config::default();
+        cfg.markers.strict = Some(crate::config::StrictMode::Abort);
+        cfg.rootdir = rootdir.to_owned();
+        cfg.doctest = Some(crate::config::DoctestConfig {
+            scope: Some(crate::config::DoctestScope::Public),
+            skip: vec![crate::config::ScopeEntry::Member {
+                file: Utf8PathBuf::from("mod.py"),
+                cls: "Widget".to_string(),
+                name: "typo_method".to_string(),
+            }],
+        });
+        assert_eq!(
+            stale_count(&cfg, &[]),
+            0,
+            "a run that never scanned the file has no evidence about the \
+             method either -- `Member` must abstain on the same terms as \
+             `Symbol`, or narrowed runs hard-fail all over again (#1796)",
+        );
+    }
+
+    #[test]
     fn stale_entries_promote_to_collect_error_under_abort() {
         use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
         use std::sync::Arc;
