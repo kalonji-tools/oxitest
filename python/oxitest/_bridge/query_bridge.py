@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-__all__ = ["fixture_entries", "helper_entries", "plugin_entries", "test_fixture_deps"]
+__all__ = ["fixture_entries", "plugin_entries", "test_fixture_deps"]
 
-import inspect
 from typing import Any
 
 from oxitest._bridge._fixture_registry import (
@@ -62,36 +61,6 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
                 "scope": defn.scope.value,
                 "type": getattr(defn.fixture_type, "__name__", "None"),
                 "uses": deps,
-            }
-        )
-    return entries
-
-
-def helper_entries(registry: Any) -> list[dict[str, str]]:
-    """Return all helper defs as dicts for the Rust query engine."""
-    entries = []
-    for defn in registry.all():
-        match defn.source:
-            case ConftestSource(conftest_path=p):
-                source = p
-            case PluginSource(plugin_module=m):
-                source = f"<plugin:{m}>"
-            case _:
-                source = "<unknown>"
-
-        doc = (defn.func.__doc__ or "").strip()
-        try:
-            sig = str(inspect.signature(defn.func, eval_str=True))
-        except (ValueError, TypeError):
-            sig = "(...)"
-
-        entries.append(
-            {
-                "name": defn.name,
-                "source": source,
-                "namespace": defn.namespace,
-                "docstring": doc,
-                "signature": f"{defn.name}{sig}",
             }
         )
     return entries

@@ -25,7 +25,6 @@ from oxitest._bridge._fixture_registry import (
 from oxitest._bridge._fixture_type import FixtureRef
 from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._fn_metadata import _update, get_metadata
-from oxitest._bridge._helpers import Helpers
 from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._metadata import get_marks
@@ -486,10 +485,9 @@ def _check_module_registrars(
 
     for attr_name in vars(module):
         obj = getattr(module, attr_name)
-        if not isinstance(obj, (Fixtures, Helpers)):
+        if not isinstance(obj, Fixtures):
             continue
 
-        kind = type(obj).__name__
         source_line_num = getattr(obj, "_source_line", 0)
 
         # Check for allow comment on the instance line
@@ -500,7 +498,7 @@ def _check_module_registrars(
 
         if allowed:
             # Authorized — register silently
-            if isinstance(obj, Fixtures) and registry is not None:
+            if registry is not None:
                 for defn in obj.defs:
                     registry.register(
                         dataclasses.replace(
@@ -516,7 +514,7 @@ def _check_module_registrars(
                 CollectedViolation(
                     node_id=path,
                     kind=ViolationKind.REGISTRAR_IN_TEST_MODULE,
-                    detail=f"{kind}() instance '{attr_name}' — "
+                    detail=f"Fixtures() instance '{attr_name}' — "
                     f"move to conftest.py or add "
                     f"# oxitest: allow[registrar-in-test-module]",
                 )

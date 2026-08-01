@@ -339,45 +339,6 @@ def test_collected_item_with_markers_and_param() -> None:
     )
 
 
-def test_collect_module_emits_violation_for_helpers_in_test_module(
-    tmp: TempDir,
-) -> None:
-    """Helpers() instance without allow comment emits REGISTRAR_IN_TEST_MODULE."""
-    path = helpers.write_test_module(
-        tmp,
-        "from oxitest import Helpers\n"
-        "h = Helpers()\n"
-        "@h.helper\n"
-        "def my_helper():\n"
-        "    return 42\n"
-        "def test_foo(): pass\n",
-        name="test_with_helpers.py",
-    )
-    _, violations = collect_module(path)
-    registrar_viols = [
-        v for v in violations if v.kind == ViolationKind.REGISTRAR_IN_TEST_MODULE
-    ]
-    assert len(registrar_viols) == 1, (
-        f"Helpers() in a test module without an allow comment must emit exactly one"
-        f" violation -- zero means the guard is broken, more than one means duplicate"
-        f" detection: {registrar_viols}"
-    )
-    v = registrar_viols[0]
-    assert v.node_id == path, (
-        f"node_id must point to the offending module so reporters can show the file"
-        f" path in diagnostics -- a wrong path sends users to the wrong file:"
-        f" {v.node_id!r}"
-    )
-    assert "Helpers" in v.detail, (
-        f"the detail must name the registrar class so the user knows which instance"
-        f" triggered the violation and can locate it in the source: {v.detail!r}"
-    )
-    assert "allow[registrar-in-test-module]" in v.detail, (
-        f"the detail must include the allow comment syntax so the user knows exactly"
-        f" how to suppress the violation if intentional: {v.detail!r}"
-    )
-
-
 def _write_py(tmp_path: TempDir, src: str) -> str:
     """Write source code to a temp file and return its path as str."""
     return helpers.write_test_module(tmp_path, src, name="test_viol.py")
@@ -1507,29 +1468,4 @@ def test_fixtures_without_allow_comment_blocked(tmp: TempDir) -> None:
         "fixtures must NOT be registered when the allow comment is absent --"
         " registering them anyway bypasses the safety gate and lets accidental"
         " registrars silently take effect"
-    )
-
-
-def test_helpers_with_allow_comment_suppressed(tmp: TempDir) -> None:
-    """Helpers() with allow comment emits no violation."""
-    path = helpers.write_test_module(
-        tmp,
-        "from oxitest import Helpers\n"
-        "h = Helpers()  "
-        "# oxitest: allow[registrar-in-test-module]\n"
-        "@h.helper\n"
-        "def my_helper():\n"
-        "    return 42\n"
-        "def test_foo(): pass\n",
-        name="test_helpers_allow.py",
-    )
-    _, violations = collect_module(path)
-    registrar_viols = [
-        v for v in violations if v.kind == ViolationKind.REGISTRAR_IN_TEST_MODULE
-    ]
-    assert len(registrar_viols) == 0, (
-        "the allow comment is the opt-in gate for Helpers() in test modules -- emitting"
-        " a violation despite the comment breaks the suppression contract and forces"
-        " users to move helpers elsewhere: "
-        f"{registrar_viols}"
     )
