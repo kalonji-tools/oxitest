@@ -18,7 +18,7 @@ subcommand is equivalent to `oxitest run`.
 |------------|---------|
 | `run` | Run tests (default when no subcommand is given) |
 | `debug` | Run tests under an interactive debugger |
-| `query` | Inspect tests, fixtures, marks, helpers, or plugins without running them |
+| `query` | Inspect tests, fixtures, marks, or plugins without running them |
 | `inspect` | Interactive TUI explorer for tests, fixtures, marks, and other project metadata |
 | `env` | Print environment information and exit |
 | `fixtures` | **Deprecated.** Use `oxitest query fixtures` instead. |
@@ -124,7 +124,7 @@ See [Debug tests](../how-to/debug-tests.md) for usage examples.
 
 ## `oxitest query`
 
-Inspect project resources — tests, fixtures, marks, helpers, or plugins — and
+Inspect project resources — tests, fixtures, marks, or plugins — and
 exit without running any tests.
 
 ```text
@@ -138,10 +138,9 @@ The `<resource>` argument selects what to inspect:
 | `tests` | Collected test items | Yes (collection) |
 | `fixtures` | Registered fixtures | Yes |
 | `marks` | All marks used in the project | No (Rust AST) |
-| `helpers` | Conftest helper namespaces | No (Rust AST) |
 | `plugins` | Registered plugins and protocols | Yes |
 
-Resources that use Rust AST (`marks`, `helpers`) are instant — they never
+Resources that use Rust AST (`marks`) are instant — they never
 invoke Python. `tests`, `fixtures`, and `plugins` require Python.
 
 ### Common flags
@@ -250,20 +249,6 @@ oxitest query marks [OPTIONS] [PATHS...]
 | `--jsonl` | — | flag | `false` | Output as JSON Lines. |
 | `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
 
-### `query helpers`
-
-List all conftest helper namespaces. Uses Rust AST — no Python required.
-
-```text
-oxitest query helpers [OPTIONS] [PATHS...]
-```
-
-| Flag | Short | Type | Default | Description |
-|------|-------|------|---------|-------------|
-| `-E` | — | `EXPR` | — | DSL filter. Predicate: `name()`. |
-| `--jsonl` | — | flag | `false` | Output as JSON Lines. |
-| `--color` | — | `auto\|always\|never` | `auto` | Color output mode. |
-
 ### `query plugins`
 
 List all registered plugins and the protocols they implement.
@@ -288,7 +273,7 @@ vary by resource but the syntax is consistent:
 | Predicate | Resources | Matches when… |
 |-----------|-----------|---------------|
 | `name(pat)` | all | name contains `pat` (substring, case-insensitive) |
-| `source(pat)` | tests, fixtures, helpers | file path or node ID contains `pat` |
+| `source(pat)` | tests, fixtures | file path or node ID contains `pat` |
 | `mark(name)` | tests | test has the given mark |
 | `async()` | tests, fixtures | test or fixture is an async function |
 | `shared()` | fixtures | fixture is declared `shared=True` |
@@ -309,7 +294,7 @@ Expressions can be combined with `and`, `or`, `not`, and parentheses:
 ## `oxitest inspect`
 
 Interactive terminal UI for exploring test project metadata — tests, fixtures,
-marks, conftests, plugins, and helpers — without running any tests.
+marks, conftests, and plugins — without running any tests.
 
 ```text
 oxitest inspect [NAME] [OPTIONS]
@@ -352,7 +337,7 @@ same filter semantics as `oxitest run`.
 
 `oxitest inspect` uses a two-phase loading model:
 
-1. **Phase 1 (instant)** — Tests, marks, and helpers are extracted from the
+1. **Phase 1 (instant)** — Tests and marks are extracted from the
    Rust AST without starting a Python session. The TUI becomes interactive
    immediately.
 2. **Phase 2 (background)** — A background thread initialises the Python

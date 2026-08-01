@@ -9,8 +9,8 @@
 
 ## Overview
 
-Plugins extend oxitest through nine protocols: **Reporter**, **LogBackend**,
-**FixtureProvider**, **HelperProvider**, **Collector**, **ExecutionWrapper**, **AsyncBackend**, **DebuggerBackend**, and **CoverageProvider**. Each plugin is a
+Plugins extend oxitest through eight protocols: **Reporter**, **LogBackend**,
+**FixtureProvider**, **Collector**, **ExecutionWrapper**, **AsyncBackend**, **DebuggerBackend**, and **CoverageProvider**. Each plugin is a
 Python package declared in `pyproject.toml` and loaded at startup. Per-plugin
 configuration is passed via `plugin_settings` as a dictionary to the plugin's
 entry point function.
@@ -129,7 +129,7 @@ purposes:
 | **Scope** | One project | Any project that installs it |
 | **Distribution** | Not distributed | Published to PyPI or a private index |
 | **Packaging** | None required | Standard Python package |
-| **Best for** | Project-specific fixtures and helpers | Reusable infrastructure across many projects |
+| **Best for** | Project-specific fixtures | Reusable infrastructure across many projects |
 
 Use `conftest.py` when the extension is specific to your test suite.
 Use a plugin when you want to share the behaviour across multiple projects or
@@ -140,7 +140,6 @@ distribute it to other teams.
 | I want to... | Use this protocol |
 |---|---|
 | Provide reusable fixtures across projects | `FixtureProvider` |
-| Provide reusable helper functions across projects | `HelperProvider` |
 | Add retry, profiling, or tracing around tests | `ExecutionWrapper` |
 | Send results to a dashboard or custom format | `Reporter` |
 | Use an alternative coverage tool | `CoverageProvider` |
@@ -172,7 +171,7 @@ that accompanies it (for example, a coverage plugin that also provides a
 
 ## Protocols
 
-The `Plugin` dataclass has nine fields — six tuple-based protocol fields and
+The `Plugin` dataclass has eight fields — five tuple-based protocol fields and
 three singleton fields (`async_backend`, `debugger_backend`, and
 `coverage_provider`). Each tuple field allows a single plugin to provide
 multiple implementations of the same protocol. The three singleton fields
@@ -184,7 +183,6 @@ does not provide the backend; do not pass `None` explicitly.
 class Plugin:
     log_backends: tuple[LogBackend, ...] = ()
     fixture_providers: tuple[FixtureProvider, ...] = ()
-    helper_providers: tuple[HelperProvider, ...] = ()
     execution_wrappers: tuple[ExecutionWrapper, ...] = ()
     collectors: tuple[Collector, ...] = ()
     reporters: tuple[Reporter, ...] = ()
@@ -378,37 +376,6 @@ wouldn't get.
 > `frames`) that are captured from a real exception's traceback — no wrapper
 > case has yet demanded author-synthesis of these. If your plugin has one,
 > please [file an issue](https://github.com/kalonji-tools/oxitest/issues/new).
-
-### HelperProvider
-
-Helper providers contribute named callables to the helper registry. Tests
-access them via `helpers.<namespace>.<name>()`.
-
-**Signatures:**
-
-```python
---8<-- "python/tests/docs/how-to/test_write_plugins.py:helper-provider-protocol"
-```
-
-**Example** -- provide a URL builder helper:
-
-```python
-from oxitest.plugin import Plugin
-
-
-class UrlHelper:
-    @property
-    def name(self):
-        return "build_url"
-
-    @property
-    def helper(self):
-        return lambda base, path: f"{base.rstrip('/')}/{path.lstrip('/')}"
-
-
-def oxitest_plugin(config=None):
-    return Plugin(helper_providers=(UrlHelper(),))
-```
 
 ## Complete example
 

@@ -62,15 +62,9 @@
 
 ## Conftest
 
-**conftest.py** — A reserved filename discovered by walking from rootdir to the test file's directory. Holds fixtures and helpers. Unlike pytest — and unlike `@oxi.fixture` declarations — its fixtures are registered **run-wide**, not scoped to the containing subtree, so they are exempt from the B1 boundary. Two visibility regimes therefore run side by side until `conftest.py` support is retired (#1720); the gap is tracked as #1760.
+**conftest.py** — A reserved filename discovered by walking from rootdir to the test file's directory. Holds fixtures. Unlike pytest — and unlike `@oxi.fixture` declarations — its fixtures are registered **run-wide**, not scoped to the containing subtree, so they are exempt from the B1 boundary. Two visibility regimes therefore run side by side until `conftest.py` support is retired (#1720); the gap is tracked as #1760.
 
-**Helpers** — Callables explicitly registered via a `Helpers()` instance in conftest.py. Accessed via `from oxitest import helpers` as `helpers.<namespace>.<fn>()`. Sources: conftest definitions and plugin providers.
-
-**Helpers (registry)** — An instance-based registry (`helpers = Helpers()`) that collects helper definitions via the `@helpers.helper` decorator.
-
-**HelperProvider** — Plugin protocol for providing helpers. Properties: `name` (str) and `helper` (callable). Namespace derived from `provider.__module__` at registration time.
-
-**Allow Comment** — Inline comment `# oxitest: allow[rule-name]` that authorizes behavior that would otherwise be a strict-mode violation. Used to opt in to `Fixtures()` or `Helpers()` in test modules.
+**Allow Comment** — Inline comment `# oxitest: allow[rule-name]` that authorizes behavior that would otherwise be a strict-mode violation. Used to opt in to `Fixtures()` in test modules.
 
 ## Marks
 
@@ -124,7 +118,7 @@
 
 **Subcommand** — A top-level operation that determines what oxitest does: `run` (execute tests, default), `debug` (interactive debugger), `query` (filter and print test artifacts), `inspect` (interactive TUI explorer), `env` (print environment). Each subcommand has its own flag set.
 
-**Inspect Node** — A navigable entity in the `inspect` TUI. One of six built-in kinds: Fixture, Test, Mark, Conftest, Plugin, Helper. Plugins may add extension node kinds. Each node has fields, edges to other nodes, and a detail view.
+**Inspect Node** — A navigable entity in the `inspect` TUI. One of five built-in kinds: Fixture, Test, Mark, Conftest, Plugin. Plugins may add extension node kinds. Each node has fields, edges to other nodes, and a detail view.
 
 **Overview** — The cartographic landing screen of `inspect`. Shows curated sections (e.g., Fixture Gravity, Marks, Signals) that reveal the shape and hotspots of the test suite. Sections populate progressively as phase-2 data arrives.
 

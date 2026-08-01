@@ -221,7 +221,7 @@ if matches!(command, config::Command::Env) {
 
 ### Reference: how `Query` is structured
 
-`Query` is the most complex subcommand. It takes a positional `ResourceKind` enum (`tests`, `fixtures`, `marks`, `helpers`, `plugins`) and optional flags (`--fzf`, `--detail`, `--jsonl`, `--count`, `--tree`). Some resource kinds (`tests`, `marks`, `helpers`) work without a Python session (instant), while others (`fixtures`, `plugins`) require one. The pipeline dispatch checks this:
+`Query` is the most complex subcommand. It takes a positional `ResourceKind` enum (`tests`, `fixtures`, `marks`, `plugins`) and optional flags (`--fzf`, `--detail`, `--jsonl`, `--count`, `--tree`). Some resource kinds (`tests`, `marks`) work without a Python session (instant), while others (`fixtures`, `plugins`) require one. The pipeline dispatch checks this:
 
 ```rust
 config::Command::Query(ref args) => {
@@ -361,7 +361,6 @@ The plugin system is defined in two places:
 | `fixture_provider` | `FixtureProvider` | Lazy | Many |
 | `execution_wrapper` | `ExecutionWrapper` | Lazy | Many |
 | `debugger_backend` | `DebuggerBackend` | Lazy | At most one |
-| `helper_provider` | `HelperProvider` | Lazy | Many |
 
 **Eager** protocols must be loaded at session start (before test execution).
 **Lazy** protocols are deferred until first use -- their plugin modules are not even imported until needed.

@@ -364,7 +364,7 @@ Multiple fixture names can be passed in a single decorator:
     Everything in this section still works and is not deprecated. It is
     scheduled for removal in
     [#1720](https://github.com/kalonji-tools/oxitest/issues/1720), at which
-    point `Fixtures()`, `Helpers()`, and `conftest.py` discovery all go away
+    point `Fixtures()` and `conftest.py` discovery both go away
     together. New fixtures belong in a `__fixtures__.py`.
 
     The two routes differ in one user-visible way beyond syntax: `conftest.py`
