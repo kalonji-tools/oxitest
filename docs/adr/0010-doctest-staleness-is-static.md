@@ -41,7 +41,7 @@ The "entry exists but yielded no coverage subjects" signal is dropped entirely �
   | Blind spot | Why accepted |
   |---|---|
   | Entry exists but sits outside the declared test tree | Detecting it needs the *declared* `testpaths`, which `merge_paths` destroys — see **#1798**. Patching around it in the guard would add machinery #1798 deletes |
-  | `Symbol`/`Member` in a file permanently excluded from the coverage set (`conftest.py`, `python_files` glob, `norecursedirs`, or the `List`-scope prescreen) | Detecting it would couple staleness to the exclusion set, which **#1790** is actively deciding whether to change |
+  | `Symbol`/`Member` entry whose file the scanner never parses — the entry abstains, whatever the reason the file was dropped. The current drop reasons, and which of them an explicit `scope` entry can override, live in `run_coverage_check` (`src/doctest/coverage.rs`); enumerating them here is how this row drifted the first time (#1799) | An unparsed file carries no evidence about the symbols inside it (#1796). Detecting these entries would couple staleness to the exclusion set, which **#1790** is actively deciding whether to change |
   | Entry exists and is reachable but yields no coverage subjects | Not evidence of anything. This is the signal all three attempts mistook for a typo |
 
 - **#1798 is this ADR's expiry condition for the first blind spot.** Once `paths.testpaths` stops conflating the declared test tree with the effective run set, reachability becomes statically answerable and this ADR should be amended rather than worked around.
