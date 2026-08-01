@@ -133,7 +133,9 @@ class FixtureValidator:
 
         # 2. Expand transitively: referenced fixtures + autouse fixtures + all deps
         seed_names = set(referenced)
-        for defn in self._registry.get_autouse():
+        # Full-catalog query: an autouse fixture anywhere in the run is used
+        # by the tests inside its own boundary, so it must never be flagged.
+        for defn in self._registry.get_autouse(None):
             seed_names.add(defn.name)
         all_used = _expand_fixture_deps(seed_names, self._registry)
 
