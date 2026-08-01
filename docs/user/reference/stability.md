@@ -20,7 +20,7 @@ These surfaces will not change in backward-incompatible ways without a major ver
 
 - Subcommands: `run` (default), `debug`, `query`, `env`
 - All documented flags and their behavior
-- Exit codes: 0 (success), 1 (test failure), 2 (usage error), 3 (collection error), 4 (internal error)
+- Exit codes: 0 (success), 1 (test failure), 2 (interrupted), 3 (collection error), 4 (usage error)
 
 **Configuration**
 
