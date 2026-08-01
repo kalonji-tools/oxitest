@@ -410,7 +410,7 @@ def test_full_pipeline_two_namespaces_same_fixture_name(tmp: TempDir) -> None:
     )
 
 
-# ── ContextVar proxies (_FixturesProxy) ───────────────────────────────────────
+# ── ContextVar proxies (_FixturesProxy) ─────────────────────────────────────
 
 
 def test_fixtures_proxy_resolves_namespace_and_accessor(
