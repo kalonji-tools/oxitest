@@ -330,6 +330,16 @@ class FixtureSession:
         # would misattribute it in every stats readout.
         self._package_hits: defaultdict[str, int] = defaultdict(int)
         self._package_misses: defaultdict[str, int] = defaultdict(int)
+        # Function-tier (per-test) counters, folded at each test's dispose the
+        # same way module/package counters fold at their boundary — the scope
+        # itself dies with the test, so without the fold the data is recorded
+        # and then discarded. Deliberately NOT merged into get_cache_stats():
+        # the summary line's absence for uncached-only runs is pinned by an
+        # integration test, and a single-access function fixture counting as a
+        # cache "miss" would skew the reported hit rate. Surfacing these is a
+        # separate reporting decision, same standing as _package_hits above.
+        self._function_hits: defaultdict[str, int] = defaultdict(int)
+        self._function_misses: defaultdict[str, int] = defaultdict(int)
         self._module_cache = ModuleCache()
 
         # ── Register all fixture sources into the unified registry ──
@@ -841,6 +851,18 @@ class FixtureSession:
 
     # ── Resolution ────────────────────────────────────────────────────────────
 
+    def _fold_function_stats(self, scope: _Scope) -> None:
+        """Fold a dying per-test scope's counters into the session aggregates.
+
+        Mirrors what ``end_module`` / ``end_package`` do at their boundaries:
+        the scope's counters die with it, and unfolded they were recorded for
+        nothing.
+        """
+        for fixture_name, count in scope.hits.items():
+            self._function_hits[fixture_name] += count
+        for fixture_name, count in scope.misses.items():
+            self._function_misses[fixture_name] += count
+
     def resolve_for_test(
         self,
         fn: Callable[..., Any],
@@ -864,6 +886,7 @@ class FixtureSession:
         self._function_scope = function_scope
 
         def _dispose_function_scope() -> None:
+            self._fold_function_stats(function_scope)
             function_scope.cache.clear()
             if self._function_scope is function_scope:
                 self._function_scope = None

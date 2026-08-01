@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from oxitest._bridge._fixture_session import _Scope
+from tests import helpers
 
 
 def test_scope_miss_on_first_access() -> None:
@@ -48,3 +49,38 @@ def test_get_cache_stats_shape() -> None:
     total_misses = sum(scope.misses.values())
     assert total_hits == 2, f"expected 2 total hits, got {total_hits}"
     assert total_misses == 2, f"expected 2 total misses, got {total_misses}"
+
+
+def test_function_tier_counters_fold_at_test_dispose() -> None:
+    """Per-test cache stats survive the test's dispose instead of vanishing.
+
+    Module and package scopes fold their counters into session aggregates
+    before being discarded; the per-test function scope (#1775) must do the
+    same, or its hit/miss data is recorded and then thrown away every test.
+    """
+    # Arrange — one function-lifetime fixture; a session with an active test.
+    session = helpers.make_session_with("db", object)
+    meta = helpers.make_meta("t.py")
+
+    def _test_fn() -> None:
+        pass
+
+    # Act — resolve once (miss), access again within the same test window
+    # (hit — the arrange-phase route the executor uses), then drain teardowns
+    # exactly as the executor does: in reverse, dispose last.
+    _, teardowns = session.resolve_for_test(_test_fn, meta)
+    session.get_fixture_by_name("db", meta.module_path, teardowns)
+    session.get_fixture_by_name("db", meta.module_path, teardowns)
+    for teardown in reversed(teardowns):
+        teardown()
+
+    # Assert
+    assert session._function_hits["db"] == 1, (  # noqa: SLF001 — no public API reads the folded per-test counters yet; the fold itself is what's under test
+        "the second same-test access hit the per-test cache; losing that count "
+        "at dispose means function-tier caching is invisible to any future "
+        "stats consumer, unlike the module/package tiers which fold"
+    )
+    assert session._function_misses["db"] == 1, (  # noqa: SLF001 — same: the aggregate is internal until a reporting decision surfaces it
+        "the first access built the fixture; the miss must fold with the hit "
+        "or the aggregate misstates the tier's build count"
+    )
