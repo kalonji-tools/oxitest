@@ -202,7 +202,7 @@ pub enum CollectError {
 
 /// Lightweight tag for the kind of test outcome — no payload, just the label.
 ///
-/// Used in [`TestTiming`] and [`CacheEntry`](crate::cache) to avoid stringly-typed
+/// Used in [`TestTiming`](crate::types::TestTiming) and [`CacheEntry`](crate::cache) to avoid stringly-typed
 /// comparisons. The `#[serde(rename_all = "snake_case")]` attribute ensures round-trip
 /// compatibility with the JSON cache and worker protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

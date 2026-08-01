@@ -789,9 +789,10 @@ fn try_run_test_with_session_obj(
 /// for that outcome kind. Passed tests (the majority) go from 13 PyO3
 /// getattr() calls to 2.
 ///
-/// Each status arm extracts PyO3 fields, builds a [`RawOutcome`], and calls
-/// [`RawOutcome::into_test_outcome()`] — the single conversion path shared
-/// with the JSON worker.
+/// Each status arm extracts PyO3 fields, builds a
+/// [`RawOutcome`](crate::worker_result::RawOutcome), and calls
+/// [`RawOutcome::into_test_outcome()`](crate::worker_result::RawOutcome::into_test_outcome)
+/// — the single conversion path shared with the JSON worker.
 fn extract_outcome(py_result: &Bound<'_, PyAny>) -> PyResult<TestOutcome> {
     use crate::worker_result::RawOutcome;
 

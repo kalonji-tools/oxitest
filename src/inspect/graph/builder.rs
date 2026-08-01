@@ -1,7 +1,7 @@
 //! Graph construction from [`QueryEntry`] data.
 //!
 //! [`GraphBuilder`] accumulates nodes via `add_*_entries` methods, then
-//! [`resolve_edges`] wires cross-references, populates inverse edges,
+//! [`resolve_edges`](GraphBuilder::resolve_edges) wires cross-references, populates inverse edges,
 //! groups parametrized tests, and records broken edges for unresolved
 //! fixture dependencies.
 

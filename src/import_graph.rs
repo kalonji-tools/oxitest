@@ -88,8 +88,8 @@ fn file_to_modules(rel_path: &str) -> Vec<String> {
 
 /// Determine which test files are affected, with per-file diagnostics.
 ///
-/// Like [`resolve_affected`], but returns an [`ImportAnalysis`] per test file
-/// showing which imports matched changed sources.
+/// Returns an [`ImportAnalysis`](crate::affected::ImportAnalysis) per test
+/// file showing which imports matched changed sources.
 pub(crate) fn resolve_affected_with_diagnostics(
     test_files: &[camino::Utf8PathBuf],
     changed_sources: &[String],

@@ -16,7 +16,8 @@ fn wire_frames(raw: Vec<RawFrame>) -> Vec<Frame> {
 ///
 /// Converts `Vec<i64>` (from JSON wire protocol) to `Option<Box<[usize]>>`,
 /// dropping non-positive values. The PyO3 path extracts `Vec<usize>` directly
-/// and uses [`tips_from_usize`] instead.
+/// and needs no filtering — [`RawOutcome::into_test_outcome`] boxes it
+/// directly (empty becomes `None`).
 pub(super) fn filter_tips(lines: Vec<i64>) -> Vec<usize> {
     lines
         .iter()
