@@ -73,12 +73,11 @@ def test_eager_protocols_constant_contains_expected_values() -> None:
 
 
 def test_lazy_protocols_constant_contains_expected_values() -> None:
-    """LAZY_PROTOCOLS contains exactly the five protocols that allow deferred import."""
+    """LAZY_PROTOCOLS contains exactly the four protocols that allow deferred import."""
     expected = frozenset(
         {
             "log_backend",
             "fixture_provider",
-            "helper_provider",
             "execution_wrapper",
             "debugger_backend",
         }

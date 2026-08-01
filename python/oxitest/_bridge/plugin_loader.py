@@ -54,7 +54,6 @@ if TYPE_CHECKING:
         Collector,
         ExecutionWrapper,
         FixtureProvider,
-        HelperProvider,
         LogBackend,
         Reporter,
     )
@@ -75,7 +74,6 @@ LAZY_PROTOCOLS = frozenset(
     {
         "log_backend",
         "fixture_provider",
-        "helper_provider",
         "execution_wrapper",
         "debugger_backend",
     }
@@ -169,7 +167,6 @@ class PluginRegistry:
     # Sequential protocol collections (iterated by consumers)
     log_backends: tuple[LogBackend, ...] = ()
     fixture_providers: tuple[FixtureProvider, ...] = ()
-    helper_providers: tuple[HelperProvider, ...] = ()
     execution_wrappers: tuple[ExecutionWrapper, ...] = ()
     collectors: tuple[Collector, ...] = ()
     reporters: tuple[Reporter, ...] = ()
@@ -224,7 +221,6 @@ class _PluginRegistryBuilder:
         # Compute sequential protocol collections
         log_backends = _flatten_protocol(self._entries, "log_backends")
         fixture_providers = _flatten_protocol(self._entries, "fixture_providers")
-        helper_providers = _flatten_protocol(self._entries, "helper_providers")
         execution_wrappers = _flatten_protocol(self._entries, "execution_wrappers")
         collectors = _flatten_protocol(self._entries, "collectors")
         reporters = _flatten_protocol(self._entries, "reporters")
@@ -264,7 +260,6 @@ class _PluginRegistryBuilder:
             cli_extensions=MappingProxyType(self._cli_extensions),
             log_backends=log_backends,
             fixture_providers=fixture_providers,
-            helper_providers=helper_providers,
             execution_wrappers=execution_wrappers,
             collectors=collectors,
             reporters=reporters,
