@@ -103,7 +103,6 @@ True
 from __future__ import annotations
 
 import sys
-from typing import Any as _Any, NoReturn as _NoReturn
 
 from oxitest._bridge._approx import ApproxBase as ApproxBase, approx as approx
 from oxitest._bridge._arrange_api import arrange as arrange
@@ -144,7 +143,6 @@ from oxitest._bridge._fixture_type import (
 from oxitest._bridge._fixtures import (
     Fixtures as Fixtures,
 )
-from oxitest._bridge._helpers import Helpers as Helpers
 from oxitest._bridge._importorskip import importorskip as importorskip
 from oxitest._bridge._mark_api import (
     mark as mark,
@@ -158,7 +156,6 @@ from oxitest._bridge._plugin_config import (
 )
 from oxitest._bridge._raises import raises as raises
 from oxitest._bridge._read_fixtures import _FixturesProxy as _FixturesProxy
-from oxitest._bridge._read_helpers import _HelpersProxy as _HelpersProxy
 from oxitest._bridge._warns import warns as warns
 from oxitest._bridge.parametrize import (
     parametrize as parametrize,
@@ -192,7 +189,6 @@ __all__ = [
     "Fixture",
     "FixtureRef",
     "Fixtures",
-    "Helpers",
     "LogCapture",
     "Patcher",
     "Plugin",
@@ -208,7 +204,6 @@ __all__ = [
     "arrange",
     "fixture",
     "fixtures",
-    "helpers",
     "importorskip",
     "injectable",
     "mark",
@@ -220,22 +215,7 @@ __all__ = [
 ]
 
 
-helpers = _HelpersProxy()
 fixtures = _FixturesProxy()
-
-
-def helper(*_args: _Any, **_kwargs: _Any) -> _NoReturn:
-    """Sentinel: raises with instructions to use Helpers() registry instead."""
-    msg = (
-        "oxitest.helper does not exist.\n"
-        "Helpers in oxitest are declared via a Helpers() registry:\n\n"
-        "    helpers = oxitest.Helpers()\n\n"
-        "    @helpers.helper\n"
-        "    def my_helper() -> MyType:\n"
-        "        ...\n\n"
-        "Define your Helpers() instance in conftest.py."
-    )
-    raise AttributeError(msg)
 
 
 def main() -> None:

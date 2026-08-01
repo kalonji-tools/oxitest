@@ -121,8 +121,6 @@ class Fixtures:
     See Also:
         - :class:`Fixture` — the injection-signal annotation.
         - :class:`Yields` — return-type annotation for yield fixtures.
-        - :class:`Helpers` — the sibling registry for stateless test
-          utilities.
 
     Examples:
         Register fixtures on a module-level ``fixtures`` instance in
