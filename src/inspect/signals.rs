@@ -20,9 +20,6 @@ pub(crate) enum SignalKind {
     /// One or more fixtures are defined but never consumed by any test or
     /// other fixture.
     UnusedFixtures,
-    /// One or more helper functions live in a conftest whose fixture count is
-    /// zero, suggesting nothing in the test suite imports from that conftest.
-    UnusedHelpers,
     /// The graph contains edges that could not be resolved during construction
     /// (e.g. a fixture dependency name that matches no known fixture).
     BrokenEdges,
@@ -71,7 +68,6 @@ pub(crate) fn detect_signals(graph: &InspectGraph) -> Vec<Signal> {
     }
     let mut signals = Vec::new();
     detect_unused_fixtures(graph, &mut signals);
-    detect_unused_helpers(graph, &mut signals);
     detect_broken_edges(graph, &mut signals);
     detect_high_fan_in(graph, &mut signals);
     detect_deep_chains(graph, &mut signals);
@@ -110,11 +106,6 @@ fn detect_unused_fixtures(graph: &InspectGraph, signals: &mut Vec<Signal>) {
         });
     }
 }
-
-/// Unused helper detection requires scanning test file imports for
-/// `helpers.<namespace>.<name>` usage — deferred until import analysis
-/// is available.
-fn detect_unused_helpers(_graph: &InspectGraph, _signals: &mut Vec<Signal>) {}
 
 /// Report edges that the builder could not resolve.
 ///
@@ -260,7 +251,6 @@ mod tests {
         graph.conftests.push(ConftestNode {
             path: "conftest.py".to_string(),
             fixtures: vec![],
-            helpers: vec![],
         });
         // Fixture with no consumers and autouse=false.
         graph
@@ -361,7 +351,6 @@ mod tests {
         graph.conftests.push(ConftestNode {
             path: "conftest.py".to_string(),
             fixtures: vec![],
-            helpers: vec![],
         });
         // Need at least one fixture so detect_signals doesn't return early.
         graph
@@ -484,6 +473,4 @@ mod tests {
             "fixture consumed by exactly 50% of tests should not exceed the >50% threshold"
         );
     }
-
-    // unused_helper detector removed — requires import analysis (deferred)
 }

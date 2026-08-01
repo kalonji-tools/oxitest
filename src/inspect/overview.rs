@@ -29,7 +29,6 @@ pub(crate) struct ConftestEntry {
     pub node_ref: NodeRef,
     pub path: String,
     pub fixture_count: usize,
-    pub helper_count: usize,
 }
 
 // ── OverviewItem ─────────────────────────────────────────────────────────────
@@ -105,7 +104,6 @@ impl OverviewSections {
                 node_ref: NodeRef::new(NodeKind::Conftest, i),
                 path: c.path.clone(),
                 fixture_count: c.fixtures.len(),
-                helper_count: c.helpers.len(),
             })
             .collect();
         conftests.sort_by_key(|e| std::cmp::Reverse(e.fixture_count));
@@ -155,7 +153,6 @@ impl OverviewSections {
                 node_ref: e.node_ref.clone(),
                 path: e.path.clone(),
                 fixture_count: e.fixture_count,
-                helper_count: e.helper_count,
             }))
         } else if index < g + m + c + self.signals.len() {
             let s = &self.signals[index - g - m - c];
@@ -192,7 +189,7 @@ impl OverviewSections {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::inspect::graph::nodes::{ConftestNode, FixtureNode, HelperNode, MarkNode, TestNode};
+    use crate::inspect::graph::nodes::{ConftestNode, FixtureNode, MarkNode, TestNode};
 
     /// Build a fixture node with the given name and a pre-set consumer list.
     fn make_fixture(name: &str, consumers: Vec<NodeRef>) -> FixtureNode {
@@ -231,25 +228,11 @@ mod tests {
         }
     }
 
-    /// Build a conftest node with fixture and helper index lists.
-    fn make_conftest(path: &str, fixtures: Vec<usize>, helpers: Vec<usize>) -> ConftestNode {
+    /// Build a conftest node with a fixture index list.
+    fn make_conftest(path: &str, fixtures: Vec<usize>) -> ConftestNode {
         ConftestNode {
             path: path.to_string(),
             fixtures,
-            helpers,
-        }
-    }
-
-    /// Build a minimal helper node.
-    fn make_helper(name: &str) -> HelperNode {
-        HelperNode {
-            name: name.to_string(),
-            signature: format!("{name}()"),
-            docstring: None,
-            source: "tests/conftest.py".to_string(),
-            namespace: "conftest".to_string(),
-            conftest_idx: Some(0),
-            plugin_idx: None,
         }
     }
 
@@ -275,11 +258,10 @@ mod tests {
         // One mark used by one test.
         graph.marks.push(make_mark("slow", vec![0]));
 
-        // One conftest with one fixture and one helper.
+        // One conftest with one fixture.
         graph
             .conftests
-            .push(make_conftest("tests/conftest.py", vec![0], vec![0]));
-        graph.helpers.push(make_helper("make_db"));
+            .push(make_conftest("tests/conftest.py", vec![0]));
 
         let sections = OverviewSections::from_graph(&graph);
 
@@ -323,10 +305,6 @@ mod tests {
         assert_eq!(
             sections.conftests[0].fixture_count, 1,
             "fixture_count should equal conftests.fixtures.len()"
-        );
-        assert_eq!(
-            sections.conftests[0].helper_count, 1,
-            "helper_count should equal conftests.helpers.len()"
         );
     }
 
@@ -377,7 +355,7 @@ mod tests {
         // Add one conftest.
         graph
             .conftests
-            .push(make_conftest("tests/conftest.py", vec![0, 1], vec![]));
+            .push(make_conftest("tests/conftest.py", vec![0, 1]));
 
         let sections = OverviewSections::from_graph(&graph);
         let total = sections.item_count();
@@ -432,9 +410,7 @@ mod tests {
         graph.marks.push(make_mark("slow", vec![0]));
 
         // One conftest.
-        graph
-            .conftests
-            .push(make_conftest("conftest.py", vec![0], vec![]));
+        graph.conftests.push(make_conftest("conftest.py", vec![0]));
 
         let sections = OverviewSections::from_graph(&graph);
 
@@ -468,7 +444,7 @@ mod tests {
         ));
         graph.tests.push(make_test("tests/test.py::test_it"));
         graph.marks.push(make_mark("m", vec![0]));
-        graph.conftests.push(make_conftest("c.py", vec![0], vec![]));
+        graph.conftests.push(make_conftest("c.py", vec![0]));
 
         let sections = OverviewSections::from_graph(&graph);
 
@@ -577,7 +553,6 @@ mod tests {
         graph.conftests.push(ConftestNode {
             path: "conftest.py".to_string(),
             fixtures: vec![],
-            helpers: vec![],
         });
         // Unused conftest fixture (no consumers, not autouse) triggers UnusedFixtures signal.
         graph.fixtures.push(FixtureNode {
@@ -646,7 +621,6 @@ mod tests {
         graph.conftests.push(ConftestNode {
             path: "conftest.py".to_string(),
             fixtures: vec![],
-            helpers: vec![],
         });
         graph.fixtures.push(FixtureNode {
             name: "orphan".to_string(),
@@ -683,7 +657,6 @@ mod tests {
         graph.conftests.push(ConftestNode {
             path: "conftest.py".to_string(),
             fixtures: vec![],
-            helpers: vec![],
         });
         graph.fixtures.push(FixtureNode {
             name: "orphan".to_string(),

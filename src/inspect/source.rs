@@ -28,14 +28,6 @@ pub(crate) fn node_source_location(
             let file = node_id.split("::").next().unwrap_or(node_id);
             Some((file.to_string(), 1))
         }
-        NodeKind::Helper => {
-            let source = &graph.helpers[node.index].source;
-            if source.is_empty() {
-                None
-            } else {
-                Some((source.clone(), 1))
-            }
-        }
         NodeKind::Mark | NodeKind::Plugin | NodeKind::Conftest => None,
     }
 }
@@ -92,7 +84,7 @@ pub(crate) fn open_in_editor(path: &str, line: usize) -> Result<(), String> {
 mod tests {
     use super::*;
     use crate::inspect::graph::InspectGraph;
-    use crate::inspect::graph::nodes::{FixtureNode, HelperNode, MarkNode, TestNode};
+    use crate::inspect::graph::nodes::{FixtureNode, MarkNode, TestNode};
 
     fn make_fixture(source: &str) -> FixtureNode {
         FixtureNode {
@@ -125,18 +117,6 @@ mod tests {
         MarkNode {
             name: name.to_string(),
             used_by: vec![],
-        }
-    }
-
-    fn make_helper(source: &str) -> HelperNode {
-        HelperNode {
-            name: "helper_fn".to_string(),
-            signature: "helper_fn()".to_string(),
-            docstring: None,
-            source: source.to_string(),
-            namespace: "conftest".to_string(),
-            conftest_idx: Some(0),
-            plugin_idx: None,
         }
     }
 
@@ -251,38 +231,12 @@ mod tests {
         graph.conftests.push(ConftestNode {
             path: "tests/conftest.py".to_string(),
             fixtures: vec![],
-            helpers: vec![],
         });
         let node = NodeRef::new(NodeKind::Conftest, 0);
         let result = node_source_location(&graph, &node);
         assert!(
             result.is_none(),
             "Conftest kind should return None (conftest path is not a source location)"
-        );
-    }
-
-    #[test]
-    fn helper_source_location() {
-        let mut graph = InspectGraph::default();
-        graph.helpers.push(make_helper("tests/conftest.py"));
-        let node = NodeRef::new(NodeKind::Helper, 0);
-        let result = node_source_location(&graph, &node);
-        assert_eq!(
-            result,
-            Some(("tests/conftest.py".to_string(), 1)),
-            "helper with a non-empty source should return Some with path and line 1"
-        );
-    }
-
-    #[test]
-    fn helper_empty_source_returns_none() {
-        let mut graph = InspectGraph::default();
-        graph.helpers.push(make_helper(""));
-        let node = NodeRef::new(NodeKind::Helper, 0);
-        let result = node_source_location(&graph, &node);
-        assert!(
-            result.is_none(),
-            "helper with empty source string should return None"
         );
     }
 
