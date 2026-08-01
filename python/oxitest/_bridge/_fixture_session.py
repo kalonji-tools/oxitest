@@ -264,10 +264,13 @@ def _check_unannotated_params(
 class FixtureSession:
     """Manages fixture lifecycle for a single oxitest run.
 
-    Owns four fixture scopes:
+    Owns five fixture scopes:
 
-    - **function scope** (per-test teardown list, `fn_teardowns`) — default
-      for all user-defined fixtures.
+    - **function scope** (`_function_scope`) — default for all user-defined
+      fixtures; one `_Scope` per test, created by `resolve_for_test` and
+      disposed at the test boundary, so every access route within one test
+      observes the same instance (#1775). Its teardown list is the per-test
+      `fn_teardowns` list drained by the executor.
     - **module scope** (`_module_scopes`) — one `_Scope` per module path, for
       fixtures declared ``@oxi.fixture(lifetime="module")``; created on first
       use and drained at `end_module`.
@@ -308,6 +311,13 @@ class FixtureSession:
         # which is the guarantee the tier makes; the scheduler co-locates that
         # subtree onto one worker so it holds under parallel execution too.
         self._package_scopes: dict[str, _Scope] = {}
+        # lifetime="function" fixtures — one scope per *test* (#1775), created
+        # by resolve_for_test and disposed by a teardown closure at the test
+        # boundary. None whenever no test is active, which keeps direct
+        # resolution calls outside a test uncached (their historical
+        # behaviour). Its teardown list IS the per-test fn_teardowns list, so
+        # the executor's existing drain stays the single teardown authority.
+        self._function_scope: _Scope | None = None
         self._has_wide_async: bool | None = None
         # Module scopes are discarded at end_module, taking their counters with
         # them, so cache stats are folded into these before the pop. Without
@@ -466,10 +476,11 @@ class FixtureSession:
         return source.anchor_package_path
 
     def _scope_for(self, defn: FixtureDef, module_path: str) -> ScopeRefs | None:
-        """Map a fixture def to its scope refs. None = function scope.
+        """Map a fixture def to its scope refs. None = uncached (no active test).
 
         *module_path* selects the bucket for module-lifetime fixtures; it is
-        ignored for every other scope.
+        ignored for every other scope. The function tier returns the per-test
+        scope (``per_test=True``) while a test is active, ``None`` otherwise.
         """
         if defn.scope is FixtureScope.MODULE:
             # Not setdefault(): its default arg is evaluated on every call, so
@@ -507,7 +518,18 @@ class FixtureSession:
         if defn.shared:
             s = self._shared_scope
             return ScopeRefs(s.cache, s.teardowns, s.hits, s.misses)
-        return None
+        # Function tier (#1775). A per-test scope exists only while a test is
+        # being resolved or run; every access route during that window — the
+        # autouse pass, Fixture[T] injection, fx. proxy access — lands in the
+        # same cache, which is what makes "once per test" hold. Outside a
+        # test there is no boundary that could dispose a cache, so direct
+        # resolution stays uncached.
+        scope = self._function_scope
+        if scope is None:
+            return None
+        return ScopeRefs(
+            scope.cache, scope.teardowns, scope.hits, scope.misses, per_test=True
+        )
 
     # ── Async delegation properties ─────────────────────────────────────────
 
@@ -833,6 +855,22 @@ class FixtureSession:
         named in skip_names are skipped even if annotated with Fixture[T].
         """
         fn_teardowns: list[Callable[[], None]] = []
+        # The per-test function scope (#1775). Its teardown list IS
+        # fn_teardowns, so a build registers its teardown exactly where the
+        # executor already drains — once per test, in reverse build order.
+        # Unconditional replacement is what guarantees no instance survives
+        # into the next test even when an error path skips the drain below.
+        function_scope = _Scope(teardowns=fn_teardowns)
+        self._function_scope = function_scope
+
+        def _dispose_function_scope() -> None:
+            function_scope.cache.clear()
+            if self._function_scope is function_scope:
+                self._function_scope = None
+
+        # Appended first: the executor drains fn_teardowns in reverse, so the
+        # cache is dropped LAST — after every fixture teardown has run.
+        fn_teardowns.append(_dispose_function_scope)
         self._async_mgr.was_used = False  # reset per-test
         with _fixture_scope(self, meta.module_path, fn_teardowns):
             hints = _get_hints(fn)

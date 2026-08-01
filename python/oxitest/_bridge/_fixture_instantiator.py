@@ -76,6 +76,15 @@ class ScopeRefs:
     teardowns: list[Callable[[], None]]
     hits: dict[str, int]
     misses: dict[str, int]
+    #: True when this scope lives exactly one test — the function tier's
+    #: per-test cache (#1775). ``scope_refs is not None`` used to imply
+    #: "outlives the test"; four behaviours hang off that reading
+    #: (``FrozenProxy`` freezing, eager session-loop async resolution,
+    #: session-manager teardown routing, and the shorter-lived-async-dep
+    #: rejection) and none of them may apply to a scope that dies with the
+    #: test. This flag is what lets the function tier share the cache gate
+    #: without inheriting any of them.
+    per_test: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,6 +140,21 @@ def _cache_key(defn: FixtureDef[Any]) -> str:
     belongs with the old-API retirement in slice 13, not here.
     """
     if defn.scope is FixtureScope.MODULE and defn.namespace:
+        return f"{defn.namespace}.{defn.name}"
+    return defn.name
+
+
+def _per_test_key(defn: FixtureDef[Any]) -> str:
+    """Key a function-lifetime fixture within the per-test cache (#1775).
+
+    Namespace-qualified whenever a namespace exists: two function-lifetime
+    fixtures sharing a short name in different packages can both be touched by
+    one test, and a bare-name key would silently hand the second access the
+    first fixture's instance. Deliberately NOT folded into ``_cache_key``:
+    that key also names entries in the fixture-timing report, and the function
+    tier's timing names must not change just because caching arrived.
+    """
+    if defn.namespace:
         return f"{defn.namespace}.{defn.name}"
     return defn.name
 
@@ -229,9 +253,9 @@ class FixtureInstantiator:
 
     The Instantiator never owns fixture scopes; callers supply scope information
     via a ``scope_callback`` that maps a ``(FixtureDef, module_path)`` pair to
-    ``ScopeRefs | None``. ``None`` means function scope (no caching); a
-    ``ScopeRefs`` means a cached scope — shared, or the module bucket selected
-    by *module_path*.
+    ``ScopeRefs | None``. ``None`` means no scope is active (no caching); a
+    ``ScopeRefs`` means a cached scope — the per-test function scope
+    (``per_test=True``), shared, or a wider bucket selected by *module_path*.
     """
 
     def __init__(
@@ -405,8 +429,11 @@ class FixtureInstantiator:
         ctx = replace(ctx, boundary_path=_boundary_for(defn, ctx))
         scope_refs = ctx.scope_callback(defn, ctx.module_path)
 
+        if scope_refs is not None and scope_refs.per_test:
+            return self._resolve_per_test(defn, ctx, scope_refs)
+
         if scope_refs is not None:
-            # Cached fixture (shared or module scope) — check cache first
+            # Cached fixture (shared or wider lifetime) — check cache first
             key = _cache_key(defn)
             if key in scope_refs.cache:
                 if defn.is_async and self._async_mgr is not None:
@@ -423,8 +450,46 @@ class FixtureInstantiator:
             scope_refs.cache[key] = value
             return value
 
-        # Function scope — no caching
+        # Function scope outside a test (no per-test scope active) — no caching
         return self._instantiate(defn, ctx, ctx.fn_teardowns)
+
+    def _resolve_per_test(
+        self,
+        defn: FixtureDef[Any],
+        ctx: _ResolutionContext,
+        scope_refs: ScopeRefs,
+    ) -> Any:
+        """Resolve a function-lifetime fixture through the per-test cache.
+
+        One build per test regardless of access route — the autouse pass,
+        ``Fixture[T]`` injection, and ``fx.`` proxy access all land here
+        (#1775, ADR-0009's lifetime table). Three deliberate differences from
+        the wider-tier branch above:
+
+        - the value is cached **raw**, never ``FrozenProxy``-wrapped —
+          function lifetime is the tier whose values a test may freely
+          mutate; ADR-0005 freezes only what outlives a test;
+        - an async def is neither resolved eagerly on the session loop nor
+          cached: the sync route hands its coroutine to the execution
+          middleware exactly as before, and a coroutine object can only be
+          awaited once, so caching it would hand a dead coroutine to the
+          next route. The proxy route caches the *awaited value* in
+          ``_build_async`` instead;
+        - teardowns go to ``scope_refs.teardowns``, which **is** the per-test
+          ``fn_teardowns`` list, so the executor keeps draining them exactly
+          once per test with unchanged ordering — a cache hit skips
+          ``_instantiate`` entirely and therefore cannot double-register.
+        """
+        if defn.is_async:
+            return self._instantiate(defn, ctx, ctx.fn_teardowns)
+        key = _per_test_key(defn)
+        if key in scope_refs.cache:
+            scope_refs.hits[key] = scope_refs.hits.get(key, 0) + 1
+            return scope_refs.cache[key]
+        scope_refs.misses[key] = scope_refs.misses.get(key, 0) + 1
+        value = self._instantiate(defn, ctx, scope_refs.teardowns)
+        scope_refs.cache[key] = value
+        return value
 
     def _resolve_shared_async(
         self,
@@ -482,10 +547,15 @@ class FixtureInstantiator:
         """Build (or return the cached) value for an async fixture.
 
         Runs on the caller's event loop. *scope_refs* is ``None`` for function
-        lifetime — no caching — and the tier's scope otherwise.
+        lifetime outside a test, the per-test scope during one (#1775 — two
+        distinct handles for the same fixture, e.g. the shortcut and the
+        qualified spelling, must converge on one build), and the tier's scope
+        for wider lifetimes.
         """
         ctx = replace(ctx, boundary_path=_boundary_for(defn, ctx))
-        key = _cache_key(defn)
+        timing_key = _cache_key(defn)
+        per_test = scope_refs is not None and scope_refs.per_test
+        key = _per_test_key(defn) if per_test else timing_key
         if scope_refs is not None:
             if key in scope_refs.cache:
                 scope_refs.hits[key] = scope_refs.hits.get(key, 0) + 1
@@ -507,10 +577,14 @@ class FixtureInstantiator:
                     value = raw
             except Exception as exc:
                 raise FixtureSetupError(defn.name, exc) from exc
-            self._setup_times[key].append((time.monotonic() - _start) * 1000.0)
+            self._setup_times[timing_key].append((time.monotonic() - _start) * 1000.0)
 
         if scope_refs is not None:
-            value = FrozenProxy(value)
+            # The per-test cache stores the value raw: function-lifetime
+            # values die with the test and stay mutable (ADR-0005 freezes
+            # only what outlives one).
+            if not per_test:
+                value = FrozenProxy(value)
             scope_refs.cache[key] = value
         return value
 
@@ -534,11 +608,14 @@ class FixtureInstantiator:
             resolve_user=lambda n: self.resolve_fixture(n, ctx),
         )
         for dep_name, dep_val in deps.items():
-            if scope_refs is not None:
+            if scope_refs is not None and not scope_refs.per_test:
                 # This fixture outlives the test; a dependency that does not
                 # would be captured into the wider cache and handed to every
                 # later test — and, being loop-bound, to tests whose loop it
                 # no longer belongs to. The eager path rejects the same shape.
+                # The per-test scope is exempt: a function-lifetime fixture
+                # depending on another function-lifetime async fixture dies
+                # with the same test and has always been legal.
                 _check_async_dep(
                     dep_name,
                     dep_val,
@@ -564,17 +641,19 @@ class FixtureInstantiator:
     ) -> None:
         """Queue an async generator's post-``yield`` half at the right boundary.
 
-        Function lifetime (*scope_refs* is ``None``) drains inside the test
-        body, while the loop that created the generator is still open — an
-        async generator can only be resumed on the loop it was started on, so
-        anything later is a teardown on a dead loop.
+        Function lifetime (*scope_refs* is ``None`` outside a test, or the
+        per-test scope during one) drains inside the test body, while the
+        loop that created the generator is still open — an async generator
+        can only be resumed on the loop it was started on, so anything later
+        is a teardown on a dead loop.
 
         Wider lifetimes outlive that loop by definition, so they go to the
         session-lifetime manager, tagged with the boundary whose exit should
         dispose them. Module lifetime is keyed by module path; anything else
         falls back to session end.
         """
-        if scope_refs is None and register_async_teardown(defn.name, agen):
+        dies_with_test = scope_refs is None or scope_refs.per_test
+        if dies_with_test and register_async_teardown(defn.name, agen):
             return
         if self._async_mgr is None:
             return
