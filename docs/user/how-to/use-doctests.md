@@ -59,7 +59,7 @@ Members are opt-in per method: `"Cls"` alone does not walk the class body, and t
 
 **Skip is subtractive, not additive.** `skip = ["file.py::Cls::method"]` only removes a subject that some `scope` entry already put into scope. A skip Member entry combined with a whole-file scope (`scope = ["file.py"]`) is a no-op — whole-file scope only enumerates top-level subjects, so there is no method subject to subtract; the skip entry becomes stale. Use `scope = ["file.py::Cls::method"]` first if you need the method in scope to then skip it (rare — usually just omit the entry entirely).
 
-**Explicit list entries bypass the leading-underscore filter.** `scope = ["src/mypkg/mod.py::_helper"]` will cover `_helper`, because naming it explicitly is opt-in. The scalar `scope = "public"` still filters underscored names — the private-bypass only applies to list-form entries. Built-in filters (`norecursedirs`, the `python_files` glob, `conftest.py`) always win, so a symbol inside `test_*.py` or `conftest.py` stays out even if you list it. The same filter applies to whole modules: under the scalar `scope = "public"`, a file whose dotted module path contains any `_`-prefixed component (`src/mypkg/_internal/helpers.py`, `src/mypkg/_compat.py`) is never scanned at all. Only a list-form `scope` entry naming the file opts it back in — `skip` entries get no such bypass, so a `skip` entry pointing into a private module silently has no effect, and is not reported stale either, because the staleness guard only judges symbols in files the scan actually parsed.
+**Explicit list entries bypass the leading-underscore filter.** `scope = ["src/mypkg/mod.py::_helper"]` will cover `_helper`, because naming it explicitly is opt-in. The scalar `scope = "public"` still filters underscored names — the private-bypass only applies to list-form entries. Built-in filters (`norecursedirs`, the `python_files` glob, `conftest.py`) always win, so a symbol inside `test_*.py` or `conftest.py` stays out even if you list it. The same filter applies to whole modules: under the scalar `scope = "public"`, a file whose dotted module path contains any `_`-prefixed component (`src/mypkg/_internal/helpers.py`, `src/mypkg/_compat.py`) is never scanned at all. Only a list-form `scope` entry naming the file opts it back in — `skip` entries get no such bypass, so a `skip` entry pointing into a private module silently has no effect, and is not reported stale either, because the guard only speaks to files the scan actually attempted to read. (A file the scan attempted but could not parse *is* reported — see [Files that fail to parse](#files-that-fail-to-parse).)
 
 ### Skipping subjects
 
@@ -97,6 +97,18 @@ The diagnostic text tells you which case applies:
 ```
 
 This lets a strict project catch drift in its `scope` / `skip` config without a separate lint pass.
+
+### Files that fail to parse
+
+A file in the coverage scan set that fails to parse (syntax error or I/O error) produces its own diagnostic under the `doctest.coverage.parse-error` context, naming the file — its definitions are invisible to coverage until the file is fixed. A `Symbol` or `Member` entry (in `scope` or `skip`) naming a symbol inside such a file reports the parse failure too, instead of a staleness verdict:
+
+```
+<kind> entry '<entry>' names a file that could not be parsed (fix the file so coverage can judge this entry)
+```
+
+Both diagnostics ride the same global `strict` dial as every other coverage diagnostic: silent when `strict` is absent or `"off"`, a Warning under `"enforce"`, an Error that hard-fails collection under `"abort"`.
+
+Only files the scanner genuinely tried to read are diagnosed. Files excluded before the parse — `norecursedirs` directories, `python_files` matches, `conftest.py`, private modules under the scalar `scope = "public"`, and files no entry could match under a list-form `scope` — produce nothing, so deliberately-invalid fixture files stay legal in a strict repo as long as they live in an excluded directory.
 
 When enabled, oxitest scans all `.py` files in your test paths for
 docstrings containing `>>>` interactive examples.
