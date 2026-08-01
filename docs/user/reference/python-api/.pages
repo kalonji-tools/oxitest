@@ -2,7 +2,6 @@ nav:
   - Marks: marks.md
   - Arrange: arrange.md
   - Fixture types: fixture-types.md
-  - Helpers: helpers.md
   - Built-in fixtures: builtins.md
   - Async backend: async-backend.md
   - Plugin configuration: plugin-config.md

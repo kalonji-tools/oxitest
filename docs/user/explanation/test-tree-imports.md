@@ -79,5 +79,3 @@ already behave — rootdir detection is not specific to imports.
 
 - [Configuration reference](../reference/configuration.md#root-directory-detection) —
   how the rootdir is determined
-- [Conftest helpers](conftest-helpers.md) — the framework-managed alternative
-  for shared test infrastructure

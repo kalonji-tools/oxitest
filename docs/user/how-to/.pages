@@ -5,7 +5,6 @@ nav:
   - Use markers: use-markers.md
   - Use parametrize: use-parametrize.md
   - Use fixtures: use-fixtures.md
-  - Share test helpers: share-test-helpers.md
   - Use built-in fixtures: use-builtin-fixtures.md
   - Run tests in parallel: run-in-parallel.md
   - Use retries and flaky detection: use-retries.md
