@@ -697,7 +697,7 @@ pub(super) fn collect_coverage_diagnostics(
         })
         .collect();
 
-    let (mut diagnostics, (scope_hits, skip_hits), parsed_files) =
+    let (mut diagnostics, (scope_hits, skip_hits), scanned_files) =
         run_coverage_check(&rel_files, &root, severity.clone(), &dt.scope, &dt.skip);
 
     let scope_entries: &[crate::config::ScopeEntry] = match dt.scope.as_ref() {
@@ -706,7 +706,8 @@ pub(super) fn collect_coverage_diagnostics(
     };
     let inputs = StalenessInputs {
         rootdir: &config.rootdir,
-        scanned: &parsed_files,
+        scanned: &scanned_files.parsed,
+        parse_failed: &scanned_files.parse_failed,
     };
     diagnostics.extend(stale_diagnostics(
         scope_entries,
@@ -748,6 +749,13 @@ struct StalenessInputs<'a> {
     /// stale. Gating on the offered set instead told users to "check the symbol
     /// name" for symbols that were fine (#1796).
     scanned: &'a [Utf8PathBuf],
+    /// Files the scan attempted to read but could not parse, relative to
+    /// `rootdir` (#1800). Not evidence about the symbols inside — the file was
+    /// never read — but evidence that the run *tried*: an entry naming a
+    /// symbol in one of these reports the parse failure instead of abstaining.
+    /// Files the scan never attempted appear in neither slice and still force
+    /// abstention.
+    parse_failed: &'a [Utf8PathBuf],
 }
 
 /// Why an entry is stale, or that it is not.
@@ -757,6 +765,11 @@ enum Staleness {
     MissingPath,
     /// The file was scanned, but the named symbol produced no coverage subject.
     NoSubjects,
+    /// The scan attempted the entry's file and could not parse it (#1800).
+    /// Not a staleness verdict — the entry may be perfectly correct — but the
+    /// run cannot judge it until the file is fixed, and saying so beats
+    /// silent abstention.
+    ParseFailure,
     /// Not stale.
     Fresh,
 }
@@ -792,6 +805,17 @@ impl StalenessInputs<'_> {
             // here is what reopened #1796 three times.
             ScopeEntry::Prefix(_) | ScopeEntry::File(_) => Staleness::Fresh,
             ScopeEntry::Symbol { .. } | ScopeEntry::Member { .. } => {
+                // Parse failure first (#1800): the scan tried to read this
+                // exact file and could not, so it can say *why* the entry has
+                // no verdict instead of silently abstaining. Same exact
+                // membership rule as `scanned` below, for the same reason.
+                if self
+                    .parse_failed
+                    .iter()
+                    .any(|failed_file| failed_file == rel)
+                {
+                    return Staleness::ParseFailure;
+                }
                 // Exact membership, not containment: the question is whether
                 // *this file* was scanned, never whether its directory was.
                 // Directory-level containment is what the retired `covers()`
@@ -811,11 +835,14 @@ impl StalenessInputs<'_> {
     }
 }
 
-/// Diagnose scope/skip entries that can never match a coverage subject.
+/// Diagnose scope/skip entries that can never match a coverage subject —
+/// plus entries whose file the scan attempted but could not parse (#1800).
 ///
 /// A missing path and a missing symbol are different findings with different
-/// remedies, so they get different messages. The `context` strings are
-/// unchanged, so hard-fail classification is unaffected. See ADR-0010.
+/// remedies, so they get different messages. The staleness `context` strings
+/// are unchanged; a parse failure is not a staleness verdict, so it reports
+/// under `doctest.coverage.parse-error` instead — leaving `stale-scope` /
+/// `stale-skip` reserved for entries that can never match. See ADR-0010.
 fn stale_diagnostics(
     entries: &[crate::config::ScopeEntry],
     hits: &[bool],
@@ -828,22 +855,29 @@ fn stale_diagnostics(
         .iter()
         .zip(hits.iter())
         .filter_map(|(entry, hit)| {
-            let detail = match inputs.classify(entry, *hit) {
+            let (entry_context, detail) = match inputs.classify(entry, *hit) {
                 Staleness::Fresh => return None,
                 // `render_entry` prints the whole `file::Class::method`, so this
                 // must say which half is wrong -- otherwise a Symbol entry with
                 // a missing file reads as "the method does not exist" and sends
                 // the user hunting in the wrong place.
-                Staleness::MissingPath => {
-                    "names a path that does not exist (remove the entry or fix the path)"
-                }
-                Staleness::NoSubjects => {
-                    "matched no coverage subjects (remove it, or check the symbol name)"
-                }
+                Staleness::MissingPath => (
+                    context,
+                    "names a path that does not exist (remove the entry or fix the path)",
+                ),
+                Staleness::NoSubjects => (
+                    context,
+                    "matched no coverage subjects (remove it, or check the symbol name)",
+                ),
+                Staleness::ParseFailure => (
+                    "doctest.coverage.parse-error",
+                    "names a file that could not be parsed (fix the file so \
+                     coverage can judge this entry)",
+                ),
             };
             Some(crate::reporter::stats::DiagnosticEntry {
                 severity: severity.clone(),
-                context: std::sync::Arc::from(context),
+                context: std::sync::Arc::from(entry_context),
                 message: format!(
                     "{kind} entry '{}' {detail}",
                     crate::config::render_entry(entry),
@@ -858,8 +892,10 @@ fn stale_diagnostics(
 /// Split a coverage diagnostic set into hard-fail errors and pending diagnostics.
 ///
 /// `doctest.coverage`, `doctest.coverage.analysis`, `doctest.coverage.stale-scope`,
-/// and `doctest.coverage.stale-skip` Error-severity entries all become
-/// `CollectError::PyError` (hard fail under `strict = "abort"`).
+/// `doctest.coverage.stale-skip`, and `doctest.coverage.parse-error`
+/// Error-severity entries all become `CollectError::PyError` (hard fail under
+/// `strict = "abort"`). A parse failure hard-fails on the same terms: the run
+/// cannot vouch for coverage of a module it could not read (#1800).
 ///
 /// Under `abort`, an analysis error means "the scanner cannot verify coverage
 /// for this subject" — that is semantically a coverage failure. Stale scope/skip
@@ -885,6 +921,7 @@ pub(super) fn split_coverage_diagnostics(
                 | "doctest.coverage.analysis"
                 | "doctest.coverage.stale-scope"
                 | "doctest.coverage.stale-skip"
+                | "doctest.coverage.parse-error"
         );
         if d.severity == DiagnosticSeverity::Error && is_hard_fail_context {
             let mut msg = d.message.clone();
@@ -1991,6 +2028,245 @@ mod tests {
             "a run that never scanned the file has no evidence about the \
              method either -- `Member` must abstain on the same terms as \
              `Symbol`, or narrowed runs hard-fail all over again (#1796)",
+        );
+    }
+
+    // ── parse-error diagnostics (#1800) ─────────────────────────────────────
+    //
+    // Real-files style, same as the `cfg_for_stale` family: every fixture
+    // writes the broken file to disk and drives the full
+    // `collect_coverage_diagnostics` path, so a hardwired predicate cannot
+    // pass (the ADR-0010 "must kill mutants" rule).
+
+    /// Count diagnostics carrying the parse-error context for *cfg*.
+    fn parse_error_count(cfg: &crate::config::Config, doctest_files: &[Utf8PathBuf]) -> usize {
+        collect_coverage_diagnostics(doctest_files, cfg)
+            .iter()
+            .filter(|diag| diag.context.as_ref() == "doctest.coverage.parse-error")
+            .count()
+    }
+
+    #[test]
+    fn unparsable_file_in_scan_set_emits_parse_error_diagnostic() {
+        // Before #1800 this was a bare `continue`: the file vanished from
+        // coverage auditing with no diagnostic naming it.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        root.child("broken.py")
+            .write_str("def broken(:\n    pass\n")
+            .expect("write a file with a syntax error");
+        let mut cfg = crate::config::Config::default();
+        cfg.markers.strict = Some(crate::config::StrictMode::Enforce);
+        cfg.rootdir = rootdir.to_owned();
+        cfg.doctest = Some(crate::config::DoctestConfig {
+            scope: Some(crate::config::DoctestScope::Public),
+            skip: vec![],
+        });
+
+        let diags = collect_coverage_diagnostics(&[rootdir.join("broken.py")], &cfg);
+
+        let parse_error = diags
+            .iter()
+            .find(|diag| diag.context.as_ref() == "doctest.coverage.parse-error");
+        assert!(
+            parse_error.is_some(),
+            "a file the scanner tried to read but could not parse must produce \
+             its own diagnostic -- silently dropping it removes the module from \
+             coverage auditing with zero evidence anything is wrong (#1800); \
+             got: {diags:?}",
+        );
+        let diag = parse_error.expect("checked above");
+        assert!(
+            diag.message.contains("broken.py"),
+            "the diagnostic must name the file so the user knows what to fix; \
+             got: {}",
+            diag.message,
+        );
+        assert_eq!(
+            diag.severity,
+            crate::reporter::stats::DiagnosticSeverity::Warning,
+            "severity rides the global strict dial exactly like the other \
+             coverage diagnostics -- enforce means Warning",
+        );
+    }
+
+    #[test]
+    fn skip_symbol_entry_reports_parse_failure_when_file_unparsable() {
+        // Half 2 of #1800: the entry names a symbol the run holds no evidence
+        // about because the parse failed. Abstaining (the pre-#1800 behaviour)
+        // leaves the entry as invisible dead config; a NoSubjects verdict
+        // would be a wrong diagnosis (#1796's shape). It must report the
+        // parse failure itself.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        root.child("broken.py")
+            .write_str("def broken(:\n    pass\n")
+            .expect("write a file with a syntax error");
+        let mut cfg = crate::config::Config::default();
+        cfg.markers.strict = Some(crate::config::StrictMode::Abort);
+        cfg.rootdir = rootdir.to_owned();
+        cfg.doctest = Some(crate::config::DoctestConfig {
+            scope: Some(crate::config::DoctestScope::Public),
+            skip: vec![crate::config::ScopeEntry::Symbol {
+                file: Utf8PathBuf::from("broken.py"),
+                name: "helper".to_string(),
+            }],
+        });
+
+        let diags = collect_coverage_diagnostics(&[rootdir.join("broken.py")], &cfg);
+
+        let entry_report = diags.iter().find(|diag| {
+            diag.context.as_ref() == "doctest.coverage.parse-error"
+                && diag.message.contains("skip entry")
+        });
+        assert!(
+            entry_report.is_some(),
+            "a skip entry naming a symbol in an offered-but-unparsable file \
+             must report the parse failure instead of abstaining -- the scan \
+             was asked to read the file and could not (#1800); got: {diags:?}",
+        );
+        assert!(
+            entry_report
+                .expect("checked above")
+                .message
+                .contains("broken.py::helper"),
+            "the entry-level report must render the full entry so the user \
+             can find it in their config",
+        );
+        assert!(
+            !diags
+                .iter()
+                .any(|diag| diag.context.as_ref() == "doctest.coverage.stale-skip"),
+            "a parse failure is not a staleness verdict -- emitting stale-skip \
+             here would tell the user to check a symbol name the run never \
+             read, the wrong-diagnosis shape of #1796",
+        );
+    }
+
+    #[test]
+    fn scope_symbol_entry_reports_parse_failure_when_file_unparsable() {
+        // The scope side of half 2: a list-form entry explicitly opted the
+        // file in, so the user believes the symbol is being coverage-checked.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        root.child("broken.py")
+            .write_str("def broken(:\n    pass\n")
+            .expect("write a file with a syntax error");
+        let mut cfg = crate::config::Config::default();
+        cfg.markers.strict = Some(crate::config::StrictMode::Abort);
+        cfg.rootdir = rootdir.to_owned();
+        cfg.doctest = Some(crate::config::DoctestConfig {
+            scope: Some(crate::config::DoctestScope::List(vec![
+                crate::config::ScopeEntry::Symbol {
+                    file: Utf8PathBuf::from("broken.py"),
+                    name: "helper".to_string(),
+                },
+            ])),
+            skip: vec![],
+        });
+
+        let diags = collect_coverage_diagnostics(&[rootdir.join("broken.py")], &cfg);
+
+        assert!(
+            diags.iter().any(|diag| {
+                diag.context.as_ref() == "doctest.coverage.parse-error"
+                    && diag.message.contains("scope entry")
+                    && diag.message.contains("broken.py::helper")
+            }),
+            "a scope entry into an unparsable file must be told the file \
+             could not be read -- abstaining leaves coverage silently \
+             unenforced for a symbol the user explicitly asked about (#1800); \
+             got: {diags:?}",
+        );
+    }
+
+    #[test]
+    fn unparsable_file_under_norecursedirs_emits_no_parse_error() {
+        // Exclusion pin: `norecursedirs` prunes the file in
+        // `collect_coverage_diagnostics` before `rel_files` ever reaches the
+        // parse loop, so the scanner never asked for it. This is what keeps
+        // deliberately-invalid fixture files legal in a strict repo -- the
+        // noise objection that made option 1 controversial in #1800.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        root.child("fixtures/broken.py")
+            .write_str("def broken(:\n    pass\n")
+            .expect("write a broken file inside an excluded directory");
+        let mut cfg = crate::config::Config::default();
+        cfg.markers.strict = Some(crate::config::StrictMode::Abort);
+        cfg.rootdir = rootdir.to_owned();
+        cfg.paths.norecursedirs = vec!["fixtures".to_string()];
+        cfg.doctest = Some(crate::config::DoctestConfig {
+            scope: Some(crate::config::DoctestScope::Public),
+            skip: vec![],
+        });
+
+        assert_eq!(
+            parse_error_count(&cfg, &[rootdir.join("fixtures/broken.py")]),
+            0,
+            "a file pruned by norecursedirs was never offered to the parser, \
+             so it must not be diagnosed -- only files the scanner genuinely \
+             tried to read may produce the parse-error diagnostic (#1800)",
+        );
+    }
+
+    #[test]
+    fn privacy_gated_unparsable_file_emits_no_parse_error() {
+        // The scanner's own privacy gate also runs before `parse_file`: an
+        // underscore-prefixed module path under Public scope is withheld, not
+        // offered, so a syntax error inside it stays invisible -- same terms
+        // as every other pre-parse pruning.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        root.child("_internal/__init__.py")
+            .write_str("")
+            .expect("make the private directory an importable package");
+        root.child("_internal/broken.py")
+            .write_str("def broken(:\n    pass\n")
+            .expect("write a broken file inside a private module path");
+        let mut cfg = crate::config::Config::default();
+        cfg.markers.strict = Some(crate::config::StrictMode::Abort);
+        cfg.rootdir = rootdir.to_owned();
+        cfg.doctest = Some(crate::config::DoctestConfig {
+            scope: Some(crate::config::DoctestScope::Public),
+            skip: vec![],
+        });
+
+        assert_eq!(
+            parse_error_count(&cfg, &[rootdir.join("_internal/broken.py")]),
+            0,
+            "the privacy gate withholds `_`-prefixed module paths before the \
+             parse ever runs -- the scan never attempted the read, so there is \
+             no parse failure to report (#1800)",
+        );
+    }
+
+    #[test]
+    fn split_coverage_diagnostics_parse_error_hard_fails_under_abort() {
+        use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
+        use std::sync::Arc;
+
+        let diag = DiagnosticEntry {
+            severity: DiagnosticSeverity::Error,
+            context: Arc::from("doctest.coverage.parse-error"),
+            message: "`mypkg/broken.py` could not be parsed".to_string(),
+            file: Some(Utf8PathBuf::from("mypkg/broken.py")),
+            lineno: Some(crate::types::LineNo::new(1)),
+        };
+
+        let (errors, pending) = split_coverage_diagnostics(vec![diag]);
+
+        assert_eq!(
+            errors.len(),
+            1,
+            "a parse-error Error must promote to CollectError under abort -- \
+             otherwise strict = abort users get a warning-shaped line for a \
+             module that silently dropped out of coverage auditing (#1800)",
+        );
+        assert!(
+            pending.is_empty(),
+            "no pending diagnostic left behind when a parse-error Error is \
+             promoted -- double-reporting the same finding would be noise",
         );
     }
 

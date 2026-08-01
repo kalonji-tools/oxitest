@@ -146,6 +146,24 @@ fn subject_matches(
 /// `scope_matched` is empty under `Public` scope.
 pub(crate) type ScopeMatchBits = (Vec<bool>, Vec<bool>);
 
+/// Per-file outcome of the scan's parse step — the three-state scanned set (#1800).
+///
+/// A file offered to `run_coverage_check` ends up in exactly one of three
+/// states: `parsed` (opened and read — full evidence about its symbols),
+/// `parse_failed` (the scan tried to read it and could not), or **neither**
+/// (the scan never attempted the read — pruned upstream or withheld by the
+/// scanner's privacy gate). Entry classification treats the three
+/// differently: parsed files ground staleness verdicts, parse-failed files
+/// ground a parse-failure report, and unattempted files force abstention.
+#[derive(Debug, Default)]
+pub(crate) struct ScannedFiles {
+    /// Files opened and parsed successfully, relative to the module root.
+    pub(crate) parsed: Vec<Utf8PathBuf>,
+    /// Files the scan attempted to read but could not parse (syntax or I/O
+    /// error), relative to the module root.
+    pub(crate) parse_failed: Vec<Utf8PathBuf>,
+}
+
 /// Filter subjects against scope + skip, applying the public/private name
 /// filter only under scalar `Public` scope (list-form entries are explicit opt-in).
 ///
@@ -229,18 +247,21 @@ pub(crate) fn filter_subjects_by_scope(
 /// - `skip`: user-configured `[tool.oxitest.doctest].skip` entries. Applied at the
 ///   subject level via `filter_subjects_by_scope`.
 ///
-/// Returns `(diagnostics, match_bits, parsed)`. `parsed` is the subset of `files`
-/// this scan actually opened and parsed — the privacy gate and a parse failure
-/// both drop a file silently, and a dropped file carries no evidence about the
-/// symbols inside it. Callers that judge sub-file entries must gate on `parsed`,
-/// never on `files`; see `StalenessInputs` in `pipeline::collection` and #1796.
+/// Returns `(diagnostics, match_bits, scanned)`. `scanned` is the three-state
+/// scanned set (#1800): `scanned.parsed` is the subset of `files` this scan
+/// actually opened and parsed — a file the scan never attempted carries no
+/// evidence about the symbols inside it, so callers that judge sub-file
+/// entries must gate on `scanned`, never on `files`; see `StalenessInputs` in
+/// `pipeline::collection` and #1796. A file the scan attempted but could not
+/// parse lands in `scanned.parse_failed` and produces its own
+/// `doctest.coverage.parse-error` diagnostic here.
 pub(crate) fn run_coverage_check(
     files: &[Utf8PathBuf],
     root: &ModuleRoot,
     severity: DiagnosticSeverity,
     scope: &Option<crate::config::DoctestScope>,
     skip: &[crate::config::ScopeEntry],
-) -> (Vec<DiagnosticEntry>, ScopeMatchBits, Vec<Utf8PathBuf>) {
+) -> (Vec<DiagnosticEntry>, ScopeMatchBits, ScannedFiles) {
     use std::collections::HashMap;
 
     use crate::doctest::subjects::{
@@ -255,9 +276,12 @@ pub(crate) fn run_coverage_check(
         (Vec<rustpython_parser::ast::Stmt>, Utf8PathBuf, Vec<u32>),
     > = HashMap::new();
     let mut all_subjects: Vec<(String, Subject)> = Vec::new();
-    // Files this scan actually opened. Threaded out so staleness verdicts about
-    // symbols *inside* a file are only reached for files the scan can speak to.
-    let mut parsed_files: Vec<Utf8PathBuf> = Vec::new();
+    // The three-state scanned set (#1800). Threaded out so staleness verdicts
+    // about symbols *inside* a file are only reached for files the scan can
+    // speak to, and so entries into parse-failed files report instead of
+    // abstaining.
+    let mut scanned = ScannedFiles::default();
+    let mut diagnostics = Vec::new();
 
     for file in files {
         let dotted = dotted_path_for_file(file, &root.root);
@@ -276,9 +300,26 @@ pub(crate) fn run_coverage_check(
         }
         let full = root.root.join(file);
         let Some((src, stmts)) = crate::python_ast::parse_file(&full) else {
+            // The scan asked for this file and could not read it — that is a
+            // finding, not a silent drop (#1800). Everything pruned before
+            // this point (norecursedirs, python_files, conftest.py, the
+            // List-scope prescreen, the privacy gate above) was never asked
+            // for and stays silent. `parse_file` discards the concrete error,
+            // so the message names both possible causes.
+            scanned.parse_failed.push(file.clone());
+            diagnostics.push(DiagnosticEntry {
+                severity: severity.clone(),
+                context: Arc::from("doctest.coverage.parse-error"),
+                message: format!(
+                    "`{file}` could not be parsed (syntax error or I/O error) — \
+                     its definitions are invisible to doctest coverage"
+                ),
+                file: Some(file.clone()),
+                lineno: Some(LineNo::new(1)),
+            });
             continue;
         };
-        parsed_files.push(file.clone());
+        scanned.parsed.push(file.clone());
         let line_index = crate::python_ast::build_line_index(&src);
         for subj in enumerate_subjects(&stmts, &dotted, file) {
             all_subjects.push((dotted.clone(), subj));
@@ -338,7 +379,6 @@ pub(crate) fn run_coverage_check(
     // for scope/skip entries that matched zero subjects (Task 9).
     let (deduped, match_bits) = filter_subjects_by_scope(deduped, scope, skip);
 
-    let mut diagnostics = Vec::new();
     for (module_dotted, subject) in deduped {
         // Emit scanner-level "unknown export shape" for Unknown subjects up front.
         // We don't resolve a lineno for these (the Unknown RHS could be arbitrary);
@@ -405,7 +445,7 @@ pub(crate) fn run_coverage_check(
             }
         }
     }
-    (diagnostics, match_bits, parsed_files)
+    (diagnostics, match_bits, scanned)
 }
 
 /// A def-like statement located by name — the shape unified across the
@@ -1036,6 +1076,123 @@ def uncovered():
             diags.is_empty(),
             "underscore-prefixed module path ⇒ subjects not scanned (Layer 1 filter), got: {:?}",
             diags
+        );
+    }
+
+    #[test]
+    fn run_coverage_check_parse_failure_lands_in_parse_failed_not_parsed() {
+        // The three-state scanned set (#1800): a file the scan attempted but
+        // could not read must be reported back as parse-failed, with its own
+        // diagnostic — before #1800 it vanished from both the scanned set and
+        // the diagnostic stream. This test could not be written red-first: it
+        // cannot compile without `ScannedFiles`; the observed pre-fix silent
+        // drop is pinned red-first by the `collect_coverage_diagnostics`
+        // family in `pipeline::collection`.
+        use std::fs;
+        use tempfile::tempdir;
+
+        let tmp = tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned()).unwrap();
+        fs::create_dir_all(root.join("mypkg")).unwrap();
+        fs::write(root.join("mypkg/__init__.py"), "\"\"\"pkg.\"\"\"\n").unwrap();
+        fs::write(root.join("mypkg/broken.py"), "def broken(:\n    pass\n").unwrap();
+        let module_root = ModuleRoot {
+            root,
+            use_gitignore: true,
+        };
+        let files = vec![
+            Utf8PathBuf::from("mypkg/__init__.py"),
+            Utf8PathBuf::from("mypkg/broken.py"),
+        ];
+
+        let (diags, _, scanned) = run_coverage_check(
+            &files,
+            &module_root,
+            DiagnosticSeverity::Warning,
+            &None,
+            &[],
+        );
+
+        assert_eq!(
+            scanned.parse_failed,
+            vec![Utf8PathBuf::from("mypkg/broken.py")],
+            "the scan attempted the read and failed — entry classification \
+             needs this third state to report instead of abstaining (#1800)",
+        );
+        assert_eq!(
+            scanned.parsed,
+            vec![Utf8PathBuf::from("mypkg/__init__.py")],
+            "a parse-failed file must not leak into the parsed set — parsed \
+             files ground staleness verdicts, and an unread file holds no \
+             evidence about its symbols (#1796)",
+        );
+        let parse_error = diags
+            .iter()
+            .find(|diag| diag.context.as_ref() == "doctest.coverage.parse-error")
+            .expect("the parse failure must produce its own diagnostic (#1800)");
+        assert!(
+            parse_error.message.contains("mypkg/broken.py"),
+            "the diagnostic must name the file so the user knows what to fix; \
+             got: {}",
+            parse_error.message,
+        );
+        assert_eq!(
+            parse_error.file.as_deref(),
+            Some(camino::Utf8Path::new("mypkg/broken.py")),
+            "the structured file field must carry the path too, so reporters \
+             that group by file place the finding correctly",
+        );
+    }
+
+    #[test]
+    fn run_coverage_check_privacy_gated_file_lands_in_neither_scanned_state() {
+        // The privacy gate runs before `parse_file`: a withheld file was
+        // never attempted, so it must appear in neither `parsed` nor
+        // `parse_failed` — the "never offered" third state that forces
+        // entry-classification abstention (#1800).
+        use std::fs;
+        use tempfile::tempdir;
+
+        let tmp = tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned()).unwrap();
+        fs::create_dir_all(root.join("mypkg/_internal")).unwrap();
+        fs::write(root.join("mypkg/__init__.py"), "").unwrap();
+        fs::write(root.join("mypkg/_internal/__init__.py"), "").unwrap();
+        fs::write(
+            root.join("mypkg/_internal/broken.py"),
+            "def broken(:\n    pass\n",
+        )
+        .unwrap();
+        let module_root = ModuleRoot {
+            root,
+            use_gitignore: true,
+        };
+        let files = vec![Utf8PathBuf::from("mypkg/_internal/broken.py")];
+
+        let (diags, _, scanned) = run_coverage_check(
+            &files,
+            &module_root,
+            DiagnosticSeverity::Warning,
+            &None,
+            &[],
+        );
+
+        assert!(
+            scanned.parse_failed.is_empty(),
+            "the privacy gate withheld the file before the parse — recording \
+             it as parse-failed would make entries into private modules \
+             report a failure for a read the scan never attempted (#1800)",
+        );
+        assert!(
+            scanned.parsed.is_empty(),
+            "a withheld file was never opened, so it cannot be in the parsed \
+             set either — that is the #1796 evidence rule",
+        );
+        assert!(
+            diags.is_empty(),
+            "no diagnostic for a file the scan never asked for — the \
+             norecursedirs/privacy exclusions are what keep deliberately \
+             broken fixture files legal in strict repos; got: {diags:?}",
         );
     }
 
