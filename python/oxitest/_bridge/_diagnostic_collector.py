@@ -1,9 +1,8 @@
 """ContextVar-based diagnostic collector for the Python bridge.
 
-Follows the same pattern as ``_fixtures_registry_var`` and
-``_helpers_registry_var`` — FixtureSession sets the collector on entry,
-clears on exit. Any call site can emit diagnostics without threading
-the session through.
+Follows the same pattern as ``_fixtures_registry_var`` — FixtureSession
+sets the collector on entry, clears on exit. Any call site can emit
+diagnostics without threading the session through.
 """
 
 from __future__ import annotations

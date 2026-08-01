@@ -14,10 +14,8 @@ from oxitest._bridge._fixture_registry import (
     ModuleSource,
 )
 from oxitest._bridge._fixture_session import FixtureSession
-from oxitest._bridge._helper_registry import HelperDef, HelperRegistry
 from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge._read_fixtures import _fixtures_registry_var, _FixturesProxy
-from oxitest._bridge._read_helpers import _helpers_registry_var, _HelpersProxy
 from oxitest._bridge.conftest_loader import load_fixtures_from_conftest
 from oxitest._bridge.proxy import FrozenProxy
 from oxitest._bridge.proxy_ns import FixturesProxy, NamespaceProxy, OxiNamespaceProxy
@@ -412,7 +410,7 @@ def test_full_pipeline_two_namespaces_same_fixture_name(tmp: TempDir) -> None:
     )
 
 
-# ── ContextVar proxies (_FixturesProxy / _HelpersProxy) ──────────────────────
+# ── ContextVar proxies (_FixturesProxy) ───────────────────────────────────────
 
 
 def test_fixtures_proxy_resolves_namespace_and_accessor(
@@ -455,53 +453,3 @@ def test_fixtures_proxy_raises_outside_session() -> None:
             _ = proxy.db
     finally:
         _fixtures_registry_var.reset(token)
-
-
-def _greet(name: str) -> str:
-    return f"hi {name}"
-
-
-def test_helpers_proxy_resolves_namespace_and_callable() -> None:
-    """_HelpersProxy chains namespace access and callable invocation correctly."""
-    reg = HelperRegistry()
-    reg.register(
-        HelperDef(
-            name="greet",
-            func=_greet,
-            source=ConftestSource(func=_greet, conftest_path="/conftest.py"),
-            namespace="utils",
-        )
-    )
-    token = _helpers_registry_var.set(reg)
-    try:
-        proxy = _HelpersProxy()
-        assert proxy.utils.greet("world") == "hi world", (
-            "should resolve namespace then callable"
-        )
-    finally:
-        _helpers_registry_var.reset(token)
-
-
-def test_helpers_proxy_raises_outside_session() -> None:
-    """Accessing a _HelpersProxy namespace outside a session raises AttributeError."""
-    token = _helpers_registry_var.set(None)
-    try:
-        proxy = _HelpersProxy()
-        with oxitest.raises(
-            AttributeError, match="only available during a test session"
-        ):
-            _ = proxy.utils
-    finally:
-        _helpers_registry_var.reset(token)
-
-
-def test_helpers_proxy_raises_unknown_namespace() -> None:
-    """Accessing a namespace with no registered helpers raises AttributeError."""
-    reg = HelperRegistry()
-    token = _helpers_registry_var.set(reg)
-    try:
-        proxy = _HelpersProxy()
-        with oxitest.raises(AttributeError, match="no helper namespace"):
-            _ = proxy.nonexistent
-    finally:
-        _helpers_registry_var.reset(token)
