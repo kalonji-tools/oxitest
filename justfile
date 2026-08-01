@@ -68,6 +68,7 @@ preflight: clean check-locks check test-rust build test-python
     @just _log {{_blue}} "Building docs (strict)..."
     uv run --group docs mkdocs build --strict
     mdbook build docs/internals
+    cargo doc --no-deps --document-private-items
     @just _log {{_green}} "Preflight passed"
 
 # Format code and fix typos
