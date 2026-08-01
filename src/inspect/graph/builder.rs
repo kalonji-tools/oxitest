@@ -12,7 +12,7 @@ use ahash::{AHashMap, AHashSet};
 use crate::query::resource::QueryEntry;
 
 use super::InspectGraph;
-use super::nodes::{ConftestNode, FixtureNode, HelperNode, MarkNode, PluginNode, TestNode};
+use super::nodes::{ConftestNode, FixtureNode, MarkNode, PluginNode, TestNode};
 
 // ── GraphBuilder ─────────────────────────────────────────────────────────────
 
@@ -25,7 +25,6 @@ pub(crate) struct GraphBuilder {
     mark_by_name: HashMap<String, usize>,
     conftest_by_path: HashMap<String, usize>,
     plugin_by_name: HashMap<String, usize>,
-    helper_by_key: HashMap<(String, String), usize>, // (name, source)
     // Side channel: mark names per test index (populated during add_test_entries,
     // consumed during resolve_edges).
     test_mark_names: HashMap<usize, Vec<String>>,
@@ -40,7 +39,6 @@ impl GraphBuilder {
             mark_by_name: HashMap::new(),
             conftest_by_path: HashMap::new(),
             plugin_by_name: HashMap::new(),
-            helper_by_key: HashMap::new(),
             test_mark_names: HashMap::new(),
         }
     }
@@ -49,7 +47,7 @@ impl GraphBuilder {
     ///
     /// Used by progressive loading (#1119) to merge phase-2 data (fixtures,
     /// plugins) into a graph that already contains phase-1 data (tests,
-    /// marks, helpers).
+    /// marks).
     pub(crate) fn from_graph(graph: InspectGraph) -> Self {
         let fixture_by_name = graph
             .fixtures
@@ -81,12 +79,6 @@ impl GraphBuilder {
             .enumerate()
             .map(|(i, p)| (p.name.clone(), i))
             .collect();
-        let helper_by_key = graph
-            .helpers
-            .iter()
-            .enumerate()
-            .map(|(i, h)| ((h.name.clone(), h.source.clone()), i))
-            .collect();
 
         Self {
             graph,
@@ -95,7 +87,6 @@ impl GraphBuilder {
             mark_by_name,
             conftest_by_path,
             plugin_by_name,
-            helper_by_key,
             test_mark_names: HashMap::new(),
         }
     }
@@ -155,57 +146,6 @@ impl GraphBuilder {
                 used_by: vec![],
             });
             self.mark_by_name.insert(name, idx);
-        }
-    }
-
-    /// Add helper nodes from Python-tier collection.
-    ///
-    /// Expected entry fields: `name`, `source`, `namespace`, `docstring`, `signature`.
-    pub(crate) fn add_helper_entries(&mut self, entries: &[QueryEntry]) {
-        for entry in entries {
-            let name = entry.get("name").unwrap_or_default().to_string();
-            let source = entry.get("source").unwrap_or_default().to_string();
-            let namespace = entry.get("namespace").unwrap_or_default().to_string();
-            let key = (name.clone(), source.clone());
-            if self.helper_by_key.contains_key(&key) {
-                continue;
-            }
-
-            let docstring = entry.get("docstring").map(|s| s.to_string());
-            let docstring = if docstring.as_deref() == Some("") {
-                None
-            } else {
-                docstring
-            };
-            let signature = entry.get("signature").unwrap_or_default().to_string();
-
-            let is_plugin = source.starts_with("<plugin:");
-            let conftest_idx = if is_plugin {
-                None
-            } else {
-                Some(self.ensure_conftest(&source))
-            };
-            let plugin_idx = if is_plugin {
-                let module = source
-                    .strip_prefix("<plugin:")
-                    .and_then(|s| s.strip_suffix('>'))
-                    .unwrap_or(&source);
-                self.plugin_by_name.get(module).copied()
-            } else {
-                None
-            };
-
-            let idx = self.graph.helpers.len();
-            self.graph.helpers.push(HelperNode {
-                name,
-                signature,
-                docstring,
-                source,
-                namespace,
-                conftest_idx,
-                plugin_idx,
-            });
-            self.helper_by_key.insert(key, idx);
         }
     }
 
@@ -351,17 +291,15 @@ impl GraphBuilder {
     /// This must be called after all `add_*_entries` methods.  It resolves:
     ///
     /// 1. **Test -> Mark** edges from test entry `mark` fields
-    /// 2. **Helper -> Conftest** membership edges
-    /// 3. **Fixture -> Conftest** membership edges (by source path)
-    /// 4. **Fixture -> Plugin** edges (by `<plugin:name>` source prefix)
-    /// 5. **Parametrize grouping** (strip `[param_id]` from node_id)
-    /// 6. **Broken edges** for unresolved fixture references
-    /// 7. **Inverse edges** (consumers, used_by, conftest.fixtures, conftest.helpers)
+    /// 2. **Fixture -> Conftest** membership edges (by source path)
+    /// 3. **Fixture -> Plugin** edges (by `<plugin:name>` source prefix)
+    /// 4. **Parametrize grouping** (strip `[param_id]` from node_id)
+    /// 5. **Broken edges** for unresolved fixture references
+    /// 6. **Inverse edges** (consumers, used_by, conftest.fixtures)
     pub(crate) fn resolve_edges(&mut self) {
         self.resolve_test_to_mark_edges();
         self.resolve_fixture_to_conftest_edges();
         self.resolve_fixture_to_plugin_edges();
-        self.resolve_helper_to_conftest_edges();
         self.resolve_parametrize_grouping();
     }
 
@@ -381,7 +319,6 @@ impl GraphBuilder {
         self.graph.conftests.push(ConftestNode {
             path: path.to_string(),
             fixtures: vec![],
-            helpers: vec![],
         });
         self.conftest_by_path.insert(path.to_string(), idx);
         idx
@@ -494,31 +431,6 @@ impl GraphBuilder {
                 {
                     self.graph.plugins[plugin_idx].fixtures.push(fix_idx);
                 }
-            }
-        }
-    }
-
-    fn resolve_helper_to_conftest_edges(&mut self) {
-        // Helpers already have conftest_idx set during add_helper_entries.
-        // Here we wire the inverse: conftest -> helper.
-        // Pre-seed seen-set from existing edges (progressive loading support).
-        let mut seen_conftest_helpers: AHashMap<usize, AHashSet<usize>> = AHashMap::new();
-        for (ct_idx, ct) in self.graph.conftests.iter().enumerate() {
-            if !ct.helpers.is_empty() {
-                seen_conftest_helpers.insert(ct_idx, ct.helpers.iter().copied().collect());
-            }
-        }
-
-        for helper_idx in 0..self.graph.helpers.len() {
-            let Some(conftest_idx) = self.graph.helpers[helper_idx].conftest_idx else {
-                continue;
-            };
-            if seen_conftest_helpers
-                .entry(conftest_idx)
-                .or_default()
-                .insert(helper_idx)
-            {
-                self.graph.conftests[conftest_idx].helpers.push(helper_idx);
             }
         }
     }
@@ -646,54 +558,6 @@ mod tests {
         );
     }
 
-    // ── add_helper_entries ───────────────────────────────────────────────
-
-    #[test]
-    fn add_helper_entries_creates_helper_nodes() {
-        let mut builder = GraphBuilder::new();
-        builder.add_helper_entries(&[entry(&[
-            ("name", "make_db"),
-            ("source", "tests/conftest.py"),
-            ("docstring", "Create a test database."),
-            ("signature", "make_db(name: str)"),
-        ])]);
-        let graph = builder.build();
-        assert_eq!(
-            graph.helpers.len(),
-            1,
-            "one helper entry should produce one helper node"
-        );
-        assert_eq!(
-            graph.helpers[0].name, "make_db",
-            "helper name should match entry"
-        );
-        assert_eq!(
-            graph.helpers[0].docstring,
-            Some("Create a test database.".to_string()),
-            "helper docstring should be populated from entry"
-        );
-        assert_eq!(
-            graph.helpers[0].signature, "make_db(name: str)",
-            "helper signature should match entry"
-        );
-    }
-
-    #[test]
-    fn add_helper_entries_empty_docstring_becomes_none() {
-        let mut builder = GraphBuilder::new();
-        builder.add_helper_entries(&[entry(&[
-            ("name", "helper_fn"),
-            ("source", "conftest.py"),
-            ("docstring", ""),
-            ("signature", "helper_fn()"),
-        ])]);
-        let graph = builder.build();
-        assert_eq!(
-            graph.helpers[0].docstring, None,
-            "empty docstring string should be stored as None"
-        );
-    }
-
     // ── add_mark_entries ─────────────────────────────────────────────────
 
     #[test]
@@ -801,29 +665,6 @@ mod tests {
         assert!(
             graph.plugins[0].fixtures.contains(&0),
             "plugin should reference the fixture in its fixtures list"
-        );
-    }
-
-    #[test]
-    fn resolve_edges_wires_helper_to_conftest() {
-        let mut builder = GraphBuilder::new();
-        builder.add_helper_entries(&[entry(&[
-            ("name", "make_thing"),
-            ("source", "tests/conftest.py"),
-            ("docstring", ""),
-            ("signature", "make_thing()"),
-        ])]);
-        builder.resolve_edges();
-        let graph = builder.build();
-
-        assert_eq!(
-            graph.conftests.len(),
-            1,
-            "helper source should create a conftest node"
-        );
-        assert!(
-            graph.conftests[0].helpers.contains(&0),
-            "conftest should reference the helper in its helpers list"
         );
     }
 
@@ -1019,24 +860,6 @@ mod tests {
     }
 
     #[test]
-    fn deduplication_helper_by_name_and_source() {
-        let mut builder = GraphBuilder::new();
-        let helper_entry = entry(&[
-            ("name", "make_db"),
-            ("source", "tests/conftest.py"),
-            ("docstring", ""),
-            ("signature", "make_db()"),
-        ]);
-        builder.add_helper_entries(&[helper_entry.clone(), helper_entry]);
-        let graph = builder.build();
-        assert_eq!(
-            graph.helpers.len(),
-            1,
-            "adding the same helper (name+source) twice should not create duplicates"
-        );
-    }
-
-    #[test]
     fn deduplication_plugin_by_name() {
         let mut builder = GraphBuilder::new();
         let plugin_entry = entry(&[("name", "capture"), ("protocol", "")]);
@@ -1052,20 +875,26 @@ mod tests {
     // ── Conftest auto-creation ───────────────────────────────────────────
 
     #[test]
-    fn helpers_from_same_conftest_share_conftest_node() {
+    fn fixtures_from_same_conftest_share_conftest_node() {
         let mut builder = GraphBuilder::new();
-        builder.add_helper_entries(&[
+        builder.add_fixture_entries(&[
             entry(&[
-                ("name", "helper_a"),
+                ("name", "fixture_a"),
                 ("source", "tests/conftest.py"),
-                ("docstring", ""),
-                ("signature", "helper_a()"),
+                ("type", "fixture"),
+                ("scope", "function"),
+                ("autouse", "false"),
+                ("async", "false"),
+                ("description", ""),
             ]),
             entry(&[
-                ("name", "helper_b"),
+                ("name", "fixture_b"),
                 ("source", "tests/conftest.py"),
-                ("docstring", ""),
-                ("signature", "helper_b()"),
+                ("type", "fixture"),
+                ("scope", "function"),
+                ("autouse", "false"),
+                ("async", "false"),
+                ("description", ""),
             ]),
         ]);
         builder.resolve_edges();
@@ -1073,12 +902,15 @@ mod tests {
         assert_eq!(
             graph.conftests.len(),
             1,
-            "two helpers from the same conftest should share one conftest node"
+            "two fixtures from the same conftest path must resolve to one conftest \
+             node — a duplicated node would split one file's fixtures across two \
+             graph nodes and break navigation between them"
         );
         assert_eq!(
-            graph.conftests[0].helpers.len(),
+            graph.conftests[0].fixtures.len(),
             2,
-            "shared conftest should reference both helpers"
+            "the shared conftest node should list both fixtures, not just whichever \
+             one happened to create the node first"
         );
     }
 
@@ -1114,12 +946,6 @@ mod tests {
             ("mark", "slow"),
         ])]);
         builder.add_mark_entries(&[entry(&[("name", "slow"), ("used_in", "test_foo.py")])]);
-        builder.add_helper_entries(&[entry(&[
-            ("name", "make_db"),
-            ("source", "tests/conftest.py"),
-            ("docstring", ""),
-            ("signature", "make_db()"),
-        ])]);
         builder.resolve_edges();
         let graph = builder.build();
 
@@ -1146,11 +972,6 @@ mod tests {
             merged.marks.len(),
             1,
             "from_graph should preserve existing mark nodes"
-        );
-        assert_eq!(
-            merged.helpers.len(),
-            1,
-            "from_graph should preserve existing helper nodes"
         );
         assert_eq!(
             merged.fixtures.len(),
@@ -1191,16 +1012,19 @@ mod tests {
     #[test]
     fn from_graph_resolves_fixture_to_conftest_edges() {
         let mut builder = GraphBuilder::new();
-        builder.add_helper_entries(&[entry(&[
-            ("name", "make_thing"),
+        builder.add_fixture_entries(&[entry(&[
+            ("name", "existing"),
             ("source", "tests/conftest.py"),
-            ("docstring", ""),
-            ("signature", "make_thing()"),
+            ("type", "fixture"),
+            ("scope", "function"),
+            ("autouse", "false"),
+            ("async", "false"),
+            ("description", ""),
         ])]);
         builder.resolve_edges();
         let graph = builder.build();
 
-        // Phase 2: add fixture from the same conftest.
+        // Phase 2: add another fixture from the same conftest.
         let mut builder2 = GraphBuilder::from_graph(graph);
         builder2.add_fixture_entries(&[entry(&[
             ("name", "thing"),
@@ -1225,11 +1049,11 @@ mod tests {
         );
         assert!(
             merged.conftests[0].fixtures.contains(&0),
-            "conftest should reference the fixture"
+            "conftest should reference the phase-1 fixture"
         );
         assert!(
-            merged.conftests[0].helpers.contains(&0),
-            "conftest should still reference the helper"
+            merged.conftests[0].fixtures.contains(&1),
+            "conftest should also reference the phase-2 fixture added via from_graph"
         );
     }
 

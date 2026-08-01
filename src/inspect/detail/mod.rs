@@ -1,12 +1,11 @@
 //! Node detail view rendering for `oxitest inspect`.
 //!
 //! Renders the right-pane detail view for a selected node.  Each of the
-//! six node types has a dedicated renderer that shows its fields and
+//! five node types has a dedicated renderer that shows its fields and
 //! navigable connections.
 
 mod conftest;
 mod fixture;
-mod helper;
 mod mark;
 mod plugin;
 pub(crate) mod styles;
@@ -35,7 +34,6 @@ pub(crate) fn render_detail<'a>(graph: &InspectGraph, node_ref: Option<&NodeRef>
         NodeKind::Mark => mark::render_mark(graph, node_ref),
         NodeKind::Conftest => conftest::render_conftest(graph, node_ref),
         NodeKind::Plugin => plugin::render_plugin(graph, node_ref),
-        NodeKind::Helper => helper::render_helper(graph, node_ref),
     }
 }
 
@@ -50,7 +48,6 @@ pub(crate) fn render_preview<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Ve
         NodeKind::Mark => mark::preview_mark(graph, node_ref),
         NodeKind::Conftest => conftest::preview_conftest(graph, node_ref),
         NodeKind::Plugin => plugin::preview_plugin(graph, node_ref),
-        NodeKind::Helper => helper::preview_helper(graph, node_ref),
     }
 }
 
@@ -64,7 +61,6 @@ fn collect_selectable_edges(graph: &InspectGraph, node: &NodeRef) -> Vec<NodeRef
         NodeKind::Mark => mark::collect_edges(graph, node),
         NodeKind::Conftest => conftest::collect_edges(graph, node),
         NodeKind::Plugin => plugin::collect_edges(graph, node),
-        NodeKind::Helper => helper::collect_edges(graph, node),
     }
 }
 
@@ -199,7 +195,6 @@ mod tests {
         graph.conftests.push(ConftestNode {
             path: "tests/conftest.py".to_string(),
             fixtures: vec![0],
-            helpers: vec![],
         });
         graph
     }
@@ -342,19 +337,9 @@ mod tests {
             conftest_idx: Some(0),
             plugin_idx: None,
         });
-        graph.helpers.push(HelperNode {
-            name: "make_db".to_string(),
-            signature: "make_db(name: str)".to_string(),
-            docstring: None,
-            source: "tests/conftest.py".to_string(),
-            namespace: "conftest".to_string(),
-            conftest_idx: Some(0),
-            plugin_idx: None,
-        });
         graph.conftests.push(ConftestNode {
             path: "tests/conftest.py".to_string(),
             fixtures: vec![0, 1],
-            helpers: vec![0],
         });
         graph
     }
@@ -381,26 +366,6 @@ mod tests {
                 "ReporterProvider".to_string(),
             ],
             fixtures: vec![0],
-        });
-        graph
-    }
-
-    /// Build a graph for testing a helper detail view.
-    fn helper_graph() -> InspectGraph {
-        let mut graph = InspectGraph::default();
-        graph.conftests.push(ConftestNode {
-            path: "tests/conftest.py".to_string(),
-            fixtures: vec![],
-            helpers: vec![0],
-        });
-        graph.helpers.push(HelperNode {
-            name: "make_db".to_string(),
-            signature: "make_db(name: str)".to_string(),
-            docstring: Some("Create a test database.".to_string()),
-            source: "tests/conftest.py".to_string(),
-            namespace: "conftest".to_string(),
-            conftest_idx: Some(0),
-            plugin_idx: None,
         });
         graph
     }
@@ -538,7 +503,7 @@ mod tests {
     }
 
     #[test]
-    fn render_detail_conftest_shows_fixtures_and_helpers() {
+    fn render_detail_conftest_shows_fixtures() {
         let graph = conftest_graph();
         let node_ref = NodeRef {
             kind: NodeKind::Conftest,
@@ -553,10 +518,6 @@ mod tests {
         assert!(
             text.contains("Fixtures"),
             "conftest with fixtures should show the Fixtures section"
-        );
-        assert!(
-            text.contains("Helpers"),
-            "conftest with helpers should show the Helpers section"
         );
     }
 
@@ -580,33 +541,6 @@ mod tests {
         assert!(
             text.contains("Fixtures"),
             "plugin with fixtures should show the Fixtures section"
-        );
-    }
-
-    #[test]
-    fn render_detail_helper_shows_all_fields() {
-        let graph = helper_graph();
-        let node_ref = NodeRef {
-            kind: NodeKind::Helper,
-            index: 0,
-        };
-        let lines = render_detail(&graph, Some(&node_ref));
-        let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
-        assert!(
-            text.contains("make_db"),
-            "helper detail should show the helper name"
-        );
-        assert!(
-            text.contains("make_db(name: str)"),
-            "helper detail should show the signature"
-        );
-        assert!(
-            text.contains("Create a test database."),
-            "helper with docstring should show the docstring"
-        );
-        assert!(
-            text.contains("Defined In"),
-            "helper should show the Defined In section"
         );
     }
 
@@ -835,7 +769,7 @@ mod tests {
     }
 
     #[test]
-    fn preview_conftest_shows_fixtures_and_helpers() {
+    fn preview_conftest_shows_fixtures() {
         let graph = conftest_graph();
         let node_ref = NodeRef {
             kind: NodeKind::Conftest,
@@ -850,10 +784,6 @@ mod tests {
         assert!(
             text.contains("Fixtures"),
             "conftest preview should show Fixtures section"
-        );
-        assert!(
-            text.contains("Helpers"),
-            "conftest preview should show Helpers section"
         );
     }
 
@@ -877,33 +807,6 @@ mod tests {
         assert!(
             text.contains("Fixtures"),
             "plugin preview should show Fixtures section"
-        );
-    }
-
-    #[test]
-    fn preview_helper_shows_signature_and_defined_in() {
-        let graph = helper_graph();
-        let node_ref = NodeRef {
-            kind: NodeKind::Helper,
-            index: 0,
-        };
-        let lines = render_preview(&graph, &node_ref);
-        let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
-        assert!(
-            text.contains("make_db"),
-            "helper preview should show the helper name"
-        );
-        assert!(
-            text.contains("make_db(name: str)"),
-            "helper preview should show the signature"
-        );
-        assert!(
-            !text.contains("Create a test database."),
-            "helper preview should omit the docstring"
-        );
-        assert!(
-            text.contains("Defined In"),
-            "helper preview should show the Defined In section"
         );
     }
 
@@ -1026,17 +929,17 @@ mod tests {
     }
 
     #[test]
-    fn conftest_edges_include_fixtures_and_helpers() {
+    fn conftest_edges_include_fixtures() {
         let graph = conftest_graph();
         let node_ref = NodeRef {
             kind: NodeKind::Conftest,
             index: 0,
         };
-        // conftest_graph conftest has fixtures=[0, 1] and helpers=[0]
+        // conftest_graph conftest has fixtures=[0, 1]
         assert_eq!(
             selectable_edge_count(&graph, &node_ref),
-            3,
-            "conftest with two fixtures and one helper should have 3 selectable edges"
+            2,
+            "conftest with two fixtures should have 2 selectable edges"
         );
         assert_eq!(
             edge_node_at(&graph, &node_ref, 0),
@@ -1053,14 +956,6 @@ mod tests {
                 index: 1
             }),
             "second edge should be the second fixture"
-        );
-        assert_eq!(
-            edge_node_at(&graph, &node_ref, 2),
-            Some(NodeRef {
-                kind: NodeKind::Helper,
-                index: 0
-            }),
-            "third edge should be the helper"
         );
     }
 
@@ -1088,33 +983,10 @@ mod tests {
     }
 
     #[test]
-    fn helper_edge_is_conftest() {
-        let graph = helper_graph();
-        let node_ref = NodeRef {
-            kind: NodeKind::Helper,
-            index: 0,
-        };
-        // helper_graph helper has conftest_idx=Some(0)
-        assert_eq!(
-            selectable_edge_count(&graph, &node_ref),
-            1,
-            "helper should always have exactly 1 selectable edge (its conftest)"
-        );
-        assert_eq!(
-            edge_node_at(&graph, &node_ref, 0),
-            Some(NodeRef {
-                kind: NodeKind::Conftest,
-                index: 0
-            }),
-            "sole edge should be the conftest owner"
-        );
-    }
-
-    #[test]
     fn edge_node_at_out_of_bounds_returns_none() {
-        let graph = helper_graph();
+        let graph = plugin_graph();
         let node_ref = NodeRef {
-            kind: NodeKind::Helper,
+            kind: NodeKind::Fixture,
             index: 0,
         };
         assert_eq!(
@@ -1198,7 +1070,6 @@ mod snapshot_tests {
         graph.conftests.push(ConftestNode {
             path: "tests/conftest.py".to_string(),
             fixtures: vec![0],
-            helpers: vec![],
         });
         let mut app = InspectApp::new(Some(graph), None);
         app.terminal_width = 120;
@@ -1337,19 +1208,9 @@ mod snapshot_tests {
             conftest_idx: Some(0),
             plugin_idx: None,
         });
-        graph.helpers.push(HelperNode {
-            name: "make_db".to_string(),
-            signature: "make_db(name: str)".to_string(),
-            docstring: None,
-            source: "tests/conftest.py".to_string(),
-            namespace: "conftest".to_string(),
-            conftest_idx: Some(0),
-            plugin_idx: None,
-        });
         graph.conftests.push(ConftestNode {
             path: "tests/conftest.py".to_string(),
             fixtures: vec![0],
-            helpers: vec![0],
         });
         let mut app = InspectApp::new(Some(graph), None);
         app.terminal_width = 120;
@@ -1396,35 +1257,6 @@ mod snapshot_tests {
             selected: 0,
         });
         assert_snapshot!("detail_plugin", render_to_string(&app, 120, 24));
-    }
-
-    #[test]
-    fn snap_detail_helper() {
-        let mut graph = InspectGraph::default();
-        graph.conftests.push(ConftestNode {
-            path: "tests/conftest.py".to_string(),
-            fixtures: vec![],
-            helpers: vec![0],
-        });
-        graph.helpers.push(HelperNode {
-            name: "make_db".to_string(),
-            signature: "make_db(name: str)".to_string(),
-            docstring: Some("Create a test database.".to_string()),
-            source: "tests/conftest.py".to_string(),
-            namespace: "conftest".to_string(),
-            conftest_idx: Some(0),
-            plugin_idx: None,
-        });
-        let mut app = InspectApp::new(Some(graph), None);
-        app.terminal_width = 120;
-        app.nav.push(Screen::NodeFocus {
-            node: NodeRef {
-                kind: NodeKind::Helper,
-                index: 0,
-            },
-            selected: 0,
-        });
-        assert_snapshot!("detail_helper", render_to_string(&app, 120, 24));
     }
 
     #[test]

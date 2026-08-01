@@ -406,10 +406,7 @@ fn build_overview_content(
             Style::default().fg(Color::Yellow),
         )));
         for entry in &sections.conftests {
-            let text = format!(
-                "  C  {} ({} fixtures, {} helpers)",
-                entry.path, entry.fixture_count, entry.helper_count
-            );
+            let text = format!("  C  {} ({} fixtures)", entry.path, entry.fixture_count);
             if cursor == selected {
                 cursor_line_idx = Some(lines.len());
             }

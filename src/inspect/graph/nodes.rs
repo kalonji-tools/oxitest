@@ -1,6 +1,6 @@
 //! Node type definitions for the inspect graph.
 //!
-//! Each struct represents one of the six node kinds that make up the
+//! Each struct represents one of the five node kinds that make up the
 //! inspect graph.  Fields store domain data; edge fields store indices
 //! into the typed vectors held by [`super::InspectGraph`].
 //!
@@ -67,8 +67,6 @@ pub(crate) struct ConftestNode {
     pub path: String,
     /// Indices into `InspectGraph::fixtures` — fixtures defined in this conftest.
     pub fixtures: Vec<usize>,
-    /// Indices into `InspectGraph::helpers` — helpers defined in this conftest.
-    pub helpers: Vec<usize>,
 }
 
 // ── PluginNode ───────────────────────────────────────────────────────────────
@@ -80,20 +78,4 @@ pub(crate) struct PluginNode {
     pub protocols: Vec<String>,
     /// Indices into `InspectGraph::fixtures` — fixtures this plugin provides.
     pub fixtures: Vec<usize>,
-}
-
-// ── HelperNode ───────────────────────────────────────────────────────────────
-
-/// A registered helper callable (conftest or plugin-provided).
-#[derive(Debug, Clone)]
-pub(crate) struct HelperNode {
-    pub name: String,
-    pub signature: String,
-    pub docstring: Option<String>,
-    pub source: String,
-    pub namespace: String,
-    /// Index into `InspectGraph::conftests` (if conftest-provided).
-    pub conftest_idx: Option<usize>,
-    /// Index into `InspectGraph::plugins` (if plugin-provided).
-    pub plugin_idx: Option<usize>,
 }

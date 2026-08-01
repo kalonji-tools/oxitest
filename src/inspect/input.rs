@@ -1108,7 +1108,6 @@ mod tests {
         graph.conftests.push(ConftestNode {
             path: "conftest.py".to_string(),
             fixtures: vec![0],
-            helpers: vec![],
         });
 
         let fixture_node_ref = GraphNodeRef {
@@ -1378,7 +1377,6 @@ mod tests {
         graph.conftests.push(ConftestNode {
             path: "tests/conftest.py".to_string(),
             fixtures: vec![0],
-            helpers: vec![],
         });
 
         let mut app = InspectApp::new(Some(graph), None);
@@ -1501,7 +1499,6 @@ mod tests {
         graph.conftests.push(ConftestNode {
             path: "tests/conftest.py".to_string(),
             fixtures: vec![0],
-            helpers: vec![],
         });
 
         let mut app = InspectApp::new(Some(graph), None);

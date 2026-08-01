@@ -1,4 +1,4 @@
-//! In-memory graph connecting the six inspect node types.
+//! In-memory graph connecting the five inspect node types.
 //!
 //! [`InspectGraph`] holds typed vectors for each node kind and a list of
 //! [`BrokenEdge`]s for unresolved fixture references.  [`NodeRef`] is a
@@ -8,13 +8,13 @@
 pub(crate) mod builder;
 pub(crate) mod nodes;
 
-use nodes::{ConftestNode, FixtureNode, HelperNode, MarkNode, PluginNode, TestNode};
+use nodes::{ConftestNode, FixtureNode, MarkNode, PluginNode, TestNode};
 
 use crate::query::resource::QueryEntry;
 
 // ── NodeKind ─────────────────────────────────────────────────────────────────
 
-/// Discriminant for the six node types in the inspect graph.
+/// Discriminant for the five node types in the inspect graph.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum NodeKind {
     Fixture,
@@ -22,7 +22,6 @@ pub(crate) enum NodeKind {
     Mark,
     Conftest,
     Plugin,
-    Helper,
 }
 
 impl NodeKind {
@@ -34,7 +33,6 @@ impl NodeKind {
             Self::Mark => 'M',
             Self::Conftest => 'C',
             Self::Plugin => 'P',
-            Self::Helper => 'H',
         }
     }
 
@@ -46,7 +44,6 @@ impl NodeKind {
             Self::Mark => "mark",
             Self::Conftest => "conftest",
             Self::Plugin => "plugin",
-            Self::Helper => "helper",
         }
     }
 }
@@ -92,7 +89,6 @@ pub(crate) struct InspectGraph {
     pub marks: Vec<MarkNode>,
     pub conftests: Vec<ConftestNode>,
     pub plugins: Vec<PluginNode>,
-    pub helpers: Vec<HelperNode>,
     #[allow(dead_code)] // displayed by detail view (#1117) and navigation (#1116)
     pub broken_edges: Vec<BrokenEdge>,
 }
@@ -100,7 +96,7 @@ pub(crate) struct InspectGraph {
 impl InspectGraph {
     /// Strip an absolute rootdir prefix from all path fields in the graph.
     ///
-    /// Normalizes `FixtureNode.source`, `ConftestNode.path`, `HelperNode.source`,
+    /// Normalizes `FixtureNode.source`, `ConftestNode.path`,
     /// and `TestNode.node_id` to relative paths for display in the TUI.
     ///
     /// Uses `camino::Utf8Path::strip_prefix` for platform-safe path handling
@@ -125,11 +121,6 @@ impl InspectGraph {
                 c.path = rel.to_string();
             }
         }
-        for h in &mut self.helpers {
-            if let Ok(rel) = camino::Utf8Path::new(&h.source).strip_prefix(root) {
-                h.source = rel.to_string();
-            }
-        }
     }
 
     /// Return the display name for the node at the given reference.
@@ -141,7 +132,6 @@ impl InspectGraph {
             NodeKind::Mark => &self.marks[r.index].name,
             NodeKind::Conftest => &self.conftests[r.index].path,
             NodeKind::Plugin => &self.plugins[r.index].name,
-            NodeKind::Helper => &self.helpers[r.index].name,
         }
     }
 
@@ -160,7 +150,6 @@ impl InspectGraph {
             NodeKind::Mark => self.marks.len(),
             NodeKind::Conftest => self.conftests.len(),
             NodeKind::Plugin => self.plugins.len(),
-            NodeKind::Helper => self.helpers.len(),
         }
     }
 
@@ -171,7 +160,6 @@ impl InspectGraph {
             && self.marks.is_empty()
             && self.conftests.is_empty()
             && self.plugins.is_empty()
-            && self.helpers.is_empty()
     }
 
     /// Return node refs for a specific kind.
@@ -205,7 +193,7 @@ impl InspectGraph {
 
     /// Return references to every node in the graph, in display order.
     ///
-    /// Iteration order: tests → fixtures → marks → conftests → plugins → helpers.
+    /// Iteration order: tests → fixtures → marks → conftests → plugins.
     /// Each `NodeRef.index` is the position within its own typed vector,
     /// matching the O(1) lookup semantics of `node_name` and `node_sigil`.
     #[allow(dead_code)] // wired into nav/overview in follow-up tasks
@@ -238,12 +226,6 @@ impl InspectGraph {
         for i in 0..self.plugins.len() {
             refs.push(NodeRef {
                 kind: NodeKind::Plugin,
-                index: i,
-            });
-        }
-        for i in 0..self.helpers.len() {
-            refs.push(NodeRef {
-                kind: NodeKind::Helper,
                 index: i,
             });
         }
@@ -311,21 +293,11 @@ mod tests {
         graph.conftests.push(ConftestNode {
             path: "tests/conftest.py".to_string(),
             fixtures: vec![],
-            helpers: vec![],
         });
         graph.plugins.push(PluginNode {
             name: "capture".to_string(),
             protocols: vec![],
             fixtures: vec![],
-        });
-        graph.helpers.push(HelperNode {
-            name: "make_db".to_string(),
-            signature: "make_db()".to_string(),
-            docstring: None,
-            source: "tests/conftest.py".to_string(),
-            namespace: "conftest".to_string(),
-            conftest_idx: Some(0),
-            plugin_idx: None,
         });
 
         let cases: Vec<(NodeRef, &str)> = vec![
@@ -364,13 +336,6 @@ mod tests {
                 },
                 "capture",
             ),
-            (
-                NodeRef {
-                    kind: NodeKind::Helper,
-                    index: 0,
-                },
-                "make_db",
-            ),
         ];
 
         for (node_ref, expected) in &cases {
@@ -392,7 +357,6 @@ mod tests {
             (NodeKind::Mark, 'M'),
             (NodeKind::Conftest, 'C'),
             (NodeKind::Plugin, 'P'),
-            (NodeKind::Helper, 'H'),
         ];
         let graph = InspectGraph::default();
         for (kind, expected) in &cases {
@@ -547,16 +511,6 @@ mod tests {
         graph.conftests.push(ConftestNode {
             path: "/home/user/project/tests/conftest.py".to_string(),
             fixtures: vec![],
-            helpers: vec![],
-        });
-        graph.helpers.push(HelperNode {
-            name: "make_db".to_string(),
-            signature: "make_db()".to_string(),
-            docstring: None,
-            source: "/home/user/project/tests/conftest.py".to_string(),
-            namespace: "conftest".to_string(),
-            conftest_idx: Some(0),
-            plugin_idx: None,
         });
 
         graph.relativize_paths("/home/user/project");
@@ -572,10 +526,6 @@ mod tests {
         assert_eq!(
             graph.conftests[0].path, "tests/conftest.py",
             "conftest path should have rootdir prefix stripped"
-        );
-        assert_eq!(
-            graph.helpers[0].source, "tests/conftest.py",
-            "helper source should have rootdir prefix stripped"
         );
     }
 

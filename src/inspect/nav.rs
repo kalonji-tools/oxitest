@@ -159,7 +159,7 @@ mod tests {
     use super::*;
     use crate::inspect::graph::{
         NodeKind,
-        nodes::{HelperNode, MarkNode, TestNode},
+        nodes::{MarkNode, TestNode},
     };
 
     /// Build a graph with known node counts for testing.
@@ -186,15 +186,6 @@ mod tests {
         graph.marks.push(MarkNode {
             name: "slow".to_string(),
             used_by: vec![],
-        });
-        graph.helpers.push(HelperNode {
-            name: "make_db".to_string(),
-            signature: "make_db()".to_string(),
-            docstring: None,
-            source: "tests/conftest.py".to_string(),
-            namespace: "conftest".to_string(),
-            conftest_idx: Some(0),
-            plugin_idx: None,
         });
         graph
     }

@@ -31,7 +31,7 @@ pub enum Command {
     Run(RunArgs),
     /// Interactive debugger session
     Debug(DebugArgs),
-    /// Query tests, fixtures, marks, helpers, or plugins
+    /// Query tests, fixtures, marks, or plugins
     Query(QueryArgs),
     /// Interactive TUI for test suite introspection
     Inspect(InspectArgs),
