@@ -50,11 +50,9 @@ from oxitest._bridge._fixture_registry import (
 )
 from oxitest._bridge._fixture_validator import FixtureValidator as _FixtureValidator
 from oxitest._bridge._fixtures import Fixtures
-from oxitest._bridge._helper_registry import HelperDef, HelperRegistry
 from oxitest._bridge._loader import ModuleCache
 from oxitest._bridge._metadata import get_type_hints_cached as _get_hints
 from oxitest._bridge._read_fixtures import _fixtures_registry_var
-from oxitest._bridge._read_helpers import _helpers_registry_var
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.plugin_loader import PluginRegistry
 from oxitest._bridge.proxy_ns import FixturesProxy
@@ -403,7 +401,6 @@ class FixtureSession:
             _diagnostic_collector_var.set(self.diagnostics)
 
         self._prev_fixtures_var = _fixtures_registry_var.get(None)
-        self._prev_helpers_var = _helpers_registry_var.get(None)
         # Only overwrite the fixtures contextvar if there is no outer
         # session already owning it (avoids clobbering during tests that
         # create temporary sessions).
@@ -437,34 +434,6 @@ class FixtureSession:
                     autouse=provider_autouse,
                 )
             )
-
-    def _register_plugin_helpers(self, helper_registry: Any) -> None:
-        """Register all helpers from the current plugin registry."""
-        for provider in getattr(self._plugin_registry, "helper_providers", ()):
-            namespace = getattr(provider, "__module__", "<plugin>")
-            helper_registry.register(
-                HelperDef(
-                    name=provider.name,
-                    func=provider.helper,
-                    source=PluginSource(
-                        provider=provider,
-                        plugin_module=namespace,
-                    ),
-                    namespace=namespace,
-                )
-            )
-
-    def set_helper_registry(self, registry: Any) -> None:
-        """Attach a helper registry, register plugin helpers, and update contextvar.
-
-        Only overwrites the contextvar when no outer session already owns it,
-        preventing temporary sessions created during tests from clobbering the
-        real session's helpers.
-        """
-        self._register_plugin_helpers(registry)
-        self._helper_registry = registry
-        if self._prev_helpers_var is None:
-            _helpers_registry_var.set(registry)
 
     @staticmethod
     def _anchor_of(defn: FixtureDef) -> str:
@@ -680,12 +649,9 @@ class FixtureSession:
         # Only restore contextvars if this session was the one that set them
         # (i.e., _prev was None, meaning we were the outermost session).
         prev_fx = getattr(self, "_prev_fixtures_var", None)
-        prev_hlp = getattr(self, "_prev_helpers_var", None)
         prev_diag = getattr(self, "_prev_diag_var", None)
         if prev_fx is None:
             _fixtures_registry_var.set(None)
-        if prev_hlp is None:
-            _helpers_registry_var.set(None)
         if prev_diag is None:
             _diagnostic_collector_var.set(None)
 
@@ -722,11 +688,6 @@ class FixtureSession:
     def registry(self) -> FixtureRegistry:
         """Read-only access to the fixture registry."""
         return self._registry
-
-    @property
-    def helper_registry(self) -> HelperRegistry:
-        """Read-only access to the helper registry."""
-        return self._helper_registry
 
     def shared_fixture_names(self) -> tuple[str, ...]:
         """Return sorted names of fixtures with effective (most-local) shared=True."""

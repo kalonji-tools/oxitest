@@ -4,7 +4,6 @@ __all__ = [
     "SessionResult",
     "_extract_depends_on",
     "_extract_fixture_type",
-    "_extract_helpers",
     "create_conftest_fixtures",
     "create_session",
     "find_conftest_paths",
@@ -33,14 +32,11 @@ from oxitest._bridge._fixture_registry import (
 )
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._fixtures import Fixtures
-from oxitest._bridge._helper_registry import HelperRegistry
-from oxitest._bridge._helpers import Helpers
 from oxitest._bridge._namespace_validation import validate_namespace_name
 from oxitest._bridge._syspath import ensure_rootdir_importable
 from oxitest._bridge.result import DiagnosticSeverity
 
 if TYPE_CHECKING:
-    from oxitest._bridge._helper_registry import HelperDef
     from oxitest._bridge.result import CollectedViolation, Diagnostic
 
 
@@ -168,36 +164,6 @@ def _extract_fixtures(module: ModuleType, path: str) -> list[FixtureDef[Any]]:
     return found
 
 
-def _extract_helpers(module: ModuleType, path: str) -> list[HelperDef]:
-    """Extract helper definitions from Helpers instances in a module."""
-    found: list[HelperDef] = []
-    for attr_name, obj in vars(module).items():
-        if not isinstance(obj, Helpers):
-            continue
-        namespace_name = obj.namespace_name or attr_name
-        validate_namespace_name(namespace_name, path)
-        if namespace_name == "oxi":
-            msg = (
-                f"'oxi' is a reserved namespace name in oxitest. "
-                f"Rename your Helpers() instance in {path}."
-            )
-            raise ValueError(msg)
-        obj.namespace_name = namespace_name
-        for defn in obj.defs:
-            stamped = dataclasses.replace(
-                defn,
-                source=ConftestSource(func=defn.func, conftest_path=path),
-                namespace=namespace_name,
-            )
-            found.append(stamped)
-    return found
-
-
-def _has_helpers(module: ModuleType) -> bool:
-    """Return True if module has any Helpers() instances."""
-    return any(isinstance(obj, Helpers) for obj in vars(module).values())
-
-
 def load_fixtures_from_conftest(
     path: str,
 ) -> list[FixtureDef[Any]]:
@@ -218,17 +184,14 @@ def load_fixtures_from_conftest(
 
 def create_conftest_fixtures(
     conftest_paths: Sequence[str],
-) -> tuple[list[FixtureDef], list[CollectedViolation], HelperRegistry]:
+) -> tuple[list[FixtureDef], list[CollectedViolation]]:
     """Load conftest files and return all fixture defs with any violations.
 
-    Returns a tuple of (fixture_defs, violations, helper_registry) where
-    violations contains any strict-mode issues detected during fixture
-    registration and helper_registry contains all helpers extracted from
-    ``Helpers()`` instances in the conftest files.
+    Returns a tuple of (fixture_defs, violations) where violations contains
+    any strict-mode issues detected during fixture registration.
     """
     all_defs: list[FixtureDef] = []
     all_violations: list[CollectedViolation] = []
-    helper_registry = HelperRegistry()
 
     # Intentional: _tmp_registry detects registration violations (e.g.
     # missing_return_annotation) here so they can be surfaced to the Rust
@@ -242,10 +205,8 @@ def create_conftest_fixtures(
             continue
 
         fixtures = _extract_fixtures(module, path)
-        has_fixtures = bool(fixtures)
-        has_helper_fns = _has_helpers(module)
 
-        if not has_fixtures and not has_helper_fns:
+        if not fixtures:
             emit_diagnostic(
                 DiagnosticSeverity.NOTICE,
                 "conftest loading",
@@ -258,11 +219,7 @@ def create_conftest_fixtures(
             all_violations.extend(_tmp_registry.register(defn))
             all_defs.append(defn)
 
-        helper_defs = _extract_helpers(module, path)
-        for hdef in helper_defs:
-            helper_registry.register(hdef)
-
-    return all_defs, all_violations, helper_registry
+    return all_defs, all_violations
 
 
 def create_session(
@@ -302,13 +259,12 @@ def create_session(
         token = _diagnostic_collector_var.set(pre_session_diags)
 
     try:
-        defs, violations, helper_registry = create_conftest_fixtures(conftest_paths)
+        defs, violations = create_conftest_fixtures(conftest_paths)
     finally:
         if token is not None:
             _diagnostic_collector_var.reset(token)
 
     session = FixtureSession(defs)
-    session.set_helper_registry(helper_registry)
     # Transfer pre-session diagnostics into the session so they are
     # visible to drain_session_diagnostics on the Rust side.
     if pre_session_diags:
