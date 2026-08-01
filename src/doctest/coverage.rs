@@ -228,13 +228,19 @@ pub(crate) fn filter_subjects_by_scope(
 ///   filter then applies list semantics without dropping `_`-prefixed leaves.
 /// - `skip`: user-configured `[tool.oxitest.doctest].skip` entries. Applied at the
 ///   subject level via `filter_subjects_by_scope`.
+///
+/// Returns `(diagnostics, match_bits, parsed)`. `parsed` is the subset of `files`
+/// this scan actually opened and parsed — the privacy gate and a parse failure
+/// both drop a file silently, and a dropped file carries no evidence about the
+/// symbols inside it. Callers that judge sub-file entries must gate on `parsed`,
+/// never on `files`; see `StalenessInputs` in `pipeline::collection` and #1796.
 pub(crate) fn run_coverage_check(
     files: &[Utf8PathBuf],
     root: &ModuleRoot,
     severity: DiagnosticSeverity,
     scope: &Option<crate::config::DoctestScope>,
     skip: &[crate::config::ScopeEntry],
-) -> (Vec<DiagnosticEntry>, ScopeMatchBits) {
+) -> (Vec<DiagnosticEntry>, ScopeMatchBits, Vec<Utf8PathBuf>) {
     use std::collections::HashMap;
 
     use crate::doctest::subjects::{
@@ -249,6 +255,9 @@ pub(crate) fn run_coverage_check(
         (Vec<rustpython_parser::ast::Stmt>, Utf8PathBuf, Vec<u32>),
     > = HashMap::new();
     let mut all_subjects: Vec<(String, Subject)> = Vec::new();
+    // Files this scan actually opened. Threaded out so staleness verdicts about
+    // symbols *inside* a file are only reached for files the scan can speak to.
+    let mut parsed_files: Vec<Utf8PathBuf> = Vec::new();
 
     for file in files {
         let dotted = dotted_path_for_file(file, &root.root);
@@ -269,6 +278,7 @@ pub(crate) fn run_coverage_check(
         let Some((src, stmts)) = crate::python_ast::parse_file(&full) else {
             continue;
         };
+        parsed_files.push(file.clone());
         let line_index = crate::python_ast::build_line_index(&src);
         for subj in enumerate_subjects(&stmts, &dotted, file) {
             all_subjects.push((dotted.clone(), subj));
@@ -395,7 +405,7 @@ pub(crate) fn run_coverage_check(
             }
         }
     }
-    (diagnostics, match_bits)
+    (diagnostics, match_bits, parsed_files)
 }
 
 /// A def-like statement located by name — the shape unified across the
@@ -913,7 +923,7 @@ def foo():
             use_gitignore: true,
         };
         let files = vec![Utf8PathBuf::from("mypkg/__init__.py")];
-        let (diags, _) = run_coverage_check(
+        let (diags, _, _) = run_coverage_check(
             &files,
             &module_root,
             DiagnosticSeverity::Warning,
@@ -972,7 +982,7 @@ def foo():
             use_gitignore: true,
         };
         let files = vec![Utf8PathBuf::from("mypkg/__init__.py")];
-        let (diags, _) = run_coverage_check(
+        let (diags, _, _) = run_coverage_check(
             &files,
             &module_root,
             DiagnosticSeverity::Warning,
@@ -1015,7 +1025,7 @@ def uncovered():
             Utf8PathBuf::from("mypkg/_private/__init__.py"),
             Utf8PathBuf::from("mypkg/_private/thing.py"),
         ];
-        let (diags, _) = run_coverage_check(
+        let (diags, _, _) = run_coverage_check(
             &files,
             &module_root,
             DiagnosticSeverity::Warning,
@@ -1047,7 +1057,7 @@ def uncovered():
             use_gitignore: true,
         };
         let files = vec![Utf8PathBuf::from("mypkg/__init__.py")];
-        let (diags, _) = run_coverage_check(
+        let (diags, _, _) = run_coverage_check(
             &files,
             &module_root,
             DiagnosticSeverity::Warning,
@@ -1088,7 +1098,7 @@ B = A
             use_gitignore: true,
         };
         let files = vec![Utf8PathBuf::from("mypkg/__init__.py")];
-        let (diags, _) = run_coverage_check(
+        let (diags, _, _) = run_coverage_check(
             &files,
             &module_root,
             DiagnosticSeverity::Warning,
@@ -1134,7 +1144,7 @@ B = A
             use_gitignore: true,
         };
         let files = vec![Utf8PathBuf::from("mypkg/__init__.py")];
-        let (diags, _) =
+        let (diags, _, _) =
             run_coverage_check(&files, &module_root, DiagnosticSeverity::Error, &None, &[]);
 
         // Under the fix, the Call RHS terminus produces NO diagnostic — silent skip.
