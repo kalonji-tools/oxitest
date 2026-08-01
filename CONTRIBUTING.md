@@ -9,7 +9,7 @@ oxitest uses [devenv](https://devenv.sh/) for a reproducible dev environment:
 ```bash
 devenv shell         # shell with Rust, Python 3.12, maturin, uv, all dev tools
 just health          # verify toolchain
-just preflight       # full pre-push gate: clean, check, test-rust, build, test
+just preflight       # full pre-push gate: clean, check, test-rust, build, test, docs
 ```
 
 ### Without Nix

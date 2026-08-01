@@ -65,6 +65,9 @@ check-locks: (_log _blue "Checking lock files...")
 preflight: clean check-locks check test-rust build test-python
     @just _log {{_blue}} "Running doc example tests..."
     uv run python -m oxitest python/tests/docs/ --strict=off
+    @just _log {{_blue}} "Building docs (strict)..."
+    uv run --group docs mkdocs build --strict
+    mdbook build docs/internals
     @just _log {{_green}} "Preflight passed"
 
 # Format code and fix typos
