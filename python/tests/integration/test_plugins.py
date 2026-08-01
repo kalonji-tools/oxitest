@@ -1,22 +1,24 @@
 """Integration tests: `oxitest query plugins` subcommand."""
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_plugins_no_plugins_configured(tmp: TempDir) -> None:
     """`plugins` with no plugins shows 'no plugins configured' and exits 0."""
     (tmp / "pyproject.toml").write_text("[tool.oxitest]\ntestpaths = ['.']\n")
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
-    out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "plugins", cwd=".")
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "no results")
+    out, _, rc = helpers.run_oxitest_subcmd(tmp, "query", "plugins", cwd=".")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "no results")
 
 
 def test_plugins_exits_zero(tmp: TempDir) -> None:
     """`plugins` exits 0 even with no pyproject.toml."""
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
-    out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "plugins", cwd=".")
-    helpers.integ.assert_passed(out, rc)
+    out, _, rc = helpers.run_oxitest_subcmd(tmp, "query", "plugins", cwd=".")
+    integ.assert_passed(out, rc)
 
 
 def test_plugins_with_configured_plugin(tmp: TempDir) -> None:
@@ -36,11 +38,11 @@ def test_plugins_with_configured_plugin(tmp: TempDir) -> None:
         "[tool.oxitest]\ntestpaths = ['.']\nplugins = [\"my_plugin\"]\n"
     )
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
-    out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "plugins", cwd=".")
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "my_plugin")
+    out, _, rc = helpers.run_oxitest_subcmd(tmp, "query", "plugins", cwd=".")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "my_plugin")
     # Protocol details are in the detail card
-    out2, _, rc2 = helpers.common.run_oxitest_subcmd(
+    out2, _, rc2 = helpers.run_oxitest_subcmd(
         tmp,
         "query",
         "plugins",
@@ -48,5 +50,5 @@ def test_plugins_with_configured_plugin(tmp: TempDir) -> None:
         "my_plugin",
         cwd=".",
     )
-    helpers.integ.assert_passed(out2, rc2)
-    helpers.integ.assert_contains(out2, "LogBackend")
+    integ.assert_passed(out2, rc2)
+    integ.assert_contains(out2, "LogBackend")

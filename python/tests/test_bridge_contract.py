@@ -20,7 +20,6 @@ import re
 from dataclasses import dataclass
 
 import oxitest as oxi
-from oxitest import helpers
 from oxitest._bridge._debugger import _NULL_DEBUGGER
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
@@ -43,6 +42,7 @@ from oxitest._bridge.result import (
     XFailedResult,
     XPassedResult,
 )
+from tests import helpers
 
 # ── Paths to Rust source files ────────────────────────────────────────────────
 
@@ -633,7 +633,7 @@ def test_get_fixture_timings_returns_expected_shape() -> None:
 
 def test_get_fixture_timings_entry_has_required_attrs() -> None:
     """Each timing entry has the 5 required attributes with correct types."""
-    session = helpers.common.make_session_with("timed_fx", lambda: 1)
+    session = helpers.make_session_with("timed_fx", lambda: 1)
     session.get_fixture_by_name("timed_fx", "mod.py", [])
     timings = session.get_fixture_timings()
 

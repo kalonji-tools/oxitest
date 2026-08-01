@@ -1,6 +1,8 @@
 """Integration tests: module-level marks via oxi_mark."""
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_oxi_mark_applies_to_all_tests(tmp: TempDir) -> None:
@@ -12,8 +14,8 @@ def test_oxi_mark_applies_to_all_tests(tmp: TempDir) -> None:
         "def test_b(): assert True\n"
     )
     (tmp / "pyproject.toml").write_text('[tool.oxitest]\nmarkers = ["slow"]\n')
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=2)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=2)
 
 
 def test_oxi_mark_visible_to_expression_filter(tmp: TempDir) -> None:
@@ -26,8 +28,8 @@ def test_oxi_mark_visible_to_expression_filter(tmp: TempDir) -> None:
     )
     (tmp / "test_other.py").write_text("def test_c(): assert True\n")
     (tmp / "pyproject.toml").write_text('[tool.oxitest]\nmarkers = ["slow"]\n')
-    out, _, rc = helpers.common.run_oxitest(tmp, "-E", "mark(slow)")
-    helpers.integ.assert_passed(out, rc, count=2)
+    out, _, rc = helpers.run_oxitest(tmp, "-E", "mark(slow)")
+    integ.assert_passed(out, rc, count=2)
 
 
 def test_oxi_mark_per_test_override(tmp: TempDir) -> None:
@@ -39,9 +41,9 @@ def test_oxi_mark_per_test_override(tmp: TempDir) -> None:
         "def test_skipped(): assert True\n"
         "def test_runs(): assert True\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=1)
-    helpers.integ.assert_contains(out, "1 skipped")
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=1)
+    integ.assert_contains(out, "1 skipped")
 
 
 def test_oxi_mark_strict_validates_module_marks(tmp: TempDir) -> None:
@@ -49,9 +51,9 @@ def test_oxi_mark_strict_validates_module_marks(tmp: TempDir) -> None:
     (tmp / "test_mod.py").write_text(
         "import oxitest\noxi_mark = [oxitest.mark.skip]\ndef test_a(): assert True\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--strict")
-    helpers.integ.assert_failed(out, rc)
-    helpers.integ.assert_contains(out, "missing-mark-reason")
+    out, _, rc = helpers.run_oxitest(tmp, "--strict")
+    integ.assert_failed(out, rc)
+    integ.assert_contains(out, "missing-mark-reason")
 
 
 def test_oxi_mark_single_mark_not_list(tmp: TempDir) -> None:
@@ -60,5 +62,5 @@ def test_oxi_mark_single_mark_not_list(tmp: TempDir) -> None:
         "import oxitest\noxi_mark = oxitest.mark.slow\ndef test_a(): assert True\n"
     )
     (tmp / "pyproject.toml").write_text('[tool.oxitest]\nmarkers = ["slow"]\n')
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=1)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=1)

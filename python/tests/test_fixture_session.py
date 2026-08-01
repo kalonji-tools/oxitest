@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import oxitest
-from oxitest import Fixture, TempDir, TempDirFactory, helpers
+from oxitest import Fixture, TempDir, TempDirFactory
 from oxitest._bridge._errors import (
     BoundaryError,
     FixtureNotFoundError,
@@ -32,6 +32,7 @@ from oxitest._bridge.plugin_loader import (
     _PluginRegistryBuilder,
 )
 from oxitest.plugin import Plugin
+from tests import helpers
 
 
 class _MinimalType:
@@ -70,7 +71,7 @@ def test_setup_timing_recorded_for_function_scoped_fixture() -> None:
         time.sleep(0.01)
         return 42
 
-    session = helpers.common.make_session_with("slow_fixture", slow_fixture)
+    session = helpers.make_session_with("slow_fixture", slow_fixture)
     teardowns: list[Callable[[], None]] = []
     session.get_fixture_by_name("slow_fixture", "test_mod.py", teardowns)
 
@@ -105,7 +106,7 @@ def test_teardown_timing_recorded_for_yield_fixture() -> None:
         yield 42
         time.sleep(0.01)
 
-    session = helpers.common.make_session_with("yield_fx", yield_fixture)
+    session = helpers.make_session_with("yield_fx", yield_fixture)
     teardowns: list[Callable[[], None]] = []
     session.get_fixture_by_name("yield_fx", "test_mod.py", teardowns)
 
@@ -131,8 +132,8 @@ def test_shared_fixture_setup_timed_once() -> None:
         time.sleep(0.01)
         return 99
 
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def(
+    session = helpers.make_session(
+        helpers.make_fixture_def(
             "shared_fx", shared_fixture, conftest_path="/conftest.py", shared=True
         )
     )
@@ -151,13 +152,11 @@ def test_shared_fixture_setup_timed_once() -> None:
 
 def test_multiple_fixtures_each_tracked_separately() -> None:
     """Each fixture gets its own timing entry."""
-    session = helpers.common.make_session_with("fast_a", lambda: 1)
+    session = helpers.make_session_with("fast_a", lambda: 1)
     teardowns: list[Callable[[], None]] = []
 
     session.registry.register(
-        helpers.common.make_fixture_def(
-            "fast_b", lambda: 2, conftest_path="/conftest.py"
-        )
+        helpers.make_fixture_def("fast_b", lambda: 2, conftest_path="/conftest.py")
     )
 
     session.get_fixture_by_name("fast_a", "test_mod.py", teardowns)
@@ -405,8 +404,8 @@ def test_get_fixture_by_type_resolves_conftest_fixture() -> None:
         yield _MyResult()
 
     # Arrange: build a session with a conftest-sourced fixture bound to _MyResult
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def(
+    session = helpers.make_session(
+        helpers.make_fixture_def(
             "my_result",
             _my_result_factory,
             conftest_path="/fake/conftest.py",
@@ -471,7 +470,7 @@ def test_get_fixture_by_type_raises_on_unknown_type() -> None:
     Silent failure would let @oxi.arrange(UnknownType) silently skip,
     hiding user mistakes.
     """
-    session = helpers.common.make_session()  # empty registry — no fixtures registered
+    session = helpers.make_session()  # empty registry — no fixtures registered
     teardowns: list[Callable[[], None]] = []
 
     with oxitest.raises(

@@ -10,7 +10,7 @@ from typing import Any
 
 import oxitest
 import oxitest as oxi
-from oxitest import TempDir, helpers, parametrize, raises
+from oxitest import TempDir, parametrize, raises
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._mark_registry import (
@@ -28,13 +28,17 @@ from oxitest._bridge._mark_registry import (
     evaluate_marks,
 )
 from oxitest._bridge.result import (
+    ErrorResult,
     FailedResult,
     PassedResult,
     SkippedResult,
     TestResult,
     TimeoutResult,
     WarnedResult,
+    XFailedResult,
+    XPassedResult,
 )
+from tests import helpers
 
 
 def test_mark_info_stores_name_args_kwargs() -> None:
@@ -273,47 +277,61 @@ def test_mark_stacking_two_decorators() -> None:
 # ── executor-level marker tests ───────────────────────────────────────────────
 
 
+# The variants reachable through the mark pipeline. Carrying the variant itself
+# rather than a status string lets assert_result do the runtime check. Narrowing
+# only reaches this union, so field access below needs getattr -- XPassedResult
+# has no .message.
+_MarkerResult = (
+    PassedResult
+    | FailedResult
+    | ErrorResult
+    | SkippedResult
+    | XFailedResult
+    | XPassedResult
+)
+
+
 @dataclasses.dataclass(frozen=True)
 class MarkerCase:
     """Parametrize case for marker executor result tests."""
 
     code: str
-    expected_status: str
+    expected_type: type[_MarkerResult]
     message_contains: str = ""
 
 
 @parametrize(
     skip_with_reason=MarkerCase(
         code="@oxitest.mark.skip(reason='not ready')\ndef test_foo(): assert False\n",
-        expected_status="skipped",
+        expected_type=SkippedResult,
         message_contains="not ready",
     ),
     skip_bare=MarkerCase(
         code="@oxitest.mark.skip\ndef test_foo(): assert False\n",
-        expected_status="skipped",
+        expected_type=SkippedResult,
     ),
     skip_when_true=MarkerCase(
         code=(
             "@oxitest.mark.skip(when=True, reason='always')\n"
             "def test_foo(): assert False\n"
         ),
-        expected_status="skipped",
+        expected_type=SkippedResult,
     ),
     skip_when_false=MarkerCase(
         code="@oxitest.mark.skip(when=False, reason='never')\ndef test_foo(): pass\n",
-        expected_status="passed",
+        expected_type=PassedResult,
     ),
     xfail_failing=MarkerCase(
         code="@oxitest.mark.xfail(reason='known bug')\ndef test_foo(): assert False\n",
-        expected_status="xfailed",
+        expected_type=XFailedResult,
     ),
     xfail_passing_default=MarkerCase(
         code="@oxitest.mark.xfail\ndef test_foo(): pass\n",
-        expected_status="xpassed",
+        expected_type=XPassedResult,
     ),
     xfail_passing_strict_false=MarkerCase(
         code="@oxitest.mark.xfail(strict=False)\ndef test_foo(): pass\n",
-        expected_status="xpassed",
+        expected_type=XPassedResult,
     ),
     xfail_skipped_inside=MarkerCase(
         code=(
@@ -321,55 +339,60 @@ class MarkerCase:
             "@oxitest.mark.xfail\n"
             "def test_foo(): raise unittest.SkipTest('skipped inside xfail')\n"
         ),
-        expected_status="skipped",
+        expected_type=SkippedResult,
     ),
     xfail_raises_matching=MarkerCase(
         code=(
             "@oxitest.mark.xfail(raises=ValueError, reason='known')\n"
             "def test_foo(): raise ValueError('boom')\n"
         ),
-        expected_status="xfailed",
+        expected_type=XFailedResult,
     ),
     xfail_raises_not_matching=MarkerCase(
         code=(
             "@oxitest.mark.xfail(raises=TypeError, reason='known')\n"
             "def test_foo(): raise ValueError('boom')\n"
         ),
-        expected_status="error",
+        expected_type=ErrorResult,
     ),
     xfail_raises_assertion_not_matching=MarkerCase(
         code=(
             "@oxitest.mark.xfail(raises=ValueError, reason='known')\n"
             "def test_foo(): assert False\n"
         ),
-        expected_status="failed",
+        expected_type=FailedResult,
     ),
     xfail_raises_assertion_matching=MarkerCase(
         code=(
             "@oxitest.mark.xfail(raises=AssertionError, reason='known')\n"
             "def test_foo(): assert False\n"
         ),
-        expected_status="xfailed",
+        expected_type=XFailedResult,
     ),
     xfail_raises_passes=MarkerCase(
         code=(
             "@oxitest.mark.xfail(raises=ValueError, reason='known')\n"
             "def test_foo(): pass\n"
         ),
-        expected_status="xpassed",
+        expected_type=XPassedResult,
     ),
 )
 def test_mark_executor_result(
-    tmp: TempDir, code: str, expected_status: str, message_contains: str
+    tmp: TempDir,
+    code: str,
+    expected_type: type[_MarkerResult],
+    message_contains: str,
 ) -> None:
     """Each mark variant produces the expected executor status when run."""
-    result = helpers.common.exec_inline(tmp, "import oxitest\n" + code, "test_foo")
-    assert result.status == expected_status, (
-        "executor must honour the mark's semantics end-to-end, not just at the handler"
-        " level"
+    result = helpers.exec_inline(tmp, "import oxitest\n" + code, "test_foo")
+    result = helpers.assert_result(
+        result,
+        expected_type,
+        why="executor must honour the mark's semantics end-to-end, not just at the"
+        " handler level",
     )
     if message_contains:
-        assert message_contains in result.message, (
+        assert message_contains in getattr(result, "message", ""), (
             "the mark's reason must propagate through the executor into the final"
             " result message"
         )
@@ -398,7 +421,7 @@ def test_skip_handler_returns_short_circuit() -> None:
         "_SkipHandler must produce a 'skipped' status so the reporter counts it"
         " correctly"
     )
-    helpers.common.assert_result(action.result, SkippedResult, message="not ready")
+    helpers.assert_result(action.result, SkippedResult, message="not ready")
     assert not isinstance(action, Wrap), "_SkipHandler should not produce a wrapper"
 
 
@@ -507,7 +530,7 @@ def test_timeout_handler_wrapper_returns_timeout_on_expiry() -> None:
         return PassedResult()
 
     outcome = wrapper(slow_next)
-    r = helpers.common.assert_result(outcome, TimeoutResult)
+    r = helpers.assert_result(outcome, TimeoutResult)
     assert "1s" in r.message, (
         "timeout result must include the limit so the developer knows which deadline"
         " was exceeded"
@@ -623,8 +646,14 @@ def test_each_handler_has_mark_name_class_attr() -> None:
 
 def test_exc_type_populated_on_assertion_error(tmp: TempDir) -> None:
     """A failing assertion populates exc_type with 'AssertionError'."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp, "import oxitest\ndef test_foo(): assert False\n", "test_foo"
+    )
+    result = helpers.assert_result(
+        result,
+        FailedResult,
+        why="a failing assertion is a test failure, not an infrastructure error, and"
+        " only the failed variant carries exc_type",
     )
     assert result.exc_type == "AssertionError", (
         "executor must capture the exception class name so reporters can distinguish"
@@ -634,8 +663,14 @@ def test_exc_type_populated_on_assertion_error(tmp: TempDir) -> None:
 
 def test_exc_type_populated_on_runtime_error(tmp: TempDir) -> None:
     """An uncaught runtime exception sets exc_type to the exception class name."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp, "import oxitest\ndef test_foo(): raise ValueError('boom')\n", "test_foo"
+    )
+    result = helpers.assert_result(
+        result,
+        ErrorResult,
+        why="an uncaught non-assertion exception is an 'error', distinct from the"
+        " 'failed' an assertion produces, and only that variant carries exc_type",
     )
     assert result.exc_type == "ValueError", (
         "executor must capture the actual exception class name so reporters can show"
@@ -645,7 +680,7 @@ def test_exc_type_populated_on_runtime_error(tmp: TempDir) -> None:
 
 def test_exc_type_absent_on_pass(tmp: TempDir) -> None:
     """A passing test produces a PassedResult, which has no exc_type attribute."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp, "import oxitest\ndef test_foo(): pass\n", "test_foo"
     )
     assert not hasattr(result, "exc_type"), (
@@ -682,7 +717,7 @@ def test_plugin_mark_handler_wraps_correctly() -> None:
     # Execute the wrapper — use WarnedResult since it has a message field
     inner_result = WarnedResult(message="original")
     wrapped_result = action.wrapper(lambda: inner_result)
-    r = helpers.common.assert_result(wrapped_result, WarnedResult)
+    r = helpers.assert_result(wrapped_result, WarnedResult)
     assert "wrapped:" in r.message, (
         "plugin wrapper must transform the result so its side effects are visible to"
         " the reporter"
@@ -705,7 +740,7 @@ def test_marker_composition_skip_takes_precedence_over_others() -> None:
         "skip must win over xfail and timeout — running a skipped test wastes time and"
         " produces misleading results"
     )
-    helpers.common.assert_result(outcome.result, SkippedResult, message="not ready")
+    helpers.assert_result(outcome.result, SkippedResult, message="not ready")
 
 
 def test_evaluate_marks_dispatches_plugin_handlers() -> None:

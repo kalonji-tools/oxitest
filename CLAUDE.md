@@ -25,6 +25,10 @@ just build
 just test-python
 
 # Run a single Python test file
+# BROKEN in this repo — fails with "skip entry ... matched no coverage subjects"
+# and collects 0 items. The `[tool.oxitest.doctest] skip` entries are #1790's
+# stopgap; on a narrowed run they match nothing and hard-fail collection.
+# Run the whole suite instead until #1790 lands.
 just test-python python/tests/test_fixtures.py
 
 # Run Rust unit tests
@@ -218,7 +222,7 @@ Parameters annotated with `Fixture[T]` are injected; unannotated parameters are 
 
 ### Type checking
 
-`ty check` is the project's type checker. It runs on `python/oxitest/` via `just check`.
+`ty check` is the project's type checker. `just check` runs it over the **whole project**, tests included — `python/tests` is on `extra-paths` in `pyproject.toml`, so type errors in test code fail the build exactly like errors in `python/oxitest/`.
 
 ## Testing
 
@@ -243,7 +247,7 @@ Tests in `python/tests/` must follow these rules:
    - `@oxi.parametrize` for multiple similar cases, not copy-pasted test functions
    - Dataclass-based test doubles not `unittest.mock.MagicMock`
    - Exception: when testing an oxitest feature itself requires bootstrapping (e.g., testing `Patcher` needs direct `os.environ` access), stdlib is acceptable in the arrange phase.
-4. **Import helpers from oxitest.** Shared test utilities live in `python/tests/conftest.py` and are accessed via `from oxitest import helpers`. Use `helpers.common.<function>()` — never `sys.path.insert`.
+4. **Import test utilities as plain functions.** Shared utilities live in the `python/tests/helpers/` package, reached with `from tests import helpers` and called as `helpers.<function>()` — never `sys.path.insert`. Do **not** use the retired `helpers.common.<function>()` registry proxy (#1700, #1787): it resolved through `Helpers.__getattr__` to `Any`, so `ty` checked nothing at the call site. That blind spot hid 141 real type errors across ~790 calls.
 
 ## Agent skills
 

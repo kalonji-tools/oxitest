@@ -31,8 +31,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import oxitest as oxi
-from oxitest import helpers
 from oxitest._bridge._builtins._base import BuiltinFixture
+from tests import helpers
 
 _DATA_ROOT = Path(__file__).parent / "data"
 _LEGAL = _DATA_ROOT / "slice7_shortcut"
@@ -67,7 +67,7 @@ _PARALLEL = RunMode(label="-n 2", args=("-n", "2"))
 def test_the_legal_tree_passes_whole(case: RunMode) -> None:
     """Shortcut, nearest-wins, segment shadowing, and the async await."""
     # Act
-    stdout, stderr, rc = helpers.common.run_oxitest(_LEGAL, *case.args, cwd=str(_LEGAL))
+    stdout, stderr, rc = helpers.run_oxitest(_LEGAL, *case.args, cwd=str(_LEGAL))
 
     # Assert
     assert rc == 0, (
@@ -87,7 +87,7 @@ def test_the_legal_tree_passes_whole(case: RunMode) -> None:
 def test_the_shortcut_does_not_cross_a_b1_boundary(case: RunMode) -> None:
     """A bare name reports not-found, never the sibling's fixture."""
     # Act
-    stdout, stderr, rc = helpers.common.run_oxitest(_CROSS, *case.args, cwd=str(_CROSS))
+    stdout, stderr, rc = helpers.run_oxitest(_CROSS, *case.args, cwd=str(_CROSS))
 
     # Assert
     assert rc == _EXIT_FAILURE, (
@@ -112,7 +112,7 @@ def test_the_shortcut_does_not_cross_a_b1_boundary(case: RunMode) -> None:
 def test_a_sync_test_cannot_shortcut_to_an_async_fixture(case: RunMode) -> None:
     """The illegal cell, on the route that middleware cannot see."""
     # Act
-    stdout, stderr, rc = helpers.common.run_oxitest(
+    stdout, stderr, rc = helpers.run_oxitest(
         _ASYNC_SYNC, *case.args, cwd=str(_ASYNC_SYNC)
     )
 
@@ -152,10 +152,10 @@ def test_the_not_found_diagnostic_does_not_vary_with_scheduling() -> None:
     to catch it, because either message read alone looks entirely reasonable.
     """
     # Act
-    serial_out, _, serial_rc = helpers.common.run_oxitest(
+    serial_out, _, serial_rc = helpers.run_oxitest(
         _FOREIGN_INLINE, cwd=str(_FOREIGN_INLINE)
     )
-    parallel_out, _, parallel_rc = helpers.common.run_oxitest(
+    parallel_out, _, parallel_rc = helpers.run_oxitest(
         _FOREIGN_INLINE, "-n", "2", cwd=str(_FOREIGN_INLINE)
     )
 

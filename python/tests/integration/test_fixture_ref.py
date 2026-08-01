@@ -1,11 +1,13 @@
 """Integration test for FixtureRef[T] through the full CLI pipeline."""
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_fixture_ref_in_parametrize_resolves_fixture(tmp: TempDir) -> None:
     """FixtureRef in parametrize kwargs should resolve to the fixture value."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_ref.py": """\
@@ -37,5 +39,5 @@ def test_fixture_ref_in_parametrize_resolves_fixture(tmp: TempDir) -> None:
             """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=2)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=2)

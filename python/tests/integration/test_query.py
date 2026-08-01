@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_query_tests_lists_all(tmp: TempDir) -> None:
     """``query tests`` lists all collected test names."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_math.py": """\
@@ -21,14 +23,14 @@ def test_sub():
 """,
         },
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "tests")
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "test_add", "test_sub")
+    out, _err, rc = helpers.run_oxitest_subcmd(tmp, "query", "tests")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "test_add", "test_sub")
 
 
 def test_query_tests_with_expression(tmp: TempDir) -> None:
     """``query tests -E 'name(~add)'`` filters by name predicate."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_math.py": """\
@@ -40,17 +42,17 @@ def test_sub():
 """,
         },
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(
+    out, _err, rc = helpers.run_oxitest_subcmd(
         tmp, "query", "tests", "-E", "name(~add)"
     )
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "test_add")
-    helpers.integ.assert_excludes(out, "test_sub")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "test_add")
+    integ.assert_excludes(out, "test_sub")
 
 
 def test_query_tests_count(tmp: TempDir) -> None:
     """``query tests --count`` shows only the count."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_math.py": """\
@@ -62,21 +64,21 @@ def test_sub():
 """,
         },
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "tests", "--count")
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "2")
+    out, _err, rc = helpers.run_oxitest_subcmd(tmp, "query", "tests", "--count")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "2")
 
 
 def test_query_tests_jsonl(tmp: TempDir) -> None:
     """``query tests --jsonl`` emits valid JSON lines."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_one.py": "def test_solo(): pass\n",
         },
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "tests", "--jsonl")
-    helpers.integ.assert_passed(out, rc)
+    out, _err, rc = helpers.run_oxitest_subcmd(tmp, "query", "tests", "--jsonl")
+    integ.assert_passed(out, rc)
     lines = [ln for ln in out.strip().splitlines() if ln.strip()]
     assert len(lines) >= 1, f"expected at least 1 JSON line, got: {out}"
     obj = json.loads(lines[0])
@@ -85,7 +87,7 @@ def test_query_tests_jsonl(tmp: TempDir) -> None:
 
 def test_query_marks(tmp: TempDir) -> None:
     """``query marks`` includes marks used in test files."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_marked.py": """\
@@ -97,43 +99,41 @@ def test_heavy():
 """,
         },
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "marks")
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "slow")
+    out, _err, rc = helpers.run_oxitest_subcmd(tmp, "query", "marks")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "slow")
 
 
 def test_query_detail_single(tmp: TempDir) -> None:
     """``query tests --detail test_one`` shows a detail card."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_a.py": "def test_one(): pass\ndef test_two(): pass\n",
         },
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(
+    out, _err, rc = helpers.run_oxitest_subcmd(
         tmp, "query", "tests", "--detail", "test_one"
     )
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "test_one")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "test_one")
 
 
 def test_query_invalid_predicate(tmp: TempDir) -> None:
     """``query tests -E 'shared()'`` fails — shared is not valid for tests."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_a.py": "def test_one(): pass\n",
         },
     )
-    _out, _err, rc = helpers.common.run_oxitest_subcmd(
-        tmp, "query", "tests", "-E", "shared()"
-    )
+    _out, _err, rc = helpers.run_oxitest_subcmd(tmp, "query", "tests", "-E", "shared()")
     assert rc != 0, f"expected non-zero exit for invalid predicate, got {rc}"
 
 
 def test_query_helpers(tmp: TempDir) -> None:
     """``query helpers`` shows helper functions from conftest."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_a.py": "def test_one(): pass\n",
@@ -148,14 +148,14 @@ def test_query_helpers(tmp: TempDir) -> None:
                 return 42
         """,
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "helpers")
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "my_helper")
+    out, _err, rc = helpers.run_oxitest_subcmd(tmp, "query", "helpers")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "my_helper")
 
 
 def test_query_helpers_shows_docstring(tmp: TempDir) -> None:
     """``query helpers --detail`` includes helper docstrings."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_a.py": "def test_one(): pass\n",
@@ -171,16 +171,16 @@ def test_query_helpers_shows_docstring(tmp: TempDir) -> None:
                 return {}
         """,
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(
+    out, _err, rc = helpers.run_oxitest_subcmd(
         tmp, "query", "helpers", "--detail", "make_db"
     )
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "Create a test database.")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "Create a test database.")
 
 
 def test_query_fixtures_uses_predicate(tmp: TempDir) -> None:
     """``query fixtures -E 'uses(db)'`` filters fixtures by dependency."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_a.py": """\
@@ -204,17 +204,17 @@ def conn(db: Fixture[object]) -> object:
     return db
 """,
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(
+    out, _err, rc = helpers.run_oxitest_subcmd(
         tmp, "query", "fixtures", "-E", "uses(db)"
     )
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "conn")
-    helpers.integ.assert_excludes(out, "db")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "conn")
+    integ.assert_excludes(out, "db")
 
 
 def test_query_tests_uses_predicate(tmp: TempDir) -> None:
     """``query tests -E 'uses(db)'`` filters tests by fixture usage."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_a.py": """\
@@ -237,17 +237,15 @@ def db() -> object:
     return object()
 """,
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(
-        tmp, "query", "tests", "-E", "uses(db)"
-    )
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "test_with_db")
-    helpers.integ.assert_excludes(out, "test_without")
+    out, _err, rc = helpers.run_oxitest_subcmd(tmp, "query", "tests", "-E", "uses(db)")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "test_with_db")
+    integ.assert_excludes(out, "test_without")
 
 
 def test_query_fixtures_shows_docstring(tmp: TempDir) -> None:
     """``query fixtures --detail`` includes fixture docstrings."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_a.py": """\
@@ -268,16 +266,16 @@ def test_query_fixtures_shows_docstring(tmp: TempDir) -> None:
                 return object()
         """,
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(
+    out, _err, rc = helpers.run_oxitest_subcmd(
         tmp, "query", "fixtures", "--detail", "db"
     )
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "Provide a database connection.")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "Provide a database connection.")
 
 
 def test_query_tests_uses_substring_match(tmp: TempDir) -> None:
     """``query tests -E 'uses(~db)'`` matches fixtures by substring."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_a.py": """\
@@ -300,17 +298,15 @@ def db_conn() -> object:
     return object()
 """,
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(
-        tmp, "query", "tests", "-E", "uses(~db)"
-    )
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "test_with_db")
-    helpers.integ.assert_excludes(out, "test_without")
+    out, _err, rc = helpers.run_oxitest_subcmd(tmp, "query", "tests", "-E", "uses(~db)")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "test_with_db")
+    integ.assert_excludes(out, "test_without")
 
 
 def test_query_tests_uses_exact_match(tmp: TempDir) -> None:
     """``query tests -E 'uses(=db)'`` requires exact fixture name match."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_a.py": """\
@@ -337,17 +333,15 @@ def db_conn() -> object:
     return object()
 """,
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(
-        tmp, "query", "tests", "-E", "uses(=db)"
-    )
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "test_db")
-    helpers.integ.assert_excludes(out, "test_db_conn")
+    out, _err, rc = helpers.run_oxitest_subcmd(tmp, "query", "tests", "-E", "uses(=db)")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "test_db")
+    integ.assert_excludes(out, "test_db_conn")
 
 
 def test_query_tests_uses_composed_with_mark(tmp: TempDir) -> None:
     """``query tests -E 'uses(db) & mark(slow)'`` composes predicates."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_a.py": """\
@@ -376,10 +370,10 @@ def db() -> object:
     return object()
 """,
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(
+    out, _err, rc = helpers.run_oxitest_subcmd(
         tmp, "query", "tests", "-E", "uses(db) & mark(slow)"
     )
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "test_slow_db")
-    helpers.integ.assert_excludes(out, "test_fast_db")
-    helpers.integ.assert_excludes(out, "test_slow_no_db")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "test_slow_db")
+    integ.assert_excludes(out, "test_fast_db")
+    integ.assert_excludes(out, "test_slow_no_db")

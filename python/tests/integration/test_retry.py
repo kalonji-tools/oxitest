@@ -1,21 +1,23 @@
 """Integration tests: --retries flag behavior."""
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_persistent_failure_exits_1(tmp: TempDir) -> None:
     """A test that always fails still exits 1 even with --retries 1."""
     (tmp / "test_always_fail.py").write_text("def test_always_bad(): assert False\n")
-    out, _, rc = helpers.common.run_oxitest(tmp, "--retries", "1")
-    helpers.integ.assert_failed(out, rc)
+    out, _, rc = helpers.run_oxitest(tmp, "--retries", "1")
+    integ.assert_failed(out, rc)
 
 
 def test_retries_zero_is_default(tmp: TempDir) -> None:
     """Without --retries, a failing test exits 1 and output has no 'flaky'."""
     (tmp / "test_fail_default.py").write_text("def test_bad(): assert False\n")
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_failed(out, rc)
-    helpers.integ.assert_excludes(out, "flaky")
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_failed(out, rc)
+    integ.assert_excludes(out, "flaky")
 
 
 def test_flaky_test_exits_0(tmp: TempDir) -> None:
@@ -30,9 +32,9 @@ def test_flaky_test_exits_0(tmp: TempDir) -> None:
         "        assert False, 'first attempt'\n"
         "    marker.unlink()\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--retries", "1", "--serial")
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "flaky")
+    out, _, rc = helpers.run_oxitest(tmp, "--retries", "1", "--serial")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "flaky")
 
 
 def test_flaky_test_retries_in_parallel(tmp: TempDir) -> None:
@@ -50,6 +52,6 @@ def test_flaky_test_retries_in_parallel(tmp: TempDir) -> None:
     (tmp / "test_stable.py").write_text(
         "def test_stable_a(): assert True\ndef test_stable_b(): assert True\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--retries", "1", "--workers", "2")
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "flaky")
+    out, _, rc = helpers.run_oxitest(tmp, "--retries", "1", "--workers", "2")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "flaky")

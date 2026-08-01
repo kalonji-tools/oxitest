@@ -9,7 +9,8 @@ import textwrap
 from dataclasses import dataclass, field
 
 import oxitest as oxi
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
 
 # ── Failure diagnostics ──────────────────────────────────────────────────────
 
@@ -80,7 +81,7 @@ def test_failure_output(
 ) -> None:
     """Failure output matches expected patterns for each scenario."""
     (tmp / "test_check.py").write_text(test_code)
-    out, _, rc = helpers.common.run_oxitest(tmp, *extra_args)
+    out, _, rc = helpers.run_oxitest(tmp, *extra_args)
     assert rc != 0, f"expected non-zero exit code:\n{out}"
     for s in expected:
         assert s in out, f"expected {s!r} in output:\n{out}"
@@ -106,7 +107,7 @@ def test_default_hides_passing_tests(tmp: TempDir) -> None:
             assert 1 == 2, ""
     """)
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--serial")
+    out, _, rc = helpers.run_oxitest(tmp, "--serial")
     assert rc != 0, f"expected non-zero exit code, got rc={rc}\n{out}"
     assert "test_pass_one" not in out, f"passing test should be hidden:\n{out}"
     assert "test_pass_two" not in out, f"passing test should be hidden:\n{out}"
@@ -134,7 +135,7 @@ def test_verbose_failure_node_id_shown(tmp: TempDir) -> None:
             assert 1 == 2, ""
     """)
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--serial", "-v")
+    out, _, rc = helpers.run_oxitest(tmp, "--serial", "-v")
     assert rc != 0, f"expected non-zero exit code, got rc={rc}\n{out}"
     assert "test_fail_gamma" in out, (
         f"failing test node_id should appear in FAILURES:\n{out}"
@@ -154,7 +155,7 @@ def test_default_shows_summary_for_all_passing(tmp: TempDir) -> None:
             assert True, ""
     """)
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--serial")
+    out, _, rc = helpers.run_oxitest(tmp, "--serial")
     assert rc == 0, f"expected zero exit code, got rc={rc}\n{out}"
     assert "passed" in out, f"summary should appear:\n{out}"
     assert "test_one" not in out, f"test name should be hidden:\n{out}"
@@ -171,7 +172,7 @@ def test_failure_diagnostic_shown_in_default(tmp: TempDir) -> None:
             assert x == 99, ""
     """)
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--serial")
+    out, _, rc = helpers.run_oxitest(tmp, "--serial")
     assert rc != 0, f"expected non-zero exit code, got rc={rc}\n{out}"
     assert "test_diag.py" in out, f"file location should appear:\n{out}"
     assert "assert x == 99" in out, f"source line should appear:\n{out}"
@@ -193,10 +194,10 @@ def test_parallel_failure_diagnostics_match_serial(tmp: TempDir) -> None:
     )
 
     # Serial: runs tests in-process via the PyO3 bridge (run_phase)
-    serial_out, _, serial_rc = helpers.common.run_oxitest(tmp, "--serial")
+    serial_out, _, serial_rc = helpers.run_oxitest(tmp, "--serial")
 
     # Parallel: forces the subprocess-worker path (run_phase_parallel) even for 1 test
-    parallel_out, _, parallel_rc = helpers.common.run_oxitest(tmp, "--workers", "2")
+    parallel_out, _, parallel_rc = helpers.run_oxitest(tmp, "--workers", "2")
 
     assert serial_rc != 0, f"Expected serial run to fail, got rc={serial_rc}"
     assert parallel_rc != 0, f"Expected parallel run to fail, got rc={parallel_rc}"

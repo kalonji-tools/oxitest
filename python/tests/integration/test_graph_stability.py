@@ -9,22 +9,22 @@ from __future__ import annotations
 
 import json
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def _fixture_entries(tmp: TempDir) -> list[dict[str, str]]:
     """Run ``query fixtures --jsonl`` and return parsed entries."""
-    out, _err, rc = helpers.common.run_oxitest_subcmd(
-        tmp, "query", "fixtures", "--jsonl"
-    )
-    helpers.integ.assert_passed(out, rc)
+    out, _err, rc = helpers.run_oxitest_subcmd(tmp, "query", "fixtures", "--jsonl")
+    integ.assert_passed(out, rc)
     return [json.loads(line) for line in out.strip().splitlines() if line.strip()]
 
 
 def _test_entries(tmp: TempDir) -> list[dict[str, str]]:
     """Run ``query tests --jsonl`` and return parsed entries."""
-    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "tests", "--jsonl")
-    helpers.integ.assert_passed(out, rc)
+    out, _err, rc = helpers.run_oxitest_subcmd(tmp, "query", "tests", "--jsonl")
+    integ.assert_passed(out, rc)
     return [json.loads(line) for line in out.strip().splitlines() if line.strip()]
 
 
@@ -40,7 +40,7 @@ def test_fixture_edges_are_reciprocal(tmp: TempDir) -> None:
     registry returned by ``query fixtures``.
     """
     # ── Arrange ──────────────────────────────────────────────────────────
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_reciprocal.py": """\
@@ -97,8 +97,8 @@ def test_fixture_edges_are_reciprocal(tmp: TempDir) -> None:
     # Both directions of the edge exist: tests are collected AND the fixtures
     # they depend on are registered. If either side were missing, the graph
     # would have dangling edges and test execution would fail.
-    out, _err, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=3)
+    out, _err, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=3)
 
 
 # ── test_fixture_scope_reflected_in_graph ─────────────────────────────────────
@@ -112,7 +112,7 @@ def test_fixture_scope_reflected_in_graph(tmp: TempDir) -> None:
     query DSL predicates) can filter by scope.
     """
     # ── Arrange ──────────────────────────────────────────────────────────
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_scope.py": """\
@@ -215,5 +215,5 @@ def test_cross_conftest_dependency_edges(tmp: TempDir) -> None:
     # Prove the cross-conftest dependency edge actually resolves at runtime:
     # db_conn depends on db_url via Fixture[str], and the test depends on
     # db_conn.  If the edge is broken, fixture injection will fail.
-    out, _err, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=1)
+    out, _err, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=1)

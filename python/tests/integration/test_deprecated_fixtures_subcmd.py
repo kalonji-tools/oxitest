@@ -5,12 +5,14 @@ from __future__ import annotations
 import subprocess
 import sys
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_fixtures_subcmd_prints_deprecation_warning(tmp: TempDir) -> None:
     """``oxitest fixtures`` emits a deprecation warning to stderr."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_a.py": """\
@@ -30,14 +32,14 @@ def test_fixtures_subcmd_prints_deprecation_warning(tmp: TempDir) -> None:
                 return object()
         """,
     )
-    _out, err, rc = helpers.common.run_oxitest_subcmd(tmp, "fixtures")
+    _out, err, rc = helpers.run_oxitest_subcmd(tmp, "fixtures")
     assert rc == 0, f"expected exit 0, got {rc}\n{err}"
     assert "deprecated" in err, f"expected deprecation warning in stderr, got: {err!r}"
 
 
 def test_fixtures_subcmd_still_lists_fixtures(tmp: TempDir) -> None:
     """``oxitest fixtures`` still outputs fixture listing despite being deprecated."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_a.py": """\
@@ -57,7 +59,7 @@ def test_fixtures_subcmd_still_lists_fixtures(tmp: TempDir) -> None:
                 return object()
         """,
     )
-    out, _err, rc = helpers.common.run_oxitest_subcmd(tmp, "fixtures")
+    out, _err, rc = helpers.run_oxitest_subcmd(tmp, "fixtures")
     assert rc == 0, f"expected exit 0, got {rc}\n{out}"
     assert "db" in out, f"expected fixture 'db' in stdout, got: {out!r}"
 

@@ -1,6 +1,7 @@
 """Integration test: parallel failure output shows worker ID and concurrent tests."""
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
 
 
 def test_parallel_failure_shows_worker_context(tmp: TempDir) -> None:
@@ -12,7 +13,7 @@ def test_parallel_failure_shows_worker_context(tmp: TempDir) -> None:
     (tmp / "test_b.py").write_text(
         "def test_fail():\n    assert False, 'deliberate failure'\n"
     )
-    stdout, stderr, rc = helpers.common.run_oxitest(tmp, "--workers", "2")
+    stdout, stderr, rc = helpers.run_oxitest(tmp, "--workers", "2")
     output = stdout + stderr
     assert rc != 0, f"expected non-zero exit for failing test, got {rc}\n{output}"
     assert "worker #" in output, f"Expected 'worker #' in output:\n{output}"

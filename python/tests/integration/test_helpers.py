@@ -1,11 +1,13 @@
 """Integration tests: explicit helper registration via Helpers()."""
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_explicit_helper_registration(tmp: TempDir) -> None:
     """Helpers registered via Helpers() are accessible via ``helpers``."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_it.py": """\
@@ -26,13 +28,13 @@ def test_explicit_helper_registration(tmp: TempDir) -> None:
                 return f"hi {name}"
         """,
     )
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=1)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=1)
 
 
 def test_helpers_in_test_file_strict_violation(tmp: TempDir) -> None:
     """Helpers() in a test file triggers registrar-in-test-module under --strict."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_it.py": """\
@@ -49,14 +51,14 @@ def test_helpers_in_test_file_strict_violation(tmp: TempDir) -> None:
             """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--strict")
-    helpers.integ.assert_failed(out, rc)
-    helpers.integ.assert_contains(out, "registrar-in-test-module")
+    out, _, rc = helpers.run_oxitest(tmp, "--strict")
+    integ.assert_failed(out, rc)
+    integ.assert_contains(out, "registrar-in-test-module")
 
 
 def test_multiple_helper_namespaces(tmp: TempDir) -> None:
     """Multiple Helpers() instances in one conftest create separate namespaces."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_it.py": """\
@@ -86,13 +88,13 @@ def test_multiple_helper_namespaces(tmp: TempDir) -> None:
                 return s.upper() + "!"
         """,
     )
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=2)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=2)
 
 
 def test_nested_conftest_helper_access(tmp: TempDir) -> None:
     """Child conftest helpers accessible alongside parent conftest helpers."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_root.py": """\
@@ -132,5 +134,5 @@ def test_nested_conftest_helper_access(tmp: TempDir) -> None:
         "    result = helpers.root.ping()\n"
         "    assert result == 'pong', f\"expected 'pong', got {result}\"\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=3)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=3)

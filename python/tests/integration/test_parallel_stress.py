@@ -8,7 +8,9 @@ import re
 from pathlib import Path
 
 import oxitest
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def _parse_counts(out: str) -> dict[str, int]:
@@ -32,8 +34,8 @@ def test_parallel_matches_serial_at_scale(tmp: TempDir) -> None:
         (tmp / f"test_scale_{file_idx}.py").write_text("\n".join(lines))
 
     # Act: run both serial and parallel (--workers forces parallel mode).
-    serial_out, _, serial_rc = helpers.common.run_oxitest(tmp, "--serial", timeout=90)
-    parallel_out, _, parallel_rc = helpers.common.run_oxitest(
+    serial_out, _, serial_rc = helpers.run_oxitest(tmp, "--serial", timeout=90)
+    parallel_out, _, parallel_rc = helpers.run_oxitest(
         tmp, "--workers", "4", timeout=90
     )
 
@@ -71,7 +73,7 @@ def test_worker_crash_reports_errors(tmp: TempDir) -> None:
     )
 
     # Act: run with multiple workers so the crash doesn't block everything.
-    out, stderr, rc = helpers.common.run_oxitest(tmp, "--workers", "2")
+    out, stderr, rc = helpers.run_oxitest(tmp, "--workers", "2")
 
     # Assert: the overall run must fail because a worker crashed.
     assert rc != 0, (
@@ -95,9 +97,7 @@ def test_maxfail_stops_early_under_load(tmp: TempDir) -> None:
     (tmp / "test_maxfail_load.py").write_text("\n".join(lines))
 
     # Act: use --workers to force parallel, --maxfail 3 to stop early.
-    out, stderr, rc = helpers.common.run_oxitest(
-        tmp, "--maxfail", "3", "--workers", "2"
-    )
+    out, stderr, rc = helpers.run_oxitest(tmp, "--maxfail", "3", "--workers", "2")
 
     # Assert: run exits non-zero because failures were detected.
     assert rc != 0, (
@@ -151,10 +151,10 @@ def test_shared_fixture_created_once_across_workers(tmp: TempDir) -> None:
         )
 
     # Act: run with workers to exercise parallel fixture sharing.
-    out, _, rc = helpers.common.run_oxitest(tmp, "--workers", "2")
+    out, _, rc = helpers.run_oxitest(tmp, "--workers", "2")
 
     # Assert: all tests pass.
-    helpers.integ.assert_passed(out, rc, count=3)
+    integ.assert_passed(out, rc, count=3)
 
     # Assert: the counter file shows the fixture was created exactly once.
     counter_path = Path(str(tmp)) / ".fixture_counter"

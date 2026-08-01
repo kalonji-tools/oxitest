@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
 from oxitest._bridge._assert_error import _OXITEST_NO_RHS, _OxitestAssertionError
 from oxitest._bridge._diagnostics import (
     _REPR_MAX,
@@ -21,6 +21,7 @@ from oxitest._bridge.result import (
     TestResult,
     WarnedResult,
 )
+from tests import helpers
 
 
 def test_plain_assertion_returns_failed() -> None:
@@ -91,7 +92,7 @@ def test_skipped_exception_returns_skipped() -> None:
 
     exc = Skipped("skip reason")
     result = _handle_runtime_exception(exc)
-    helpers.common.assert_result(result, SkippedResult, message="skip reason")
+    helpers.assert_result(result, SkippedResult, message="skip reason")
 
 
 def test_skip_test_returns_skipped() -> None:
@@ -114,9 +115,9 @@ def test_skip_test_returns_skipped() -> None:
 
 def test_regular_exception_returns_error() -> None:
     """An ordinary Exception (not skip/assert) produces ErrorResult with type name."""
-    exc = helpers.common.make_exc(ValueError, "something broke")
+    exc = helpers.make_exc(ValueError, "something broke")
     result = _handle_runtime_exception(exc)
-    r = helpers.common.assert_result(result, ErrorResult)
+    r = helpers.assert_result(result, ErrorResult)
     assert "ValueError" in r.message, (
         "the exception type name must appear in the message so developers can identify"
         " the error class without a traceback"
@@ -261,7 +262,7 @@ def test_frames_captured_on_runtime_exception() -> None:
     except Exception as exc:  # noqa: BLE001 — test intentionally catches to verify error handling
         result = _handle_runtime_exception(exc)
 
-    r = helpers.common.assert_result(result, ErrorResult)
+    r = helpers.assert_result(result, ErrorResult)
     assert len(r.frames) >= 2, (
         "runtime errors need the same frame depth as assertion errors -- incomplete"
         " traces leave developers guessing at the crash site"
@@ -277,12 +278,12 @@ def test_frames_empty_when_no_traceback() -> None:
     exc = ValueError("no tb")
     exc.__traceback__ = None
     result = _handle_runtime_exception(exc)
-    helpers.common.assert_result(result, ErrorResult, frames=())
+    helpers.assert_result(result, ErrorResult, frames=())
 
 
 def test_bad_module_path_returns_error(tmp: TempDir) -> None:
     """run_test returns an error result when the module path does not exist."""
-    result = helpers.common.run_test(str(tmp / "nonexistent.py"), "test_foo")
+    result = helpers.run_test(str(tmp / "nonexistent.py"), "test_foo")
     assert result.status == "error", (
         "a missing module is an infrastructure error, not a test failure --"
         " misclassifying it hides broken test collection from the developer"
@@ -293,7 +294,7 @@ def test_bad_fn_name_returns_error(tmp: TempDir) -> None:
     """run_test returns an error when the function name is absent from the module."""
     module = tmp / "test_mod.py"
     module.write_text("def test_real(): pass\n")
-    result = helpers.common.run_test(str(module), "test_missing")
+    result = helpers.run_test(str(module), "test_missing")
     assert result.status == "error", (
         "a missing function name means the collector and executor disagree on what"
         " exists -- this must surface as an error, not a silent pass"

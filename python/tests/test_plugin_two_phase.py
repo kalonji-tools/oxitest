@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Annotated
 
 import oxitest
-from oxitest import TestContext, helpers
+from oxitest import TestContext
 from oxitest._bridge._plugin_config import (
     Both,
     CliExtension,
@@ -20,6 +20,7 @@ from oxitest._bridge.plugin_loader import (
     load_plugins,
 )
 from oxitest.plugin import Plugin
+from tests import helpers
 
 
 def _make_plugin_with_extension() -> types.ModuleType:
@@ -35,7 +36,7 @@ def _make_plugin_with_extension() -> types.ModuleType:
         call_tracker.append(True)
         return Plugin()
 
-    return helpers.common.make_plugin_module(
+    return helpers.make_plugin_module(
         "fake_ext_plugin",
         oxitest_plugin,
         oxitest_cli_extension=CliExtension(prefix="fake", config_type=FakeCfg),
@@ -47,7 +48,7 @@ def _make_plugin_with_extension() -> types.ModuleType:
 def test_discover_cli_extensions_reads_attribute(ctx: TestContext) -> None:
     """load_plugins discovers oxitest_cli_extension and stores prefix + descriptors."""
     mod = _make_plugin_with_extension()
-    helpers.common.install_module(ctx, "fake_ext_plugin", mod)
+    helpers.install_module(ctx, "fake_ext_plugin", mod)
 
     registry = load_plugins(["fake_ext_plugin"], {})
     extensions = registry.cli_extensions
@@ -63,7 +64,7 @@ def test_discover_cli_extensions_reads_attribute(ctx: TestContext) -> None:
 def test_user_prefix_override(ctx: TestContext) -> None:
     """cli_prefix in plugin_settings should override the default extension prefix."""
     mod = _make_plugin_with_extension()
-    helpers.common.install_module(ctx, "fake_ext_plugin", mod)
+    helpers.install_module(ctx, "fake_ext_plugin", mod)
 
     registry = load_plugins(
         ["fake_ext_plugin"],
@@ -76,8 +77,8 @@ def test_user_prefix_override(ctx: TestContext) -> None:
 @oxitest.mark.inprocess
 def test_plugin_without_extension_has_no_cli(ctx: TestContext) -> None:
     """A plugin without oxitest_cli_extension should not appear in cli_extensions."""
-    mod = helpers.common.make_plugin_module("fake_simple", lambda **_: Plugin())
-    helpers.common.install_module(ctx, "fake_simple", mod)
+    mod = helpers.make_plugin_module("fake_simple", lambda **_: Plugin())
+    helpers.install_module(ctx, "fake_simple", mod)
 
     registry = load_plugins(["fake_simple"], {})
     assert "fake_simple" not in registry.cli_extensions, (
@@ -89,7 +90,7 @@ def test_plugin_without_extension_has_no_cli(ctx: TestContext) -> None:
 def test_activate_plugin_with_typed_config(ctx: TestContext) -> None:
     """activate_plugin calls oxitest_plugin exactly once with the merged config."""
     mod = _make_plugin_with_extension()
-    helpers.common.install_module(ctx, "fake_ext_plugin", mod)
+    helpers.install_module(ctx, "fake_ext_plugin", mod)
 
     registry = load_plugins(["fake_ext_plugin"], {})
     plugin = _activate_plugin(
@@ -107,7 +108,7 @@ def test_activate_plugin_with_typed_config(ctx: TestContext) -> None:
 def test_activate_deferred_returns_new_registry(ctx: TestContext) -> None:
     """activate_deferred_plugins returns a new registry; the original is unchanged."""
     mod = _make_plugin_with_extension()
-    helpers.common.install_module(ctx, "fake_ext_plugin", mod)
+    helpers.install_module(ctx, "fake_ext_plugin", mod)
 
     old_registry = load_plugins(["fake_ext_plugin"], {})
     old_entry = old_registry.entries[0]
@@ -137,8 +138,8 @@ def test_backwards_compat_dict_config(ctx: TestContext) -> None:
         received["config"] = config
         return Plugin()
 
-    mod = helpers.common.make_plugin_module("fake_legacy", entry)
-    helpers.common.install_module(ctx, "fake_legacy", mod)
+    mod = helpers.make_plugin_module("fake_legacy", entry)
+    helpers.install_module(ctx, "fake_legacy", mod)
 
     load_plugins(["fake_legacy"], {"fake_legacy": {"key": "val"}})
     assert received.get("config") == {"key": "val"}, (

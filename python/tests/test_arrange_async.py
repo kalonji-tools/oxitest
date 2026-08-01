@@ -6,8 +6,9 @@ function-scope fixtures on async tests run correctly (fixing today's silent
 no-op at _fixture_instantiator.py:138-151).
 """
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
 from oxitest._bridge._fixture_instantiator import _unpack_sync
+from tests import helpers
 
 
 def test_async_each_fixture_on_sync_test_raises_arrange_error(
@@ -15,7 +16,7 @@ def test_async_each_fixture_on_sync_test_raises_arrange_error(
 ) -> None:
     """@arrange(async_fixture) on a sync test raises ArrangeError.
 
-    Uses helpers.common.run_oxitest to drive a real oxitest run so the arrange
+    Uses helpers.run_oxitest to drive a real oxitest run so the arrange
     phase actually executes.
     """
     (tmp / "conftest.py").write_text(
@@ -35,7 +36,7 @@ def test_async_each_fixture_on_sync_test_raises_arrange_error(
         "    pass\n"
     )
 
-    stdout, _stderr, rc = helpers.common.run_oxitest(tmp)
+    stdout, _stderr, rc = helpers.run_oxitest(tmp)
 
     assert "cannot arrange async fixture(s) on a sync test" in stdout, (
         f"expected the async_mismatch template (proxy for ArrangeError), got:\n{stdout}"
@@ -77,7 +78,7 @@ def test_each_loop_created_lazily_and_closed_after_test(
         "    pass\n"
     )
 
-    stdout, stderr, _rc = helpers.common.run_oxitest(tmp)
+    stdout, stderr, _rc = helpers.run_oxitest(tmp)
 
     assert "1 passed" in stdout, (
         f"async test arranging an async-each fixture must run to green, got:\n{stdout}"
@@ -131,7 +132,7 @@ def test_two_async_each_fixtures_share_one_per_test_session(
         "    )\n"
     )
 
-    stdout, _stderr, _rc = helpers.common.run_oxitest(tmp)
+    stdout, _stderr, _rc = helpers.run_oxitest(tmp)
 
     assert "2 passed" in stdout, (
         f"both tests must pass — cache-hit path in get_each_session must "
@@ -197,7 +198,7 @@ def test_multiple_illegal_entries_listed_in_one_diagnostic(
         "    pass\n"
     )
 
-    stdout, _stderr, _rc = helpers.common.run_oxitest(tmp)
+    stdout, _stderr, _rc = helpers.run_oxitest(tmp)
 
     assert "3 illegal entries" in stdout, (
         f"expected the diagnostic to say `3 illegal entries`, got:\n{stdout}"
@@ -245,7 +246,7 @@ def test_scan_is_all_or_nothing_no_partial_setup(tmp: TempDir) -> None:
         "    )\n"
     )
 
-    stdout, _stderr, _rc = helpers.common.run_oxitest(tmp)
+    stdout, _stderr, _rc = helpers.run_oxitest(tmp)
 
     assert "cannot arrange async fixture(s) on a sync test" in stdout, (
         f"scan must raise on the illegal entry, got:\n{stdout}"
@@ -294,7 +295,7 @@ def test_mixed_sync_async_teardown_lifo(tmp: TempDir) -> None:
         "    )\n"
     )
 
-    stdout, _stderr, _rc = helpers.common.run_oxitest(tmp)
+    stdout, _stderr, _rc = helpers.run_oxitest(tmp)
     assert "2 passed" in stdout, f"both tests must pass, got:\n{stdout}"
 
 
@@ -343,7 +344,7 @@ def test_per_test_loop_shared_across_setup_body_and_teardown(
         "    )\n"
     )
 
-    stdout, _stderr, _rc = helpers.common.run_oxitest(tmp)
+    stdout, _stderr, _rc = helpers.run_oxitest(tmp)
     assert "2 passed" in stdout, (
         f"probe test + verification test must pass, got:\n{stdout}"
     )
@@ -388,7 +389,7 @@ def test_teardown_raise_does_not_halt_draining(tmp: TempDir) -> None:
 
     # `--warnings` expands the reporter's collapsed warning summary so the
     # teardown diagnostic's text appears in stdout for assertion.
-    stdout, _stderr, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    stdout, _stderr, _rc = helpers.run_oxitest(tmp, "--warnings")
     # Both tests must pass: test_raise runs (fixtures set up, body executes,
     # teardown for `raising` fires and raises but is caught by safe_teardown,
     # then `outer`'s teardown still fires); test_outer_teardown_still_fired
@@ -421,7 +422,7 @@ def test_arrange_missing_fixture_surfaces_as_error(tmp: TempDir) -> None:
         "    pass\n"
     )
 
-    stdout, _stderr, _rc = helpers.common.run_oxitest(tmp)
+    stdout, _stderr, _rc = helpers.run_oxitest(tmp)
 
     assert "'nonexistent'" in stdout and "not found" in stdout, (
         f"expected the missing fixture name and 'not found' in diagnostic, "
@@ -461,7 +462,7 @@ def test_arrange_scan_runs_once_per_test_not_per_parametrize_case(
         "    pass\n"
     )
 
-    stdout, _stderr, _rc = helpers.common.run_oxitest(tmp)
+    stdout, _stderr, _rc = helpers.run_oxitest(tmp)
 
     assert "3 errors" in stdout or "3 error" in stdout, (
         f"one error per parametrize case (3 cases), got:\n{stdout}"
@@ -489,7 +490,7 @@ def test_arrange_type_based_entry_resolves_via_get_by_type(tmp: TempDir) -> None
         "    pass\n"
     )
 
-    stdout, _stderr, rc = helpers.common.run_oxitest(tmp)
+    stdout, _stderr, rc = helpers.run_oxitest(tmp)
 
     assert rc == 0, (
         f"@arrange(TempDir) is a legal sync-type arrange, got rc={rc}\n"
@@ -534,7 +535,7 @@ def test_async_each_coroutine_only_fixture(tmp: TempDir) -> None:
         "    )\n"
     )
 
-    stdout, _stderr, rc = helpers.common.run_oxitest(tmp)
+    stdout, _stderr, rc = helpers.run_oxitest(tmp)
 
     assert rc == 0, (
         f"coroutine-only async fixture must run to green, got rc={rc}\n"
@@ -604,7 +605,7 @@ def test_cross_loop_asyncio_task_usable_in_body(tmp: TempDir) -> None:
         "    )\n"
     )
 
-    stdout, _stderr, rc = helpers.common.run_oxitest(tmp)
+    stdout, _stderr, rc = helpers.run_oxitest(tmp)
 
     assert rc == 0, (
         f"cross-loop Task usage must succeed once arrange_session is "
@@ -647,7 +648,7 @@ def test_async_test_without_arrange_uses_fresh_session_fallback(
         "    )\n"
     )
 
-    stdout, _stderr, rc = helpers.common.run_oxitest(tmp)
+    stdout, _stderr, rc = helpers.run_oxitest(tmp)
 
     assert rc == 0, (
         f"async test without @arrange must pass via the fresh-session "
@@ -727,7 +728,7 @@ def test_shared_session_precedence_over_arrange_session(tmp: TempDir) -> None:
         "    )\n"
     )
 
-    stdout, _stderr, rc = helpers.common.run_oxitest(tmp)
+    stdout, _stderr, rc = helpers.run_oxitest(tmp)
 
     assert rc == 0, (
         f"both tests must pass to prove shared_session wins the body-loop "

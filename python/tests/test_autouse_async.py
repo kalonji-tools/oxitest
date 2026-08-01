@@ -6,7 +6,8 @@ time. Shared-async autouse and async-each-without-autouse remain legal.
 
 from collections.abc import AsyncGenerator, Generator
 
-from oxitest import AutouseRegistrationError, Fixtures, TempDir, helpers, raises
+from oxitest import AutouseRegistrationError, Fixtures, TempDir, raises
+from tests import helpers
 
 
 def test_async_each_autouse_rejected_at_registration() -> None:
@@ -152,7 +153,7 @@ def test_diagnostic_surfaces_via_oxitest_runner(tmp: TempDir) -> None:
     )
     (tmp / "test_sample.py").write_text("def test_noop(): pass\n")
 
-    out, err, rc = helpers.common.run_oxitest(tmp)
+    out, err, rc = helpers.run_oxitest(tmp)
 
     assert rc != 0, (
         f"conftest with illegal autouse combo must fail collection, "

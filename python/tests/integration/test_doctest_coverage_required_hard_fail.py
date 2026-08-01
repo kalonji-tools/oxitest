@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_abort_strict_returncode_reflects_coverage_gap(tmp: TempDir) -> None:
     """strict=abort hard-fails at collection when a subject is missing."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={},
         pyproject="""
@@ -25,7 +27,7 @@ def test_abort_strict_returncode_reflects_coverage_gap(tmp: TempDir) -> None:
             ),
         },
     )
-    stdout, stderr, rc = helpers.common.run_oxitest(tmp)
+    stdout, stderr, rc = helpers.run_oxitest(tmp)
     assert rc != 0, (
         "strict=abort promotes coverage gaps to Error, exiting non-zero; "
         f"got rc={rc}\nstdout:\n{stdout}\nstderr:\n{stderr}"
@@ -34,7 +36,7 @@ def test_abort_strict_returncode_reflects_coverage_gap(tmp: TempDir) -> None:
 
 def test_abort_strict_with_full_coverage_returncode_zero(tmp: TempDir) -> None:
     """strict=abort with a fully-covered project is the happy path — exit 0."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={},
         pyproject="""
@@ -53,7 +55,7 @@ def test_abort_strict_with_full_coverage_returncode_zero(tmp: TempDir) -> None:
             ),
         },
     )
-    stdout, stderr, rc = helpers.common.run_oxitest(tmp)
+    stdout, stderr, rc = helpers.run_oxitest(tmp)
     assert rc == 0, (
         "strict=abort with a fully-covered project must succeed; "
         f"got rc={rc}\nstdout:\n{stdout}\nstderr:\n{stderr}"

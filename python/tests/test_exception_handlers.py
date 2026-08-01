@@ -6,12 +6,13 @@ import warnings
 from dataclasses import dataclass
 
 import oxitest as oxi
-from oxitest import WarnCapture, helpers
+from oxitest import WarnCapture
 from oxitest._bridge._diagnostics import (
     check_warnings as _check_warnings,
     dispatch_exception as _dispatch_exception,
 )
 from oxitest._bridge.result import ErrorResult, FailedResult, StatusKind
+from tests import helpers
 
 # ---------------------------------------------------------------------------
 # _check_warnings
@@ -80,7 +81,7 @@ def test_dispatch_assertion_error() -> None:
 
     result = _dispatch_exception(exc)
 
-    helpers.common.assert_result(result, FailedResult, exc_type="AssertionError")
+    helpers.assert_result(result, FailedResult, exc_type="AssertionError")
 
 
 def test_dispatch_runtime_exception() -> None:
@@ -89,7 +90,7 @@ def test_dispatch_runtime_exception() -> None:
 
     result = _dispatch_exception(exc)
 
-    r = helpers.common.assert_result(result, ErrorResult)
+    r = helpers.assert_result(result, ErrorResult)
     assert "ValueError" in r.message, "expected ValueError in message"
 
 

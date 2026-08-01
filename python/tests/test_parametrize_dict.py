@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from oxitest import Fixture, TempDir, helpers, parametrize, raises
+from oxitest import Fixture, TempDir, parametrize, raises
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge.conftest_loader import create_session
 from oxitest._bridge.importer import collect_module
 from oxitest._bridge.parametrize import DataclassCases, DictCases
+from oxitest._bridge.result import PassedResult
+from tests import helpers
 
 
 @dataclass(frozen=True)
@@ -143,21 +145,25 @@ def test_executor_dict_mode_passes(tmp: TempDir) -> None:
         "def test_add(x: int, y: int, expected: int) -> None:\n"
         "    assert x + y == expected\n"
     )
-    result_basic = helpers.common.exec_inline(tmp, code, "test_add", param_id="basic")
-    result_neg = helpers.common.exec_inline(tmp, code, "test_add", param_id="negative")
-    assert result_basic.status == "passed", (
-        f"dict-mode must inject case values as kwargs so the test body receives them --"
-        f" failure means injection is broken: {result_basic.message}"
+    result_basic = helpers.exec_inline(tmp, code, "test_add", param_id="basic")
+    result_neg = helpers.exec_inline(tmp, code, "test_add", param_id="negative")
+    helpers.assert_result(
+        result_basic,
+        PassedResult,
+        why="dict-mode must inject case values as kwargs so the test body receives"
+        " them -- failure means injection is broken",
     )
-    assert result_neg.status == "passed", (
-        f"each dict case runs independently with its own kwargs -- if 'negative' fails"
-        f" while 'basic' passes, case isolation is broken: {result_neg.message}"
+    helpers.assert_result(
+        result_neg,
+        PassedResult,
+        why="each dict case runs independently with its own kwargs -- if 'negative'"
+        " fails while 'basic' passes, case isolation is broken",
     )
 
 
 def test_executor_dict_mode_failure(tmp: TempDir) -> None:
     """Dict mode: failing assertion produces 'failed' status."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "import oxitest\n"
         "@oxitest.parametrize(wrong=dict(x=1, y=2, expected=99))\n"
@@ -192,18 +198,18 @@ def test_executor_dict_mode_with_fixture(tmp: TempDir) -> None:
         "    assert x * multiplier == expected\n"
     )
     session, _, _diags = create_session([str(conftest)])
-    result = helpers.common.run_test(
-        str(f), "test_mul", session=session, param_id="double"
-    )
-    assert result.status == "passed", (
-        f"dict-mode and fixture injection must coexist -- the session resolves"
-        f" Fixture[T] params while dict supplies the rest: {result.message}"
+    result = helpers.run_test(str(f), "test_mul", session=session, param_id="double")
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="dict-mode and fixture injection must coexist -- the session resolves"
+        " Fixture[T] params while dict supplies the rest",
     )
 
 
 def test_collect_dict_parametrize_expands_to_n_items(tmp: TempDir) -> None:
     """collect_module expands an N-case dict @parametrize into N CollectedItems."""
-    path = helpers.common.write_test_module(
+    path = helpers.write_test_module(
         tmp,
         "import oxitest\n"
         "@oxitest.parametrize(\n"
@@ -231,7 +237,7 @@ def test_collect_dict_parametrize_expands_to_n_items(tmp: TempDir) -> None:
 
 def test_collect_dict_parametrize_item_has_param_values(tmp: TempDir) -> None:
     """Each dict parametrize item carries its values as param_values pairs."""
-    path = helpers.common.write_test_module(
+    path = helpers.write_test_module(
         tmp,
         "import oxitest\n"
         "@oxitest.parametrize(basic=dict(x=1, y=2))\n"

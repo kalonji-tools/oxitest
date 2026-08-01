@@ -9,7 +9,9 @@ subjects contribute to the diagnostic set; ``--warnings`` expands the summary
 so message content is assertable.
 """
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_single_hop_alias_from_private_source(tmp: TempDir) -> None:
@@ -21,7 +23,7 @@ def test_single_hop_alias_from_private_source(tmp: TempDir) -> None:
     a fully covered source ⇒ no ``doctest.coverage`` diagnostic for
     ``mypkg.approx``.
     """
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={},
         pyproject="""\
@@ -50,7 +52,7 @@ def test_single_hop_alias_from_private_source(tmp: TempDir) -> None:
             ),
         },
     )
-    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    out, err, _rc = helpers.run_oxitest(tmp, "--warnings")
     combined = out + err
     coverage_lines = [
         line
@@ -73,7 +75,7 @@ def test_multi_hop_alias_reaches_class_docstring(tmp: TempDir) -> None:
     ``_bridge/_ft.py``) to reach it. A covered ``_FixtureType`` ⇒ no
     ``doctest.coverage`` diagnostic for ``mypkg.Fixture``.
     """
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={},
         pyproject="""\
@@ -103,7 +105,7 @@ def test_multi_hop_alias_reaches_class_docstring(tmp: TempDir) -> None:
             ),
         },
     )
-    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    out, err, _rc = helpers.run_oxitest(tmp, "--warnings")
     combined = out + err
     coverage_lines = [
         line
@@ -126,7 +128,7 @@ def test_dedup_public_to_public_reexport(tmp: TempDir) -> None:
     against the canonical definition-site path — even though both paths are
     scanned.
     """
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={},
         pyproject="""\
@@ -143,7 +145,7 @@ def test_dedup_public_to_public_reexport(tmp: TempDir) -> None:
             "mypkg/plugin.py": "class Plugin:\n    pass\n",
         },
     )
-    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    out, err, _rc = helpers.run_oxitest(tmp, "--warnings")
     combined = out + err
     assert "mypkg.plugin.Plugin" in combined, (
         "the diagnostic must name the definition-site path — that's the "
@@ -177,7 +179,7 @@ def test_alias_cycle_produces_scanner_diagnostic(tmp: TempDir) -> None:
     whose message contains the phrase ``alias cycle`` (see
     ``coverage.rs::diagnostic_for_walk_error``).
     """
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={},
         pyproject="""\
@@ -191,7 +193,7 @@ def test_alias_cycle_produces_scanner_diagnostic(tmp: TempDir) -> None:
             "mypkg/__init__.py": '__all__ = ["A"]\nA = B\nB = A\n',
         },
     )
-    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    out, err, _rc = helpers.run_oxitest(tmp, "--warnings")
     combined = out + err
     assert "alias cycle" in combined.lower(), (
         "the walker must surface cycles as a user-visible diagnostic so the "

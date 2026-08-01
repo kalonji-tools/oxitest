@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from oxitest import helpers
 from oxitest._bridge._fixture_registry import FixtureDef, FixtureRegistry
 from oxitest._bridge._fixture_validator import FixtureValidator
 from oxitest._bridge._loader import ModuleCache
 from oxitest._bridge.plugin_loader import PluginRegistry
+from tests import helpers
 
 
 def _make_validator(*defs: FixtureDef[object]) -> FixtureValidator:
@@ -24,7 +24,7 @@ def _factory_no_dep() -> None:
 def test_validate_valid_names_returns_empty() -> None:
     """validate_fixture_names should return empty list when all names are registered."""
     v = _make_validator(
-        helpers.common.make_fixture_def("store", lambda: 42, conftest_path="/c.py")
+        helpers.make_fixture_def("store", lambda: 42, conftest_path="/c.py")
     )
 
     errors = v.validate_fixture_names(
@@ -37,7 +37,7 @@ def test_validate_valid_names_returns_empty() -> None:
 def test_validate_invalid_name_returns_error() -> None:
     """validate_fixture_names reports an error for an unregistered fixture name."""
     v = _make_validator(
-        helpers.common.make_fixture_def("store", lambda: 42, conftest_path="/c.py")
+        helpers.make_fixture_def("store", lambda: 42, conftest_path="/c.py")
     )
 
     errors = v.validate_fixture_names(
@@ -50,7 +50,7 @@ def test_validate_invalid_name_returns_error() -> None:
 def test_find_unused_detects_unreferenced() -> None:
     """find_unused_fixtures should identify fixtures that no test references."""
     v = _make_validator(
-        helpers.common.make_fixture_def(
+        helpers.make_fixture_def(
             "unused_db", conftest_path="/project/conftest.py", factory=_factory_no_dep
         )
     )
@@ -66,7 +66,7 @@ def test_find_unused_detects_unreferenced() -> None:
 def test_find_unused_excludes_autouse() -> None:
     """find_unused_fixtures should not flag autouse fixtures as unused."""
     v = _make_validator(
-        helpers.common.make_fixture_def(
+        helpers.make_fixture_def(
             "auto_setup",
             autouse=True,
             conftest_path="/project/conftest.py",
@@ -86,10 +86,10 @@ def test_find_unused_excludes_transitive_deps() -> None:
         pass
 
     v = _make_validator(
-        helpers.common.make_fixture_def(
+        helpers.make_fixture_def(
             "dep", conftest_path="/project/conftest.py", factory=_factory_no_dep
         ),
-        helpers.common.make_fixture_def(
+        helpers.make_fixture_def(
             "parent",
             conftest_path="/project/conftest.py",
             factory=_parent,
@@ -125,7 +125,7 @@ def test_validate_builtin_qualifier_not_flagged() -> None:
 def test_validate_fixref_names_excluded() -> None:
     """fixture_names in fixref_names should be excluded from validation errors."""
     v = _make_validator(
-        helpers.common.make_fixture_def("store", lambda: 42, conftest_path="/c.py")
+        helpers.make_fixture_def("store", lambda: 42, conftest_path="/c.py")
     )
 
     errors = v.validate_fixture_names(
@@ -144,7 +144,7 @@ def test_validate_fixref_names_excluded() -> None:
 def test_validate_mixed_valid_and_invalid() -> None:
     """validate_fixture_names reports only invalid names across multiple items."""
     v = _make_validator(
-        helpers.common.make_fixture_def("store", lambda: 42, conftest_path="/c.py")
+        helpers.make_fixture_def("store", lambda: 42, conftest_path="/c.py")
     )
 
     errors = v.validate_fixture_names(

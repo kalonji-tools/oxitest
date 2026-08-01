@@ -15,7 +15,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
 
 _TESTS_ROOT = Path(__file__).parent
 _DATA_ROOT = _TESTS_ROOT / "data"
@@ -105,9 +106,7 @@ def test_slice1_repro_project_passes_under_n() -> None:
     `len(pids) > 1` is unsatisfiable by construction. The tests below carry the
     guarded coverage; this one would still pass if the run collapsed to serial.
     """
-    out, err, rc = helpers.common.run_oxitest(
-        _DATA_ROOT / "slice1_same_package", "-n", "2"
-    )
+    out, err, rc = helpers.run_oxitest(_DATA_ROOT / "slice1_same_package", "-n", "2")
 
     assert rc == 0, (
         f"slice-1 fixtures did not resolve in workers (rc={rc}) — this is the "
@@ -122,7 +121,7 @@ def test_own_package_fixtures_resolve_in_workers(tmp: TempDir) -> None:
     log = Path(tmp) / "pids.log"
     _write_multi_package_project(root, log, cross_package=False)
 
-    out, err, rc = helpers.common.run_oxitest(None, "-n", "4", cwd=str(root))
+    out, err, rc = helpers.run_oxitest(None, "-n", "4", cwd=str(root))
 
     assert rc == 0, (
         f"own-package fixtures did not resolve under -n (rc={rc})\n"
@@ -170,7 +169,7 @@ def test_cross_package_access_is_rejected_identically_in_serial_and_parallel(
     log = Path(tmp) / "pids.log"
     _write_multi_package_project(root, log, cross_package=True)
 
-    serial_out, serial_err, serial_rc = helpers.common.run_oxitest(
+    serial_out, serial_err, serial_rc = helpers.run_oxitest(
         None, "--serial", cwd=str(root)
     )
     assert serial_rc != 0, (
@@ -179,7 +178,7 @@ def test_cross_package_access_is_rejected_identically_in_serial_and_parallel(
     )
 
     log.unlink(missing_ok=True)
-    out, err, rc = helpers.common.run_oxitest(None, "-n", "4", cwd=str(root))
+    out, err, rc = helpers.run_oxitest(None, "-n", "4", cwd=str(root))
 
     assert rc != 0, (
         f"parallel run succeeded (rc={rc}) at a cross-sibling access that "
@@ -211,13 +210,13 @@ def test_fixtures_resolve_on_a_warm_cache(tmp: TempDir) -> None:
     log = Path(tmp) / "pids.log"
     _write_multi_package_project(root, log, cross_package=False)
 
-    first_out, _, first_rc = helpers.common.run_oxitest(None, "-n", "4", cwd=str(root))
+    first_out, _, first_rc = helpers.run_oxitest(None, "-n", "4", cwd=str(root))
     assert first_rc == 0, (
         f"cold run failed, so the warm-cache assertion proves nothing\n{first_out}"
     )
 
     log.unlink(missing_ok=True)
-    out, err, rc = helpers.common.run_oxitest(None, "-n", "4", cwd=str(root))
+    out, err, rc = helpers.run_oxitest(None, "-n", "4", cwd=str(root))
 
     assert rc == 0, (
         f"the warm-cache run failed where the cold run passed (rc={rc}) — the "

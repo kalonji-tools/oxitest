@@ -6,9 +6,10 @@ from dataclasses import dataclass
 from typing import Annotated
 
 import oxitest
-from oxitest import Both, Cli, CliExtension, Conf, Plugin, TestContext, helpers
+from oxitest import Both, Cli, CliExtension, Conf, Plugin, TestContext
 from oxitest._bridge._plugin_config import introspect_config, merge_config
 from oxitest._bridge.plugin_loader import _activate_plugin, load_plugins
+from tests import helpers
 
 
 @dataclass(frozen=True)
@@ -51,12 +52,12 @@ def test_plugin_loader_discovers_and_activates_typed_config(ctx: TestContext) ->
         received_configs.append(config)
         return Plugin()
 
-    mod = helpers.common.make_plugin_module(
+    mod = helpers.make_plugin_module(
         "e2e_plugin",
         oxitest_plugin,
         oxitest_cli_extension=CliExtension(prefix="e2e", config_type=TestConfig),
     )
-    helpers.common.install_module(ctx, "e2e_plugin", mod)
+    helpers.install_module(ctx, "e2e_plugin", mod)
 
     registry = load_plugins(["e2e_plugin"], {"e2e_plugin": {"path": "/from/pyproject"}})
     assert "e2e_plugin" in registry.cli_extensions, (

@@ -1,11 +1,12 @@
 """Collection-time behavior of @oxi.arrange."""
 
 import oxitest
-from oxitest import StdCapture, TempDir, helpers
+from oxitest import StdCapture, TempDir
 from oxitest._bridge._errors import CollectionError
 from oxitest._bridge._test_kind import Solitary
 from oxitest._bridge.importer import collect_module
 from oxitest._bridge.result import CollectedItem
+from tests import helpers
 
 
 def test_collected_item_defaults_arranged_to_empty_tuple() -> None:
@@ -32,7 +33,7 @@ def test_importer_populates_arranged_from_decorator(tmp: TempDir) -> None:
 
     Without this, the executor's arrange phase (Task 12) has no data to iterate.
     """
-    path = helpers.common.write_test_module(
+    path = helpers.write_test_module(
         tmp,
         "import oxitest\n"
         "from oxitest import TempDir\n"
@@ -53,7 +54,7 @@ def test_importer_dedupes_stacked_arrange(tmp: TempDir) -> None:
 
     Preserves first-occurrence order via a stable dedupe.
     """
-    path = helpers.common.write_test_module(
+    path = helpers.write_test_module(
         tmp,
         "import oxitest\n"
         "from oxitest import TempDir\n"
@@ -76,7 +77,7 @@ def test_importer_errors_on_type_collision(tmp: TempDir) -> None:
     Redundant declaration + potential double-instantiation risk. Fail loud at
     collection so user picks one form.
     """
-    path = helpers.common.write_test_module(
+    path = helpers.write_test_module(
         tmp,
         "import oxitest\n"
         "from oxitest import TempDir\n"
@@ -96,7 +97,7 @@ def test_importer_errors_on_name_collision(tmp: TempDir) -> None:
 
     Named conftest fixture arranged AND injected as parameter — pick one.
     """
-    path = helpers.common.write_test_module(
+    path = helpers.write_test_module(
         tmp,
         "import oxitest\n"
         "from oxitest import Fixture\n"
@@ -119,7 +120,7 @@ def test_arranged_fixtures_appear_in_fixture_deps(tmp: TempDir) -> None:
     to FixtureValidator.find_unused_fixtures(), causing strict mode to flag them
     as unused and abort the run.
     """
-    path = helpers.common.write_test_module(
+    path = helpers.write_test_module(
         tmp,
         "import oxitest\n"
         "from oxitest import TempDir\n"
@@ -146,7 +147,7 @@ def test_class_arrange_propagates_to_methods(tmp: TempDir) -> None:
     Users write class-level arrange to share fixture side effects across
     multiple test methods without repeating the decorator on each.
     """
-    path = helpers.common.write_test_module(
+    path = helpers.write_test_module(
         tmp,
         "import oxitest\n"
         "from oxitest import TempDir\n"
@@ -173,7 +174,7 @@ def test_class_and_method_arrange_merge_class_first(tmp: TempDir) -> None:
     Method adds to (not replaces) class-level arrangement; the merged tuple
     preserves declaration semantics.
     """
-    path = helpers.common.write_test_module(
+    path = helpers.write_test_module(
         tmp,
         "import oxitest\n"
         "from oxitest import TempDir, StdCapture\n"

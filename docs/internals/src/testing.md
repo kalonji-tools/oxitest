@@ -99,53 +99,68 @@ These rules are enforced by code review and documented in `CLAUDE.md`:
    assertions.
 3. **Dogfood oxitest features.** Prefer `oxi.raises()` over `try/except`,
    `TempDir` over `tempfile`, `@oxi.parametrize` over copy-pasted tests, etc.
-4. **Import helpers from oxitest.** Shared utilities live in
-   `python/tests/conftest.py` (namespace `helpers.common`) and
-   `python/tests/integration/conftest.py` (namespace `helpers.integ`).  Access
-   them via `from oxitest import helpers`.
+4. **Import test utilities as plain functions.** Shared utilities live in the
+   `python/tests/helpers/` package and in `python/tests/integration/helpers.py`.
+   Import them with `from tests import helpers` and call `helpers.<function>()`.
+   The old `helpers.common.<fn>()` / `helpers.integ.<fn>()` registry proxy is
+   retired (#1700, #1787) — it resolved through `__getattr__` to `Any`, so `ty`
+   verified nothing at the call site.
 
 ### Integration test anatomy
 
 ```python
 # python/tests/integration/test_basic.py
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
-def test_all_pass_exits_zero(tmp: TempDir):
+def test_all_pass_exits_zero(tmp: TempDir) -> None:
     # Arrange -- write a tiny project into a temp directory
     (tmp / "test_ok.py").write_text(
         "def test_a(): assert 1 == 1\ndef test_b(): assert True\n"
     )
     # Act -- run oxitest as a subprocess
-    out, _, rc = helpers.common.run_oxitest(tmp)
+    out, _, rc = helpers.run_oxitest(tmp)
     # Assert
-    helpers.integ.assert_passed(out, rc)
+    integ.assert_passed(out, rc)
 ```
 
-`helpers.common.run_oxitest(tmp)` invokes the built `oxitest` binary in a
-subprocess, captures stdout/stderr, and returns the tuple
-`(stdout, stderr, returncode)`.  The `helpers.integ.assert_passed` /
-`assert_failed` / `assert_contains` helpers standardize exit-code and output
-checks across all integration tests.
+`helpers.run_oxitest(tmp)` invokes `python -m oxitest` in a subprocess,
+captures stdout/stderr, and returns the tuple `(stdout, stderr, returncode)`.
+The `integ.assert_passed` / `assert_failed` / `assert_contains` helpers
+standardize exit-code and output checks across all integration tests.
 
-### Helper namespaces
+### Where the utilities live
 
-Each conftest defines a `Helpers()` instance whose variable name becomes
-the namespace.  Helpers are registered via the `@helpers.helper` decorator
-and accessed via `from oxitest import helpers`:
+Plain modules, reached by plain import — there is no registry and no decorator:
 
-| Conftest | Namespace | Key helpers |
-|----------|-----------|-------------|
-| `python/tests/conftest.py` | `helpers.common` | `run_oxitest`, `write_test_file`, `make_session`, `make_meta` |
-| `python/tests/integration/conftest.py` | `helpers.integ` | `write_project`, `assert_passed`, `assert_failed`, `assert_contains` |
+| Module | Import as | Key functions |
+|--------|-----------|---------------|
+| `python/tests/helpers/` | `from tests import helpers` | `run_oxitest`, `assert_result`, `exec_inline`, `write_test_file`, `make_session`, `make_meta` |
+| `python/tests/integration/helpers.py` | `from tests.integration import helpers as integ` | `write_project`, `assert_passed`, `assert_failed`, `assert_contains` |
+
+`assert_result(result, Variant, why=...)` narrows a `TestResult` to one variant
+and returns it typed as that variant, so subsequent field access type-checks.
+Prefer it over a bare `assert result.status == "..."` whenever the test then
+reads a variant-specific field.
 
 ### Running Python tests
 
 ```bash
 just test-python                          # run all Python tests (no rebuild)
-just test-python python/tests/test_fixtures.py  # single file
+just test-python python/tests/test_fixtures.py  # single file -- see caveat below
 ```
+
+> **Single-file runs currently fail in this repository.** They abort with
+> `skip entry 'python/tests/helpers/' matched no coverage subjects` and collect
+> zero items. The `[tool.oxitest.doctest] skip` entries in `pyproject.toml` are
+> the stopgap recorded in [#1790](https://github.com/kalonji-tools/oxitest/issues/1790);
+> a narrowed run collects none of the paths they name, and a skip entry that
+> matches nothing is hard-failed under `strict = "abort"` so a typo cannot
+> silently bypass coverage. That guard is right for a full run and wrong for a
+> narrowed one. Until #1790 resolves it, run the whole suite.
 
 ## oxitest-consumer
 

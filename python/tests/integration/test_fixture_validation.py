@@ -1,6 +1,8 @@
 """Integration tests: fixture name validation at collection time."""
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_fixture_typo_aborts_with_exit_code_3(tmp: TempDir) -> None:
@@ -22,9 +24,9 @@ def test_uses_typo(sotre: oxitest.Fixture[int]) -> None:
 """
     (tmp / "conftest.py").write_text(conftest)
     (tmp / "test_typo.py").write_text(test_file)
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_collection_error(out, rc)
-    helpers.integ.assert_contains(out.lower(), "fixture", "sotre")
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_collection_error(out, rc)
+    integ.assert_contains(out.lower(), "fixture", "sotre")
 
 
 def test_valid_fixture_names_pass(tmp: TempDir) -> None:
@@ -46,8 +48,8 @@ def test_uses_store(store: oxitest.Fixture[int]) -> None:
 """
     (tmp / "conftest.py").write_text(conftest)
     (tmp / "test_ok.py").write_text(test_file)
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc)
 
 
 def test_did_you_mean_suggestion(tmp: TempDir) -> None:
@@ -69,7 +71,7 @@ def test_typo(sotre: oxitest.Fixture[int]) -> None:
 """
     (tmp / "conftest.py").write_text(conftest)
     (tmp / "test_typo.py").write_text(test_file)
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_collection_error(out, rc)
-    helpers.integ.assert_contains(out.lower(), "did you mean")
-    helpers.integ.assert_contains(out, "store")
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_collection_error(out, rc)
+    integ.assert_contains(out.lower(), "did you mean")
+    integ.assert_contains(out, "store")

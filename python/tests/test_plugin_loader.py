@@ -6,7 +6,7 @@ import types
 from typing import Any, Never
 
 import oxitest
-from oxitest import TestContext, helpers, raises
+from oxitest import TestContext, raises
 from oxitest._bridge._coverage import _NULL_COVERAGE
 from oxitest._bridge._debugger import _NULL_DEBUGGER, DebuggerBackend, _PdbBackend
 from oxitest._bridge._errors import ConflictingDebuggerError, OxitestError
@@ -24,6 +24,7 @@ from oxitest._bridge.plugin_loader import (
     needs_eager_import,
 )
 from oxitest.plugin import Plugin
+from tests import helpers
 
 
 def test_load_empty_plugins_returns_empty_registry() -> None:
@@ -38,8 +39,8 @@ def test_load_empty_plugins_returns_empty_registry() -> None:
 @oxitest.mark.inprocess
 def test_load_valid_plugin(ctx: TestContext) -> None:
     """A module with a valid oxitest_plugin() entry function is loaded."""
-    mod = helpers.common.make_plugin_module("fake_plugin", lambda **_: Plugin())
-    helpers.common.install_module(ctx, "fake_plugin", mod)
+    mod = helpers.make_plugin_module("fake_plugin", lambda **_: Plugin())
+    helpers.install_module(ctx, "fake_plugin", mod)
 
     registry = load_plugins(["fake_plugin"], {})
     assert len(registry.entries) == 1, f"expected 1 entry, got {len(registry.entries)}"
@@ -58,8 +59,8 @@ def test_load_plugin_receives_config(ctx: TestContext) -> None:
         received["config"] = config
         return Plugin()
 
-    mod = helpers.common.make_plugin_module("cfg_plugin", entry)
-    helpers.common.install_module(ctx, "cfg_plugin", mod)
+    mod = helpers.make_plugin_module("cfg_plugin", entry)
+    helpers.install_module(ctx, "cfg_plugin", mod)
 
     load_plugins(["cfg_plugin"], {"cfg_plugin": {"level": "DEBUG"}})
     assert received["config"] == {"level": "DEBUG"}, (
@@ -77,7 +78,7 @@ def test_load_missing_module_raises() -> None:
 def test_load_no_entry_function_raises(ctx: TestContext) -> None:
     """load_plugins raises PluginLoadError when the module has no oxitest_plugin."""
     mod = types.ModuleType("no_entry")
-    helpers.common.install_module(ctx, "no_entry", mod)
+    helpers.install_module(ctx, "no_entry", mod)
 
     with raises(PluginLoadError, match="has no oxitest_plugin"):
         load_plugins(["no_entry"], {})
@@ -86,8 +87,8 @@ def test_load_no_entry_function_raises(ctx: TestContext) -> None:
 @oxitest.mark.inprocess
 def test_load_wrong_return_type_raises(ctx: TestContext) -> None:
     """load_plugins raises PluginLoadError when oxitest_plugin() returns non-Plugin."""
-    mod = helpers.common.make_plugin_module("bad_return", lambda **_: "not a Plugin")
-    helpers.common.install_module(ctx, "bad_return", mod)
+    mod = helpers.make_plugin_module("bad_return", lambda **_: "not a Plugin")
+    helpers.install_module(ctx, "bad_return", mod)
 
     with raises(PluginLoadError, match="must return oxitest.Plugin"):
         load_plugins(["bad_return"], {})
@@ -101,8 +102,8 @@ def test_load_entry_raises_wraps_error(ctx: TestContext) -> None:
         msg = "boom"
         raise ValueError(msg)
 
-    mod = helpers.common.make_plugin_module("raises_plugin", bad_entry)
-    helpers.common.install_module(ctx, "raises_plugin", mod)
+    mod = helpers.make_plugin_module("raises_plugin", bad_entry)
+    helpers.install_module(ctx, "raises_plugin", mod)
 
     with raises(PluginLoadError, match="raised"):
         load_plugins(["raises_plugin"], {})
@@ -123,16 +124,16 @@ def test_registry_aggregates_across_plugins(ctx: TestContext) -> None:
         def records(self) -> list[object]:
             return []
 
-    mod1 = helpers.common.make_plugin_module(
+    mod1 = helpers.make_plugin_module(
         "plug1",
         lambda **_: Plugin(log_backends=(FakeBackend(),)),
     )
-    mod2 = helpers.common.make_plugin_module(
+    mod2 = helpers.make_plugin_module(
         "plug2",
         lambda **_: Plugin(log_backends=(FakeBackend(),)),
     )
-    helpers.common.install_module(ctx, "plug1", mod1)
-    helpers.common.install_module(ctx, "plug2", mod2)
+    helpers.install_module(ctx, "plug1", mod1)
+    helpers.install_module(ctx, "plug2", mod2)
 
     registry = load_plugins(["plug1", "plug2"], {})
     assert len(registry.log_backends) == 2, (
@@ -143,16 +144,16 @@ def test_registry_aggregates_across_plugins(ctx: TestContext) -> None:
 @oxitest.mark.inprocess
 def test_conflicting_debugger_backends_raises(ctx: TestContext) -> None:
     """Two plugins providing debugger backends should raise ConflictingDebuggerError."""
-    mod_a = helpers.common.make_plugin_module(
+    mod_a = helpers.make_plugin_module(
         "dbg_plugin_a",
-        lambda **_: Plugin(debugger_backend=helpers.common.RecordingDebugger()),
+        lambda **_: Plugin(debugger_backend=helpers.RecordingDebugger()),
     )
-    mod_b = helpers.common.make_plugin_module(
+    mod_b = helpers.make_plugin_module(
         "dbg_plugin_b",
-        lambda **_: Plugin(debugger_backend=helpers.common.RecordingDebugger()),
+        lambda **_: Plugin(debugger_backend=helpers.RecordingDebugger()),
     )
-    helpers.common.install_module(ctx, "dbg_plugin_a", mod_a)
-    helpers.common.install_module(ctx, "dbg_plugin_b", mod_b)
+    helpers.install_module(ctx, "dbg_plugin_a", mod_a)
+    helpers.install_module(ctx, "dbg_plugin_b", mod_b)
 
     with raises(ConflictingDebuggerError) as exc_info:
         load_plugins(["dbg_plugin_a", "dbg_plugin_b"], {})
@@ -181,11 +182,11 @@ def test_flatten_protocol_returns_empty_for_no_plugins() -> None:
 @oxitest.mark.inprocess
 def test_single_debugger_backend_is_valid(ctx: TestContext) -> None:
     """One plugin providing a debugger backend should not raise."""
-    mod = helpers.common.make_plugin_module(
+    mod = helpers.make_plugin_module(
         "solo_dbg",
-        lambda **_: Plugin(debugger_backend=helpers.common.RecordingDebugger()),
+        lambda **_: Plugin(debugger_backend=helpers.RecordingDebugger()),
     )
-    helpers.common.install_module(ctx, "solo_dbg", mod)
+    helpers.install_module(ctx, "solo_dbg", mod)
 
     registry = load_plugins(["solo_dbg"], {})
     assert registry.debugger_backend is not _NULL_DEBUGGER, (
@@ -285,7 +286,7 @@ def test_null_debugger_trace_raises() -> None:
 
 def test_null_debugger_post_mortem_raises() -> None:
     """Null debugger .post_mortem() raises AssertionError - filter bypass is a bug."""
-    exc = helpers.common.make_exc(RuntimeError, "dummy")
+    exc = helpers.make_exc(RuntimeError, "dummy")
     tb = exc.__traceback__
     assert tb is not None, "traceback must exist for the arrange phase"
     with raises(AssertionError, match="discovery filter is broken"):
@@ -318,13 +319,13 @@ def test_registry_builder_still_rejects_two_real_debuggers() -> None:
     builder.add_entry(
         ActivatedPluginEntry(
             module_name="a",
-            plugin=Plugin(debugger_backend=helpers.common.RecordingDebugger()),
+            plugin=Plugin(debugger_backend=helpers.RecordingDebugger()),
         )
     )
     builder.add_entry(
         ActivatedPluginEntry(
             module_name="b",
-            plugin=Plugin(debugger_backend=helpers.common.RecordingDebugger()),
+            plugin=Plugin(debugger_backend=helpers.RecordingDebugger()),
         )
     )
     with raises(ConflictingDebuggerError):
@@ -355,7 +356,7 @@ def test_resolve_debugger_backend_falls_back_to_pdb_with_null_registry() -> None
 
 def test_resolve_debugger_backend_returns_plugin_backend_when_registered() -> None:
     """When a plugin registers a debugger, resolver returns that backend directly."""
-    plugin_debugger = helpers.common.RecordingDebugger()
+    plugin_debugger = helpers.RecordingDebugger()
     session = FixtureSession(
         [], plugin_registry=PluginRegistry(debugger_backend=plugin_debugger)
     )

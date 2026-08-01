@@ -1,6 +1,7 @@
 """Integration tests: ``oxitest debug`` subcommand."""
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
 
 # -- Plugin scaffold -----------------------------------------------------------
 
@@ -40,7 +41,7 @@ def _run_debug(
     args = ["debug"]
     if always:
         args.append("--always")
-    return helpers.common.run_oxitest_subcmd(tmp, *args, cwd=".")
+    return helpers.run_oxitest_subcmd(tmp, *args, cwd=".")
 
 
 # -- Tests ---------------------------------------------------------------------

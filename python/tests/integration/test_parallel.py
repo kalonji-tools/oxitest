@@ -2,7 +2,9 @@
 
 import re
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def _parse_counts(out: str) -> dict[str, int]:
@@ -21,8 +23,8 @@ def test_serial_and_default_same_counts(tmp: TempDir) -> None:
     (tmp / "test_b.py").write_text(
         "def test_fail(): assert False\ndef test_pass(): assert True\n"
     )
-    serial_out, _, _ = helpers.common.run_oxitest(tmp, "--serial")
-    default_out, _, _ = helpers.common.run_oxitest(tmp)
+    serial_out, _, _ = helpers.run_oxitest(tmp, "--serial")
+    default_out, _, _ = helpers.run_oxitest(tmp)
     serial_counts = _parse_counts(serial_out)
     default_counts = _parse_counts(default_out)
     assert serial_counts == default_counts, (
@@ -37,7 +39,7 @@ def test_serial_and_default_both_pass(tmp: TempDir) -> None:
         "def test_beta(): assert True\n"
         "def test_gamma(): assert True\n"
     )
-    serial_out, _, serial_rc = helpers.common.run_oxitest(tmp, "--serial")
-    default_out, _, default_rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(serial_out, serial_rc)
-    helpers.integ.assert_passed(default_out, default_rc)
+    serial_out, _, serial_rc = helpers.run_oxitest(tmp, "--serial")
+    default_out, _, default_rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(serial_out, serial_rc)
+    integ.assert_passed(default_out, default_rc)

@@ -1,6 +1,8 @@
 """Integration tests: auto-arrangement by shared fixture dependencies."""
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def _write_shared_suite(tmp: TempDir) -> None:
@@ -34,8 +36,8 @@ def _write_shared_suite(tmp: TempDir) -> None:
 def test_auto_arrange_default_passes(tmp: TempDir) -> None:
     """Auto-arrangement is on by default and doesn't break test execution."""
     _write_shared_suite(tmp)
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=4)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=4)
 
 
 def test_auto_arrange_no_shared_fixtures(tmp: TempDir) -> None:
@@ -46,5 +48,5 @@ def test_auto_arrange_no_shared_fixtures(tmp: TempDir) -> None:
         "def test_b() -> None:\n"
         "    assert True\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=2)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=2)

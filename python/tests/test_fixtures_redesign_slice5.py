@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from oxitest import helpers
+from tests import helpers
 
 _DATA_ROOT = Path(__file__).parent / "data"
 _PROJECT = _DATA_ROOT / "slice5_inline_fixtures"
@@ -30,7 +30,7 @@ _TOTAL_TESTS = 5
 def test_inline_fixtures_work_end_to_end() -> None:
     """Lifetimes, isolation, and package-level visibility, in one real run."""
     # Act
-    stdout, stderr, rc = helpers.common.run_oxitest(_PROJECT)
+    stdout, stderr, rc = helpers.run_oxitest(_PROJECT)
 
     # Assert
     assert rc == 0, (
@@ -46,7 +46,7 @@ def test_inline_fixtures_work_end_to_end() -> None:
 def test_inline_package_lifetime_is_rejected() -> None:
     """Inline `package` exceeds the module cap, wherever the file sits."""
     # Act
-    stdout, stderr, rc = helpers.common.run_oxitest(_INLINE_PACKAGE)
+    stdout, stderr, rc = helpers.run_oxitest(_INLINE_PACKAGE)
     output = stdout + stderr
 
     # Assert
@@ -74,7 +74,7 @@ def test_inline_session_at_the_rootdir_package_is_rejected() -> None:
     would outlive its module.
     """
     # Act
-    stdout, stderr, rc = helpers.common.run_oxitest(_INLINE_SESSION_AT_ROOT)
+    stdout, stderr, rc = helpers.run_oxitest(_INLINE_SESSION_AT_ROOT)
     output = stdout + stderr
 
     # Assert
@@ -98,7 +98,7 @@ def test_inline_fixture_is_not_injectable_across_files() -> None:
     before the fix a sibling file received the fixture as ``FrozenProxy(2)``.
     """
     # Act
-    stdout, stderr, rc = helpers.common.run_oxitest(_CROSS_FILE_INJECTION)
+    stdout, stderr, rc = helpers.run_oxitest(_CROSS_FILE_INJECTION)
     output = stdout + stderr
 
     # Assert
@@ -125,7 +125,7 @@ def test_a_module_level_mark_object_does_not_break_registration() -> None:
     kills the worker subprocess rather than failing a test.
     """
     # Act
-    stdout, stderr, rc = helpers.common.run_oxitest(_MARK_BESIDE_FIXTURE)
+    stdout, stderr, rc = helpers.run_oxitest(_MARK_BESIDE_FIXTURE)
     output = stdout + stderr
 
     # Assert

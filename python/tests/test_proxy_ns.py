@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import oxitest
-from oxitest import Fixture, LogCapture, Patcher, StdCapture, TempDir, helpers
+from oxitest import Fixture, LogCapture, Patcher, StdCapture, TempDir
 from oxitest._bridge._builtin_context import TestContext as OxiTestContext
 from oxitest._bridge._errors import BoundaryError, FixtureNotFoundError
 from oxitest._bridge._fixture_registry import (
@@ -21,14 +21,16 @@ from oxitest._bridge._read_helpers import _helpers_registry_var, _HelpersProxy
 from oxitest._bridge.conftest_loader import load_fixtures_from_conftest
 from oxitest._bridge.proxy import FrozenProxy
 from oxitest._bridge.proxy_ns import FixturesProxy, NamespaceProxy, OxiNamespaceProxy
+from oxitest._bridge.result import PassedResult
+from tests import helpers
 
 # ── NamespaceProxy ─────────────────────────────────────────────────────────
 
 
 def test_namespace_proxy_resolves_fixture() -> None:
     """Attribute access on NamespaceProxy resolves and returns the fixture value."""
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def("conn", lambda: "db-val", namespace="db")
+    session = helpers.make_session(
+        helpers.make_fixture_def("conn", lambda: "db-val", namespace="db")
     )
     proxy = NamespaceProxy("db", session, "/fake/test.py", [])
     assert proxy.conn == "db-val", (
@@ -44,8 +46,8 @@ def test_namespace_proxy_is_lazy() -> None:
         called.append(1)
         return "val"
 
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def("conn", make_conn, namespace="db")
+    session = helpers.make_session(
+        helpers.make_fixture_def("conn", make_conn, namespace="db")
     )
     proxy = NamespaceProxy("db", session, "/fake/test.py", [])
     assert called == [], "fixture factory must not be called before attribute access"
@@ -58,9 +60,9 @@ def test_namespace_proxy_is_lazy() -> None:
 
 def test_namespace_proxy_isolates_namespaces() -> None:
     """Two NamespaceProxy instances for different namespaces resolve the same name."""
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def("conn", lambda: "db-conn", namespace="db"),
-        helpers.common.make_fixture_def("conn", lambda: "http-conn", namespace="http"),
+    session = helpers.make_session(
+        helpers.make_fixture_def("conn", lambda: "db-conn", namespace="db"),
+        helpers.make_fixture_def("conn", lambda: "http-conn", namespace="http"),
     )
     db_proxy = NamespaceProxy("db", session, "/fake/test.py", [])
     http_proxy = NamespaceProxy("http", session, "/fake/test.py", [])
@@ -78,8 +80,8 @@ def test_namespace_proxy_isolates_namespaces() -> None:
 
 def test_fixtures_proxy_getattr_returns_namespace_proxy() -> None:
     """Accessing a user-defined namespace on FixturesProxy returns a NamespaceProxy."""
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def("conn", lambda: 1, namespace="db")
+    session = helpers.make_session(
+        helpers.make_fixture_def("conn", lambda: 1, namespace="db")
     )
     proxy = FixturesProxy(session, "/fake/test.py", [])
     ns = proxy.db
@@ -90,7 +92,7 @@ def test_fixtures_proxy_getattr_returns_namespace_proxy() -> None:
 
 def test_fixtures_proxy_getattr_returns_oxi_proxy() -> None:
     """Accessing the 'oxi' attribute on FixturesProxy returns an OxiNamespaceProxy."""
-    session = helpers.common.make_session()
+    session = helpers.make_session()
     proxy = FixturesProxy(session, "/fake/test.py", [])
     oxi = proxy.oxi
     assert isinstance(oxi, OxiNamespaceProxy), (
@@ -106,7 +108,7 @@ def test_fixtures_proxy_unknown_namespace_raises() -> None:
     how a boundary violation becomes a mystery, so this segment now raises the
     same taxonomy as the rest of fixture lookup.
     """
-    session = helpers.common.make_session()
+    session = helpers.make_session()
     proxy = FixturesProxy(session, "/fake/test.py", [])
     with oxitest.raises(FixtureNotFoundError, match="unknown_ns"):
         _ = proxy.unknown_ns
@@ -254,8 +256,8 @@ def test_oxi_proxy_unknown_raises_with_available_list(
 
 def test_shared_fixture_accessed_via_namespace_is_frozen_proxy() -> None:
     """shared=True fixture accessed via fx.db.conn should be FrozenProxy-wrapped."""
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def(
+    session = helpers.make_session(
+        helpers.make_fixture_def(
             "conn",
             lambda: {"host": "localhost", "port": 5432},
             shared=True,
@@ -339,8 +341,13 @@ def test_full_pipeline_fx_namespace_access(tmp: TempDir) -> None:
         reg.register(d)
     session = FixtureSession(reg)
 
-    result = helpers.common.run_test(str(test_file), "test_access", session)
-    assert result.status == "passed", result.message
+    result = helpers.run_test(str(test_file), "test_access", session)
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="fx.<namespace>.<fixture> must resolve end to end, from the conftest"
+        " namespace declaration through the registry to the test body",
+    )
 
 
 def test_full_pipeline_fx_oxi_tmp(
@@ -357,8 +364,13 @@ def test_full_pipeline_fx_oxi_tmp(
         "    assert p.read_text() == 'hi'\n"
     )
 
-    result = helpers.common.run_test(str(test_file), "test_oxi_tmp", fixture_session)
-    assert result.status == "passed", result.message
+    result = helpers.run_test(str(test_file), "test_oxi_tmp", fixture_session)
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="the built-in 'oxi' namespace must expose a usable tmp directory through"
+        " fx -- the test writes a file and reads it back",
+    )
 
 
 def test_full_pipeline_two_namespaces_same_fixture_name(tmp: TempDir) -> None:
@@ -391,8 +403,13 @@ def test_full_pipeline_two_namespaces_same_fixture_name(tmp: TempDir) -> None:
         reg.register(d)
     session = FixtureSession(reg)
 
-    result = helpers.common.run_test(str(test_file), "test_two_namespaces", session)
-    assert result.status == "passed", result.message
+    result = helpers.run_test(str(test_file), "test_two_namespaces", session)
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="two namespaces declaring the same fixture name must stay independent --"
+        " fx.db.url and fx.cache.url must not collapse onto a single value",
+    )
 
 
 # ── ContextVar proxies (_FixturesProxy / _HelpersProxy) ──────────────────────

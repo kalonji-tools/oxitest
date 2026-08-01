@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_dataclass_field_diffs_shown(tmp: TempDir) -> None:
     """Assertion failure on dataclasses should display per-field diffs in output."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_dc.py": """
@@ -26,14 +28,14 @@ def test_dataclass_field_diffs_shown(tmp: TempDir) -> None:
             """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_failed(out, rc)
-    helpers.integ.assert_contains(out, "field diffs", "email", "age")
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_failed(out, rc)
+    integ.assert_contains(out, "field diffs", "email", "age")
 
 
 def test_non_dataclass_no_field_diffs(tmp: TempDir) -> None:
     """Non-dataclass assertion failures should not include a 'field diffs' section."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_plain.py": """
@@ -42,6 +44,6 @@ def test_non_dataclass_no_field_diffs(tmp: TempDir) -> None:
             """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_failed(out, rc)
-    helpers.integ.assert_excludes(out, "field diffs")
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_failed(out, rc)
+    integ.assert_excludes(out, "field diffs")

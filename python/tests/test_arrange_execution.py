@@ -9,11 +9,13 @@ from __future__ import annotations
 
 from collections.abc import Generator
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._loader import _load_module
 from oxitest._bridge.plugin_loader import PluginRegistry
+from oxitest._bridge.result import ErrorResult, PassedResult
+from tests import helpers
 
 
 def test_arrange_type_builtin_setup_runs(tmp: TempDir) -> None:
@@ -23,7 +25,7 @@ def test_arrange_type_builtin_setup_runs(tmp: TempDir) -> None:
     get_fixture_by_type.  If that dispatch is missing, the TempDir factory
     never runs and the teardown list stays empty.
     """
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "import oxitest\n"
         "from oxitest import TempDir\n"
@@ -33,9 +35,10 @@ def test_arrange_type_builtin_setup_runs(tmp: TempDir) -> None:
         "    assert True, 'arrange-only test must reach the body'\n",
         "test_with_arrange",
     )
-    assert result.status == "passed", (
-        "arrange phase must not prevent test body from running — "
-        f"got status={result.status!r}, message={result.message!r}"
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="arrange phase must not prevent test body from running",
     )
 
 
@@ -54,8 +57,8 @@ def test_arrange_name_string_setup_runs(tmp: TempDir) -> None:
         yield
         teardown_log.append("teardown")
 
-    session = helpers.common.make_session_with("my_fixture", my_fixture_factory)
-    result = helpers.common.exec_inline(
+    session = helpers.make_session_with("my_fixture", my_fixture_factory)
+    result = helpers.exec_inline(
         tmp,
         "import oxitest\n"
         "\n"
@@ -65,9 +68,10 @@ def test_arrange_name_string_setup_runs(tmp: TempDir) -> None:
         "test_with_name_arrange",
         session=session,
     )
-    assert result.status == "passed", (
-        "arrange phase must not prevent test body from running — "
-        f"got status={result.status!r}, message={result.message!r}"
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="arrange phase must not prevent test body from running",
     )
     assert setup_log == ["setup"], (
         "arrange by name must call the fixture factory exactly once — "
@@ -91,8 +95,8 @@ def test_arrange_teardown_runs_after_test_body(tmp: TempDir) -> None:
         yield
         teardown_log.append("torn_down")
 
-    session = helpers.common.make_session_with("side_effect", side_effect_fixture)
-    result = helpers.common.exec_inline(
+    session = helpers.make_session_with("side_effect", side_effect_fixture)
+    result = helpers.exec_inline(
         tmp,
         "import oxitest\n"
         "\n"
@@ -102,9 +106,10 @@ def test_arrange_teardown_runs_after_test_body(tmp: TempDir) -> None:
         "test_teardown_registered",
         session=session,
     )
-    assert result.status == "passed", (
-        "test must pass so teardown-ran check is meaningful — "
-        f"got status={result.status!r}, message={result.message!r}"
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="test must pass so teardown-ran check is meaningful",
     )
     assert teardown_log == ["torn_down"], (
         "arrange teardown must run after the test body — "
@@ -120,7 +125,7 @@ def test_arrange_missing_fixture_returns_error_result(tmp: TempDir) -> None:
     FixtureNotFoundError; run_test must catch this and return status='error'.
     """
     session = FixtureSession(FixtureRegistry(), PluginRegistry())
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "import oxitest\n"
         "\n"
@@ -150,8 +155,8 @@ def test_arrange_multiple_entries_all_setup(tmp: TempDir) -> None:
         yield
         log.append("extra_teardown")
 
-    session = helpers.common.make_session_with("extra", extra_factory)
-    result = helpers.common.exec_inline(
+    session = helpers.make_session_with("extra", extra_factory)
+    result = helpers.exec_inline(
         tmp,
         "import oxitest\n"
         "from oxitest import TempDir\n"
@@ -162,9 +167,10 @@ def test_arrange_multiple_entries_all_setup(tmp: TempDir) -> None:
         "test_multi_arrange",
         session=session,
     )
-    assert result.status == "passed", (
-        "test must pass when all arranged fixtures resolve successfully — "
-        f"got status={result.status!r}, message={result.message!r}"
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="test must pass when all arranged fixtures resolve successfully",
     )
     assert "extra_setup" in log, (
         f"string-based arranged fixture 'extra' must run setup — log={log!r}"
@@ -196,7 +202,7 @@ def test_arrange_ambiguous_type_reports_error(tmp: TempDir) -> None:
         "def test_ambiguous() -> None:\n"
         "    pass\n"
     )
-    path = helpers.common.write_test_module(tmp, code, name="test_ambig.py")
+    path = helpers.write_test_module(tmp, code, name="test_ambig.py")
 
     # Pre-load the module via the same loader the executor uses, then seed it
     # into the session cache so the executor reuses the exact same module
@@ -209,23 +215,25 @@ def test_arrange_ambiguous_type_reports_error(tmp: TempDir) -> None:
     # registry.resolve(ambig_type) sees two candidates; neither name matches
     # the qualifier "_AmbigSentinel" ("alpha"/"beta"), so AmbiguousFixtureError
     # is raised.
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def(
+    session = helpers.make_session(
+        helpers.make_fixture_def(
             "alpha", fixture_type=ambig_type, conftest_path="/conftest.py"
         ),
-        helpers.common.make_fixture_def(
+        helpers.make_fixture_def(
             "beta", fixture_type=ambig_type, conftest_path="/conftest.py"
         ),
     )
     # Seed the cache so the executor loads the same module we pre-loaded.
     session.module_cache.set(path, preloaded)
 
-    result = helpers.common.run_test(path, "test_ambiguous", session=session)
+    result = helpers.run_test(path, "test_ambiguous", session=session)
 
-    assert result.status == "error", (
-        "an ambiguous arranged fixture is an infrastructure error — "
-        "run_test must catch AmbiguousFixtureError and return status='error', "
-        f"not propagate it as an unhandled exception: got status={result.status!r}"
+    result = helpers.assert_result(
+        result,
+        ErrorResult,
+        why="an ambiguous arranged fixture is an infrastructure error — run_test must"
+        " catch AmbiguousFixtureError and return status='error', not propagate it as"
+        " an unhandled exception",
     )
     assert "ambiguous" in result.message.lower(), (
         "the error message must mention 'ambiguous' so the user understands why "

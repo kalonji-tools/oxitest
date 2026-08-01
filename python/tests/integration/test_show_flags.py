@@ -1,6 +1,8 @@
 """Integration tests: --show-locals and --show-internals wire behavior."""
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_show_locals_displays_variables(tmp: TempDir) -> None:
@@ -11,9 +13,9 @@ def test_show_locals_displays_variables(tmp: TempDir) -> None:
         "    y = 'hello'\n"
         "    assert x == 0, 'wrong value'\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--show-locals")
-    helpers.integ.assert_failed(out, rc)
-    helpers.integ.assert_contains(out, "x", "42")
+    out, _, rc = helpers.run_oxitest(tmp, "--show-locals")
+    integ.assert_failed(out, rc)
+    integ.assert_contains(out, "x", "42")
 
 
 def test_show_internals_shows_bridge_frames(tmp: TempDir) -> None:
@@ -21,17 +23,17 @@ def test_show_internals_shows_bridge_frames(tmp: TempDir) -> None:
     (tmp / "test_internal.py").write_text(
         "def test_fail():\n    assert False, 'boom'\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--show-internals")
-    helpers.integ.assert_failed(out, rc)
-    helpers.integ.assert_contains(out, "oxitest/")
+    out, _, rc = helpers.run_oxitest(tmp, "--show-internals")
+    integ.assert_failed(out, rc)
+    integ.assert_contains(out, "oxitest/")
 
 
 def test_default_hides_internals(tmp: TempDir) -> None:
     """Without --show-internals, internal frames are filtered."""
     (tmp / "test_hidden.py").write_text("def test_fail():\n    assert False, 'boom'\n")
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_failed(out, rc)
-    helpers.integ.assert_excludes(out, "oxitest/_bridge")
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_failed(out, rc)
+    integ.assert_excludes(out, "oxitest/_bridge")
 
 
 def test_default_no_locals(tmp: TempDir) -> None:
@@ -39,6 +41,6 @@ def test_default_no_locals(tmp: TempDir) -> None:
     (tmp / "test_no_locals.py").write_text(
         "def test_with_locals():\n    secret = 'hidden'\n    assert False, 'fail'\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_failed(out, rc)
-    helpers.integ.assert_excludes(out, "secret")
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_failed(out, rc)
+    integ.assert_excludes(out, "secret")

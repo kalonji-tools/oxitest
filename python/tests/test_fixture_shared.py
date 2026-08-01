@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Generator
 
-from oxitest import Fixture, Fixtures, helpers, raises
+from oxitest import Fixture, Fixtures, raises
 from oxitest._bridge.proxy import FrozenProxy, SharedFixtureMutationError
+from tests import helpers
 
 # ── shared= fixture tier ───────────────────────────────────────────────────────
 
@@ -48,17 +49,15 @@ def test_shared_fixture_is_called_once_across_tests() -> None:
         calls.append(1)
         return len(calls)
 
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def(
-            "db", factory, shared=True, conftest_path="/c.py"
-        )
+    session = helpers.make_session(
+        helpers.make_fixture_def("db", factory, shared=True, conftest_path="/c.py")
     )
 
     def fn(db: Fixture[int]) -> None:
         pass
 
-    k1, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
-    k2, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
+    k1, _ = session.resolve_for_test(fn, helpers.make_meta("t.py"))
+    k2, _ = session.resolve_for_test(fn, helpers.make_meta("t.py"))
     assert len(calls) == 1, f"factory called {len(calls)} times, expected 1"
     # Both resolutions return the same proxy instance (cache hit)
     assert k1["db"] is k2["db"], "same FrozenProxy instance expected on cache hit"
@@ -70,16 +69,14 @@ def test_shared_fixture_value_is_wrapped_in_frozen_proxy() -> None:
     def factory() -> dict[str, int]:
         return {"x": 1}
 
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def(
-            "cfg", factory, shared=True, conftest_path="/c.py"
-        )
+    session = helpers.make_session(
+        helpers.make_fixture_def("cfg", factory, shared=True, conftest_path="/c.py")
     )
 
     def fn(cfg: Fixture[dict[str, int]]) -> None:
         pass
 
-    k, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
+    k, _ = session.resolve_for_test(fn, helpers.make_meta("t.py"))
     assert isinstance(k["cfg"], FrozenProxy), (
         f"shared fixture should be wrapped in a FrozenProxy, got "
         f"{type(k['cfg']).__name__}"
@@ -92,16 +89,14 @@ def test_shared_fixture_proxy_raises_on_item_mutation() -> None:
     def factory() -> dict[str, int]:
         return {"x": 1}
 
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def(
-            "cfg", factory, shared=True, conftest_path="/c.py"
-        )
+    session = helpers.make_session(
+        helpers.make_fixture_def("cfg", factory, shared=True, conftest_path="/c.py")
     )
 
     def fn(cfg: Fixture[dict[str, int]]) -> None:
         pass
 
-    k, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
+    k, _ = session.resolve_for_test(fn, helpers.make_meta("t.py"))
     with raises(SharedFixtureMutationError):
         k["cfg"]["x"] = 2
 
@@ -114,16 +109,14 @@ def test_shared_fixture_teardown_runs_on_end_session() -> None:
         yield "v"
         torn_down.append(True)
 
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def(
-            "res", factory, shared=True, conftest_path="/c.py"
-        )
+    session = helpers.make_session(
+        helpers.make_fixture_def("res", factory, shared=True, conftest_path="/c.py")
     )
 
     def fn(res: Fixture[str]) -> None:
         pass
 
-    session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
+    session.resolve_for_test(fn, helpers.make_meta("t.py"))
     session.end_module("t.py")
     assert not torn_down, "teardown must not run at end_module for shared fixtures"
     session.end_session()
@@ -138,11 +131,9 @@ def test_shared_fixture_names_uses_most_local_definition() -> None:
     # Root conftest defines db as shared; leaf conftest overrides it as non-shared.
     # shared_fixture_names() should NOT include "db" because the effective definition
     # (defs[-1]) has shared=False.
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def(
-            "db", shared=True, conftest_path="/root/conftest.py"
-        ),
-        helpers.common.make_fixture_def("db", conftest_path="/root/sub/conftest.py"),
+    session = helpers.make_session(
+        helpers.make_fixture_def("db", shared=True, conftest_path="/root/conftest.py"),
+        helpers.make_fixture_def("db", conftest_path="/root/sub/conftest.py"),
     )
     assert session.shared_fixture_names() == (), (
         "shared_fixture_names() should use only the most-local definition; "
@@ -152,8 +143,8 @@ def test_shared_fixture_names_uses_most_local_definition() -> None:
 
 def test_shared_fixture_names_returns_empty_when_no_shared() -> None:
     """shared_fixture_names() returns an empty list when no fixture has shared=True."""
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def("client", conftest_path="/c.py")
+    session = helpers.make_session(
+        helpers.make_fixture_def("client", conftest_path="/c.py")
     )
     assert session.shared_fixture_names() == (), (
         "shared_fixture_names() should return [] when no fixture has shared=True"
@@ -162,10 +153,10 @@ def test_shared_fixture_names_returns_empty_when_no_shared() -> None:
 
 def test_shared_fixture_names_returns_only_shared_names() -> None:
     """shared_fixture_names() returns a sorted list of only the shared fixture names."""
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def("db", shared=True, conftest_path="/c.py"),
-        helpers.common.make_fixture_def("cache", shared=True, conftest_path="/c.py"),
-        helpers.common.make_fixture_def("client", conftest_path="/c.py"),
+    session = helpers.make_session(
+        helpers.make_fixture_def("db", shared=True, conftest_path="/c.py"),
+        helpers.make_fixture_def("cache", shared=True, conftest_path="/c.py"),
+        helpers.make_fixture_def("client", conftest_path="/c.py"),
     )
     assert session.shared_fixture_names() == ("cache", "db"), (
         "shared_fixture_names() should return only names where shared=True, got "
@@ -178,7 +169,7 @@ def test_shared_fixture_names_returns_only_shared_names() -> None:
 
 def test_shared_fixture_groups_empty_registry() -> None:
     """shared_fixture_groups() returns an empty list when no fixtures are registered."""
-    session = helpers.common.make_session()
+    session = helpers.make_session()
     assert session.shared_fixture_groups() == (), (
         "empty registry should return no fixture groups"
     )
@@ -186,8 +177,8 @@ def test_shared_fixture_groups_empty_registry() -> None:
 
 def test_shared_fixture_groups_no_shared_fixtures() -> None:
     """shared_fixture_groups() returns an empty list when no fixture has shared=True."""
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def("store", conftest_path="/conftest.py")
+    session = helpers.make_session(
+        helpers.make_fixture_def("store", conftest_path="/conftest.py")
     )
     assert session.shared_fixture_groups() == (), (
         "registry with no shared fixtures should return no groups"
@@ -196,8 +187,8 @@ def test_shared_fixture_groups_no_shared_fixtures() -> None:
 
 def test_shared_fixture_groups_single_shared() -> None:
     """A single shared fixture forms its own group of one."""
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def("db", shared=True, conftest_path="/conftest.py")
+    session = helpers.make_session(
+        helpers.make_fixture_def("db", shared=True, conftest_path="/conftest.py")
     )
     groups = session.shared_fixture_groups()
     assert groups == (("db",),), (
@@ -211,11 +202,11 @@ def test_shared_fixture_groups_transitive_dependency() -> None:
     class _DbType:
         pass
 
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def(
+    session = helpers.make_session(
+        helpers.make_fixture_def(
             "db", shared=True, conftest_path="/conftest.py", fixture_type=_DbType
         ),
-        helpers.common.make_fixture_def(
+        helpers.make_fixture_def(
             "repo",
             conftest_path="/conftest.py",
             depends_on=(("db", _DbType),),
@@ -229,13 +220,9 @@ def test_shared_fixture_groups_transitive_dependency() -> None:
 
 def test_shared_fixture_groups_two_independent_shared() -> None:
     """Two independent shared fixtures each form their own group."""
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def(
-            "db", shared=True, conftest_path="/conftest.py"
-        ),
-        helpers.common.make_fixture_def(
-            "cache", shared=True, conftest_path="/conftest.py"
-        ),
+    session = helpers.make_session(
+        helpers.make_fixture_def("db", shared=True, conftest_path="/conftest.py"),
+        helpers.make_fixture_def("cache", shared=True, conftest_path="/conftest.py"),
     )
     groups = session.shared_fixture_groups()
     assert len(groups) == 2, (
@@ -256,14 +243,14 @@ def test_shared_fixture_groups_transitive_merge() -> None:
     class _CacheType:
         pass
 
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def(
+    session = helpers.make_session(
+        helpers.make_fixture_def(
             "db", shared=True, conftest_path="/c.py", fixture_type=_DbType
         ),
-        helpers.common.make_fixture_def(
+        helpers.make_fixture_def(
             "cache", shared=True, conftest_path="/c.py", fixture_type=_CacheType
         ),
-        helpers.common.make_fixture_def(
+        helpers.make_fixture_def(
             "service",
             conftest_path="/c.py",
             depends_on=(("db", _DbType), ("cache", _CacheType)),

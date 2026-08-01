@@ -18,7 +18,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
 
 _DATA_ROOT = Path(__file__).parent / "data"
 _SUITE = _DATA_ROOT / "rootdir_import"
@@ -33,7 +34,7 @@ _SUITE_TESTS = 4
 
 def test_serial_run_resolves_tree_imports() -> None:
     """The suite's absolute tree imports resolve on the serial path."""
-    stdout, stderr, rc = helpers.common.run_oxitest(_SUITE)
+    stdout, stderr, rc = helpers.run_oxitest(_SUITE)
 
     assert rc == 0, (
         f"the suite imports `rootdir_import.helpers` by absolute path; a "
@@ -51,7 +52,7 @@ def test_parallel_run_resolves_tree_imports() -> None:
     `-n 2` forces the parallel path regardless of test count, so this does not
     depend on the suite being large enough to trip `min_parallel_tests`.
     """
-    stdout, stderr, rc = helpers.common.run_oxitest(_SUITE, "-n", "2")
+    stdout, stderr, rc = helpers.run_oxitest(_SUITE, "-n", "2")
 
     assert rc == 0, (
         f"worker subprocesses inherit nothing from the coordinator's sys.path; "
@@ -79,7 +80,7 @@ def test_inspect_resolves_tree_imports() -> None:
     `__fixtures__.py`, which itself imports from the test tree, so a broken
     rootdir surfaces as an `ImportError` here.
     """
-    stdout, stderr, rc = helpers.common.run_oxitest_subcmd(
+    stdout, stderr, rc = helpers.run_oxitest_subcmd(
         _SUITE, "query", "fixtures", "--count"
     )
 
@@ -104,8 +105,8 @@ def test_import_spelling_is_stable_across_invocations() -> None:
     """
     deep = _NESTED / "rootdir_import_nested" / "api" / "test_deep.py"
 
-    full_out, full_err, full_rc = helpers.common.run_oxitest(_NESTED)
-    one_out, one_err, one_rc = helpers.common.run_oxitest(deep)
+    full_out, full_err, full_rc = helpers.run_oxitest(_NESTED)
+    one_out, one_err, one_rc = helpers.run_oxitest(deep)
 
     assert full_rc == 0, f"full run failed:\n{full_out}\n{full_err}"
     assert one_rc == 0, (
@@ -166,7 +167,7 @@ def test_installed_distribution_wins_over_the_tree(tmp: TempDir) -> None:
         **os.environ,
         "PYTHONPATH": os.pathsep.join(filter(None, [str(winner), inherited])),
     }
-    stdout, stderr, rc = helpers.common.run_oxitest(suite, env=env)
+    stdout, stderr, rc = helpers.run_oxitest(suite, env=env)
 
     assert rc == 0, (
         f"a directory named `probe_pkg` in the tree shadowed a pre-existing "
@@ -188,7 +189,7 @@ def test_doctests_inherit_the_path_entry() -> None:
     unrelated to this test. The suite's pyproject.toml already opts doctest
     collection in via its (narrowly-scoped) `[tool.oxitest.doctest]` table.
     """
-    stdout, stderr, rc = helpers.common.run_oxitest(_SUITE)
+    stdout, stderr, rc = helpers.run_oxitest(_SUITE)
 
     assert rc == 0, (
         f"the doctest in helpers.describe imports from the test tree; a "

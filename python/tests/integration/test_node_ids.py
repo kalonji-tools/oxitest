@@ -7,14 +7,16 @@ miss (path canonicalization, conftest discovery, strict mode interaction).
 
 from __future__ import annotations
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 # ── Single node ID ───────────────────────────────────────────────────────────
 
 
 def test_run_single_node_id(tmp: TempDir) -> None:
     """``oxitest run path::test_name`` runs exactly one test."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="# oxitest",
         tests={
@@ -27,18 +29,18 @@ def test_sub():
 """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd(
+    out, _, rc = helpers.run_oxitest_subcmd(
         tmp,
         "run",
         "test_math.py::test_add",
         cwd=".",
     )
-    helpers.integ.assert_passed(out, rc, count=1)
+    integ.assert_passed(out, rc, count=1)
 
 
 def test_run_node_id_nonexistent_test_collects_zero(tmp: TempDir) -> None:
     """Targeting a test that doesn't exist collects zero items."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="# oxitest",
         tests={
@@ -48,13 +50,13 @@ def test_add():
 """,
         },
     )
-    out, *_ = helpers.common.run_oxitest_subcmd(
+    out, *_ = helpers.run_oxitest_subcmd(
         tmp,
         "run",
         "test_math.py::test_nonexistent",
         cwd=".",
     )
-    helpers.integ.assert_contains(out, "no tests ran")
+    integ.assert_contains(out, "no tests ran")
 
 
 # ── Class-based node IDs ─────────────────────────────────────────────────────
@@ -62,7 +64,7 @@ def test_add():
 
 def test_run_class_method_node_id(tmp: TempDir) -> None:
     """``oxitest run path::TestClass::test_method`` targets a class method."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="# oxitest",
         tests={
@@ -79,18 +81,18 @@ def test_standalone():
 """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd(
+    out, _, rc = helpers.run_oxitest_subcmd(
         tmp,
         "run",
         "test_cls.py::TestSuite::test_alpha",
         cwd=".",
     )
-    helpers.integ.assert_passed(out, rc, count=1)
+    integ.assert_passed(out, rc, count=1)
 
 
 def test_run_class_prefix_selects_all_methods(tmp: TempDir) -> None:
     """``oxitest run path::TestClass`` runs all methods in the class."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="# oxitest",
         tests={
@@ -107,13 +109,13 @@ def test_standalone():
 """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd(
+    out, _, rc = helpers.run_oxitest_subcmd(
         tmp,
         "run",
         "test_cls.py::TestSuite",
         cwd=".",
     )
-    helpers.integ.assert_passed(out, rc, count=2)
+    integ.assert_passed(out, rc, count=2)
 
 
 # ── Parametrized node IDs ────────────────────────────────────────────────────
@@ -121,7 +123,7 @@ def test_standalone():
 
 def test_run_parametrized_prefix_matches_all_cases(tmp: TempDir) -> None:
     """Node ID without brackets matches all parametrized variants."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="# oxitest",
         tests={
@@ -144,18 +146,18 @@ def test_math(x: int, y: int, expected: int):
 """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd(
+    out, _, rc = helpers.run_oxitest_subcmd(
         tmp,
         "run",
         "test_param.py::test_math",
         cwd=".",
     )
-    helpers.integ.assert_passed(out, rc, count=2)
+    integ.assert_passed(out, rc, count=2)
 
 
 def test_run_parametrized_exact_case(tmp: TempDir) -> None:
     """Node ID with brackets matches only that parametrized case."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="# oxitest",
         tests={
@@ -177,13 +179,13 @@ def test_mul(x: int, expected: int):
 """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd(
+    out, _, rc = helpers.run_oxitest_subcmd(
         tmp,
         "run",
         "test_param.py::test_mul[double]",
         cwd=".",
     )
-    helpers.integ.assert_passed(out, rc, count=1)
+    integ.assert_passed(out, rc, count=1)
 
 
 # ── Mixed paths and node IDs ────────────────────────────────────────────────
@@ -191,7 +193,7 @@ def test_mul(x: int, expected: int):
 
 def test_run_mixed_path_and_node_id(tmp: TempDir) -> None:
     """Bare path runs all tests; node ID runs just one. Mixed works."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="# oxitest",
         tests={
@@ -208,14 +210,14 @@ def test_three():
 """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd(
+    out, _, rc = helpers.run_oxitest_subcmd(
         tmp,
         "run",
         "test_a.py::test_one",
         "test_b.py",
         cwd=".",
     )
-    helpers.integ.assert_passed(out, rc, count=2)
+    integ.assert_passed(out, rc, count=2)
 
 
 # ── Strict mode with subset targeting ────────────────────────────────────────
@@ -223,7 +225,7 @@ def test_three():
 
 def test_strict_with_single_file_no_false_unused(tmp: TempDir) -> None:
     """Strict mode doesn't flag unused fixtures when targeting a file subset."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_a.py": """\
@@ -251,14 +253,14 @@ def db() -> str:
 strict = "abort"
 """,
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "run", "test_a.py", cwd=".")
-    helpers.integ.assert_passed(out, rc, count=1)
-    helpers.integ.assert_excludes(out, "unused-fixture")
+    out, _, rc = helpers.run_oxitest_subcmd(tmp, "run", "test_a.py", cwd=".")
+    integ.assert_passed(out, rc, count=1)
+    integ.assert_excludes(out, "unused-fixture")
 
 
 def test_strict_with_node_id_no_false_unused(tmp: TempDir) -> None:
     """Strict mode doesn't flag unused fixtures when targeting via node ID."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_a.py": """\
@@ -285,14 +287,14 @@ def db() -> str:
 strict = "abort"
 """,
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd(
+    out, _, rc = helpers.run_oxitest_subcmd(
         tmp,
         "run",
         "test_a.py::test_no_fixture",
         cwd=".",
     )
-    helpers.integ.assert_passed(out, rc, count=1)
-    helpers.integ.assert_excludes(out, "unused-fixture")
+    integ.assert_passed(out, rc, count=1)
+    integ.assert_excludes(out, "unused-fixture")
 
 
 # ── Conftest ancestor discovery ──────────────────────────────────────────────
@@ -320,13 +322,13 @@ def test_node_id_in_nested_dir_loads_ancestor_conftests(tmp: TempDir) -> None:
         "def test_sees_sub(sub_val: Fixture[str]):\n"
         "    assert sub_val == 'from_sub'\n"
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd(
+    out, _, rc = helpers.run_oxitest_subcmd(
         tmp,
         "run",
         "tests/deep/test_deep.py::test_sees_root",
         cwd=".",
     )
-    helpers.integ.assert_passed(out, rc, count=1)
+    integ.assert_passed(out, rc, count=1)
 
 
 # ── Multiple node IDs ────────────────────────────────────────────────────────
@@ -334,7 +336,7 @@ def test_node_id_in_nested_dir_loads_ancestor_conftests(tmp: TempDir) -> None:
 
 def test_run_multiple_node_ids(tmp: TempDir) -> None:
     """Multiple node IDs from different files run exactly those tests."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="# oxitest",
         tests={
@@ -351,11 +353,11 @@ def test_gamma():
 """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd(
+    out, _, rc = helpers.run_oxitest_subcmd(
         tmp,
         "run",
         "test_a.py::test_alpha",
         "test_b.py::test_gamma",
         cwd=".",
     )
-    helpers.integ.assert_passed(out, rc, count=2)
+    integ.assert_passed(out, rc, count=2)

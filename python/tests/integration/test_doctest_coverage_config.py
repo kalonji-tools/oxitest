@@ -5,12 +5,14 @@ whole load path through the CLI, including the error rendering for the legacy
 ``doctest_modules`` key and unknown enum values.
 """
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_doctest_section_parses(tmp: TempDir) -> None:
     """A valid ``[tool.oxitest.doctest]`` sub-table loads and the run succeeds."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="""\
             [tool.oxitest.doctest]
@@ -23,7 +25,7 @@ def test_doctest_section_parses(tmp: TempDir) -> None:
             """,
         },
     )
-    out, err, rc = helpers.common.run_oxitest(tmp)
+    out, err, rc = helpers.run_oxitest(tmp)
     assert rc == 0, (
         f"a valid [tool.oxitest.doctest] section must not block the run: {out}{err}"
     )
@@ -31,7 +33,7 @@ def test_doctest_section_parses(tmp: TempDir) -> None:
 
 def test_legacy_doctest_modules_hard_errors(tmp: TempDir) -> None:
     """Legacy ``doctest_modules`` key hard-errors with a migration hint."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="""\
             [tool.oxitest]
@@ -44,7 +46,7 @@ def test_legacy_doctest_modules_hard_errors(tmp: TempDir) -> None:
             """,
         },
     )
-    out, err, rc = helpers.common.run_oxitest(tmp)
+    out, err, rc = helpers.run_oxitest(tmp)
     assert rc != 0, (
         "the removed doctest_modules key must fail at config load — silent "
         f"acceptance would mean stale config is being ignored: {out}{err}"
@@ -69,7 +71,7 @@ def test_invalid_scope_surfaces_deserializer_error(tmp: TempDir) -> None:
     stderr. This replaces the earlier soft-fallback contract that let typos
     silently drop config.
     """
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="""\
             [tool.oxitest.doctest]
@@ -82,7 +84,7 @@ def test_invalid_scope_surfaces_deserializer_error(tmp: TempDir) -> None:
             """,
         },
     )
-    out, err, rc = helpers.common.run_oxitest(tmp)
+    out, err, rc = helpers.run_oxitest(tmp)
     assert rc != 0, (
         "an unknown scope value must hard-exit — silent fallback to defaults "
         f"would let typos ship undetected: {out}{err}"
@@ -112,7 +114,7 @@ def test_scope_off_hard_errors_with_migration_hint(tmp: TempDir) -> None:
     must surface even when the whole pyproject silently falls back to
     defaults.
     """
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="""\
             [tool.oxitest.doctest]
@@ -125,7 +127,7 @@ def test_scope_off_hard_errors_with_migration_hint(tmp: TempDir) -> None:
             """,
         },
     )
-    out, err, _rc = helpers.common.run_oxitest(tmp)
+    out, err, _rc = helpers.run_oxitest(tmp)
     combined = out + err
     assert "off" in combined, (
         "the deserializer error must name the removed value 'off' so users "
@@ -144,7 +146,7 @@ def test_list_form_scope_covers_only_named_symbol(tmp: TempDir) -> None:
     subjects in the same file are outside scope and produce no diagnostic
     even under ``strict = "enforce"``.
     """
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="""\
             [tool.oxitest]
@@ -169,7 +171,7 @@ def test_list_form_scope_covers_only_named_symbol(tmp: TempDir) -> None:
             ),
         },
     )
-    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    out, err, _rc = helpers.run_oxitest(tmp, "--warnings")
     combined = out + err
     assert "also_public" not in combined, (
         "an out-of-scope subject must not produce a coverage diagnostic — "
@@ -183,7 +185,7 @@ def test_skip_symbol_removes_only_that_symbol(tmp: TempDir) -> None:
     ``skip = ["file.py::sym"]`` excludes exactly that subject — other subjects
     in the same file are still covered by ``scope = "public"``.
     """
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="""\
             [tool.oxitest]
@@ -200,7 +202,7 @@ def test_skip_symbol_removes_only_that_symbol(tmp: TempDir) -> None:
             "src/mod.py": ("def keep_me(): pass\ndef skip_me(): pass\n"),
         },
     )
-    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    out, err, _rc = helpers.run_oxitest(tmp, "--warnings")
     combined = out + err
     assert "keep_me" in combined, (
         "an in-scope subject must still be diagnosed for missing Examples — "
@@ -223,7 +225,7 @@ def test_stale_scope_entry_hard_fails_under_abort(tmp: TempDir) -> None:
     load → subject filter → match tracking → stale diagnostic emission
     → hard-fail promotion → non-zero exit.
     """
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="""\
             [tool.oxitest]
@@ -241,7 +243,7 @@ def test_stale_scope_entry_hard_fails_under_abort(tmp: TempDir) -> None:
             ),
         },
     )
-    out, err, rc = helpers.common.run_oxitest(tmp)
+    out, err, rc = helpers.run_oxitest(tmp)
     combined = out + err
     assert rc != 0, (
         "a stale scope entry under strict = abort must hard-fail — otherwise "
@@ -262,7 +264,7 @@ def test_unknown_oxitest_key_hard_exits(tmp: TempDir) -> None:
     ``UsageError`` and names the offender so users can grep their
     pyproject for the typo.
     """
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="""\
             [tool.oxitest]
@@ -275,7 +277,7 @@ def test_unknown_oxitest_key_hard_exits(tmp: TempDir) -> None:
             """,
         },
     )
-    out, err, rc = helpers.common.run_oxitest(tmp)
+    out, err, rc = helpers.run_oxitest(tmp)
     assert rc != 0, (
         "unknown top-level [tool.oxitest] keys must hard-exit — silent drop "
         f"would let typos evade the fail-closed contract: {out}{err}"
@@ -295,7 +297,7 @@ def test_whole_file_syntax_error_does_not_block_oxitest(tmp: TempDir) -> None:
     oxitest from running under defaults — other tools reading pyproject
     will complain on their own turf.
     """
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="""\
             [tool.ruff
@@ -311,7 +313,7 @@ def test_whole_file_syntax_error_does_not_block_oxitest(tmp: TempDir) -> None:
             """,
         },
     )
-    out, err, rc = helpers.common.run_oxitest(tmp)
+    out, err, rc = helpers.run_oxitest(tmp)
     assert rc == 0, (
         "whole-file TOML syntax errors outside [tool.oxitest] must not fail "
         f"oxitest — narrow scope per ADR-0008: {out}{err}"
@@ -322,7 +324,7 @@ def test_scope_member_form_covered_method_produces_no_diagnostic(
     tmp: TempDir,
 ) -> None:
     """Member-form scope entry: method with Examples block produces no diagnostic."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="""\
             [tool.oxitest]
@@ -347,7 +349,7 @@ def test_scope_member_form_covered_method_produces_no_diagnostic(
             ),
         },
     )
-    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    out, err, _rc = helpers.run_oxitest(tmp, "--warnings")
     combined = out + err
     assert "Cls.method" not in combined, (
         "a member-form scope entry pointing at a method with an Examples: "
@@ -360,7 +362,7 @@ def test_scope_member_form_missing_examples_header_is_diagnosed(
     tmp: TempDir,
 ) -> None:
     """Member-form: method missing Examples header → diagnostic naming Cls.method."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="""\
             [tool.oxitest]
@@ -378,7 +380,7 @@ def test_scope_member_form_missing_examples_header_is_diagnosed(
             ),
         },
     )
-    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    out, err, _rc = helpers.run_oxitest(tmp, "--warnings")
     combined = out + err
     assert "Cls.method" in combined, (
         "the diagnostic must name the method via its dotted public_id "
@@ -395,7 +397,7 @@ def test_scope_member_form_missing_method_hard_fails_as_stale(
     tmp: TempDir,
 ) -> None:
     """Member-form scope entry with non-existent method: stale hard-fail under abort."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="""\
             [tool.oxitest]
@@ -419,7 +421,7 @@ def test_scope_member_form_missing_method_hard_fails_as_stale(
             ),
         },
     )
-    out, err, rc = helpers.common.run_oxitest(tmp)
+    out, err, rc = helpers.run_oxitest(tmp)
     combined = out + err
     assert rc != 0, (
         "a member-form scope entry naming a non-existent method must hard-fail "
@@ -434,7 +436,7 @@ def test_scope_member_form_missing_method_hard_fails_as_stale(
 
 def test_skip_member_form_excludes_only_that_method(tmp: TempDir) -> None:
     """Member-form skip: excludes only the named method; sibling still checked."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="""\
             [tool.oxitest]
@@ -457,7 +459,7 @@ def test_skip_member_form_excludes_only_that_method(tmp: TempDir) -> None:
             ),
         },
     )
-    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    out, err, _rc = helpers.run_oxitest(tmp, "--warnings")
     combined = out + err
     assert "Cls.method" not in combined, (
         "the skip entry must remove the named method from coverage checks — "
@@ -473,7 +475,7 @@ def test_skip_member_form_excludes_only_that_method(tmp: TempDir) -> None:
 
 def test_scope_member_pass_body_method_diagnoses_at_def_line(tmp: TempDir) -> None:
     """Pass-body method (not an ellipsis stub) still diagnoses missing Examples."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="""\
             [tool.oxitest]
@@ -489,7 +491,7 @@ def test_scope_member_pass_body_method_diagnoses_at_def_line(tmp: TempDir) -> No
             "src/mod.py": ("class Cls:\n    def method(self):\n        pass\n"),
         },
     )
-    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    out, err, _rc = helpers.run_oxitest(tmp, "--warnings")
     combined = out + err
     assert "Cls.method" in combined, (
         "pass-body is NOT an ellipsis stub — the method is a real subject that "
@@ -504,7 +506,7 @@ def test_scope_member_pass_body_method_diagnoses_at_def_line(tmp: TempDir) -> No
 
 def test_scope_member_ellipsis_stub_method_surfaces_as_stale(tmp: TempDir) -> None:
     """Ellipsis-body abstract method: filtered at lookup → stale-entry."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         pyproject="""\
             [tool.oxitest]
@@ -520,7 +522,7 @@ def test_scope_member_ellipsis_stub_method_surfaces_as_stale(tmp: TempDir) -> No
             "src/mod.py": ("class Cls:\n    def abstract_method(self) -> int: ...\n"),
         },
     )
-    out, err, rc = helpers.common.run_oxitest(tmp)
+    out, err, rc = helpers.run_oxitest(tmp)
     combined = out + err
     assert rc != 0, (
         "an ellipsis-body abstract method under a Member scope entry must "

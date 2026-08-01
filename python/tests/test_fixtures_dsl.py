@@ -6,7 +6,7 @@ import unittest
 from typing import Any
 
 import oxitest
-from oxitest import Fixture, Fixtures, TestContext, helpers, raises
+from oxitest import Fixture, Fixtures, TestContext, raises
 from oxitest._bridge._builtin_context import TestContext as OxiTestContext
 from oxitest._bridge._errors import (
     FixtureNotFoundError,
@@ -18,6 +18,7 @@ from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge.plugin_loader import load_plugins
 from oxitest._bridge.proxy_ns import FixturesProxy
 from oxitest.plugin import Plugin
+from tests import helpers
 
 # ── skip / mark ───────────────────────────────────────────────────────────────
 
@@ -186,13 +187,13 @@ def test_resolve_for_test_skip_names_prevents_resolution() -> None:
         called.append("db")
         return 42
 
-    session = helpers.common.make_session(helpers.common.make_fixture_def("db", my_db))
+    session = helpers.make_session(helpers.make_fixture_def("db", my_db))
 
     def test_fn(db: Fixture[int]) -> None:
         pass
 
     kwargs, _ = session.resolve_for_test(
-        test_fn, helpers.common.make_meta("/fake/test.py"), skip_names=frozenset({"db"})
+        test_fn, helpers.make_meta("/fake/test.py"), skip_names=frozenset({"db"})
     )
     assert "db" not in kwargs, (
         f"'db' should be skipped (in skip_names) and not appear in kwargs, got keys: "
@@ -203,10 +204,8 @@ def test_resolve_for_test_skip_names_prevents_resolution() -> None:
 
 def test_unannotated_param_matching_fixture_raises_helpful_error() -> None:
     """An unannotated param matching a fixture raises UnannotatedFixtureParamError."""
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def(
-            "numbers", lambda: [1, 2, 3], conftest_path="/c.py"
-        )
+    session = helpers.make_session(
+        helpers.make_fixture_def("numbers", lambda: [1, 2, 3], conftest_path="/c.py")
     )
 
     # param 'numbers' has no annotation — should raise a helpful error
@@ -214,7 +213,7 @@ def test_unannotated_param_matching_fixture_raises_helpful_error() -> None:
         pass
 
     with raises(UnannotatedFixtureParamError) as exc_info:
-        session.resolve_for_test(test_fn, helpers.common.make_meta("t.py"))
+        session.resolve_for_test(test_fn, helpers.make_meta("t.py"))
 
     msg = str(exc_info.value)
     assert "numbers" in msg, (
@@ -232,10 +231,8 @@ def test_unannotated_param_matching_fixture_raises_helpful_error() -> None:
 
 def test_wrong_annotation_matching_fixture_raises_helpful_error() -> None:
     """Wrong annotation on a fixture-name param raises UnannotatedFixtureParamError."""
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def(
-            "numbers", lambda: [1, 2, 3], conftest_path="/c.py"
-        )
+    session = helpers.make_session(
+        helpers.make_fixture_def("numbers", lambda: [1, 2, 3], conftest_path="/c.py")
     )
 
     # param 'numbers' has wrong annotation (list[int] instead of Fixture[list[int]])
@@ -243,7 +240,7 @@ def test_wrong_annotation_matching_fixture_raises_helpful_error() -> None:
         pass
 
     with raises(UnannotatedFixtureParamError) as exc_info:
-        session.resolve_for_test(test_fn, helpers.common.make_meta("t.py"))
+        session.resolve_for_test(test_fn, helpers.make_meta("t.py"))
 
     msg = str(exc_info.value)
     assert "numbers" in msg, (
@@ -281,14 +278,14 @@ def test_on_teardown_registers_cleanup() -> None:
         ctx.on_teardown(lambda: calls.append("done"))
         return "val"
 
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def("thing", factory, conftest_path="/c.py")
+    session = helpers.make_session(
+        helpers.make_fixture_def("thing", factory, conftest_path="/c.py")
     )
 
     def fn(thing: Fixture[str]) -> None:
         pass
 
-    meta = helpers.common.make_meta("t.py")
+    meta = helpers.make_meta("t.py")
     kwargs, fn_teardowns = session.resolve_for_test(fn, meta)
     assert kwargs["thing"] == "val", (
         f"fixture using ctx.on_teardown should still return 'val', got "
@@ -331,16 +328,14 @@ def test_fixtures_explicit_name_is_stored() -> None:
 
 def test_resolve_for_test_injects_fixtures_proxy_for_bare_fixtures_annotation() -> None:
     """Test that resolve_for_test injects FixturesProxy for bare Fixtures annotation."""
-    session = helpers.common.make_session()
+    session = helpers.make_session()
 
     # Create the test function with Fixtures annotation
     # Use the actual Fixtures class directly (not string annotation)
     def test_fn(fx: Fixtures) -> None:
         pass
 
-    kwargs, _ = session.resolve_for_test(
-        test_fn, helpers.common.make_meta("/fake/test.py")
-    )
+    kwargs, _ = session.resolve_for_test(test_fn, helpers.make_meta("/fake/test.py"))
     assert "fx" in kwargs, (
         f"Fixtures-annotated param 'fx' should be injected into kwargs, got keys: "
         f"{list(kwargs)}"
@@ -353,14 +348,12 @@ def test_resolve_for_test_injects_fixtures_proxy_for_bare_fixtures_annotation() 
 
 def test_resolve_for_test_fixtures_proxy_has_correct_session() -> None:
     """Verify that FixturesProxy holds reference to the correct session."""
-    session = helpers.common.make_session()
+    session = helpers.make_session()
 
     def test_fn(fx: Fixtures) -> None:
         pass
 
-    kwargs, _ = session.resolve_for_test(
-        test_fn, helpers.common.make_meta("/fake/module.py")
-    )
+    kwargs, _ = session.resolve_for_test(test_fn, helpers.make_meta("/fake/module.py"))
     proxy = kwargs["fx"]
     assert proxy.session is session, (
         f"FixturesProxy.session should be the same session used during resolve, got "
@@ -373,9 +366,9 @@ def test_resolve_for_test_fixtures_proxy_has_correct_session() -> None:
 
 def test_get_fixture_in_namespace_resolves_correct_fixture() -> None:
     """get_fixture_in_namespace() resolves a fixture value by name and namespace."""
-    session = helpers.common.make_session(
-        helpers.common.make_fixture_def("conn", lambda: "db-conn", namespace="db"),
-        helpers.common.make_fixture_def("conn", lambda: "http-conn", namespace="http"),
+    session = helpers.make_session(
+        helpers.make_fixture_def("conn", lambda: "db-conn", namespace="db"),
+        helpers.make_fixture_def("conn", lambda: "http-conn", namespace="http"),
     )
 
     result = session.get_fixture_in_namespace("conn", "db", "/fake/test.py", [])
@@ -393,7 +386,7 @@ def test_get_fixture_in_namespace_resolves_correct_fixture() -> None:
 
 def test_get_fixture_in_namespace_raises_not_found_with_namespace() -> None:
     """get_fixture_in_namespace() raises FixtureNotFoundError for missing fixtures."""
-    session = helpers.common.make_session()
+    session = helpers.make_session()
 
     with raises(FixtureNotFoundError) as exc_info:
         session.get_fixture_in_namespace("conn", "db", "/fake/test.py", [])
@@ -541,11 +534,11 @@ def test_plugin_fixture_provider_injected(ctx: TestContext) -> None:
             return False
 
     provider = FakeDatabaseProvider()
-    mod = helpers.common.make_plugin_module(
+    mod = helpers.make_plugin_module(
         "db_plugin",
         lambda **_: Plugin(fixture_providers=(provider,)),
     )
-    helpers.common.install_module(ctx, "db_plugin", mod)
+    helpers.install_module(ctx, "db_plugin", mod)
 
     registry = load_plugins(["db_plugin"], {})
     assert len(registry.fixture_providers) == 1, (

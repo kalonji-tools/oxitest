@@ -17,7 +17,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import oxitest
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 # -- Helpers -------------------------------------------------------------------
 
@@ -36,7 +38,7 @@ def _run(
     base_env = {**os.environ, "PYTHONPATH": FIXTURES_DIR}
     if env_extra:
         base_env.update(env_extra)
-    return helpers.common.run_oxitest(None, *args, env=base_env, cwd=str(tmp))
+    return helpers.run_oxitest(None, *args, env=base_env, cwd=str(tmp))
 
 
 def _run_top_flag(
@@ -71,7 +73,7 @@ def _run_sub(
     base_env = {**os.environ, "PYTHONPATH": FIXTURES_DIR}
     if env_extra:
         base_env.update(env_extra)
-    return helpers.common.run_oxitest_subcmd(tmp, *args, cwd=".", env=base_env)
+    return helpers.run_oxitest_subcmd(tmp, *args, cwd=".", env=base_env)
 
 
 def _write_infra_project(tmp: TempDir, test_code: str, extra_toml: str = "") -> None:
@@ -198,8 +200,8 @@ def test_cli_extension_discovered_via_query_plugins(tmp: TempDir) -> None:
     """``query plugins`` shows the infra plugin and its CLI extension prefix."""
     _write_infra_project(tmp, "def test_one(): pass\n")
     out, _, rc = _run_sub(tmp, "query", "plugins")
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "oxitest_sample_infra")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "oxitest_sample_infra")
 
 
 def test_prefix_collision_produces_error(tmp: TempDir) -> None:
@@ -246,7 +248,7 @@ def test_plugin_without_extension_still_works(tmp: TempDir) -> None:
     )
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
     out, _, rc = _run(tmp)
-    helpers.integ.assert_passed(out, rc)
+    integ.assert_passed(out, rc)
     assert (tmp / "plugin_activated.txt").exists(), (
         "plugin without CLI extension should be activated during loading"
     )
@@ -274,7 +276,7 @@ def test_plugin_receives_pyproject_settings(tmp: TempDir) -> None:
     )
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
     out, _, rc = _run(tmp)
-    helpers.integ.assert_passed(out, rc)
+    integ.assert_passed(out, rc)
     config = json.loads((tmp / "config_echo.json").read_text())
     assert config["host"] == "my-server", (
         f"plugin_settings should reach plugin, got {config['host']!r}"
@@ -288,7 +290,7 @@ def test_two_cli_extension_plugins_coexist(tmp: TempDir) -> None:
     """Two plugins with different CLI prefixes both discovered without error."""
     _write_both_plugins_project(tmp, "def test_one(): pass\n")
     out, _, rc = _run(tmp)
-    helpers.integ.assert_passed(out, rc)
+    integ.assert_passed(out, rc)
 
 
 def test_plugin_with_cli_extension_activated_after_session(tmp: TempDir) -> None:
@@ -301,7 +303,7 @@ def test_plugin_with_cli_extension_activated_after_session(tmp: TempDir) -> None
     """
     _write_infra_project(tmp, "def test_one(): pass\n")
     out, _, rc = _run(tmp)
-    helpers.integ.assert_passed(out, rc)
+    integ.assert_passed(out, rc)
     assert (tmp / "infra_config_received.json").exists(), (
         "plugin with CLI extension should be activated after session init"
     )
@@ -326,8 +328,8 @@ def test_fixture_provider_injects_into_tests(tmp: TempDir) -> None:
         "    )\n"
     )
     out, _, rc = _run(tmp)
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "got data=hello")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "got data=hello")
 
 
 def test_reporter_receives_events_and_writes_output(tmp: TempDir) -> None:
@@ -338,7 +340,7 @@ def test_reporter_receives_events_and_writes_output(tmp: TempDir) -> None:
     )
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
     out, _, rc = _run(tmp)
-    helpers.integ.assert_passed(out, rc)
+    integ.assert_passed(out, rc)
     reporter_path = tmp / "reporter_output.json"
     assert reporter_path.exists(), "Reporter plugin should write reporter_output.json"
     events = json.loads(reporter_path.read_text())
@@ -371,8 +373,8 @@ def test_execution_wrapper_intercepts_marked_tests(tmp: TempDir) -> None:
         "    assert True, 'remote test should pass'\n"
     )
     out, _, rc = _run(tmp)
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "remote executed")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "remote executed")
 
 
 # -- Multi-plugin interaction --------------------------------------------------
@@ -389,7 +391,7 @@ def test_two_plugins_active_simultaneously(tmp: TempDir) -> None:
     )
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
     out, _, rc = _run(tmp)
-    helpers.integ.assert_passed(out, rc)
+    integ.assert_passed(out, rc)
     assert (tmp / "plugin_activated.txt").exists(), "fixture plugin should be activated"
     assert (tmp / "reporter_output.json").exists(), (
         "reporter plugin should write output"
@@ -442,17 +444,17 @@ def test_fixtures_from_both_plugins_in_same_test(tmp: TempDir) -> None:
         "    )\n"
     )
     out, _, rc = _run(tmp)
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "data=hello")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "data=hello")
 
 
 def test_query_plugins_shows_both_sample_plugins(tmp: TempDir) -> None:
     """``query plugins`` should list both sample plugins when both are configured."""
     _write_both_plugins_project(tmp, "def test_one(): pass\n")
     out, _, rc = _run_sub(tmp, "query", "plugins")
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "oxitest_sample_infra")
-    helpers.integ.assert_contains(out, "oxitest_sample_metrics")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "oxitest_sample_infra")
+    integ.assert_contains(out, "oxitest_sample_metrics")
 
 
 def test_plugin_configs_independent(tmp: TempDir) -> None:
@@ -488,7 +490,7 @@ def test_plugin_configs_independent(tmp: TempDir) -> None:
     )
     (tmp / "test_example.py").write_text("def test_one(): pass\n")
     out, _, rc = _run(tmp)
-    helpers.integ.assert_passed(out, rc)
+    integ.assert_passed(out, rc)
     cfg_x = json.loads((tmp / "config_x.json").read_text())
     cfg_y = json.loads((tmp / "config_y.json").read_text())
     assert cfg_x["host"] == "x-host", (
@@ -589,7 +591,7 @@ def test_plugin_config_precedence(tmp: TempDir, case: CliPrecedenceCase) -> None
     _write_infra_project(tmp, "def test_one(): pass\n")
     out, err, rc = _run(tmp, *case.cli_args, env_extra=case.env_extra or None)
     combined = out + err
-    helpers.integ.assert_passed(combined, rc)
+    integ.assert_passed(combined, rc)
     config = json.loads((tmp / "infra_config_received.json").read_text())
     assert config["host"] == case.expected_host, (
         f"expected host={case.expected_host!r} with cli={case.cli_args} "

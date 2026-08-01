@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-from oxitest import TempDir, helpers, raises
+from oxitest import TempDir, raises
 from oxitest._bridge.conftest_loader import load_fixtures_from_conftest
 from oxitest._bridge.importer import collect_module
+from oxitest._bridge.result import ErrorResult
+from tests import helpers
 
 # ── Group B: Collection expansion ─────────────────────────────────────────────
 
 
 def test_collect_parametrize_expands_to_n_items(tmp: TempDir) -> None:
     """collect_module expands an N-case @parametrize into N CollectedItems."""
-    path = helpers.common.write_test_module(
+    path = helpers.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -42,7 +44,7 @@ def test_collect_parametrize_expands_to_n_items(tmp: TempDir) -> None:
 
 def test_collect_parametrize_item_has_param_values(tmp: TempDir) -> None:
     """Each collected parametrize item carries field values as param_values pairs."""
-    path = helpers.common.write_test_module(
+    path = helpers.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -72,7 +74,7 @@ def test_collect_parametrize_item_has_param_values(tmp: TempDir) -> None:
 
 def test_collect_non_parametrize_has_none_param_id(tmp: TempDir) -> None:
     """Non-parametrized tests have param_id=None and empty param_values."""
-    path = helpers.common.write_test_module(tmp, "def test_foo(): pass\n")
+    path = helpers.write_test_module(tmp, "def test_foo(): pass\n")
     items, _ = collect_module(path)
     assert len(items) == 1, f"expected 1 item, got {len(items)}"
     assert items[0].param_id is None, (
@@ -97,7 +99,7 @@ def test_dict_parametrize_rejects_extra_key(tmp: TempDir) -> None:
         "    pass\n"
     )
     with raises(ImportError, match="unexpected key"):
-        collect_module(helpers.common.write_test_module(tmp, code))
+        collect_module(helpers.write_test_module(tmp, code))
 
 
 def test_dict_parametrize_rejects_missing_key(tmp: TempDir) -> None:
@@ -110,7 +112,7 @@ def test_dict_parametrize_rejects_missing_key(tmp: TempDir) -> None:
         "    pass\n"
     )
     with raises(ImportError, match="missing key"):
-        collect_module(helpers.common.write_test_module(tmp, code))
+        collect_module(helpers.write_test_module(tmp, code))
 
 
 def test_dataclass_parametrize_rejects_non_frozen(tmp: TempDir) -> None:
@@ -128,7 +130,7 @@ def test_dataclass_parametrize_rejects_non_frozen(tmp: TempDir) -> None:
         "    pass\n"
     )
     with raises(ImportError, match="frozen=True"):
-        collect_module(helpers.common.write_test_module(tmp, code))
+        collect_module(helpers.write_test_module(tmp, code))
 
 
 def test_dataclass_parametrize_rejects_mixed_types(tmp: TempDir) -> None:
@@ -152,7 +154,7 @@ def test_dataclass_parametrize_rejects_mixed_types(tmp: TempDir) -> None:
         "    pass\n"
     )
     with raises(ImportError, match="instance of 'CaseA'"):
-        collect_module(helpers.common.write_test_module(tmp, code))
+        collect_module(helpers.write_test_module(tmp, code))
 
 
 def test_fixture_ref_no_session_with_namespace_returns_error(tmp: TempDir) -> None:
@@ -190,12 +192,11 @@ def test_fixture_ref_no_session_with_namespace_returns_error(tmp: TempDir) -> No
         "def test_query(store: Fixture[str]) -> None:\n"
         "    assert store == 'db-conn'\n"
     )
-    result = helpers.common.run_test(
-        str(f), "test_query", session=None, param_id="prod"
-    )
-    assert result.status == "error", (
-        f"FixtureRef with namespace and session=None should produce status='error', "
-        f"got {result.status!r}"
+    result = helpers.run_test(str(f), "test_query", session=None, param_id="prod")
+    result = helpers.assert_result(
+        result,
+        ErrorResult,
+        why="FixtureRef with namespace and session=None should produce status='error'",
     )
     assert "conn" in result.message, (
         f"error message should mention fixture name 'conn', got {result.message!r}"
