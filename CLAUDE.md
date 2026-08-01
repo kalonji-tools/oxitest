@@ -25,11 +25,7 @@ just build
 just test-python
 
 # Run a single Python test file
-# BROKEN in this repo — fails with "skip entry ... matched no coverage subjects"
-# and collects 0 items. The `[tool.oxitest.doctest] skip` entries are #1790's
-# stopgap; on a narrowed run they match nothing and hard-fail collection.
-# Run the whole suite instead until #1790 lands.
-just test-python python/tests/test_fixtures.py
+just test-python python/tests/test_fixture_registry.py
 
 # Run Rust unit tests
 just test-rust

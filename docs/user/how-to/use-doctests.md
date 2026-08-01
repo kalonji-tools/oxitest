@@ -78,11 +78,23 @@ Every entry shape valid in `scope` is valid in `skip`. Skipped subjects produce 
 
 ### Stale entry detection
 
-An entry that matches zero subjects — a typo, a moved file, a renamed symbol — is **stale**. Stale entries surface via the global `strict` dial:
+A **stale entry** is a scope entry — in either `scope` or `skip` — that can never match a coverage subject, under any invocation shape. `--affected`, `--lf`, `-E`, and explicit paths all agree on the same verdict, because staleness is a property of the entry, not of a particular run:
+
+- A `Prefix` (`dir/`) or `File` (`f.py`) entry is stale only when its path does not exist on disk. Matching zero coverage subjects is not, by itself, stale — private-only modules, `test_*.py` files, and `conftest.py` all legitimately yield none, and that is never treated as a typo.
+- A `Symbol` (`f.py::name`) or `Member` (`f.py::Cls::name`) entry is *additionally* stale when its file was scanned but the named symbol produced no coverage subject.
+
+Stale entries surface via the global `strict` dial:
 
 - **`strict` absent** — silent. Stale entries are not reported.
 - **`strict = "enforce"`** — each stale entry surfaces as a Warning diagnostic.
 - **`strict = "abort"`** — each stale entry surfaces as an Error and hard-fails collection.
+
+The diagnostic text tells you which case applies:
+
+```
+<kind> entry '<entry>' names a path that does not exist (remove the entry or fix the path)
+<kind> entry '<entry>' matched no coverage subjects (remove it, or check the symbol name)
+```
 
 This lets a strict project catch drift in its `scope` / `skip` config without a separate lint pass.
 

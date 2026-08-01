@@ -150,17 +150,19 @@ reads a variant-specific field.
 
 ```bash
 just test-python                          # run all Python tests (no rebuild)
-just test-python python/tests/test_fixtures.py  # single file -- see caveat below
+just test-python python/tests/test_fixture_registry.py  # single file
 ```
 
-> **Single-file runs currently fail in this repository.** They abort with
-> `skip entry 'python/tests/helpers/' matched no coverage subjects` and collect
-> zero items. The `[tool.oxitest.doctest] skip` entries in `pyproject.toml` are
-> the stopgap recorded in [#1790](https://github.com/kalonji-tools/oxitest/issues/1790);
-> a narrowed run collects none of the paths they name, and a skip entry that
-> matches nothing is hard-failed under `strict = "abort"` so a typo cannot
-> silently bypass coverage. That guard is right for a full run and wrong for a
-> narrowed one. Until #1790 resolves it, run the whole suite.
+A full run checks every doctest-coverage `scope` / `skip` entry for staleness,
+so a mistyped path still hard-fails under `strict = "abort"`. The verdict is
+static: decided from the entry and the filesystem, never from run state. An
+entry whose path is missing on disk is stale on every invocation shape,
+including `--affected`, `--lf`, `-E`, and explicit CLI paths on a single-file
+run. A `Prefix` or `File` entry whose path exists is never stale — zero
+coverage subjects is routine, not evidence of a typo. Only `Symbol` and
+`Member` entries stay hit-based, gated on exact membership in the scanned set.
+See `StalenessInputs::classify` in `src/pipeline/collection.rs` and
+[ADR-0010](../../adr/0010-doctest-staleness-is-static.md).
 
 ## oxitest-consumer
 
