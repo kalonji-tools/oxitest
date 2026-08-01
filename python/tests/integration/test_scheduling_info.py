@@ -2,48 +2,50 @@
 
 from __future__ import annotations
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_verbose_shows_scheduling_decision(tmp: TempDir) -> None:
     """-v should emit a 'scheduling:' line explaining how tests are dispatched."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={"test_a.py": "def test_one(): pass\n"},
     )
-    _out, err, rc = helpers.common.run_oxitest(tmp, "-v")
-    helpers.integ.assert_passed(_out, rc)
-    helpers.integ.assert_contains(err, "scheduling:")
+    _out, err, rc = helpers.run_oxitest(tmp, "-v")
+    integ.assert_passed(_out, rc)
+    integ.assert_contains(err, "scheduling:")
 
 
 def test_verbose_shows_serial_reason(tmp: TempDir) -> None:
     """-v --serial should mention 'serial' in the scheduling diagnostic output."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={"test_a.py": "def test_one(): pass\n"},
     )
-    _out, err, rc = helpers.common.run_oxitest(tmp, "-v", "--serial")
-    helpers.integ.assert_passed(_out, rc)
-    helpers.integ.assert_contains(err, "serial")
+    _out, err, rc = helpers.run_oxitest(tmp, "-v", "--serial")
+    integ.assert_passed(_out, rc)
+    integ.assert_contains(err, "serial")
 
 
 def test_verbose_shows_strategy(tmp: TempDir) -> None:
     """-v should include the scheduling strategy name in the diagnostic output."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={"test_a.py": "def test_one(): pass\n"},
     )
-    _out, err, rc = helpers.common.run_oxitest(tmp, "-v")
-    helpers.integ.assert_passed(_out, rc)
-    helpers.integ.assert_contains(err, "strategy")
+    _out, err, rc = helpers.run_oxitest(tmp, "-v")
+    integ.assert_passed(_out, rc)
+    integ.assert_contains(err, "strategy")
 
 
 def test_no_scheduling_info_without_verbose(tmp: TempDir) -> None:
     """Without -v, the scheduling diagnostic section should not appear."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={"test_a.py": "def test_one(): pass\n"},
     )
-    _out, err, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(_out, rc)
-    helpers.integ.assert_excludes(err, "scheduling:")
+    _out, err, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(_out, rc)
+    integ.assert_excludes(err, "scheduling:")

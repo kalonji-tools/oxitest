@@ -9,7 +9,9 @@ from __future__ import annotations
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from types import TracebackType
+from typing import TypeVar
 
 from oxitest import TempDir, TestResult
 from oxitest._bridge._fixture_session import _SessionProtocol
@@ -18,30 +20,71 @@ from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.executor import run_test as _run_test
 from tests.helpers.modules import write_test_module
 
+_R = TypeVar("_R", bound=TestResult)
+
+
+def _describe(result: TestResult) -> str:
+    """Name a result and quote its message, for an ``assert_result`` failure.
+
+    Packs the name-plus-optional-message conditional into a single expression so
+    it can sit in an ``assert``'s message slot, which is the half of an
+    ``assert`` that stays lazy. Inlining it would mean a ternary nested inside
+    an f-string. Call it only from a message slot -- hoisting the call to a
+    statement above the ``assert`` makes it eager again.
+    """
+    message = getattr(result, "message", "")
+    return f"{type(result).__name__}({message!r})" if message else type(result).__name__
+
 
 def assert_result(
     result: TestResult | None,
-    expected_type: type[TestResult],
+    expected_type: type[_R],
+    *,
+    why: str = "",
     **fields: object,
-) -> TestResult:
+) -> _R:
     """Narrow a TestResult to a specific variant and assert field values.
 
-    Returns the narrowed result for further assertions.
+    Returns the narrowed result typed as *expected_type* rather than the
+    ``TestResult`` union, so callers can reach variant-specific fields without
+    a second narrowing step. The runtime check was always here; before #1791
+    the return annotation discarded it and ty learned nothing.
+
+    Args:
+        result: The result to narrow. ``None`` fails the assertion.
+        expected_type: The variant *result* must be an instance of. Read via
+            ``getattr(..., "__name__")`` because a ``types.UnionType`` has no
+            ``__name__`` -- ``isinstance`` would accept one, so without this the
+            call would pass forever and then ``AttributeError`` the day it
+            failed. ty rejects a union here, so this is defence, not support.
+        why: Explains why this variant is the contract under test. Appended to
+            every failure message on its own line -- CLAUDE.md requires each
+            assert to say why. The separator is a newline rather than " -- "
+            because the prose itself conventionally uses " -- " to divide claim
+            from consequence, and nesting the two read as a run-on.
+            A result variant field named "why" would bind this parameter instead
+            and its assertion would silently not run; no variant has one. This is
+            asymmetric with *result*/*expected_type*, which are positional-or-
+            keyword -- a colliding field name there raises a loud ``TypeError``.
+        **fields: Field values asserted on the narrowed result.
+
     """
-    assert result is not None, f"expected {expected_type.__name__}, got None"
+    suffix = f"\n{why}" if why else ""
+    expected_name = getattr(expected_type, "__name__", str(expected_type))
+    assert result is not None, f"expected {expected_name}, got None{suffix}"
     assert isinstance(result, expected_type), (
-        f"expected {expected_type.__name__}, got {type(result).__name__}"
+        f"expected {expected_name}, got {_describe(result)}{suffix}"
     )
     for name, expected in fields.items():
         actual = getattr(result, name)
         assert actual == expected, (
-            f"{expected_type.__name__}.{name}: expected {expected!r}, got {actual!r}"
+            f"{expected_name}.{name}: expected {expected!r}, got {actual!r}{suffix}"
         )
     return result
 
 
 def run_oxitest(
-    tmp_path: TempDir | None,
+    tmp_path: TempDir | Path | None,
     *extra_args: str,
     env: dict[str, str] | None = None,
     cwd: str | None = None,
@@ -78,7 +121,7 @@ def run_oxitest(
 
 
 def run_oxitest_subcmd(
-    tmp_path: TempDir | None,
+    tmp_path: TempDir | Path | None,
     *subcmd_and_args: str,
     timeout: int = 60,
     cwd: str | None = None,

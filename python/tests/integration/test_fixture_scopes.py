@@ -1,6 +1,8 @@
 """Integration tests: fixture scope interactions."""
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_shared_fixture_with_parametrize(tmp: TempDir) -> None:
@@ -33,8 +35,8 @@ def test_shared_fixture_with_parametrize(tmp: TempDir) -> None:
         "    assert db == 'conn-1', f'expected conn-1, got {db}'\n"
     )
 
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=3)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=3)
 
 
 def test_shared_and_autouse_both_apply(tmp: TempDir) -> None:
@@ -64,8 +66,8 @@ def test_shared_and_autouse_both_apply(tmp: TempDir) -> None:
         "    assert db == 'shared-conn'\n"
     )
 
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=2)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=2)
 
 
 def test_yield_fixture_teardown_lifo(tmp: TempDir) -> None:
@@ -104,8 +106,8 @@ def test_yield_fixture_teardown_lifo(tmp: TempDir) -> None:
         "    ], f'unexpected order: {conftest.order}'\n"
     )
 
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=2)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=2)
 
 
 def test_skip_takes_precedence_over_xfail(tmp: TempDir) -> None:
@@ -122,7 +124,7 @@ def test_skip_takes_precedence_over_xfail(tmp: TempDir) -> None:
         "    assert True\n"
     )
 
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "1 skipped")
-    helpers.integ.assert_contains(out, "1 passed")
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "1 skipped")
+    integ.assert_contains(out, "1 passed")

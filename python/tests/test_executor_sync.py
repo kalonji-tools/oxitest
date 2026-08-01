@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from oxitest import (
     Fixture,
     TempDir,
-    helpers,
     parametrize,
 )
 from oxitest._bridge._diagnostic_collector import (
@@ -17,7 +16,15 @@ from oxitest._bridge._diagnostic_collector import (
 from oxitest._bridge._fixture_context import _current_teardown_node_id, _warn_teardown
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
-from oxitest._bridge.result import Diagnostic
+from oxitest._bridge.result import (
+    Diagnostic,
+    ErrorResult,
+    FailedResult,
+    PassedResult,
+    SkippedResult,
+    WarnedResult,
+)
+from tests import helpers
 
 
 def test_warn_teardown_emits_diagnostic(
@@ -96,13 +103,12 @@ def test_warn_teardown_picks_up_contextvar(
 
 def test_passing_function(tmp: TempDir) -> None:
     """A passing test produces status='passed' and reports its bare assert line."""
-    result = helpers.common.exec_inline(
-        tmp, "def test_ok(): assert 1 == 1\n", "test_ok"
-    )
-    assert result.status == "passed", (
-        f"simple passing test is the baseline contract -- executor must not mangle"
-        f" results: "
-        f"{result.status!r}"
+    result = helpers.exec_inline(tmp, "def test_ok(): assert 1 == 1\n", "test_ok")
+    result = helpers.assert_result(
+        result,
+        PassedResult,
+        why="simple passing test is the baseline contract -- executor must not mangle"
+        " results",
     )
     assert result.no_message_lines == (1,), (
         f"strict mode relies on no_message_lines to catch bare asserts -- missing this"
@@ -114,12 +120,13 @@ def test_passing_function(tmp: TempDir) -> None:
 
 def test_passing_with_bare_assert_returns_no_message_lines(tmp: TempDir) -> None:
     """Bare assert lines are tracked in no_message_lines for strict-mode checks."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp, "def test_bare():\n    assert 1 == 1\n", "test_bare"
     )
-    assert result.status == "passed", (
-        f"passing test is the baseline contract -- executor must not mangle results: "
-        f"{result.status!r}"
+    result = helpers.assert_result(
+        result,
+        PassedResult,
+        why="passing test is the baseline contract -- executor must not mangle results",
     )
     assert len(result.no_message_lines) == 1, (
         f"exactly one bare assert exists in the source -- over- or under-counting"
@@ -137,12 +144,13 @@ def test_passing_with_message_assert_returns_empty_no_message_lines(
     tmp: TempDir,
 ) -> None:
     """Asserts with a message are not flagged in no_message_lines."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp, 'def test_msg():\n    assert 1 == 1, "one equals one"\n', "test_msg"
     )
-    assert result.status == "passed", (
-        f"passing test is the baseline contract -- executor must not mangle results: "
-        f"{result.status!r}"
+    result = helpers.assert_result(
+        result,
+        PassedResult,
+        why="passing test is the baseline contract -- executor must not mangle results",
     )
     assert result.no_message_lines == (), (
         f"asserts with messages satisfy strict mode -- flagging them would produce"
@@ -153,13 +161,14 @@ def test_passing_with_message_assert_returns_empty_no_message_lines(
 
 def test_failing_assertion_with_message(tmp: TempDir) -> None:
     """A failing assert with a message produces status='failed' with correct lineno."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp, 'def test_bad():\n    assert 1 == 2, "one is not two"\n', "test_bad"
     )
-    assert result.status == "failed", (
-        f"AssertionError maps to 'failed' status, not 'error' -- these are distinct"
-        f" failure modes "
-        f"that reporters and CI gates handle differently: {result.status!r}"
+    result = helpers.assert_result(
+        result,
+        FailedResult,
+        why="AssertionError maps to 'failed' status, not 'error' -- these are distinct"
+        " failure modes that reporters and CI gates handle differently",
     )
     assert result.message == "one is not two", (
         f"the user-provided assertion message is the developer's diagnosis -- losing it"
@@ -185,13 +194,14 @@ def test_failing_assertion_with_message(tmp: TempDir) -> None:
 
 def test_failing_bare_assertion(tmp: TempDir) -> None:
     """A failing bare assert produces status='failed' with an empty message string."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp, "def test_bad():\n    assert 1 == 2\n", "test_bad"
     )
-    assert result.status == "failed", (
-        f"AssertionError maps to 'failed' status, not 'error' -- these are distinct"
-        f" failure modes "
-        f"that reporters and CI gates handle differently: {result.status!r}"
+    result = helpers.assert_result(
+        result,
+        FailedResult,
+        why="AssertionError maps to 'failed' status, not 'error' -- these are distinct"
+        " failure modes that reporters and CI gates handle differently",
     )
     assert result.message == "", (
         f"bare asserts have no user message -- fabricating one would mislead developers"
@@ -218,13 +228,14 @@ def test_failing_bare_assertion(tmp: TempDir) -> None:
 
 def test_error_exception(tmp: TempDir) -> None:
     """An uncaught exception produces status='error' with exception type and message."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp, "def test_error():\n    raise ValueError('boom')\n", "test_error"
     )
-    assert result.status == "error", (
-        f"uncaught exceptions are infrastructure failures, not assertion failures --"
-        f" conflating "
-        f"them loses the signal that something unexpected broke: {result.status!r}"
+    result = helpers.assert_result(
+        result,
+        ErrorResult,
+        why="uncaught exceptions are infrastructure failures, not assertion failures --"
+        " conflating them loses the signal that something unexpected broke",
     )
     assert "ValueError" in result.message, (
         f"the exception type tells developers what category of bug to look for --"
@@ -245,16 +256,16 @@ def test_error_exception(tmp: TempDir) -> None:
 
 def test_skipped_via_unittest(tmp: TempDir) -> None:
     """Raising unittest.SkipTest produces status='skipped' with the skip reason."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "import unittest\ndef test_skip(): raise unittest.SkipTest('reason')\n",
         "test_skip",
     )
-    assert result.status == "skipped", (
-        f"unittest.SkipTest is the stdlib skip protocol -- misclassifying it breaks"
-        f" compatibility "
-        f"with existing test suites that rely on unittest skip semantics:"
-        f" {result.status!r}"
+    result = helpers.assert_result(
+        result,
+        SkippedResult,
+        why="unittest.SkipTest is the stdlib skip protocol -- misclassifying it breaks"
+        " compatibility with existing test suites that rely on unittest skip semantics",
     )
     assert result.message == "reason", (
         f"the skip reason explains why a test was excluded -- losing it makes skip"
@@ -265,21 +276,21 @@ def test_skipped_via_unittest(tmp: TempDir) -> None:
 
 def test_function_not_found_is_error(tmp: TempDir) -> None:
     """Running a non-existent test function name produces status='error'."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp, "def test_real(): pass\n", "test_nonexistent", name="test_foo.py"
     )
-    assert result.status == "error", (
-        f"a missing function is a collection-level defect, not a test failure --"
-        f" reporting it as "
-        f"'error' ensures the runner surfaces broken test references instead of"
-        f" silently skipping "
-        f"them: {result.status!r}"
+    helpers.assert_result(
+        result,
+        ErrorResult,
+        why="a missing function is a collection-level defect, not a test failure --"
+        " reporting it as 'error' ensures the runner surfaces broken test references"
+        " instead of silently skipping them",
     )
 
 
 def test_warning_captured_as_warned_status(tmp: TempDir) -> None:
     """A test that emits a Python warning produces status='warned' with warning type."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "import warnings\n"
         "def test_warn():\n"
@@ -287,10 +298,11 @@ def test_warning_captured_as_warned_status(tmp: TempDir) -> None:
         "    assert 1 == 1\n",
         "test_warn",
     )
-    assert result.status == "warned", (
-        f"warnings are a distinct outcome that strict mode can gate on -- collapsing"
-        f" them into "
-        f"'passed' hides deprecation debt from CI: {result.status!r}"
+    result = helpers.assert_result(
+        result,
+        WarnedResult,
+        why="warnings are a distinct outcome that strict mode can gate on -- collapsing"
+        " them into 'passed' hides deprecation debt from CI",
     )
     assert "DeprecationWarning" in result.message, (
         f"the warning category tells developers whether the warning is actionable now"
@@ -305,7 +317,7 @@ class OperandCase:
 
     source: str
     fn_name: str
-    expected_status: str
+    expected_type: type[FailedResult | ErrorResult]
     expected_left: str
     expected_right: str
     expected_op: str
@@ -316,7 +328,7 @@ class OperandCase:
     compare_equal=OperandCase(
         source="def test_bad():\n    assert 41 == 42\n",
         fn_name="test_bad",
-        expected_status="failed",
+        expected_type=FailedResult,
         expected_left="41",
         expected_right="42",
         expected_op="==",
@@ -324,7 +336,7 @@ class OperandCase:
     bool_assert=OperandCase(
         source="def test_bad():\n    flag = False\n    assert flag\n",
         fn_name="test_bad",
-        expected_status="failed",
+        expected_type=FailedResult,
         expected_left="False",
         expected_right="",
         expected_op="",
@@ -332,7 +344,7 @@ class OperandCase:
     message_assert=OperandCase(
         source='def test_bad():\n    assert 1 == 2, "one is not two"\n',
         fn_name="test_bad",
-        expected_status="failed",
+        expected_type=FailedResult,
         expected_left="1",
         expected_right="2",
         expected_op="==",
@@ -341,7 +353,7 @@ class OperandCase:
     error_no_operands=OperandCase(
         source="def test_error():\n    raise ValueError('boom')\n",
         fn_name="test_error",
-        expected_status="error",
+        expected_type=ErrorResult,
         expected_left="",
         expected_right="",
         expected_op="",
@@ -349,7 +361,7 @@ class OperandCase:
     is_none_check=OperandCase(
         source="def test_bad():\n    result = 42\n    assert result is None\n",
         fn_name="test_bad",
-        expected_status="failed",
+        expected_type=FailedResult,
         expected_left="42",
         expected_right="None",
         expected_op="is",
@@ -359,18 +371,19 @@ def test_assertion_operands(  # noqa: PLR0913
     tmp: TempDir,
     source: str,
     fn_name: str,
-    expected_status: str,
+    expected_type: type[FailedResult | ErrorResult],
     expected_left: str,
     expected_right: str,
     expected_op: str,
     expected_message: str,
 ) -> None:
     """Executor extracts left, right, and op operands from assertion failures."""
-    result = helpers.common.exec_inline(tmp, source, fn_name, name="test_op.py")
-    assert result.status == expected_status, (
-        f"status classification drives reporter rendering and CI gates -- wrong status"
-        f" breaks "
-        f"downstream tooling: status={result.status!r}, message={result.message!r}"
+    result = helpers.exec_inline(tmp, source, fn_name, name="test_op.py")
+    result = helpers.assert_result(
+        result,
+        expected_type,
+        why="status classification drives reporter rendering and CI gates -- wrong"
+        " status breaks downstream tooling",
     )
     actual_left = getattr(result, "left", "")
     actual_right = getattr(result, "right", "")
@@ -403,33 +416,32 @@ def test_assertion_operands(  # noqa: PLR0913
 
 def test_run_test_without_session_backward_compat(tmp: TempDir) -> None:
     """run_test() works without a FixtureSession for tests with no fixture params."""
-    result = helpers.common.exec_inline(
-        tmp, "def test_ok(): assert 1 == 1\n", "test_ok"
-    )
-    assert result.status == "passed", (
-        f"backward compatibility guarantee -- tests with no fixture params must work"
-        f" without a "
-        f"session so existing code does not break when the fixture system evolves:"
-        f" {result.status!r}"
+    result = helpers.exec_inline(tmp, "def test_ok(): assert 1 == 1\n", "test_ok")
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="backward compatibility guarantee -- tests with no fixture params must work"
+        " without a session so existing code does not break when the fixture system"
+        " evolves",
     )
 
 
 def test_run_test_with_fixture_injected(tmp: TempDir) -> None:
     """Executor injects a registered fixture value into Fixture[T]-annotated params."""
-    session = helpers.common.make_session_with("val", lambda: 99)
-    result = helpers.common.exec_inline(
+    session = helpers.make_session_with("val", lambda: 99)
+    result = helpers.exec_inline(
         tmp,
         "from oxitest import Fixture\n"
         "def test_uses_val(val: Fixture[int]) -> None: assert val == 99\n",
         "test_uses_val",
         session=session,
     )
-    assert result.status == "passed", (
-        f"fixture injection is the core DI contract -- if the executor cannot resolve"
-        f" and pass a "
-        f"registered fixture value, the entire fixture system is broken:"
-        f" status={result.status!r}, "
-        f"msg={result.message!r}"
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="fixture injection is the core DI contract -- if the executor cannot"
+        " resolve and pass a registered fixture value, the entire fixture system is"
+        " broken",
     )
 
 
@@ -440,18 +452,19 @@ def test_run_test_fixture_setup_error_returns_error_result(tmp: TempDir) -> None
         msg = "db is down"
         raise RuntimeError(msg)
 
-    session = helpers.common.make_session_with("bad", bad_factory)
-    result = helpers.common.exec_inline(
+    session = helpers.make_session_with("bad", bad_factory)
+    result = helpers.exec_inline(
         tmp,
         "from oxitest import Fixture\n"
         "def test_uses_bad(bad: Fixture[None]) -> None: pass\n",
         "test_uses_bad",
         session=session,
     )
-    assert result.status == "error", (
-        f"fixture setup failures are infrastructure errors, not test failures --"
-        f" conflating them "
-        f"hides the fact that the test never ran: {result.status!r}"
+    result = helpers.assert_result(
+        result,
+        ErrorResult,
+        why="fixture setup failures are infrastructure errors, not test failures --"
+        " conflating them hides the fact that the test never ran",
     )
     assert "bad" in result.message, (
         f"the fixture name tells developers which dependency failed -- without it, they"
@@ -469,18 +482,19 @@ def test_run_test_missing_fixture_returns_error_result(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
 ) -> None:
     """Requesting an unregistered fixture produces status='error' naming the fixture."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "from oxitest import Fixture\n"
         "def test_uses_missing(nonexistent: Fixture[int]) -> None: pass\n",
         "test_uses_missing",
         session=fixture_session,
     )
-    assert result.status == "error", (
-        f"an unregistered fixture is a configuration defect -- reporting it as 'error'"
-        f" ensures the "
-        f"runner surfaces wiring mistakes instead of silently injecting None:"
-        f" {result.status!r}"
+    result = helpers.assert_result(
+        result,
+        ErrorResult,
+        why="an unregistered fixture is a configuration defect -- reporting it as"
+        " 'error' ensures the runner surfaces wiring mistakes instead of silently"
+        " injecting None",
     )
     assert "nonexistent" in result.message, (
         f"naming the missing fixture tells developers exactly what to register -- a"
@@ -497,18 +511,19 @@ def test_run_test_fixture_teardown_runs_after_failure(tmp: TempDir) -> None:
         yield 99
         torn_down.append(True)
 
-    session = helpers.common.make_session_with("val", factory)
-    result = helpers.common.exec_inline(
+    session = helpers.make_session_with("val", factory)
+    result = helpers.exec_inline(
         tmp,
         "from oxitest import Fixture\n"
         "def test_fail(val: Fixture[int]) -> None: assert val == 0, 'not zero'\n",
         "test_fail",
         session=session,
     )
-    assert result.status == "failed", (
-        f"AssertionError maps to 'failed' status, not 'error' -- these are distinct"
-        f" failure modes "
-        f"that reporters and CI gates handle differently: {result.status!r}"
+    helpers.assert_result(
+        result,
+        FailedResult,
+        why="AssertionError maps to 'failed' status, not 'error' -- these are distinct"
+        " failure modes that reporters and CI gates handle differently",
     )
     assert torn_down == [True], (  # teardown ran despite test failure
         f"yield fixture teardown is a cleanup guarantee -- skipping it on failure"
@@ -529,12 +544,12 @@ def test_yield_fixture_teardown_exception_does_not_affect_test_result(
         msg = "teardown exploded"
         raise RuntimeError(msg)
 
-    session = helpers.common.make_session_with("val", factory)
+    session = helpers.make_session_with("val", factory)
     # Force the diagnostic collector to point to this session's diagnostics
     # so teardown diagnostics land here instead of the outer test runner's session.
     diag_token = _diagnostic_collector_var.set(session.diagnostics)
     try:
-        result = helpers.common.exec_inline(
+        result = helpers.exec_inline(
             tmp,
             "from oxitest import Fixture\n"
             "def test_ok(val: Fixture[int]) -> None:\n"
@@ -544,11 +559,11 @@ def test_yield_fixture_teardown_exception_does_not_affect_test_result(
         )
     finally:
         _diagnostic_collector_var.reset(diag_token)
-    assert result.status == "passed", (
-        f"teardown errors are side-effects -- they must not retroactively change a"
-        f" passing verdict "
-        f"or developers lose trust in green results: status={result.status!r}, "
-        f"msg={result.message!r}"
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="teardown errors are side-effects -- they must not retroactively change a"
+        " passing verdict or developers lose trust in green results",
     )
     assert torn_down == ["ran"], (
         f"teardown must execute even when it will raise -- the cleanup side-effects"
@@ -579,12 +594,12 @@ def test_yield_fixture_teardown_exception_does_not_block_next_teardown(
         log.append("b_teardown")
 
     reg = FixtureRegistry()
-    reg.register(helpers.common.make_fixture_def("a", factory_a, conftest_path="/c.py"))
-    reg.register(helpers.common.make_fixture_def("b", factory_b, conftest_path="/c.py"))
+    reg.register(helpers.make_fixture_def("a", factory_a, conftest_path="/c.py"))
+    reg.register(helpers.make_fixture_def("b", factory_b, conftest_path="/c.py"))
     session = FixtureSession(reg)
     diag_token = _diagnostic_collector_var.set(session.diagnostics)
     try:
-        result = helpers.common.exec_inline(
+        result = helpers.exec_inline(
             tmp,
             "from oxitest import Fixture\n"
             "def test_ok(a: Fixture[int], b: Fixture[int]) -> None:\n"
@@ -595,11 +610,11 @@ def test_yield_fixture_teardown_exception_does_not_block_next_teardown(
         )
     finally:
         _diagnostic_collector_var.reset(diag_token)
-    assert result.status == "passed", (
-        f"teardown errors are side-effects -- they must not retroactively change a"
-        f" passing verdict "
-        f"or developers lose trust in green results: status={result.status!r}, "
-        f"msg={result.message!r}"
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="teardown errors are side-effects -- they must not retroactively change a"
+        " passing verdict or developers lose trust in green results",
     )
     assert "a_teardown" in log, (
         f"every fixture teardown must run regardless of other teardown failures --"
@@ -637,12 +652,12 @@ def test_multiple_teardown_failures_all_reported(
         raise ValueError(msg)
 
     reg = FixtureRegistry()
-    reg.register(helpers.common.make_fixture_def("a", factory_a, conftest_path="/c.py"))
-    reg.register(helpers.common.make_fixture_def("b", factory_b, conftest_path="/c.py"))
+    reg.register(helpers.make_fixture_def("a", factory_a, conftest_path="/c.py"))
+    reg.register(helpers.make_fixture_def("b", factory_b, conftest_path="/c.py"))
     session = FixtureSession(reg)
     diag_token = _diagnostic_collector_var.set(session.diagnostics)
     try:
-        result = helpers.common.exec_inline(
+        result = helpers.exec_inline(
             tmp,
             "from oxitest import Fixture\n"
             "def test_ok(a: Fixture[int], b: Fixture[int]) -> None:\n"
@@ -653,11 +668,11 @@ def test_multiple_teardown_failures_all_reported(
         )
     finally:
         _diagnostic_collector_var.reset(diag_token)
-    assert result.status == "passed", (
-        f"teardown errors are side-effects -- even when all teardowns fail, the test"
-        f" body passed "
-        f"and the verdict must reflect that: status={result.status!r},"
-        f" msg={result.message!r}"
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="teardown errors are side-effects -- even when all teardowns fail, the test"
+        " body passed and the verdict must reflect that",
     )
     assert "a_teardown" in log, (
         f"every fixture teardown must attempt cleanup even when all peers also fail --"
@@ -683,7 +698,7 @@ def test_multiple_teardown_failures_all_reported(
 
 def test_compact_parametrize_passes_whole_dataclass(tmp: TempDir) -> None:
     """params: Params receives the whole dataclass, not spread fields."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "import dataclasses\n"
         "import oxitest\n"
@@ -700,17 +715,18 @@ def test_compact_parametrize_passes_whole_dataclass(tmp: TempDir) -> None:
         "test_compact",
         param_id="case1",
     )
-    assert result.status == "passed", (
-        f"compact mode passes the whole dataclass as a single argument -- if resolution"
-        f" breaks, "
-        f"structured test cases lose their grouping and field access fails: "
-        f"status={result.status!r}, msg={result.message!r}"
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="compact mode passes the whole dataclass as a single argument -- if"
+        " resolution breaks, structured test cases lose their grouping and field access"
+        " fails",
     )
 
 
 def test_expanded_parametrize_still_works(tmp: TempDir) -> None:
     """x: int, y: int receives spread fields (existing behaviour preserved)."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "import dataclasses\n"
         "import oxitest\n"
@@ -727,19 +743,18 @@ def test_expanded_parametrize_still_works(tmp: TempDir) -> None:
         "test_expanded",
         param_id="case1",
     )
-    assert result.status == "passed", (
-        f"expanded mode spreads dataclass fields into individual params -- this is the"
-        f" original "
-        f"behavior and must not regress when compact mode is added:"
-        f" status={result.status!r}, "
-        f"msg={result.message!r}"
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="expanded mode spreads dataclass fields into individual params -- this is"
+        " the original behavior and must not regress when compact mode is added",
     )
 
 
 def test_compact_parametrize_mixed_with_fixture(tmp: TempDir) -> None:
     """params: Params + db: Fixture[int] — both resolved correctly."""
-    session = helpers.common.make_session_with("db", lambda: 99)
-    result = helpers.common.exec_inline(
+    session = helpers.make_session_with("db", lambda: 99)
+    result = helpers.exec_inline(
         tmp,
         "import dataclasses\n"
         "import oxitest\n"
@@ -757,17 +772,17 @@ def test_compact_parametrize_mixed_with_fixture(tmp: TempDir) -> None:
         session=session,
         param_id="case1",
     )
-    assert result.status == "passed", (
-        f"compact parametrize and fixture injection must coexist -- if the resolver"
-        f" confuses "
-        f"Params with Fixture[T] annotations, one system stomps the other: "
-        f"status={result.status!r}, msg={result.message!r}"
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="compact parametrize and fixture injection must coexist -- if the resolver"
+        " confuses Params with Fixture[T] annotations, one system stomps the other",
     )
 
 
 def test_expanded_parametrize_with_unrelated_annotation(tmp: TempDir) -> None:
     """Non-fixture param annotated with a different type → expanded mode."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "import dataclasses\n"
         "import oxitest\n"
@@ -782,10 +797,10 @@ def test_expanded_parametrize_with_unrelated_annotation(tmp: TempDir) -> None:
         "test_unrelated",
         param_id="case1",
     )
-    assert result.status == "passed", (
-        f"non-Fixture annotations must not confuse the resolver into compact mode -- if"
-        f" a plain "
-        f"type hint triggers whole-dataclass injection, field spreading silently"
-        f" breaks: "
-        f"status={result.status!r}, msg={result.message!r}"
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="non-Fixture annotations must not confuse the resolver into compact mode --"
+        " if a plain type hint triggers whole-dataclass injection, field spreading"
+        " silently breaks",
     )

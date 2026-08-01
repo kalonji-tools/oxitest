@@ -6,7 +6,7 @@ import types
 from typing import Any, Never
 
 import oxitest
-from oxitest import TestContext, helpers, raises
+from oxitest import TestContext, raises
 from oxitest._bridge.plugin_loader import (
     EAGER_PROTOCOLS,
     LAZY_PROTOCOLS,
@@ -20,6 +20,7 @@ from oxitest._bridge.plugin_loader import (
     needs_eager_import,
 )
 from oxitest.plugin import Plugin
+from tests import helpers
 
 
 def test_plugin_with_eager_protocol_imported_immediately() -> None:
@@ -122,8 +123,8 @@ def test_activated_plugin_entry_default_declared_protocols_is_empty() -> None:
 @oxitest.mark.inprocess
 def test_activate_entry_imports_module(ctx: TestContext) -> None:
     """activate_entry() imports the module and returns an ActivatedPluginEntry."""
-    mod = helpers.common.make_plugin_module("lazy_fixture_plugin", Plugin)
-    helpers.common.install_module(ctx, "lazy_fixture_plugin", mod)
+    mod = helpers.make_plugin_module("lazy_fixture_plugin", Plugin)
+    helpers.install_module(ctx, "lazy_fixture_plugin", mod)
 
     entry = DeferredPluginEntry(
         module_name="lazy_fixture_plugin", declared_protocols=("fixture_provider",)
@@ -160,8 +161,8 @@ def test_activated_plugin_entry_plugin_accessible() -> None:
 @oxitest.mark.inprocess
 def test_load_plugins_defers_lazy_only_plugin(ctx: TestContext) -> None:
     """load_plugins defers plugins with only lazy protocols (no startup import)."""
-    mod = helpers.common.make_plugin_module("lazy_only_plugin", Plugin)
-    helpers.common.install_module(ctx, "lazy_only_plugin", mod)
+    mod = helpers.make_plugin_module("lazy_only_plugin", Plugin)
+    helpers.install_module(ctx, "lazy_only_plugin", mod)
 
     registry = load_plugins(
         ["lazy_only_plugin"],
@@ -182,10 +183,8 @@ def test_load_plugins_eager_imports_plugin_with_eager_protocol(
     ctx: TestContext,
 ) -> None:
     """load_plugins eagerly imports plugins that declare a reporter protocol."""
-    mod = helpers.common.make_plugin_module(
-        "eager_reporter_plugin", lambda **_: Plugin()
-    )
-    helpers.common.install_module(ctx, "eager_reporter_plugin", mod)
+    mod = helpers.make_plugin_module("eager_reporter_plugin", lambda **_: Plugin())
+    helpers.install_module(ctx, "eager_reporter_plugin", mod)
 
     registry = load_plugins(
         ["eager_reporter_plugin"],
@@ -203,8 +202,8 @@ def test_load_plugins_eager_imports_plugin_with_no_protocols_declared(
     ctx: TestContext,
 ) -> None:
     """load_plugins eagerly imports plugins with no protocol declaration (default)."""
-    mod = helpers.common.make_plugin_module("no_protocols_plugin", lambda **_: Plugin())
-    helpers.common.install_module(ctx, "no_protocols_plugin", mod)
+    mod = helpers.make_plugin_module("no_protocols_plugin", lambda **_: Plugin())
+    helpers.install_module(ctx, "no_protocols_plugin", mod)
 
     registry = load_plugins(["no_protocols_plugin"], {})
     assert len(registry.entries) == 1, f"expected 1 entry, got {len(registry.entries)}"
@@ -262,11 +261,11 @@ def test_deferred_fixture_plugin_loaded_via_activate_entry(ctx: TestContext) -> 
         def autouse(self) -> bool:
             return False
 
-    mod = helpers.common.make_plugin_module(
+    mod = helpers.make_plugin_module(
         "deferred_fixture_plugin",
         lambda: Plugin(fixture_providers=(FakeFixtureProvider(),)),
     )
-    helpers.common.install_module(ctx, "deferred_fixture_plugin", mod)
+    helpers.install_module(ctx, "deferred_fixture_plugin", mod)
 
     entry = DeferredPluginEntry(
         module_name="deferred_fixture_plugin", declared_protocols=("fixture_provider",)
@@ -327,8 +326,8 @@ def test_deferred_fixture_plugin_activated_in_phase_2(ctx: TestContext) -> None:
         providers: Any = (FakeFixtureProvider(),)
         return Plugin(fixture_providers=providers)
 
-    mod = helpers.common.make_plugin_module("deferred_fx_phase2", oxitest_plugin)
-    helpers.common.install_module(ctx, "deferred_fx_phase2", mod)
+    mod = helpers.make_plugin_module("deferred_fx_phase2", oxitest_plugin)
+    helpers.install_module(ctx, "deferred_fx_phase2", mod)
 
     # Load with declared fixture_provider protocol → deferred (no CLI ext)
     registry = load_plugins(
@@ -370,7 +369,7 @@ def test_activate_entry_missing_entry_point_raises_plugin_load_error(
 ) -> None:
     """activate_entry() raises PluginLoadError when module has no oxitest_plugin()."""
     mod = types.ModuleType("no_entry_deferred")
-    helpers.common.install_module(ctx, "no_entry_deferred", mod)
+    helpers.install_module(ctx, "no_entry_deferred", mod)
 
     entry = DeferredPluginEntry(
         module_name="no_entry_deferred", declared_protocols=("fixture_provider",)
@@ -392,7 +391,7 @@ def test_activate_entry_exception_wrapped_in_plugin_load_error(
 
     mod = types.ModuleType("broken_deferred_plugin")
     setattr(mod, "oxitest_plugin", broken_entry)  # noqa: B010 — dynamic module attr
-    helpers.common.install_module(ctx, "broken_deferred_plugin", mod)
+    helpers.install_module(ctx, "broken_deferred_plugin", mod)
 
     entry = DeferredPluginEntry(
         module_name="broken_deferred_plugin", declared_protocols=("fixture_provider",)

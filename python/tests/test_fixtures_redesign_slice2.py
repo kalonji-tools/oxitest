@@ -12,7 +12,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
 
 _TESTS_ROOT = Path(__file__).parent
 _DATA_ROOT = _TESTS_ROOT / "data"
@@ -52,7 +53,7 @@ def _run_project(tmp: TempDir, *extra_args: str) -> _Run:
     """Run the slice-2 data-project with a fresh log file."""
     log = Path(tmp) / "events.log"
     env = {**os.environ, "SLICE2_LOG": str(log)}
-    stdout, stderr, rc = helpers.common.run_oxitest(_PROJECT, *extra_args, env=env)
+    stdout, stderr, rc = helpers.run_oxitest(_PROJECT, *extra_args, env=env)
     events = tuple(log.read_text().splitlines()) if log.exists() else ()
     return _Run(stdout=stdout, stderr=stderr, rc=rc, events=events)
 
@@ -173,7 +174,7 @@ def test_exitfirst_still_disposes(tmp: TempDir) -> None:
         "    assert fx.pkg.resource is not None, 'should not be reached'\n"
     )
 
-    out, err, rc = helpers.common.run_oxitest(None, "-x", cwd=str(root))
+    out, err, rc = helpers.run_oxitest(None, "-x", cwd=str(root))
 
     assert rc != 0, (
         f"the project must fail so -x actually aborts; rc={rc}\n"
@@ -219,7 +220,7 @@ def test_old_shared_fixture_api_unaffected(tmp: TempDir) -> None:
             "    assert resource == 'res', 'shared fixture must still inject'\n"
         )
 
-    out, err, rc = helpers.common.run_oxitest(tmp, "--serial")
+    out, err, rc = helpers.run_oxitest(tmp, "--serial")
 
     assert rc == 0, f"old shared=True API regressed:\nstdout:\n{out}\nstderr:\n{err}"
     events = log.read_text().splitlines()
@@ -263,9 +264,7 @@ def test_failing_module_teardown_is_reported(tmp: TempDir) -> None:
         "    assert fx.pkg.mod_raiser == 'm', 'fixture injects before it fails'\n"
     )
 
-    out, err, rc = helpers.common.run_oxitest(
-        None, "--serial", "--warnings", cwd=str(root)
-    )
+    out, err, rc = helpers.run_oxitest(None, "--serial", "--warnings", cwd=str(root))
 
     assert rc == 0, (
         f"a failing teardown must not fail the run (rc={rc})\n"
@@ -306,7 +305,7 @@ def test_failing_shared_teardown_is_reported(tmp: TempDir) -> None:
         "    assert shared_raiser == 's', 'shared fixture injects'\n"
     )
 
-    out, err, rc = helpers.common.run_oxitest(tmp, "--serial", "--warnings")
+    out, err, rc = helpers.run_oxitest(tmp, "--serial", "--warnings")
 
     assert rc == 0, (
         f"a failing teardown must not fail the run (rc={rc})\n"
@@ -353,7 +352,7 @@ def test_lifetime_inversion_resolves_without_crashing(tmp: TempDir) -> None:
         "    assert fx.pkg.long_lived == 'holds:fresh', 'inverted dep resolves'\n"
     )
 
-    out, err, rc = helpers.common.run_oxitest(None, "--serial", cwd=str(root))
+    out, err, rc = helpers.run_oxitest(None, "--serial", cwd=str(root))
 
     assert rc == 0, (
         f"a module-lifetime fixture depending on a function-lifetime one "

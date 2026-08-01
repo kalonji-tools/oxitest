@@ -15,7 +15,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
 
 _TESTS_ROOT = Path(__file__).parent
 _DATA_ROOT = _TESTS_ROOT / "data"
@@ -63,7 +64,7 @@ def _run_project(tmp: TempDir, *extra_args: str) -> _Run:
     """Run the slice-3 data-project with a fresh log file."""
     log = Path(tmp) / "events.log"
     env = {**os.environ, "SLICE3_LOG": str(log)}
-    stdout, stderr, rc = helpers.common.run_oxitest(_PROJECT, *extra_args, env=env)
+    stdout, stderr, rc = helpers.run_oxitest(_PROJECT, *extra_args, env=env)
     events = tuple(log.read_text().splitlines()) if log.exists() else ()
     return _Run(stdout=stdout, stderr=stderr, rc=rc, events=events)
 
@@ -179,7 +180,7 @@ def test_no_collapse_warning_without_a_package_declaration(tmp: TempDir) -> None
     # Arrange — the slice-2 project declares only lifetime="module".
     log = Path(tmp) / "events.log"
     env = {**os.environ, "SLICE2_LOG": str(log)}
-    stdout, _stderr, _rc = helpers.common.run_oxitest(
+    stdout, _stderr, _rc = helpers.run_oxitest(
         _DATA_ROOT / "slice2_module_lifetime", "--warnings", env=env
     )
 
@@ -210,7 +211,7 @@ def test_inprocess_inside_a_package_is_rejected_at_collection(tmp: TempDir) -> N
     env = {**os.environ, "SLICE3_LOG": str(log)}
 
     # Act
-    stdout, stderr, rc = helpers.common.run_oxitest(
+    stdout, stderr, rc = helpers.run_oxitest(
         _DATA_ROOT / "slice3_inprocess_reject", env=env
     )
 

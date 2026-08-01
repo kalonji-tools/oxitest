@@ -7,12 +7,12 @@ from collections.abc import Callable
 from types import MappingProxyType
 from typing import Any
 
-from oxitest import helpers
 from oxitest._bridge._middleware import (
     ExecutionPlan,
     build_pipeline,
 )
 from oxitest._bridge.result import TestResult, WarnedResult
+from tests import helpers
 
 
 class _UppercaseMiddleware:
@@ -56,7 +56,7 @@ def test_build_pipeline_no_middlewares() -> None:
 
     execute = build_pipeline([], plan, base)
     result = execute()
-    helpers.common.assert_result(result, WarnedResult, message="ok")
+    helpers.assert_result(result, WarnedResult, message="ok")
 
 
 def test_build_pipeline_single_middleware() -> None:
@@ -75,7 +75,7 @@ def test_build_pipeline_single_middleware() -> None:
 
     execute = build_pipeline([_UppercaseMiddleware()], plan, base)
     result = execute()
-    helpers.common.assert_result(result, WarnedResult, message="HELLO")
+    helpers.assert_result(result, WarnedResult, message="HELLO")
 
 
 def test_build_pipeline_ordering() -> None:
@@ -95,7 +95,7 @@ def test_build_pipeline_ordering() -> None:
     mws = [_SkipMiddleware(), _UppercaseMiddleware()]
     execute = build_pipeline(mws, plan, base)
     result = execute()
-    helpers.common.assert_result(result, WarnedResult, message="BASE")
+    helpers.assert_result(result, WarnedResult, message="BASE")
 
 
 def test_build_pipeline_skip_middleware_is_noop() -> None:
@@ -114,4 +114,4 @@ def test_build_pipeline_skip_middleware_is_noop() -> None:
 
     execute = build_pipeline([_SkipMiddleware()], plan, base)
     result = execute()
-    helpers.common.assert_result(result, WarnedResult, message="unchanged")
+    helpers.assert_result(result, WarnedResult, message="unchanged")

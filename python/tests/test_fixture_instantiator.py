@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from oxitest import Fixture, helpers, raises
+from oxitest import Fixture, raises
 from oxitest._bridge._errors import (
     AmbiguousFixtureError,
     BroadFixtureTypeError,
@@ -29,6 +29,7 @@ from oxitest._bridge._fixture_registry import (
 from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.plugin_loader import PluginRegistry
+from tests import helpers
 
 
 class _PluginType:
@@ -48,7 +49,7 @@ def _make_instantiator(
 def test_resolve_simple_fixture() -> None:
     """resolve_fixture should return the factory's return value for a known fixture."""
     inst, _reg = _make_instantiator(
-        helpers.common.make_fixture_def("db", lambda: "conn", conftest_path="/c.py")
+        helpers.make_fixture_def("db", lambda: "conn", conftest_path="/c.py")
     )
     teardowns: list = []
 
@@ -70,8 +71,8 @@ def test_resolve_cycle_raises() -> None:
         pass
 
     inst, _reg = _make_instantiator(
-        helpers.common.make_fixture_def("a", fx_a, conftest_path="/c.py"),
-        helpers.common.make_fixture_def("b", fx_b, conftest_path="/c.py"),
+        helpers.make_fixture_def("a", fx_a, conftest_path="/c.py"),
+        helpers.make_fixture_def("b", fx_b, conftest_path="/c.py"),
     )
 
     with raises(FixtureCycleError):
@@ -99,7 +100,7 @@ def test_resolve_not_found_raises() -> None:
 def test_resolve_shared_uses_scope_refs() -> None:
     """Shared fixtures are stored in the ScopeRefs cache after first resolution."""
     inst, _reg = _make_instantiator(
-        helpers.common.make_fixture_def(
+        helpers.make_fixture_def(
             "shared_db", lambda: "shared_conn", conftest_path="/c.py", shared=True
         )
     )
@@ -122,7 +123,7 @@ def test_resolve_shared_uses_scope_refs() -> None:
 def test_timing_recorded() -> None:
     """get_fixture_timings records setup_count and name for each resolved fixture."""
     inst, _reg = _make_instantiator(
-        helpers.common.make_fixture_def("fast", lambda: 1, conftest_path="/c.py")
+        helpers.make_fixture_def("fast", lambda: 1, conftest_path="/c.py")
     )
 
     inst.resolve_fixture(
@@ -202,7 +203,7 @@ def test_resolve_param_type_miss_name_fallback() -> None:
     class UnrelatedType:
         pass
 
-    defn = helpers.common.make_fixture_def(
+    defn = helpers.make_fixture_def(
         "my_fixture",
         lambda: "value",
         conftest_path="/c.py",
@@ -254,7 +255,7 @@ def test_resolve_param_prefers_param_name_over_type_resolved_name() -> None:
     class DbConn:
         pass
 
-    defn_primary = helpers.common.make_fixture_def(
+    defn_primary = helpers.make_fixture_def(
         "db",
         DbConn,
         conftest_path="/c.py",

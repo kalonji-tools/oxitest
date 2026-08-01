@@ -8,7 +8,9 @@ import tempfile
 from pathlib import Path
 
 import oxitest
-from oxitest import Fixture, TempDir, helpers
+from oxitest import Fixture, TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_list_prints_node_ids_and_exits_zero(tmp: TempDir) -> None:
@@ -18,10 +20,10 @@ def test_list_prints_node_ids_and_exits_zero(tmp: TempDir) -> None:
         "def test_beta(): assert True\n"
         "def test_gamma(): assert True\n"
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "tests")
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "test_alpha", "test_beta", "test_gamma")
-    helpers.integ.assert_excludes(out, "passed")
+    out, _, rc = helpers.run_oxitest_subcmd(tmp, "query", "tests")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "test_alpha", "test_beta", "test_gamma")
+    integ.assert_excludes(out, "passed")
 
 
 def test_list_detailed_shows_marks_and_fixtures(tmp: TempDir) -> None:
@@ -38,9 +40,9 @@ def test_list_detailed_shows_marks_and_fixtures(tmp: TempDir) -> None:
         "def test_one(): assert True\n"
         "def test_two(my_db: Fixture[str]): assert True\n"
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "tests")
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "test_one", "test_two")
+    out, _, rc = helpers.run_oxitest_subcmd(tmp, "query", "tests")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "test_one", "test_two")
 
 
 def test_expression_filter(tmp: TempDir) -> None:
@@ -48,8 +50,8 @@ def test_expression_filter(tmp: TempDir) -> None:
     (tmp / "test_kw.py").write_text(
         "def test_alpha(): assert True\ndef test_beta(): assert False\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "-E", "name(alpha)")
-    helpers.integ.assert_passed(out, rc, count=1)
+    out, _, rc = helpers.run_oxitest(tmp, "-E", "name(alpha)")
+    integ.assert_passed(out, rc, count=1)
 
 
 def test_serial_flag(tmp: TempDir) -> None:
@@ -57,8 +59,8 @@ def test_serial_flag(tmp: TempDir) -> None:
     (tmp / "test_serial.py").write_text(
         "def test_a(): assert True\ndef test_b(): assert True\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--serial")
-    helpers.integ.assert_passed(out, rc)
+    out, _, rc = helpers.run_oxitest(tmp, "--serial")
+    integ.assert_passed(out, rc)
 
 
 def test_json_output(tmp: TempDir) -> None:
@@ -67,8 +69,8 @@ def test_json_output(tmp: TempDir) -> None:
         "def test_one(): assert True\ndef test_two(): assert True\n"
     )
     json_path = Path(tmp) / "results.json"
-    out, _, rc = helpers.common.run_oxitest(tmp, "--json", str(json_path))
-    helpers.integ.assert_passed(out, rc)
+    out, _, rc = helpers.run_oxitest(tmp, "--json", str(json_path))
+    integ.assert_passed(out, rc)
     assert json_path.exists(), "--json should create the output file"
     data = json.loads(json_path.read_text())
     passed = data["results"]["summary"]["passed"]
@@ -81,13 +83,11 @@ def test_junit_xml_output(tmp: TempDir) -> None:
         "def test_first(): assert True\ndef test_second(): assert True\n"
     )
     xml_path = Path(tmp) / "results.xml"
-    out, _, rc = helpers.common.run_oxitest(tmp, "--junit-xml", str(xml_path))
-    helpers.integ.assert_passed(out, rc)
+    out, _, rc = helpers.run_oxitest(tmp, "--junit-xml", str(xml_path))
+    integ.assert_passed(out, rc)
     assert xml_path.exists(), "--junit-xml should create the output file"
     xml_content = xml_path.read_text()
-    helpers.integ.assert_contains(
-        xml_content, "<testsuites", "test_first", "test_second"
-    )
+    integ.assert_contains(xml_content, "<testsuites", "test_first", "test_second")
 
 
 def test_expression_marker_filter(tmp: TempDir) -> None:
@@ -100,39 +100,39 @@ def test_expression_marker_filter(tmp: TempDir) -> None:
     )
     pyproject = Path(tmp) / "pyproject.toml"
     pyproject.write_text('[tool.oxitest]\nmarkers = ["slow: slow tests"]\n')
-    out, _, rc = helpers.common.run_oxitest(tmp, "-E", "mark(slow)")
-    helpers.integ.assert_passed(out, rc, count=1)
+    out, _, rc = helpers.run_oxitest(tmp, "-E", "mark(slow)")
+    integ.assert_passed(out, rc, count=1)
 
 
 def test_exitfirst_conflicts_with_maxfail(tmp: TempDir) -> None:
     """Flag conflict: -x and --maxfail are mutually exclusive."""
     (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    _, stderr, rc = helpers.common.run_oxitest(tmp, "-x", "--maxfail", "5")
+    _, stderr, rc = helpers.run_oxitest(tmp, "-x", "--maxfail", "5")
     assert rc == 4, f"-x/--maxfail conflict should exit 4, got {rc}"
-    helpers.integ.assert_contains(stderr, "-x", "--maxfail")
+    integ.assert_contains(stderr, "-x", "--maxfail")
 
 
 def test_v_with_quiet_is_valid(tmp: TempDir) -> None:
     """-v -q is valid: quiet trumps verbose."""
     (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    out, _, rc = helpers.common.run_oxitest(tmp, "-v", "-q")
+    out, _, rc = helpers.run_oxitest(tmp, "-v", "-q")
     # Quiet trumps, so this runs silently with exit 0
-    helpers.integ.assert_passed(out, rc)
+    integ.assert_passed(out, rc)
 
 
 def test_schedule_conflicts_with_serial(tmp: TempDir) -> None:
     """Flag conflict: --schedule has no effect in serial mode."""
     (tmp / "test_a.py").write_text("def test_ok(): pass\n")
-    _, stderr, rc = helpers.common.run_oxitest(tmp, "--schedule", "random", "--serial")
+    _, stderr, rc = helpers.run_oxitest(tmp, "--schedule", "random", "--serial")
     assert rc == 4, f"--schedule/--serial conflict should exit 4, got {rc}"
-    helpers.integ.assert_contains(stderr, "--schedule", "--serial")
+    integ.assert_contains(stderr, "--schedule", "--serial")
 
 
 def test_debug_with_passing_test_exits_0(tmp: TempDir) -> None:
     """`debug` subcommand on a passing test exits 0 (no pdb triggered)."""
     (tmp / "test_ok.py").write_text("def test_pass():\n    assert True\n")
-    out, _, rc = helpers.common.run_oxitest_subcmd(tmp, "debug")
-    helpers.integ.assert_passed(out, rc)
+    out, _, rc = helpers.run_oxitest_subcmd(tmp, "debug")
+    integ.assert_passed(out, rc)
 
 
 def test_debug_always_is_accepted(tmp: TempDir) -> None:
@@ -144,7 +144,7 @@ def test_debug_always_is_accepted(tmp: TempDir) -> None:
     """
     (tmp / "test_a.py").write_text("def test_ok(): pass\n")
     try:
-        _, stderr, rc = helpers.common.run_oxitest_subcmd(
+        _, stderr, rc = helpers.run_oxitest_subcmd(
             tmp,
             "debug",
             "--always",
@@ -188,7 +188,7 @@ def test_debug_always_with_plugin_backend(tmp: TempDir) -> None:
         **os.environ,
         "PYTHONPATH": str(tmp) + os.pathsep + os.environ.get("PYTHONPATH", ""),
     }
-    out, err, rc = helpers.common.run_oxitest_subcmd(
+    out, err, rc = helpers.run_oxitest_subcmd(
         tmp,
         "debug",
         "--always",
@@ -207,7 +207,7 @@ def test_debug_always_with_plugin_backend(tmp: TempDir) -> None:
 
 def test_keep_tmp_preserves_on_failure(tmp: TempDir) -> None:
     """--keep-tmp preserves TempDir when test fails."""
-    helpers.common.write_test_file(
+    helpers.write_test_file(
         tmp,
         """\
 from oxitest import Fixture
@@ -219,8 +219,8 @@ def test_uses_tmp(t: Fixture[TempDir]) -> None:
 """,
         "test_fail_tmp.py",
     )
-    out, _stderr, rc = helpers.common.run_oxitest(tmp, "--keep-tmp")
-    helpers.integ.assert_failed(out, rc)
+    out, _stderr, rc = helpers.run_oxitest(tmp, "--keep-tmp")
+    integ.assert_failed(out, rc)
     # The TempDir prefix is the test function name; find any preserved artifact.
     # tempfile.gettempdir() gives the system temp dir without hardcoding /tmp.
     tmp_root = Path(tempfile.gettempdir())
@@ -235,7 +235,7 @@ def test_uses_tmp(t: Fixture[TempDir]) -> None:
 
 def test_keep_tmp_cleans_on_pass(tmp: TempDir) -> None:
     """--keep-tmp=failed cleans up when test passes."""
-    helpers.common.write_test_file(
+    helpers.write_test_file(
         tmp,
         """\
 from oxitest import Fixture
@@ -247,9 +247,9 @@ def test_uses_tmp(t: Fixture[TempDir]) -> None:
 """,
         "test_pass_tmp.py",
     )
-    out, stderr, rc = helpers.common.run_oxitest(tmp, "--keep-tmp")
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_excludes(stderr, "KEPT")
+    out, stderr, rc = helpers.run_oxitest(tmp, "--keep-tmp")
+    integ.assert_passed(out, rc)
+    integ.assert_excludes(stderr, "KEPT")
 
 
 def test_query_tests_shows_parametrized_function(tmp: TempDir) -> None:
@@ -265,9 +265,9 @@ def test_query_tests_shows_parametrized_function(tmp: TempDir) -> None:
         "def test_abs(case: Case) -> None:\n"
         "    assert abs(case.x) == case.expected, 'mismatch'\n"
     )
-    out, _stderr, rc = helpers.common.run_oxitest_subcmd(tmp, "query", "tests")
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "test_abs")
+    out, _stderr, rc = helpers.run_oxitest_subcmd(tmp, "query", "tests")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "test_abs")
 
 
 # ── Issue #584: Integration tests for 6 untested CLI flags ───────────────────
@@ -280,7 +280,7 @@ def test_affected_filters_to_changed_tests(git_repo: Fixture[Path]) -> None:
     git = ["git", "-C", str(tmp)]
 
     # Clear git env vars that prek/pre-commit may set.
-    clean_env = helpers.integ.clean_git_env()
+    clean_env = integ.clean_git_env()
 
     def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
@@ -295,7 +295,7 @@ def test_affected_filters_to_changed_tests(git_repo: Fixture[Path]) -> None:
     run(*git, "add", "test_new.py")
 
     # Act — use clean env so oxitest doesn't see prek's GIT_* vars
-    out, _, rc = helpers.common.run_oxitest(
+    out, _, rc = helpers.run_oxitest(
         tmp,
         "--affected=HEAD",
         env=clean_env,
@@ -303,8 +303,8 @@ def test_affected_filters_to_changed_tests(git_repo: Fixture[Path]) -> None:
     )
 
     # Assert — only the new file should be collected (1 test, not 2)
-    helpers.integ.assert_passed(out, rc, count=1)
-    helpers.integ.assert_excludes(out, "2 passed")
+    integ.assert_passed(out, rc, count=1)
+    integ.assert_excludes(out, "2 passed")
 
 
 @oxitest.mark.timeout(120)
@@ -312,7 +312,7 @@ def test_affected_with_subdirectory_path(git_repo: Fixture[Path]) -> None:
     """--affected works when a subdirectory is passed as the path argument."""
     tmp = git_repo
     git = ["git", "-C", str(tmp)]
-    clean_env = helpers.integ.clean_git_env()
+    clean_env = integ.clean_git_env()
 
     def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
@@ -329,7 +329,7 @@ def test_affected_with_subdirectory_path(git_repo: Fixture[Path]) -> None:
     run(*git, "add", "tests/test_two.py")
 
     # Act — pass the subdirectory as the path (this triggered the bug)
-    out, _, rc = helpers.common.run_oxitest(
+    out, _, rc = helpers.run_oxitest(
         subdir,
         "--affected=HEAD",
         env=clean_env,
@@ -337,8 +337,8 @@ def test_affected_with_subdirectory_path(git_repo: Fixture[Path]) -> None:
     )
 
     # Assert — only the new file should be collected (1 test, not 2)
-    helpers.integ.assert_passed(out, rc, count=1)
-    helpers.integ.assert_excludes(out, "2 passed")
+    integ.assert_passed(out, rc, count=1)
+    integ.assert_excludes(out, "2 passed")
 
 
 def test_tb_line_shows_compact_failure(tmp: TempDir) -> None:
@@ -346,12 +346,12 @@ def test_tb_line_shows_compact_failure(tmp: TempDir) -> None:
     (tmp / "test_fail.py").write_text(
         "def test_boom():\n    assert 1 == 2, 'one is not two'\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--tb", "line")
-    helpers.integ.assert_failed(out, rc)
+    out, _, rc = helpers.run_oxitest(tmp, "--tb", "line")
+    integ.assert_failed(out, rc)
     # --tb=line emits a one-liner with file:line and message
-    helpers.integ.assert_contains(out, "test_fail.py", "one is not two")
+    integ.assert_contains(out, "test_fail.py", "one is not two")
     # No diagnostic box chrome
-    helpers.integ.assert_excludes(out, "┌", "└")
+    integ.assert_excludes(out, "┌", "└")
 
 
 def test_tb_no_suppresses_traceback(tmp: TempDir) -> None:
@@ -359,10 +359,10 @@ def test_tb_no_suppresses_traceback(tmp: TempDir) -> None:
     (tmp / "test_fail.py").write_text(
         "def test_kaboom():\n    assert False, 'should not see traceback'\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--tb", "no")
-    helpers.integ.assert_failed(out, rc, count=1)
+    out, _, rc = helpers.run_oxitest(tmp, "--tb", "no")
+    integ.assert_failed(out, rc, count=1)
     # No diagnostic block, no one-liner
-    helpers.integ.assert_excludes(out, "┌", "should not see traceback")
+    integ.assert_excludes(out, "┌", "should not see traceback")
 
 
 def test_timeout_cli_flag(tmp: TempDir) -> None:
@@ -370,8 +370,8 @@ def test_timeout_cli_flag(tmp: TempDir) -> None:
     (tmp / "test_slow.py").write_text(
         "import time\n\ndef test_hangs():\n    time.sleep(30)\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--timeout", "1")
-    helpers.integ.assert_failed(out, rc)
+    out, _, rc = helpers.run_oxitest(tmp, "--timeout", "1")
+    integ.assert_failed(out, rc)
     assert "1 failed" in out or "timeout" in out.lower(), (
         f"output should indicate timeout failure: {out!r}"
     )
@@ -385,10 +385,10 @@ def test_durations_shows_slowest_tests(tmp: TempDir) -> None:
         "def test_slow():\n"
         "    time.sleep(0.05)\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--durations", "1")
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out.lower(), "slowest")
-    helpers.integ.assert_contains(out, "ms")
+    out, _, rc = helpers.run_oxitest(tmp, "--durations", "1")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out.lower(), "slowest")
+    integ.assert_contains(out, "ms")
 
 
 def test_durations_shows_fixture_timings(tmp: TempDir) -> None:
@@ -407,7 +407,7 @@ def test_durations_shows_fixture_timings(tmp: TempDir) -> None:
         "def test_uses_slow(slow_setup: oxi.Fixture[int]):\n"
         '    assert slow_setup == 42, "fixture should return 42"\n'
     )
-    out, err, rc = helpers.common.run_oxitest(tmp, "--durations", "5")
+    out, err, rc = helpers.run_oxitest(tmp, "--durations", "5")
     assert rc == 0, (
         f"--durations with fixtures should exit 0, got {rc}\n"
         f"stdout: {out!r}\nstderr: {err!r}"
@@ -418,11 +418,11 @@ def test_durations_shows_fixture_timings(tmp: TempDir) -> None:
 
 def test_capture_environment_prints_versions() -> None:
     """`env` subcommand prints Python and oxitest versions and exits 0."""
-    out, _, rc = helpers.common.run_oxitest_subcmd(None, "env")
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out.lower(), "python:", "oxitest:")
+    out, _, rc = helpers.run_oxitest_subcmd(None, "env")
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out.lower(), "python:", "oxitest:")
     # Should NOT run tests
-    helpers.integ.assert_excludes(out, "passed")
+    integ.assert_excludes(out, "passed")
 
 
 @oxitest.mark.timeout(120)
@@ -435,8 +435,8 @@ def test_inprocess_mark_runs_on_main_process(tmp: TempDir) -> None:
         "    assert True\n"
     )
     (tmp / "test_normal.py").write_text("def test_worker():\n    assert True\n")
-    out, _, rc = helpers.common.run_oxitest(tmp, "--workers", "2")
-    helpers.integ.assert_passed(out, rc, count=2)
+    out, _, rc = helpers.run_oxitest(tmp, "--workers", "2")
+    integ.assert_passed(out, rc, count=2)
 
 
 # ── Dogfood: cross-feature integration tests (#788) ─────────────────────────
@@ -444,7 +444,7 @@ def test_inprocess_mark_runs_on_main_process(tmp: TempDir) -> None:
 
 def test_parametrize_with_fixtures_in_parallel(tmp: TempDir) -> None:
     """Parametrized tests using fixtures run correctly across parallel workers."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         conftest="""\
             import oxitest as oxi
@@ -478,13 +478,13 @@ def test_parametrize_with_fixtures_in_parallel(tmp: TempDir) -> None:
             """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--workers", "2")
-    helpers.integ.assert_passed(out, rc, count=3)
+    out, _, rc = helpers.run_oxitest(tmp, "--workers", "2")
+    integ.assert_passed(out, rc, count=3)
 
 
 def test_single_parametrize_case(tmp: TempDir) -> None:
     """@oxi.parametrize with a single case (only=Case(...)) runs one test."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_single.py": """\
@@ -503,13 +503,13 @@ def test_single_parametrize_case(tmp: TempDir) -> None:
             """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=1)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=1)
 
 
 def test_class_based_tests_with_fixtures(tmp: TempDir) -> None:
     """Class-based tests receive fixtures via method parameters."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         conftest="""\
             import oxitest as oxi
@@ -533,8 +533,8 @@ def test_class_based_tests_with_fixtures(tmp: TempDir) -> None:
             """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=2)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=2)
 
 
 def test_nested_conftest_reexport(tmp: TempDir) -> None:
@@ -559,13 +559,13 @@ def test_nested_conftest_reexport(tmp: TempDir) -> None:
         "def test_uses_parent_fixture(db: Fixture[str]) -> None:\n"
         "    assert db == 'root_db', 'should resolve parent fixture'\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=1)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=1)
 
 
 def test_importorskip_skips_missing_module(tmp: TempDir) -> None:
     """oxi.importorskip skips the test when the requested module is not installed."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_skip_import.py": """\
@@ -578,14 +578,14 @@ def test_importorskip_skips_missing_module(tmp: TempDir) -> None:
             """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains(out, "1 skipped")
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc)
+    integ.assert_contains(out, "1 skipped")
 
 
 def test_warns_captures_deprecation_warning(tmp: TempDir) -> None:
     """oxi.warns() captures expected warnings through the CLI pipeline."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_warns.py": """\
@@ -598,13 +598,13 @@ def test_warns_captures_deprecation_warning(tmp: TempDir) -> None:
             """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=1)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=1)
 
 
 def test_autouse_yield_fixture_teardown(tmp: TempDir) -> None:
     """Autouse yield fixture runs teardown after each test."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         conftest="""\
             import oxitest as oxi
@@ -632,5 +632,5 @@ def test_autouse_yield_fixture_teardown(tmp: TempDir) -> None:
             """,
         },
     )
-    out, _, rc = helpers.common.run_oxitest(tmp, "--serial")
-    helpers.integ.assert_passed(out, rc, count=2)
+    out, _, rc = helpers.run_oxitest(tmp, "--serial")
+    integ.assert_passed(out, rc, count=2)

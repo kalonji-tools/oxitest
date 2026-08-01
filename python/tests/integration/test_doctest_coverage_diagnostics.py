@@ -12,12 +12,14 @@ the ``doctest.coverage`` context and inline messages verbatim; without it the
 summary collapses to a bare count and we can't assert on the wording.
 """
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_missing_header_produces_warning(tmp: TempDir) -> None:
     """A public subject without `Examples:` in its docstring emits a WARNING."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={},
         pyproject="""\
@@ -37,7 +39,7 @@ def test_missing_header_produces_warning(tmp: TempDir) -> None:
             ),
         },
     )
-    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    out, err, _rc = helpers.run_oxitest(tmp, "--warnings")
     combined = out + err
     assert "doctest.coverage" in combined, (
         "the reporter must surface the coverage-rule context so users know "
@@ -56,7 +58,7 @@ def test_missing_header_produces_warning(tmp: TempDir) -> None:
 
 def test_header_present_no_examples_produces_warning(tmp: TempDir) -> None:
     """Docstring with `Examples:` header but no `>>>` block emits a distinct WARNING."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={},
         pyproject="""\
@@ -79,7 +81,7 @@ def test_header_present_no_examples_produces_warning(tmp: TempDir) -> None:
             ),
         },
     )
-    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    out, err, _rc = helpers.run_oxitest(tmp, "--warnings")
     combined = out + err
     assert "doctest.coverage" in combined, (
         "the reporter must surface the coverage-rule context so users know "
@@ -103,7 +105,7 @@ def test_off_mode_emits_no_coverage_diagnostics(tmp: TempDir) -> None:
     every ``doctest.coverage`` diagnostic — no matter what state the subjects
     are in.
     """
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={},
         pyproject="""\
@@ -117,7 +119,7 @@ def test_off_mode_emits_no_coverage_diagnostics(tmp: TempDir) -> None:
             "mypkg/__init__.py": '__all__ = ["foo"]\ndef foo(): pass\n',
         },
     )
-    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    out, err, _rc = helpers.run_oxitest(tmp, "--warnings")
     combined = out + err
     assert "doctest.coverage" not in combined, (
         "strict=off must suppress all coverage-rule diagnostics — if any "
@@ -128,7 +130,7 @@ def test_off_mode_emits_no_coverage_diagnostics(tmp: TempDir) -> None:
 
 def test_covered_subject_produces_no_diagnostic(tmp: TempDir) -> None:
     """Fully covered subject (header + `>>>` block) emits no coverage diagnostic."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={},
         pyproject="""\
@@ -153,7 +155,7 @@ def test_covered_subject_produces_no_diagnostic(tmp: TempDir) -> None:
             ),
         },
     )
-    out, err, _rc = helpers.common.run_oxitest(tmp, "--warnings")
+    out, err, _rc = helpers.run_oxitest(tmp, "--warnings")
     combined = out + err
     assert "doctest.coverage" not in combined, (
         "a subject with both an `Examples:` header and a `>>>` block is fully "

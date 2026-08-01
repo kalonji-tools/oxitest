@@ -7,7 +7,7 @@ import textwrap
 import types
 
 import oxitest
-from oxitest import Fixture, TempDir, Yields, helpers, raises
+from oxitest import Fixture, TempDir, Yields, raises
 from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge._fixture_registry import ConftestSource
 from oxitest._bridge._fixture_session import FixtureSession
@@ -23,6 +23,7 @@ from oxitest._bridge.conftest_loader import (
     load_fixtures_from_conftest,
 )
 from oxitest._bridge.result import Diagnostic
+from tests import helpers
 
 # ── find_conftest_paths ───────────────────────────────────────────────────────
 
@@ -238,7 +239,7 @@ def test_create_session_populates_registry(tmp: TempDir) -> None:
     def fn(db: Fixture[int]) -> None:
         pass
 
-    kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
+    kwargs, _ = session.resolve_for_test(fn, helpers.make_meta("t.py"))
     assert kwargs["db"] == 42, (
         f"fixture 'db' should resolve to 42 after loading conftest, got "
         f"{kwargs.get('db')!r}"
@@ -278,9 +279,7 @@ def test_create_session_later_conftest_overrides_earlier(tmp: TempDir) -> None:
     def fn(val: Fixture[str]) -> None:
         pass
 
-    kwargs, _ = session.resolve_for_test(
-        fn, helpers.common.make_meta(str(sub / "test_x.py"))
-    )
+    kwargs, _ = session.resolve_for_test(fn, helpers.make_meta(str(sub / "test_x.py")))
     assert kwargs["val"] == "local", (
         f"more-local conftest fixture should override root conftest, got "
         f"{kwargs.get('val')!r}"

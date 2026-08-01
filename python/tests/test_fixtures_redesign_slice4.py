@@ -15,7 +15,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
 
 _TESTS_ROOT = Path(__file__).parent
 _DATA_ROOT = _TESTS_ROOT / "data"
@@ -70,7 +71,7 @@ def _run_project(tmp: TempDir, *extra_args: str) -> _Run:
     """Run the slice-4 data-project with a fresh log file."""
     log = Path(tmp) / "events.log"
     env = {**os.environ, "SLICE4_LOG": str(log)}
-    stdout, stderr, rc = helpers.common.run_oxitest(_PROJECT, *extra_args, env=env)
+    stdout, stderr, rc = helpers.run_oxitest(_PROJECT, *extra_args, env=env)
     events = tuple(log.read_text().splitlines()) if log.exists() else ()
     return _Run(stdout=stdout, stderr=stderr, rc=rc, events=events)
 
@@ -214,7 +215,7 @@ def test_session_below_the_rootdir_package_is_rejected(tmp: TempDir) -> None:
     env = {**os.environ, "SLICE4_LOG": str(log)}
 
     # Act
-    stdout, stderr, rc = helpers.common.run_oxitest(_REJECT_PROJECT, env=env)
+    stdout, stderr, rc = helpers.run_oxitest(_REJECT_PROJECT, env=env)
     output = stdout + stderr
 
     # Assert

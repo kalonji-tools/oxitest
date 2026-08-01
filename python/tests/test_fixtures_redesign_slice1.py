@@ -11,7 +11,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
 
 _TESTS_ROOT = Path(__file__).parent
 _DATA_ROOT = _TESTS_ROOT / "data"
@@ -25,7 +26,7 @@ def test_module_source_end_to_end(tmp: TempDir) -> None:
     ModuleSource discovery path.
     """
     json_path = Path(tmp) / "report.json"
-    out, err, rc = helpers.common.run_oxitest(
+    out, err, rc = helpers.run_oxitest(
         _DATA_ROOT / "slice1_same_package",
         "--json",
         str(json_path),
@@ -70,7 +71,7 @@ def test_old_fixtures_api_still_works(tmp: TempDir) -> None:
         "'old Fixtures() conftest API must still work after ModuleSource changes'\n"
     )
 
-    out, err, rc = helpers.common.run_oxitest(tmp)
+    out, err, rc = helpers.run_oxitest(tmp)
     assert rc == 0, (
         f"old Fixtures() API regressed — coexistence broken:\n"
         f"stdout:\n{out}\n"
@@ -85,7 +86,7 @@ def test_collision_between_sources_is_loud(tmp: TempDir) -> None:
     a 'declared twice' diagnostic naming both source paths.
     """
     json_path = Path(tmp) / "collision_report.json"
-    out, err, rc = helpers.common.run_oxitest(
+    out, err, rc = helpers.run_oxitest(
         _DATA_ROOT / "slice1_collision",
         "--json",
         str(json_path),
@@ -117,7 +118,7 @@ def test_warm_cache_preserves_fixture_registration() -> None:
     data_root = _DATA_ROOT / "slice1_warm_cache"
 
     # First run — cold cache, populates the item cache.
-    out1, err1, rc1 = helpers.common.run_oxitest(data_root)
+    out1, err1, rc1 = helpers.run_oxitest(data_root)
     assert rc1 == 0, (
         "first (cold-cache) run must pass; "
         "fixture registration via ModuleSource is broken at the root:\n"
@@ -125,7 +126,7 @@ def test_warm_cache_preserves_fixture_registration() -> None:
     )
 
     # Second run — warm cache; fixtures must still be registered.
-    out2, err2, rc2 = helpers.common.run_oxitest(data_root)
+    out2, err2, rc2 = helpers.run_oxitest(data_root)
     assert rc2 == 0, (
         "warm-cache run regressed — HIGH-1 not fixed: "
         "__fixtures__.py fixtures were not registered when the test module "
@@ -153,7 +154,7 @@ def test_syntax_error_in_fixtures_py_diagnoses(tmp: TempDir) -> None:
         '[tool.oxitest]\ntestpaths = ["broken_pkg"]\npython_files = ["test_*.py"]\n'
     )
 
-    out, err, _rc = helpers.common.run_oxitest(tmp)
+    out, err, _rc = helpers.run_oxitest(tmp)
     combined = out + err
     assert "__fixtures__.py" in combined, (
         "a syntax error in __fixtures__.py must produce a diagnostic naming "
@@ -189,7 +190,7 @@ def test_decorated_fixture_raising_surfaces_error(tmp: TempDir) -> None:
         '[tool.oxitest]\ntestpaths = ["raising_pkg"]\npython_files = ["test_*.py"]\n'
     )
 
-    out, err, rc = helpers.common.run_oxitest(tmp)
+    out, err, rc = helpers.run_oxitest(tmp)
     assert rc != 0, (
         "a fixture that raises during instantiation must cause test failure "
         "(non-zero exit), not a collection crash with exit 0:\n"
@@ -222,7 +223,7 @@ def test_unrecognized_import_alias_diagnoses(tmp: TempDir) -> None:
         '[tool.oxitest]\ntestpaths = ["aliased_pkg"]\npython_files = ["test_*.py"]\n'
     )
 
-    out, err, _rc = helpers.common.run_oxitest(tmp)
+    out, err, _rc = helpers.run_oxitest(tmp)
     combined = out + err
     assert "__fixtures__.py" in combined, (
         "the diagnostic must name __fixtures__.py — the user cannot act on a "

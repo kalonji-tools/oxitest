@@ -4,18 +4,20 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
 from oxitest._bridge._timeout import (
     _IdleHandler,
     _IdleTimer,
     _UnixTimeoutContext,
     _WindowsTimeoutContext,
 )
+from oxitest._bridge.result import TimeoutResult
+from tests import helpers
 
 
 def test_run_test_timeout_mark_fires(tmp: TempDir) -> None:
     """@mark.timeout on a slow sync test produces status='timeout' with limit value."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "import time, oxitest\n"
         "@oxitest.mark.timeout(seconds=1)\n"
@@ -23,9 +25,10 @@ def test_run_test_timeout_mark_fires(tmp: TempDir) -> None:
         "    time.sleep(5)\n",
         "test_slow",
     )
-    assert result.status == "timeout", (
-        f"@mark.timeout on a slow test should produce status='timeout', got "
-        f"{result.status!r}"
+    result = helpers.assert_result(
+        result,
+        TimeoutResult,
+        why="@mark.timeout on a slow test should produce status='timeout'",
     )
     assert "1s" in result.message, (
         f"timeout message should mention the limit '1s', got {result.message!r}"
@@ -34,7 +37,7 @@ def test_run_test_timeout_mark_fires(tmp: TempDir) -> None:
 
 def test_run_test_timeout_passes_fast_test(tmp: TempDir) -> None:
     """A fast sync test that finishes within the @mark.timeout limit still passes."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "import oxitest\n"
         "@oxitest.mark.timeout(seconds=5)\n"
@@ -50,7 +53,7 @@ def test_run_test_timeout_passes_fast_test(tmp: TempDir) -> None:
 
 def test_run_test_default_timeout_fires(tmp: TempDir) -> None:
     """The default_timeout parameter enforces a timeout even without @mark.timeout."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "import time\ndef test_slow():\n    time.sleep(5)\n",
         "test_slow",
@@ -63,7 +66,7 @@ def test_run_test_default_timeout_fires(tmp: TempDir) -> None:
 
 def test_run_test_no_timeout_by_default(tmp: TempDir) -> None:
     """Tests run without timeout when no timeout mark or default_timeout is given."""
-    result = helpers.common.exec_inline(tmp, "def test_ok():\n    pass\n", "test_ok")
+    result = helpers.exec_inline(tmp, "def test_ok():\n    pass\n", "test_ok")
     assert result.status == "passed", (
         f"test without timeout mark should pass normally, got {result.status!r}"
     )
@@ -74,7 +77,7 @@ def test_run_test_no_timeout_by_default(tmp: TempDir) -> None:
 
 def test_async_test_timeout_mark_fires(tmp: TempDir) -> None:
     """@mark.timeout on a slow async test produces status='timeout' with limit value."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "import asyncio, oxitest\n"
         "@oxitest.mark.timeout(seconds=1)\n"
@@ -82,9 +85,10 @@ def test_async_test_timeout_mark_fires(tmp: TempDir) -> None:
         "    await asyncio.sleep(10)\n",
         "test_slow",
     )
-    assert result.status == "timeout", (
-        f"@mark.timeout on slow async test should produce status='timeout', "
-        f"got {result.status!r}, msg={result.message!r}"
+    result = helpers.assert_result(
+        result,
+        TimeoutResult,
+        why="@mark.timeout on slow async test should produce status='timeout'",
     )
     assert "1s" in result.message, (
         f"timeout message should mention the limit '1s', got {result.message!r}"
@@ -93,21 +97,22 @@ def test_async_test_timeout_mark_fires(tmp: TempDir) -> None:
 
 def test_async_test_default_timeout_fires(tmp: TempDir) -> None:
     """The default_timeout parameter enforces a timeout on slow async tests too."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "import asyncio\nasync def test_slow():\n    await asyncio.sleep(10)\n",
         "test_slow",
         default_timeout=1,
     )
-    assert result.status == "timeout", (
-        f"default_timeout=1 should fire on slow async test, "
-        f"got status={result.status!r}, msg={result.message!r}"
+    helpers.assert_result(
+        result,
+        TimeoutResult,
+        why="default_timeout=1 should fire on slow async test",
     )
 
 
 def test_async_test_timeout_passes_fast_test(tmp: TempDir) -> None:
     """A fast async test that finishes within the @mark.timeout limit still passes."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "import oxitest\n"
         "@oxitest.mark.timeout(seconds=5)\n"
@@ -128,8 +133,8 @@ def test_async_yield_fixture_teardown_runs_on_timeout(tmp: TempDir) -> None:
         yield 42
         torn_down.append(True)
 
-    session = helpers.common.make_session_with("val", async_yield_factory)
-    result = helpers.common.exec_inline(
+    session = helpers.make_session_with("val", async_yield_factory)
+    result = helpers.exec_inline(
         tmp,
         "import asyncio, oxitest\n"
         "from oxitest import Fixture\n"

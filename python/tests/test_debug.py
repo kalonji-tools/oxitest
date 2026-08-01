@@ -1,7 +1,8 @@
 """Tests for debug protocol conformance."""
 
-from oxitest import DebuggerBackend, helpers
+from oxitest import DebuggerBackend
 from oxitest._bridge._debugger import _PdbBackend
+from tests import helpers
 
 
 def test_pdb_backend_satisfies_protocol() -> None:
@@ -13,14 +14,14 @@ def test_pdb_backend_satisfies_protocol() -> None:
 
 def test_recording_debugger_satisfies_protocol() -> None:
     """RecordingDebugger test double must be a valid DebuggerBackend."""
-    assert isinstance(helpers.common.RecordingDebugger(), DebuggerBackend), (
+    assert isinstance(helpers.RecordingDebugger(), DebuggerBackend), (
         "RecordingDebugger should satisfy DebuggerBackend protocol"
     )
 
 
 def test_recording_debugger_records_trace() -> None:
     """RecordingDebugger should count trace() calls."""
-    rec = helpers.common.RecordingDebugger()
+    rec = helpers.RecordingDebugger()
     rec.trace()
     rec.trace()
     assert rec.trace_count == 2, f"expected 2 trace calls, got {rec.trace_count}"
@@ -28,8 +29,8 @@ def test_recording_debugger_records_trace() -> None:
 
 def test_recording_debugger_records_post_mortem() -> None:
     """RecordingDebugger should record traceback objects."""
-    rec = helpers.common.RecordingDebugger()
-    exc = helpers.common.make_exc(ValueError, "boom")
+    rec = helpers.RecordingDebugger()
+    exc = helpers.make_exc(ValueError, "boom")
     tb = exc.__traceback__
     assert tb is not None, "make_exc must produce a traceback"
     rec.post_mortem(tb)

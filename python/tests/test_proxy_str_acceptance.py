@@ -11,7 +11,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
 
 _PROJECT = Path(__file__).parent / "data" / "proxy_str"
 
@@ -29,7 +30,7 @@ def test_cached_fixture_values_render_their_value(tmp: TempDir) -> None:
     """Every string conversion in the data-project renders the wrapped value."""
     report = Path(tmp) / "report.json"
 
-    out, err, rc = helpers.common.run_oxitest(
+    out, err, rc = helpers.run_oxitest(
         _PROJECT,
         "--serial",
         "--json",

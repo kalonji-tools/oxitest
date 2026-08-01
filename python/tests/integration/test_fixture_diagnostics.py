@@ -2,7 +2,9 @@
 
 from pathlib import Path
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_strict_abort_unused_fixture(tmp: TempDir) -> None:
@@ -20,12 +22,12 @@ def test_strict_abort_unused_fixture(tmp: TempDir) -> None:
     pyproject.write_text('[tool.oxitest]\nstrict = "abort"\n')
 
     # Act
-    out, stderr, rc = helpers.common.run_oxitest(tmp)
+    out, stderr, rc = helpers.run_oxitest(tmp)
 
     # Assert
-    helpers.integ.assert_collection_error(out, rc)
+    integ.assert_collection_error(out, rc)
     combined = out + stderr
-    helpers.integ.assert_contains(combined.lower(), "unused")
+    integ.assert_contains(combined.lower(), "unused")
 
 
 def test_strict_abort_missing_return_annotation(tmp: TempDir) -> None:
@@ -46,10 +48,10 @@ def test_strict_abort_missing_return_annotation(tmp: TempDir) -> None:
     pyproject.write_text('[tool.oxitest]\nstrict = "abort"\n')
 
     # Act
-    out, stderr, rc = helpers.common.run_oxitest(tmp)
+    out, stderr, rc = helpers.run_oxitest(tmp)
 
     # Assert
-    helpers.integ.assert_collection_error(out, rc)
+    integ.assert_collection_error(out, rc)
     combined = out + stderr
     assert "return" in combined.lower() or "annotation" in combined.lower(), (
         f"output should mention 'return' or 'annotation': "
@@ -85,11 +87,11 @@ def test_fixture_shadow_warning_in_output(tmp: TempDir) -> None:
     )
 
     # Act
-    out, stderr, rc = helpers.common.run_oxitest(root, "--warnings")
+    out, stderr, rc = helpers.run_oxitest(root, "--warnings")
 
     # Assert — test passes but shadow warning appears
-    helpers.integ.assert_passed(out, rc)
-    helpers.integ.assert_contains((out + stderr).lower(), "shadow")
+    integ.assert_passed(out, rc)
+    integ.assert_contains((out + stderr).lower(), "shadow")
 
 
 def test_teardown_warning_includes_test_name(tmp: TempDir) -> None:
@@ -111,10 +113,10 @@ def test_teardown_warning_includes_test_name(tmp: TempDir) -> None:
     )
 
     # Act
-    out, stderr, rc = helpers.common.run_oxitest(tmp, "--warnings")
+    out, stderr, rc = helpers.run_oxitest(tmp, "--warnings")
 
     # Assert — test passes, teardown warning includes test function name
-    helpers.integ.assert_passed(out, rc)
+    integ.assert_passed(out, rc)
     combined = out + stderr
-    helpers.integ.assert_contains(combined, "test_uses_exploding")
-    helpers.integ.assert_contains(combined.lower(), "teardown")
+    integ.assert_contains(combined, "test_uses_exploding")
+    integ.assert_contains(combined.lower(), "teardown")

@@ -8,11 +8,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from types import MappingProxyType
 
-from oxitest import FixtureRef, TempDir, helpers, parametrize, partial, raises
+from oxitest import FixtureRef, TempDir, parametrize, partial, raises
 from oxitest._bridge._fn_metadata import get_metadata
 from oxitest._bridge.conftest_loader import create_session
 from oxitest._bridge.importer import collect_module
 from oxitest._bridge.parametrize import ComposedCases, DataclassCases, DictCases
+from tests import helpers
 
 
 @dataclass(frozen=True)
@@ -225,7 +226,7 @@ def test_parametrize_rejects_overlapping_fields() -> None:
 
 def test_collect_composed_parametrize_expands_cartesian_product(tmp: TempDir) -> None:
     """Two stacked @parametrize layers produce the full cartesian product of cases."""
-    path = helpers.common.write_test_module(
+    path = helpers.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -253,7 +254,7 @@ def test_collect_composed_parametrize_expands_cartesian_product(tmp: TempDir) ->
 
 def test_collect_composed_parametrize_has_merged_param_values(tmp: TempDir) -> None:
     """Composed cases carry merged param_values from all contributing partial layers."""
-    path = helpers.common.write_test_module(
+    path = helpers.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -289,7 +290,7 @@ def test_collect_composed_parametrize_has_merged_param_values(tmp: TempDir) -> N
 
 def test_collect_composed_rejects_single_partial_layer(tmp: TempDir) -> None:
     """A single partial() layer with unfilled fields raises TypeError at collect."""
-    path = helpers.common.write_test_module(
+    path = helpers.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -308,7 +309,7 @@ def test_collect_composed_rejects_single_partial_layer(tmp: TempDir) -> None:
 
 def test_collect_composed_rejects_incomplete_fields(tmp: TempDir) -> None:
     """Composed partial layers that leave a field unset raise TypeError at collect."""
-    path = helpers.common.write_test_module(
+    path = helpers.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -329,7 +330,7 @@ def test_collect_composed_rejects_incomplete_fields(tmp: TempDir) -> None:
 
 def test_collect_composed_3_layers(tmp: TempDir) -> None:
     """Three stacked partial() layers correctly compose into one combined case."""
-    path = helpers.common.write_test_module(
+    path = helpers.write_test_module(
         tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -361,7 +362,7 @@ def test_collect_composed_3_layers(tmp: TempDir) -> None:
 
 def test_executor_composed_parametrize_passes(tmp: TempDir) -> None:
     """Executor correctly injects merged field values from composed partial layers."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -386,7 +387,7 @@ def test_executor_composed_parametrize_passes(tmp: TempDir) -> None:
 
 def test_executor_composed_parametrize_failure(tmp: TempDir) -> None:
     """A wrong expected value in composed parametrize produces a failed result."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -435,9 +436,7 @@ def test_executor_composed_with_fixture(tmp: TempDir) -> None:
         "    assert x * multiplier == expected\n"
     )
     session, _, _diags = create_session([str(conftest)])
-    result = helpers.common.run_test(
-        str(f), "test_mul", session=session, param_id="a-c"
-    )
+    result = helpers.run_test(str(f), "test_mul", session=session, param_id="a-c")
     assert result.status == "passed", (
         "composed partial fields and Fixture[T] parameters must coexist; the executor"
         " must resolve fixtures independently of the partial merge pipeline"
@@ -446,7 +445,7 @@ def test_executor_composed_with_fixture(tmp: TempDir) -> None:
 
 def test_executor_composed_compact_mode(tmp: TempDir) -> None:
     """Compact-mode composed parametrize injects the assembled dataclass instance."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -498,9 +497,7 @@ def test_executor_composed_with_fixture_ref(tmp: TempDir) -> None:
         "    assert db == expected\n"
     )
     session, _, _diags = create_session([str(conftest)])
-    result = helpers.common.run_test(
-        str(f), "test_db", session=session, param_id="pg-check"
-    )
+    result = helpers.run_test(str(f), "test_db", session=session, param_id="pg-check")
     assert result.status == "passed", (
         "FixtureRef fields inside composed partials must be resolved via the fixture"
         " session at execution time, not at decoration time; eager resolution would"

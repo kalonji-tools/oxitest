@@ -4,7 +4,9 @@ import subprocess
 from pathlib import Path
 
 import oxitest
-from oxitest import Fixture, TempDir, Yields, helpers
+from oxitest import Fixture, TempDir, Yields
+from tests import helpers
+from tests.integration import helpers as integ
 
 fx = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
 
@@ -29,15 +31,15 @@ def test_affected_parallel_runs_subcommands_correctly(tmp: TempDir) -> None:
         "        f'stderr: {result.stderr}'\n"
         "    )\n"
     )
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=1)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=1)
 
 
 @fx.fixture
 def git_worktree(git_repo: Fixture[Path], tmp: TempDir) -> Yields[Path]:
     """Git worktree created from git_repo, placed inside a second TempDir."""
     main_repo = git_repo
-    clean_env = helpers.integ.clean_git_env()
+    clean_env = integ.clean_git_env()
 
     def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
@@ -64,7 +66,7 @@ def test_affected_works_in_git_worktree(git_worktree: Fixture[Path]) -> None:
     ENOENT when the canonical path differs.
     """
     worktree_path = git_worktree
-    clean_env = helpers.integ.clean_git_env()
+    clean_env = integ.clean_git_env()
 
     def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
@@ -75,7 +77,7 @@ def test_affected_works_in_git_worktree(git_worktree: Fixture[Path]) -> None:
     run(*wt_git, "add", "test_new.py")
 
     # Act — run oxitest --affected in the worktree.
-    out, err, rc = helpers.common.run_oxitest(
+    out, err, rc = helpers.run_oxitest(
         worktree_path,
         "--affected=HEAD",
         env=clean_env,
@@ -86,13 +88,13 @@ def test_affected_works_in_git_worktree(git_worktree: Fixture[Path]) -> None:
     assert "No such file or directory" not in err, (
         f"--affected failed in worktree with ENOENT:\nstderr: {err}\nstdout: {out}"
     )
-    helpers.integ.assert_passed(out, rc, count=1)
+    integ.assert_passed(out, rc, count=1)
 
 
 def test_affected_verbose_summary(git_repo: Fixture[Path]) -> None:
     """``-v --affected=HEAD`` prints a summary line to stderr."""
     repo = git_repo
-    clean_env = helpers.integ.clean_git_env()
+    clean_env = integ.clean_git_env()
 
     def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
@@ -101,7 +103,7 @@ def test_affected_verbose_summary(git_repo: Fixture[Path]) -> None:
     (repo / "test_new.py").write_text("def test_new(): assert True, 'new test'\n")
     run("git", "-C", str(repo), "add", "test_new.py")
 
-    _out, err, rc = helpers.common.run_oxitest(
+    _out, err, rc = helpers.run_oxitest(
         repo, "--affected=HEAD", "-v", env=clean_env, cwd=str(repo)
     )
     assert rc == 0, f"expected success, got rc={rc}"
@@ -113,7 +115,7 @@ def test_affected_verbose_summary(git_repo: Fixture[Path]) -> None:
 def test_affected_full_verbose_shows_stages(git_repo: Fixture[Path]) -> None:
     """``-vv --affected=HEAD`` prints stage-by-stage breakdown to stderr."""
     repo = git_repo
-    clean_env = helpers.integ.clean_git_env()
+    clean_env = integ.clean_git_env()
 
     def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
@@ -122,7 +124,7 @@ def test_affected_full_verbose_shows_stages(git_repo: Fixture[Path]) -> None:
     (repo / "test_new.py").write_text("def test_new(): assert True, 'new test'\n")
     run("git", "-C", str(repo), "add", "test_new.py")
 
-    _out, err, rc = helpers.common.run_oxitest(
+    _out, err, rc = helpers.run_oxitest(
         repo, "--affected=HEAD", "-vv", env=clean_env, cwd=str(repo)
     )
     assert rc == 0, f"expected success, got rc={rc}"
@@ -133,9 +135,9 @@ def test_affected_full_verbose_shows_stages(git_repo: Fixture[Path]) -> None:
 def test_affected_zero_results_shows_summary(git_repo: Fixture[Path]) -> None:
     """When 0 tests affected, summary prints even without -v."""
     repo = git_repo
-    clean_env = helpers.integ.clean_git_env()
+    clean_env = integ.clean_git_env()
     # No changes staged — 0 affected.
-    out, err, _ = helpers.common.run_oxitest(
+    out, err, _ = helpers.run_oxitest(
         repo, "--affected=HEAD", env=clean_env, cwd=str(repo)
     )
     # Should show "affected: 0 of N" instead of old "no changes detected"

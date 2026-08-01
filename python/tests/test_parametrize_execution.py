@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from oxitest import Fixture, FixtureRef, TempDir, helpers, parametrize, raises
+from oxitest import Fixture, FixtureRef, TempDir, parametrize, raises
 from oxitest._bridge._errors import UnannotatedFixtureParamError
 from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge.conftest_loader import create_session
+from oxitest._bridge.result import ErrorResult, PassedResult
+from tests import helpers
 
 # ── Group C: Fixture resolution with parametrize ──────────────────────────────
 
@@ -23,7 +25,7 @@ def test_plain_typed_param_not_resolved_as_fixture() -> None:
 
     # x and y are NOT annotated with Fixture[T] — should not raise FixtureNotFoundError
     kwargs, _ = session.resolve_for_test(
-        test_fn, helpers.common.make_meta("/fake/test_foo.py")
+        test_fn, helpers.make_meta("/fake/test_foo.py")
     )
     assert kwargs == {}, (
         f"plain-typed params should not be resolved as fixtures, got kwargs={kwargs!r}"
@@ -37,14 +39,14 @@ def test_fixture_annotated_param_resolved_alongside_plain_param() -> None:
     def my_fixture() -> int:
         return 42
 
-    registry.register(helpers.common.make_fixture_def("db", my_fixture))
+    registry.register(helpers.make_fixture_def("db", my_fixture))
     session = FixtureSession(registry)
 
     def test_fn(x: int, db: Fixture[int]) -> None:
         pass
 
     kwargs, _ = session.resolve_for_test(
-        test_fn, helpers.common.make_meta("/fake/test_foo.py")
+        test_fn, helpers.make_meta("/fake/test_foo.py")
     )
     assert kwargs == {"db": 42}, (
         f"only Fixture[T]-annotated param 'db' should be resolved, got "
@@ -59,14 +61,14 @@ def test_plain_typed_param_matching_fixture_raises_unannotated_error() -> None:
     def x_fixture() -> int:
         return 99
 
-    registry.register(helpers.common.make_fixture_def("x", x_fixture))
+    registry.register(helpers.make_fixture_def("x", x_fixture))
     session = FixtureSession(registry)
 
     def test_fn(x: int) -> None:
         pass
 
     with raises(UnannotatedFixtureParamError) as exc_info:
-        session.resolve_for_test(test_fn, helpers.common.make_meta("/fake/test_foo.py"))
+        session.resolve_for_test(test_fn, helpers.make_meta("/fake/test_foo.py"))
 
     msg = str(exc_info.value)
     assert "x" in msg, (
@@ -81,7 +83,7 @@ def test_plain_typed_param_matching_fixture_raises_unannotated_error() -> None:
 
 def test_executor_runs_parametrize_case(tmp: TempDir) -> None:
     """Executor injects parametrize field values; the test passes when correct."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -96,15 +98,16 @@ def test_executor_runs_parametrize_case(tmp: TempDir) -> None:
         "test_add",
         param_id="basic",
     )
-    assert result.status == "passed", (
-        f"parametrize case 'basic' should pass, got status={result.status!r}, "
-        f"msg={result.message!r}"
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="parametrize case 'basic' should pass",
     )
 
 
 def test_executor_parametrize_failure(tmp: TempDir) -> None:
     """The executor returns failed status when a parametrize case assertion fails."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "from dataclasses import dataclass\n"
         "import oxitest\n"
@@ -149,12 +152,11 @@ def test_executor_parametrize_case_with_fixture(tmp: TempDir) -> None:
         "    assert x * multiplier == expected\n"
     )
     session, _, _diags = create_session([str(conftest)])
-    result = helpers.common.run_test(
-        str(f), "test_mul", session=session, param_id="double"
-    )
-    assert result.status == "passed", (
-        f"parametrize with fixture should pass, got status={result.status!r}, "
-        f"msg={result.message!r}"
+    result = helpers.run_test(str(f), "test_mul", session=session, param_id="double")
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="parametrize with fixture should pass",
     )
 
 
@@ -203,19 +205,24 @@ def test_fixture_ref_in_parametrize_resolves_fixture(tmp: TempDir) -> None:
         "    assert db == expected\n"
     )
     session, _, _diags = create_session([str(conftest)])
-    result_pg = helpers.common.run_test(
-        str(f), "test_db", session=session, param_id="pg"
+    result_pg = helpers.run_test(str(f), "test_db", session=session, param_id="pg")
+    result_sq = helpers.run_test(str(f), "test_db", session=session, param_id="sq")
+    helpers.assert_result(
+        result_pg,
+        PassedResult,
+        why="case 'pg' must resolve its FixtureRef to the pg_db fixture value",
     )
-    result_sq = helpers.common.run_test(
-        str(f), "test_db", session=session, param_id="sq"
+    helpers.assert_result(
+        result_sq,
+        PassedResult,
+        why="case 'sq' must resolve its FixtureRef to the sqlite_db fixture value --"
+        " each case resolves independently, so 'sq' must not reuse 'pg'",
     )
-    assert result_pg.status == "passed", result_pg.message
-    assert result_sq.status == "passed", result_sq.message
 
 
 def test_fixture_ref_compact_mode_raises(tmp: TempDir) -> None:
     """FixtureRef fields are incompatible with compact mode — must return error."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "from __future__ import annotations\n"
         "from dataclasses import dataclass\n"
@@ -231,9 +238,10 @@ def test_fixture_ref_compact_mode_raises(tmp: TempDir) -> None:
         "test_db",
         param_id="pg",
     )
-    assert result.status == "error", (
-        f"FixtureRef in compact mode should produce status='error', got "
-        f"{result.status!r}"
+    result = helpers.assert_result(
+        result,
+        ErrorResult,
+        why="FixtureRef in compact mode should produce status='error'",
     )
     assert "compact mode" in result.message, (
         f"error message should mention 'compact mode', got {result.message!r}"
@@ -259,9 +267,11 @@ def test_fixture_ref_unregistered_fixture_errors(tmp: TempDir) -> None:
         "    pass\n"
     )
     session, _, _diags = create_session([str(conftest)])
-    result = helpers.common.run_test(str(f), "test_db", session=session, param_id="pg")
-    assert result.status == "error", (
-        f"unregistered FixtureRef should produce status='error', got {result.status!r}"
+    result = helpers.run_test(str(f), "test_db", session=session, param_id="pg")
+    result = helpers.assert_result(
+        result,
+        ErrorResult,
+        why="unregistered FixtureRef should produce status='error'",
     )
     assert "unknown_db" in result.message, (
         f"error message should mention 'unknown_db', got {result.message!r}"
@@ -270,7 +280,7 @@ def test_fixture_ref_unregistered_fixture_errors(tmp: TempDir) -> None:
 
 def test_fixture_ref_no_session_returns_error(tmp: TempDir) -> None:
     """FixtureRef field with session=None returns error result, not None injection."""
-    result = helpers.common.exec_inline(
+    result = helpers.exec_inline(
         tmp,
         "from __future__ import annotations\n"
         "from dataclasses import dataclass\n"
@@ -286,9 +296,10 @@ def test_fixture_ref_no_session_returns_error(tmp: TempDir) -> None:
         "test_db",
         param_id="pg",
     )
-    assert result.status == "error", (
-        f"FixtureRef with session=None should produce status='error', got "
-        f"{result.status!r}"
+    result = helpers.assert_result(
+        result,
+        ErrorResult,
+        why="FixtureRef with session=None should produce status='error'",
     )
     assert "my_db" in result.message, (
         f"error message should mention 'my_db', got {result.message!r}"
@@ -363,10 +374,13 @@ def test_fixture_ref_uses_namespace_qualified_lookup_when_namespace_present(
         "    assert store == 'db-conn'\n"
     )
     session, _, _diags = create_session([str(conftest)])
-    result = helpers.common.run_test(
-        str(f), "test_query", session=session, param_id="prod"
+    result = helpers.run_test(str(f), "test_query", session=session, param_id="prod")
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="the FixtureRef must resolve through namespace-qualified lookup -- flat"
+        " lookup would return the later-registered 'http' conn instead of 'db'",
     )
-    assert result.status == "passed", result.message
 
 
 def test_fixture_ref_falls_back_to_flat_lookup_when_no_namespace(tmp: TempDir) -> None:
@@ -409,5 +423,10 @@ def test_fixture_ref_falls_back_to_flat_lookup_when_no_namespace(tmp: TempDir) -
         "    assert db == 'flat-pg'\n"
     )
     session, _, _diags = create_session([str(conftest)])
-    result = helpers.common.run_test(str(f), "test_db", session=session, param_id="pg")
-    assert result.status == "passed", result.message
+    result = helpers.run_test(str(f), "test_db", session=session, param_id="pg")
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="a FixtureRef whose function carries no registered namespace must still"
+        " resolve via the flat get_fixture_by_name fallback",
+    )

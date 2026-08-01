@@ -16,7 +16,7 @@ import oxitest._bridge._builtins as builtins_pkg
 
 # Imports needed so that get_type_hints() can resolve annotations in locally
 # defined helper functions inside the FixtureSession integration tests.
-from oxitest import Fixture, TempDir, TestContext, helpers, raises
+from oxitest import Fixture, TempDir, TestContext, raises
 from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._builtins import (
     LogCapture,
@@ -47,6 +47,7 @@ from oxitest._bridge.result import (
     TestResult,
 )
 from oxitest.plugin import Plugin
+from tests import helpers
 
 
 def _make_builtin_ctx(
@@ -660,7 +661,7 @@ def test_tempdir_injected_via_session() -> None:
     def fn(tmp: TempDir) -> None:
         pass
 
-    kwargs, teardowns = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
+    kwargs, teardowns = session.resolve_for_test(fn, helpers.make_meta("t.py"))
     tmp = kwargs["tmp"]
     assert tmp.path.is_dir(), (
         f"TempDir injected via session should be an existing directory, got "
@@ -683,8 +684,8 @@ def test_tempdir_factory_session_scoped() -> None:
     def fn(factory: TempDirFactory) -> None:
         pass
 
-    k1, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
-    k2, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
+    k1, _ = session.resolve_for_test(fn, helpers.make_meta("t.py"))
+    k2, _ = session.resolve_for_test(fn, helpers.make_meta("t.py"))
     assert k1["factory"] is k2["factory"], (
         "TempDirFactory is session-scoped and should return the same instance across "
         "resolves"
@@ -700,7 +701,7 @@ def test_stdcapture_injected_via_session() -> None:
     def fn(cap: StdCapture) -> None:
         pass
 
-    kwargs, teardowns = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
+    kwargs, teardowns = session.resolve_for_test(fn, helpers.make_meta("t.py"))
     cap = kwargs["cap"]
     print("captured")  # noqa: T201
     result = cap.readouterr()
@@ -720,7 +721,7 @@ def test_patcher_injected_via_session() -> None:
     def fn(patch: Patcher) -> None:
         pass
 
-    kwargs, teardowns = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
+    kwargs, teardowns = session.resolve_for_test(fn, helpers.make_meta("t.py"))
     patch = kwargs["patch"]
 
     obj = types.SimpleNamespace(x=1)
@@ -744,15 +745,13 @@ def test_testcontext_still_works_via_builtin_dispatch() -> None:
         return "ok"
 
     reg = FixtureRegistry()
-    reg.register(
-        helpers.common.make_fixture_def("thing", factory, conftest_path="/c.py")
-    )
+    reg.register(helpers.make_fixture_def("thing", factory, conftest_path="/c.py"))
     session = FixtureSession(reg)
 
     def fn(thing: Fixture[str]) -> None:
         pass
 
-    kwargs, _ = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
+    kwargs, _ = session.resolve_for_test(fn, helpers.make_meta("t.py"))
     assert kwargs["thing"] == "ok", (
         f"fixture depending on Fixture[TestContext] via builtin dispatch should return "
         f"'ok', got {kwargs['thing']!r}"
@@ -883,7 +882,7 @@ def test_logcapture_injected_via_session() -> None:
     def fn(log: LogCapture) -> None:
         pass
 
-    kwargs, teardowns = session.resolve_for_test(fn, helpers.common.make_meta("t.py"))
+    kwargs, teardowns = session.resolve_for_test(fn, helpers.make_meta("t.py"))
     assert "log" in kwargs, (
         f"LogCapture should be injected as 'log' into kwargs via session, got keys: "
         f"{list(kwargs)}"
@@ -913,11 +912,11 @@ def test_logcapture_includes_plugin_backends(ctx: TestContext) -> None:
 
     fake_backend = FakePluginBackend()
 
-    mod = helpers.common.make_plugin_module(
+    mod = helpers.make_plugin_module(
         "fake_log_plugin",
         lambda **_: Plugin(log_backends=(fake_backend,)),
     )
-    helpers.common.install_module(ctx, "fake_log_plugin", mod)
+    helpers.install_module(ctx, "fake_log_plugin", mod)
 
     registry = load_plugins(["fake_log_plugin"], {})
     backends = [StdlibLogBackend(), *registry.log_backends]

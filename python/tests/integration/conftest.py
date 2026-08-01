@@ -1,111 +1,19 @@
-"""Integration test helpers.
+"""Integration test fixtures.
 
-Helper functions are accessible via ``helpers.integ.<function>()``.
+Helper functions live in ``tests.integration.helpers`` (#1787) — this file
+now only holds the shared ``fx`` fixtures.
 """
 
 from __future__ import annotations
 
-import os
 import subprocess
-import textwrap
 from pathlib import Path
 
 import oxitest
-from oxitest import Helpers, TempDir, Yields
-
-integ = Helpers()
+from oxitest import TempDir, Yields
+from tests.integration.helpers import clean_git_env
 
 fx = oxitest.Fixtures()
-
-
-# ── Helpers (helpers.integ namespace) ─────────────────────────────────────────
-
-__all__ = [
-    "assert_collection_error",
-    "assert_contains",
-    "assert_excludes",
-    "assert_failed",
-    "assert_passed",
-    "clean_git_env",
-    "write_project",
-]
-
-
-@integ.helper
-def clean_git_env() -> dict[str, str]:
-    """Strip GIT_* vars that leak from pre-push hooks."""
-    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-
-
-@integ.helper
-def write_project(
-    tmp: TempDir,
-    *,
-    tests: dict[str, str],
-    pyproject: str | None = None,
-    conftest: str | None = None,
-    extra_files: dict[str, str] | None = None,
-) -> None:
-    """Scaffold a project in tmp.
-
-    Args:
-        tmp: TempDir to write into.
-        tests: Mapping of {filename: code}. Code is dedented.
-        pyproject: Optional pyproject.toml content (dedented).
-        conftest: Optional conftest.py content (dedented).
-        extra_files: Optional mapping of {relative_path: content} for arbitrary
-            project files (e.g. package modules like ``mypkg/__init__.py``).
-            Parent directories are created automatically. Content is *not*
-            dedented — pass verbatim source (docstring indentation matters).
-
-    """
-    if pyproject:
-        (tmp / "pyproject.toml").write_text(textwrap.dedent(pyproject))
-    if conftest:
-        (tmp / "conftest.py").write_text(textwrap.dedent(conftest))
-    for name, code in tests.items():
-        (tmp / name).write_text(textwrap.dedent(code))
-    if extra_files:
-        for rel_path, content in extra_files.items():
-            target = tmp / rel_path
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(content)
-
-
-@integ.helper
-def assert_passed(out: str, rc: int, *, count: int | None = None) -> None:
-    """Assert the run passed (exit 0)."""
-    assert rc == 0, f"expected exit 0, got {rc}\n{out}"
-    if count is not None:
-        assert f"{count} passed" in out, f"expected '{count} passed' in:\n{out}"
-
-
-@integ.helper
-def assert_failed(out: str, rc: int, *, count: int | None = None) -> None:
-    """Assert the run had failures (non-zero exit)."""
-    assert rc != 0, f"expected non-zero exit, got {rc}\n{out}"
-    if count is not None:
-        assert f"{count} failed" in out, f"expected '{count} failed' in:\n{out}"
-
-
-@integ.helper
-def assert_collection_error(out: str, rc: int) -> None:
-    """Assert collection error (exit 3)."""
-    assert rc == 3, f"expected exit 3 (collection error), got {rc}\n{out}"
-
-
-@integ.helper
-def assert_contains(out: str, *terms: str) -> None:
-    """Assert all terms are present in output."""
-    for term in terms:
-        assert term in out, f"expected {term!r} in:\n{out}"
-
-
-@integ.helper
-def assert_excludes(out: str, *terms: str) -> None:
-    """Assert none of the terms are present in output."""
-    for term in terms:
-        assert term not in out, f"unexpected {term!r} in:\n{out}"
 
 
 # ── Shared fixtures ──────────────────────────────────────────────────────────

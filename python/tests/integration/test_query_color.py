@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
 
 ANSI_ESCAPE = "\x1b["
 
@@ -18,7 +19,7 @@ def _write_project(tmp: TempDir) -> None:
 def test_detail_color_always_has_ansi(tmp: TempDir) -> None:
     """--color always produces ANSI escape codes in detail output."""
     _write_project(tmp)
-    out, err, rc = helpers.common.run_oxitest_subcmd(
+    out, err, rc = helpers.run_oxitest_subcmd(
         tmp,
         "query",
         "tests",
@@ -35,7 +36,7 @@ def test_detail_color_always_has_ansi(tmp: TempDir) -> None:
 def test_detail_color_never_no_ansi(tmp: TempDir) -> None:
     """--color never produces no ANSI escape codes."""
     _write_project(tmp)
-    out, err, rc = helpers.common.run_oxitest_subcmd(
+    out, err, rc = helpers.run_oxitest_subcmd(
         tmp,
         "query",
         "tests",
@@ -52,7 +53,7 @@ def test_detail_color_never_no_ansi(tmp: TempDir) -> None:
 def test_detail_shows_source_with_highlighting(tmp: TempDir) -> None:
     """Detail card includes source code when --color always."""
     _write_project(tmp)
-    out, err, rc = helpers.common.run_oxitest_subcmd(
+    out, err, rc = helpers.run_oxitest_subcmd(
         tmp,
         "query",
         "tests",

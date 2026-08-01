@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import oxitest as oxi
-from oxitest import helpers
+from tests import helpers
 
 _DATA_ROOT = Path(__file__).parent / "data"
 _LEGAL = _DATA_ROOT / "slice6_boundary"
@@ -72,7 +72,7 @@ _EXIT_FAILURE = 1
 def test_the_legal_tree_passes_whole(case: RunMode) -> None:
     """Descendant access, rootdir access, and two packages both named `v1`."""
     # Act
-    stdout, stderr, rc = helpers.common.run_oxitest(_LEGAL, *case.args)
+    stdout, stderr, rc = helpers.run_oxitest(_LEGAL, *case.args)
 
     # Assert
     assert rc == 0, (
@@ -91,7 +91,7 @@ def test_the_legal_tree_passes_whole(case: RunMode) -> None:
 def test_cross_boundary_access_is_a_boundary_error(case: RunMode) -> None:
     """Sibling package, prefix-sibling package, and a typo across the boundary."""
     # Act
-    stdout, stderr, rc = helpers.common.run_oxitest(_CROSS, *case.args)
+    stdout, stderr, rc = helpers.run_oxitest(_CROSS, *case.args)
     output = stdout + stderr
 
     # Assert
@@ -125,7 +125,7 @@ def test_cross_boundary_access_is_a_boundary_error(case: RunMode) -> None:
 def test_the_prefix_sibling_is_not_treated_as_a_descendant() -> None:
     """`apiv2` starts with `api` as a string and is a sibling as a path."""
     # Act
-    stdout, stderr, _rc = helpers.common.run_oxitest(_CROSS)
+    stdout, stderr, _rc = helpers.run_oxitest(_CROSS)
     output = stdout + stderr
 
     # Assert
@@ -156,7 +156,7 @@ def test_the_injection_route_refuses_a_cross_boundary_fixture(case: RunMode) -> 
     resolution would quietly fall through to the name branch instead.
     """
     # Act
-    stdout, stderr, rc = helpers.common.run_oxitest(
+    stdout, stderr, rc = helpers.run_oxitest(
         _INJECTION, *case.args, cwd=str(_INJECTION)
     )
     output = stdout + stderr
@@ -198,7 +198,7 @@ def test_the_injection_route_refuses_a_cross_boundary_fixture(case: RunMode) -> 
 def test_unknown_namespace_is_not_reported_as_a_boundary(case: RunMode) -> None:
     """The other half of the taxonomy: unknown segment, not unreachable one."""
     # Act
-    stdout, stderr, rc = helpers.common.run_oxitest(_UNKNOWN, *case.args)
+    stdout, stderr, rc = helpers.run_oxitest(_UNKNOWN, *case.args)
     output = stdout + stderr
 
     # Assert
@@ -233,7 +233,7 @@ def test_a_fixture_cannot_depend_below_its_own_anchor() -> None:
     project from failing to passing.
     """
     # Act
-    stdout, stderr, rc = helpers.common.run_oxitest(_DEPENDENCY)
+    stdout, stderr, rc = helpers.run_oxitest(_DEPENDENCY)
     output = stdout + stderr
 
     # Assert

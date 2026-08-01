@@ -17,7 +17,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
 
 _TESTS_ROOT = Path(__file__).parent
 _DATA_ROOT = _TESTS_ROOT / "data"
@@ -72,7 +73,7 @@ def _run_project(tmp: TempDir, *extra_args: str) -> _Run:
     """Run the async-lifetimes data-project with a fresh log file."""
     log = Path(tmp) / "events.log"
     env = {**os.environ, "ASYNC_LIFETIMES_LOG": str(log)}
-    stdout, stderr, rc = helpers.common.run_oxitest(_PROJECT, *extra_args, env=env)
+    stdout, stderr, rc = helpers.run_oxitest(_PROJECT, *extra_args, env=env)
     events = tuple(log.read_text().splitlines()) if log.exists() else ()
     return _Run(stdout=stdout, stderr=stderr, rc=rc, events=events)
 
@@ -245,7 +246,7 @@ def test_sync_test_reaching_an_async_fixture_is_rejected() -> None:
     The old API rejects this at arrange time for parameter injection. The
     proxy path had no guard at all, which is how #1733 stayed silent.
     """
-    stdout, stderr, rc = helpers.common.run_oxitest(_REJECT_PROJECT, "--serial")
+    stdout, stderr, rc = helpers.run_oxitest(_REJECT_PROJECT, "--serial")
     combined = stdout + stderr
 
     assert rc != 0, (

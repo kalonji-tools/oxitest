@@ -1,11 +1,13 @@
 """Integration tests for lazy collection pipeline."""
 
-from oxitest import TempDir, helpers
+from oxitest import TempDir
+from tests import helpers
+from tests.integration import helpers as integ
 
 
 def test_lazy_collection_single_node_id_skips_other_modules(tmp: TempDir) -> None:
     """Running a single test by node ID should not import unmatched modules."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_a.py": "def test_one(): pass\ndef test_two(): pass\n",
@@ -13,18 +15,18 @@ def test_lazy_collection_single_node_id_skips_other_modules(tmp: TempDir) -> Non
             "test_c.py": "def test_four(): pass\n",
         },
     )
-    out, _, rc = helpers.common.run_oxitest_subcmd(
+    out, _, rc = helpers.run_oxitest_subcmd(
         tmp,
         "run",
         "test_a.py::test_one",
         cwd=".",
     )
-    helpers.integ.assert_passed(out, rc, count=1)
+    integ.assert_passed(out, rc, count=1)
 
 
 def test_lazy_collection_expression_filter(tmp: TempDir) -> None:
     """Expression filter should only import modules with matching tests."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_auth.py": (
@@ -34,42 +36,42 @@ def test_lazy_collection_expression_filter(tmp: TempDir) -> None:
         },
         pyproject='[tool.oxitest]\nmarkers = ["slow: slow tests"]\n',
     )
-    out, _, rc = helpers.common.run_oxitest(
+    out, _, rc = helpers.run_oxitest(
         tmp,
         "-E",
         "mark(slow)",
     )
-    helpers.integ.assert_passed(out, rc, count=1)
+    integ.assert_passed(out, rc, count=1)
 
 
 def test_lazy_collection_dynamic_file_falls_back_to_eager(tmp: TempDir) -> None:
     """File with exec() should fall back to eager import and still work."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_dynamic.py": ("def test_static(): pass\n"),
         },
     )
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=1)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=1)
 
 
 def test_lazy_collection_no_filter_imports_all(tmp: TempDir) -> None:
     """Running without any filter should import all modules (no regression)."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_a.py": "def test_one(): pass\n",
             "test_b.py": "def test_two(): pass\n",
         },
     )
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_passed(out, rc, count=2)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_passed(out, rc, count=2)
 
 
 def test_lazy_collection_last_failed_only_imports_matched(tmp: TempDir) -> None:
     """--failed=only should only import modules with previously failed tests."""
-    helpers.integ.write_project(
+    integ.write_project(
         tmp,
         tests={
             "test_a.py": "def test_pass(): pass\n",
@@ -77,15 +79,15 @@ def test_lazy_collection_last_failed_only_imports_matched(tmp: TempDir) -> None:
         },
     )
     # First run — test_fail fails
-    out, _, rc = helpers.common.run_oxitest(tmp)
-    helpers.integ.assert_failed(out, rc)
+    out, _, rc = helpers.run_oxitest(tmp)
+    integ.assert_failed(out, rc)
 
     # Fix the test
     (tmp / "test_b.py").write_text("def test_fail(): pass\n")
 
     # Second run with --failed=only
-    out, _, rc = helpers.common.run_oxitest(tmp, "--failed=only")
-    helpers.integ.assert_passed(out, rc, count=1)
+    out, _, rc = helpers.run_oxitest(tmp, "--failed=only")
+    integ.assert_passed(out, rc, count=1)
 
 
 def test_lazy_collection_conftest_ancestor_chain(tmp: TempDir) -> None:
@@ -108,10 +110,10 @@ def test_lazy_collection_conftest_ancestor_chain(tmp: TempDir) -> None:
     (integ_dir / "test_b.py").write_text("def test_integ(): pass\n")
 
     # Run only unit test
-    out, _, rc = helpers.common.run_oxitest_subcmd(
+    out, _, rc = helpers.run_oxitest_subcmd(
         tmp,
         "run",
         "unit/test_a.py::test_unit",
         cwd=".",
     )
-    helpers.integ.assert_passed(out, rc, count=1)
+    integ.assert_passed(out, rc, count=1)

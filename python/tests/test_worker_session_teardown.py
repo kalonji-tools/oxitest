@@ -18,8 +18,9 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from oxitest import StdCapture, TempDir, helpers
+from oxitest import StdCapture, TempDir
 from oxitest._bridge.worker import _end_task_session
+from tests import helpers
 
 _MODULES = ("a", "b")
 _TESTS_PER_MODULE = 2
@@ -109,7 +110,7 @@ def test_tempdir_factory_cleaned_up_in_parallel(tmp: TempDir) -> None:
     log = Path(tmp) / "dirs.log"
     _write_tempdir_project(root, log)
 
-    out, err, rc = helpers.common.run_oxitest(None, "--serial", cwd=str(root))
+    out, err, rc = helpers.run_oxitest(None, "--serial", cwd=str(root))
     assert rc == 0, f"serial baseline must pass\nstdout:\n{out}\nstderr:\n{err}"
     created = len(log.read_text().splitlines())
     assert created == len(_MODULES) * _TESTS_PER_MODULE, (
@@ -122,7 +123,7 @@ def test_tempdir_factory_cleaned_up_in_parallel(tmp: TempDir) -> None:
     )
 
     log.unlink()
-    out, err, rc = helpers.common.run_oxitest(None, "-n", "4", cwd=str(root))
+    out, err, rc = helpers.run_oxitest(None, "-n", "4", cwd=str(root))
     assert rc == 0, f"parallel run must pass\nstdout:\n{out}\nstderr:\n{err}"
     pids = _worker_pids(log)
     assert len(pids) > 1, (
@@ -182,7 +183,7 @@ def test_shared_fixture_teardown_runs_in_worker(tmp: TempDir) -> None:
         "auto_arrange = false\n"
     )
 
-    out, err, rc = helpers.common.run_oxitest(None, "-n", "4", cwd=str(root))
+    out, err, rc = helpers.run_oxitest(None, "-n", "4", cwd=str(root))
     assert rc == 0, f"parallel run must pass\nstdout:\n{out}\nstderr:\n{err}"
     events = log.read_text().splitlines()
     setups = [e for e in events if e.startswith("SETUP")]

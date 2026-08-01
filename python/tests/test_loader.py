@@ -6,8 +6,9 @@ import hashlib
 import importlib.util
 
 import oxitest
-from oxitest import TempDir, TestContext, helpers, raises
+from oxitest import TempDir, TestContext, raises
 from oxitest._bridge._loader import _load_module, _LoadError, _resolve_fn
+from tests import helpers
 
 
 def _unique_name(path: str) -> str:
@@ -56,7 +57,7 @@ def test_resolve_fn_returns_callable(tmp: TempDir, ctx: TestContext) -> None:
     assert spec is not None, "spec_from_file_location should return a spec"
     assert spec.loader is not None, "spec should have a loader"
     module = importlib.util.module_from_spec(spec)
-    helpers.common.install_module(ctx, "_test_mod_tmp", module)
+    helpers.install_module(ctx, "_test_mod_tmp", module)
     spec.loader.exec_module(module)
 
     _, fn = _resolve_fn(module, "test_bar", str(f))
@@ -78,7 +79,7 @@ def test_resolve_fn_raises_load_error_on_missing_function(
     assert spec is not None, "spec_from_file_location should return a spec"
     assert spec.loader is not None, "spec should have a loader"
     module = importlib.util.module_from_spec(spec)
-    helpers.common.install_module(ctx, "_test_mod_tmp2", module)
+    helpers.install_module(ctx, "_test_mod_tmp2", module)
     spec.loader.exec_module(module)
 
     with raises(_LoadError) as exc_info:
@@ -103,7 +104,7 @@ def test_resolve_fn_handles_class_method(tmp: TempDir, ctx: TestContext) -> None
     assert spec is not None, "spec_from_file_location should return a spec"
     assert spec.loader is not None, "spec should have a loader"
     module = importlib.util.module_from_spec(spec)
-    helpers.common.install_module(ctx, "_test_mod_tmp3", module)
+    helpers.install_module(ctx, "_test_mod_tmp3", module)
     spec.loader.exec_module(module)
 
     _, fn = _resolve_fn(module, "TestFoo::test_method", str(f))
