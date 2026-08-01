@@ -10,7 +10,6 @@ RESOURCES:
   tests      Test functions (instant)
   fixtures   Registered fixtures (requires Python)
   marks      Mark decorators (instant)
-  helpers    Conftest helper functions (instant)
   plugins    Registered plugins (requires Python)
 
 PREDICATES:

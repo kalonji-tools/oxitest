@@ -16,7 +16,6 @@ fn fields_for(resource: ResourceKind) -> &'static [&'static str] {
         ResourceKind::Tests => &["source", "mark", "async"],
         ResourceKind::Fixtures => &["description", "source", "shared", "autouse", "async"],
         ResourceKind::Marks => &["used_in"],
-        ResourceKind::Helpers => &["signature", "docstring", "source"],
         ResourceKind::Plugins => &["protocol"],
     }
 }

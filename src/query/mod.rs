@@ -14,12 +14,12 @@ use resource::{QueryEntry, ResourceKind};
 
 /// Determine whether the query requires a Python session (i.e., SessionPhase).
 ///
-/// Fixtures, plugins, and helpers always need Python. Tests and marks are
+/// Fixtures and plugins always need Python. Tests and marks are
 /// instant-tier unless the DSL expression references predicates that require
 /// Python data (shared, autouse, protocol, uses).
 pub(crate) fn needs_python(resource: ResourceKind, expr_str: Option<&str>) -> bool {
     match resource {
-        ResourceKind::Fixtures | ResourceKind::Plugins | ResourceKind::Helpers => true,
+        ResourceKind::Fixtures | ResourceKind::Plugins => true,
         ResourceKind::Tests | ResourceKind::Marks => {
             if let Some(s) = expr_str {
                 match compile::lex(s).and_then(compile::parse) {
@@ -52,7 +52,6 @@ pub(crate) fn default_columns(resource: ResourceKind) -> Vec<&'static str> {
         ResourceKind::Tests => vec!["name"],
         ResourceKind::Fixtures => vec!["name"],
         ResourceKind::Marks => vec!["name"],
-        ResourceKind::Helpers => vec!["name", "namespace", "source"],
         ResourceKind::Plugins => vec!["name"],
     }
 }
@@ -60,7 +59,7 @@ pub(crate) fn default_columns(resource: ResourceKind) -> Vec<&'static str> {
 /// Collect entries for the given resource kind.
 ///
 /// For instant-tier resources (tests, marks), this performs pure-Rust AST
-/// extraction. For full-tier resources (fixtures, plugins, helpers), this
+/// extraction. For full-tier resources (fixtures, plugins), this
 /// delegates to the Python bridge.
 pub(crate) fn collect_entries(
     py: pyo3::Python<'_>,
@@ -82,10 +81,6 @@ pub(crate) fn collect_entries(
             test_files,
             &cfg.markers.registered_markers,
         )),
-        ResourceKind::Helpers => match session {
-            Some(s) => extract_helper_entries_from_bridge(py, s),
-            None => Ok(vec![]),
-        },
         ResourceKind::Fixtures => match session {
             Some(s) => extract_fixture_entries(py, s),
             None => Ok(vec![]),
@@ -135,17 +130,6 @@ fn enrich_tests_with_fixture_deps(
     }
 
     Ok(())
-}
-
-fn extract_helper_entries_from_bridge(
-    py: pyo3::Python<'_>,
-    session: &crate::bridge::FixtureSession,
-) -> Result<Vec<QueryEntry>, String> {
-    let raw = self::bridge::helper_entries(session, py).map_err(|e| e.to_string())?;
-    Ok(raw
-        .into_iter()
-        .map(|fields| QueryEntry { fields })
-        .collect())
 }
 
 fn extract_fixture_entries(
@@ -292,19 +276,5 @@ mod tests {
     fn default_columns_fixtures() {
         let cols = default_columns(ResourceKind::Fixtures);
         assert!(cols.contains(&"name"));
-    }
-
-    #[test]
-    fn default_columns_helpers() {
-        let cols = default_columns(ResourceKind::Helpers);
-        assert!(
-            !cols.contains(&"signature"),
-            "signature should not be in default columns — it makes the table unreadable"
-        );
-        assert_eq!(
-            cols,
-            vec!["name", "namespace", "source"],
-            "helpers default columns should be name, namespace, source"
-        );
     }
 }
