@@ -5,7 +5,11 @@ whole load path through the CLI, including the error rendering for the legacy
 ``doctest_modules`` key and unknown enum values.
 """
 
-from oxitest import TempDir
+import subprocess
+import textwrap
+from pathlib import Path
+
+from oxitest import Fixture, TempDir
 from tests import helpers
 from tests.integration import helpers as integ
 
@@ -249,9 +253,11 @@ def test_stale_scope_entry_hard_fails_under_abort(tmp: TempDir) -> None:
         "a stale scope entry under strict = abort must hard-fail — otherwise "
         f"typos silently bypass coverage without the user noticing: {combined!r}"
     )
-    assert "stale" in combined.lower() or "matched no" in combined.lower(), (
-        "the error output must explain WHY the run failed — the message needs "
-        f"to name the stale entry so users can locate the typo: {combined!r}"
+    assert "does not exist" in combined, (
+        "the error output must name the missing path -- a File entry whose path "
+        "is absent can only be MissingPath under ADR-0010, and accepting the "
+        "hit-based message here would license the regression that reopened "
+        f"#1796 three times: {combined!r}"
     )
 
 
@@ -428,7 +434,7 @@ def test_scope_member_form_missing_method_hard_fails_as_stale(
         "under strict = abort — otherwise typos in the class/method name "
         f"silently disable coverage for that method: {combined!r}"
     )
-    assert "stale" in combined.lower() or "matched no" in combined.lower(), (
+    assert "matched no coverage subjects" in combined, (
         "the stale-entry diagnostic must fire and name the missing entry so "
         f"users can find the typo in pyproject.toml: {combined!r}"
     )
@@ -530,7 +536,108 @@ def test_scope_member_ellipsis_stub_method_surfaces_as_stale(tmp: TempDir) -> No
         "MissingHeader against a method that has no meaningful body to grade: "
         f"{combined!r}"
     )
-    assert "stale" in combined.lower() or "matched no" in combined.lower(), (
+    assert "matched no coverage subjects" in combined, (
         "the diagnostic must name the entry as stale so the user updates "
         f"pyproject.toml rather than adding docstrings to abstract stubs: {combined!r}"
+    )
+
+
+def test_narrowed_run_inside_a_skip_prefix_succeeds(tmp: TempDir) -> None:
+    """#1796 fixed: a Prefix entry whose path exists never fails a narrowed run."""
+    integ.write_project(
+        tmp,
+        pyproject="""\
+            [tool.oxitest]
+            strict = "abort"
+
+            [tool.oxitest.doctest]
+            scope = "public"
+            skip = ["helpers/"]
+        """,
+        tests={
+            "test_one.py": """\
+                def test_one():
+                    assert True, "sanity"
+            """,
+        },
+        extra_files={
+            "helpers/__init__.py": "",
+            "helpers/util.py": '''\
+def documented():
+    """Do a thing.
+
+    Examples:
+        >>> documented()
+    """
+''',
+            "helpers/private.py": '''\
+def _hidden():
+    """Not a coverage subject — private."""
+''',
+        },
+    )
+
+    out, err, rc = helpers.run_oxitest(tmp / "helpers" / "private.py")
+    combined = out + err
+
+    assert "matched no coverage subjects" not in combined, (
+        f"a Prefix entry whose path exists is never stale -- zero subjects on a "
+        f"narrowed run is not evidence of a typo (#1796)\n{combined}"
+    )
+    assert rc == 0, (
+        f"single-file runs must succeed with skip entries configured -- this is "
+        f"the workflow CLAUDE.md advertises\n{combined}"
+    )
+
+
+def test_affected_run_reports_a_nonexistent_skip_entry(
+    git_repo: Fixture[Path],
+) -> None:
+    """#1796 fixed: a missing path is stale under every invocation shape."""
+    tmp = git_repo
+    git = ["git", "-C", str(tmp)]
+    clean_env = integ.clean_git_env()
+
+    def run(*cmd: str) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
+
+    (tmp / "pyproject.toml").write_text(
+        textwrap.dedent("""\
+            [tool.oxitest]
+            testpaths = ["pkg"]
+            strict = "abort"
+
+            [tool.oxitest.doctest]
+            scope = "public"
+            skip = ["nope/"]
+        """)
+    )
+    (tmp / "pkg").mkdir()
+    (tmp / "pkg" / "__init__.py").write_text("")
+    (tmp / "pkg" / "test_baseline.py").write_text(
+        'def test_baseline():\n    assert True, "sanity"\n'
+    )
+    run(*git, "add", ".")
+    run(*git, "commit", "-m", "baseline")
+
+    # A staged change is required — --affected with an empty set early-exits
+    # Success at FilesCollected, before the coverage check ever runs.
+    (tmp / "pkg" / "test_new.py").write_text(
+        'def test_new():\n    assert True, "sanity"\n'
+    )
+    run(*git, "add", "pkg/test_new.py")
+
+    out, err, rc = helpers.run_oxitest(
+        None, "--affected=HEAD", env=clean_env, cwd=str(tmp)
+    )
+    combined = out + err
+
+    assert "does not exist" in combined, (
+        f"a path that is not on disk is a typo regardless of how the run was "
+        f"invoked -- --affected previously exempted it, so a typo in scope/skip "
+        f"config passed CI green (#1796)\n{combined}"
+    )
+    assert rc != 0, (
+        f"strict = abort must hard-fail an unmatchable entry, otherwise "
+        f"coverage is silently unenforced\n{combined}"
     )

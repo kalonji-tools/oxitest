@@ -147,3 +147,19 @@
 **Strict Mode** — Enforcement of code quality rules at collection time. Configured via `strict = "enforce"` or `strict = "abort"`; absent or `"off"` disables it. There is no `"warn"` position — `"enforce"` is the warn-only one, and it never escalates a diagnostic to an error.
 
 **Violation** — A strict-mode rule breach detected during collection (e.g. bare assert, dict parametrize, missing mark reason).
+
+## Doctest Coverage
+
+**Coverage Subject** — A definition (module, function, class, or method) eligible for doctest auditing. Under `public`, private names are not subjects.
+
+**Scope Entry** — One element of the doctest scope/skip grammar. Four forms: `Prefix` (`dir/`), `File` (`f.py`), `Symbol` (`f.py::name`), `Member` (`f.py::Cls::name`).
+
+**Doctest Scope** — Which coverage subjects are audited: every public one, or exactly those named by a list of scope entries. _Avoid_: Scope (in this repo that names the fixture caching vocabulary).
+
+**Doctest Skip** — Coverage subjects subtracted from the audited set. _Avoid_: skip (in this repo that names the mark).
+
+**Stale Entry** — A scope or skip entry that cannot match any coverage subject under any invocation. A property of the entry and the project, never of a particular run.
+
+**Declared Test Tree** — The test surface a project declares in its configuration.
+
+**Effective Run Set** — The paths a single invocation actually walks.

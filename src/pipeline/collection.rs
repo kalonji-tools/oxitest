@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use pyo3::prelude::*;
 
 use crate::{bare_asserts, bridge, cache, config, filter, types};
@@ -704,12 +704,17 @@ pub(super) fn collect_coverage_diagnostics(
         Some(crate::config::DoctestScope::List(e)) => e,
         _ => &[],
     };
+    let inputs = StalenessInputs {
+        rootdir: &config.rootdir,
+        scanned: &rel_files,
+    };
     diagnostics.extend(stale_diagnostics(
         scope_entries,
         &scope_hits,
         "doctest.coverage.stale-scope",
         "scope",
         &severity,
+        &inputs,
     ));
     diagnostics.extend(stale_diagnostics(
         &dt.skip,
@@ -717,33 +722,126 @@ pub(super) fn collect_coverage_diagnostics(
         "doctest.coverage.stale-skip",
         "skip",
         &severity,
+        &inputs,
     ));
 
     diagnostics
 }
 
-/// Emit one diagnostic per configured entry whose `hits[i]` is false — i.e.
-/// entries that matched zero subjects during scope/skip filtering.
+/// What a staleness verdict is allowed to consult.
+///
+/// Nothing here comes from `FilterConfig`, so `--affected`, `--lf`, `--ff`,
+/// `-E` and explicit CLI paths need no special case: they cannot change either
+/// input. That invariant is the whole design -- see ADR-0010. Three shipped
+/// predicates violated it and each one reopened #1796 in a new shape.
+struct StalenessInputs<'a> {
+    rootdir: &'a Utf8Path,
+    /// Files that actually entered the coverage scan, relative to `rootdir` --
+    /// the post-prescreen set handed to `run_coverage_check`.
+    scanned: &'a [Utf8PathBuf],
+}
+
+/// Why an entry is stale, or that it is not.
+#[derive(Debug)]
+enum Staleness {
+    /// The entry names a path that is not on disk.
+    MissingPath,
+    /// The file was scanned, but the named symbol produced no coverage subject.
+    NoSubjects,
+    /// Not stale.
+    Fresh,
+}
+
+impl StalenessInputs<'_> {
+    /// Classify *entry*, given whether it matched a coverage subject this run.
+    ///
+    /// Two questions, kept apart because a run can only answer one of them:
+    ///
+    /// 1. **Does the path exist?** Static and run-independent (`src/mod.py` vs
+    ///    `src/mods.py`).
+    /// 2. **Does the named symbol exist?** Only the scan knows, so it stays
+    ///    hit-based, gated on exact membership in the scanned set.
+    fn classify(&self, entry: &crate::config::ScopeEntry, hit: bool) -> Staleness {
+        use crate::config::ScopeEntry;
+
+        let rel = match entry {
+            ScopeEntry::Prefix(path) | ScopeEntry::File(path) => path,
+            ScopeEntry::Symbol { file, .. } | ScopeEntry::Member { file, .. } => file,
+        };
+        // `Prefix` entries keep their trailing `/` from `parse_scope_entry_str`,
+        // so POSIX path resolution rejects a regular file here (ENOTDIR) and no
+        // explicit `is_dir()` check is needed. Pinned by
+        // `stale_prefix_entry_naming_a_regular_file_is_stale`.
+        if !self.rootdir.join(rel).exists() {
+            return Staleness::MissingPath;
+        }
+        match entry {
+            // A Prefix/File entry whose path exists is not a typo. Zero hits
+            // means only that this run produced no subjects under it, which
+            // happens routinely (test_*.py exclusion, conftest.py, private-only
+            // modules) and is never evidence. Asking anything run-dependent
+            // here is what reopened #1796 three times.
+            ScopeEntry::Prefix(_) | ScopeEntry::File(_) => Staleness::Fresh,
+            ScopeEntry::Symbol { .. } | ScopeEntry::Member { .. } => {
+                // Exact membership, not containment: the question is whether
+                // *this file* was scanned, never whether its directory was.
+                // Directory-level containment is what the retired `covers()`
+                // asked -- it judges symbols in files the run never opened,
+                // guessing where it must abstain, and reopens #1796.
+                // `==` and `starts_with` agree on today's inputs, because
+                // `Symbol`/`Member` always name a concrete file. That makes
+                // `starts_with` look free; it stops being free the moment
+                // anything directory-shaped reaches this arm.
+                if !hit && self.scanned.iter().any(|scanned_file| scanned_file == rel) {
+                    Staleness::NoSubjects
+                } else {
+                    Staleness::Fresh
+                }
+            }
+        }
+    }
+}
+
+/// Diagnose scope/skip entries that can never match a coverage subject.
+///
+/// A missing path and a missing symbol are different findings with different
+/// remedies, so they get different messages. The `context` strings are
+/// unchanged, so hard-fail classification is unaffected. See ADR-0010.
 fn stale_diagnostics(
     entries: &[crate::config::ScopeEntry],
     hits: &[bool],
     context: &'static str,
     kind: &'static str,
     severity: &crate::reporter::stats::DiagnosticSeverity,
+    inputs: &StalenessInputs<'_>,
 ) -> Vec<crate::reporter::stats::DiagnosticEntry> {
     entries
         .iter()
         .zip(hits.iter())
-        .filter(|(_, hit)| !**hit)
-        .map(|(entry, _)| crate::reporter::stats::DiagnosticEntry {
-            severity: severity.clone(),
-            context: std::sync::Arc::from(context),
-            message: format!(
-                "{kind} entry '{}' matched no coverage subjects (remove it or fix the path)",
-                crate::config::render_entry(entry),
-            ),
-            file: None,
-            lineno: None,
+        .filter_map(|(entry, hit)| {
+            let detail = match inputs.classify(entry, *hit) {
+                Staleness::Fresh => return None,
+                // `render_entry` prints the whole `file::Class::method`, so this
+                // must say which half is wrong -- otherwise a Symbol entry with
+                // a missing file reads as "the method does not exist" and sends
+                // the user hunting in the wrong place.
+                Staleness::MissingPath => {
+                    "names a path that does not exist (remove the entry or fix the path)"
+                }
+                Staleness::NoSubjects => {
+                    "matched no coverage subjects (remove it, or check the symbol name)"
+                }
+            };
+            Some(crate::reporter::stats::DiagnosticEntry {
+                severity: severity.clone(),
+                context: std::sync::Arc::from(context),
+                message: format!(
+                    "{kind} entry '{}' {detail}",
+                    crate::config::render_entry(entry),
+                ),
+                file: None,
+                lineno: None,
+            })
         })
         .collect()
 }
@@ -797,6 +895,7 @@ pub(super) fn split_coverage_diagnostics(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_fs::prelude::*;
 
     // ── test_tree_root (#1711) ───────────────────────────────────────────────
 
@@ -1485,43 +1584,218 @@ mod tests {
         );
     }
 
-    #[test]
-    fn stale_scope_fires_when_file_scanned_but_all_subjects_filtered() {
+    /// Config for the stale-entry tests. `strict = abort`, one entry naming
+    /// *entry_path*, placed in `scope` or `skip` per *as_scope*.
+    ///
+    /// *rootdir* must exist on disk: the staleness verdict resolves each entry
+    /// against it, so a synthetic root would make every entry trivially
+    /// "missing" and every assertion here would stop meaning anything.
+    ///
+    /// No `testpaths` and no `has_explicit_paths` -- `StalenessInputs` reads
+    /// neither, which is the invariant ADR-0010 exists to hold.
+    fn cfg_for_stale(
+        rootdir: &Utf8Path,
+        entry_path: &str,
+        as_scope: bool,
+    ) -> crate::config::Config {
         use crate::config::{DoctestConfig, DoctestScope, ScopeEntry, StrictMode};
 
-        // Scope entry names a REAL file that gets scanned, but every subject
-        // in that file is private (leading _) so the Public private-filter drops
-        // them all. Under List scope with just this one entry we'd expect it to
-        // match at least one of the _-subjects (list bypasses the private
-        // filter) — but the entry is Symbol-form for a name that doesn't exist,
-        // so it still matches zero subjects and must fire stale-scope. This
-        // guards against a regression where "file existed in scan" was
-        // mistakenly treated as "entry matched".
-        let tmp = tempfile::tempdir().expect("test setup: tempdir must succeed");
-        let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned())
-            .expect("tempdir path must be valid UTF-8");
-        std::fs::create_dir_all(root.join("mypkg")).unwrap();
-        std::fs::write(root.join("mypkg/__init__.py"), "def real_symbol(): pass\n").unwrap();
-
+        let entry = if entry_path.ends_with('/') {
+            ScopeEntry::Prefix(Utf8PathBuf::from(entry_path))
+        } else {
+            ScopeEntry::File(Utf8PathBuf::from(entry_path))
+        };
         let mut cfg = crate::config::Config::default();
-        cfg.rootdir = root.clone();
-        cfg.markers.strict = Some(StrictMode::Enforce);
+        cfg.markers.strict = Some(StrictMode::Abort);
+        cfg.rootdir = rootdir.to_owned();
         cfg.doctest = Some(DoctestConfig {
-            scope: Some(DoctestScope::List(vec![ScopeEntry::Symbol {
-                file: Utf8PathBuf::from("mypkg/__init__.py"),
-                name: "not_real_symbol".to_string(),
-            }])),
-            skip: vec![],
+            scope: if as_scope {
+                Some(DoctestScope::List(vec![entry.clone()]))
+            } else {
+                Some(DoctestScope::Public)
+            },
+            skip: if as_scope { vec![] } else { vec![entry] },
         });
+        cfg
+    }
 
-        let files = vec![root.join("mypkg/__init__.py")];
-        let diags = collect_coverage_diagnostics(&files, &cfg);
-        let stale = diags
+    /// Count stale diagnostics of either kind for *cfg*, scanning *doctest_files*.
+    ///
+    /// `doctest_files` are absolute paths; `collect_coverage_diagnostics` strips
+    /// `rootdir` from them to build the scanned set. Pass an empty slice to
+    /// model "nothing scanned".
+    fn stale_count(cfg: &crate::config::Config, doctest_files: &[Utf8PathBuf]) -> usize {
+        collect_coverage_diagnostics(doctest_files, cfg)
             .iter()
-            .find(|d| d.context.as_ref() == "doctest.coverage.stale-scope");
-        assert!(
-            stale.is_some(),
-            "stale-scope must fire even when the entry's file was scanned — matching is subject-level, and 'file entered the pipeline' must not silently satisfy the entry (diags: {diags:?})",
+            .filter(|d| d.context.as_ref().starts_with("doctest.coverage.stale-"))
+            .count()
+    }
+
+    #[test]
+    fn stale_scope_prefix_entry_naming_a_missing_directory_is_stale() {
+        // The scope side, where a missed typo costs the most: every earlier
+        // predicate had some shape of run under which it exempted this entry,
+        // and a `scope` list that matches nothing disables coverage for every
+        // subject rather than merely widening it.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        // `pkgg/helpers/` is the typo under test -- deliberately never created.
+        let cfg = cfg_for_stale(rootdir, "pkgg/helpers/", true);
+        assert_eq!(
+            stale_count(&cfg, &[]),
+            1,
+            "a scope Prefix entry naming a directory that is not on disk is \
+             precisely the typo the guard exists to catch -- exempting it turns \
+             a hard-fail into a green run with nothing coverage-checked at all",
+        );
+    }
+
+    #[test]
+    fn stale_skip_entry_naming_a_missing_file_is_stale() {
+        // The skip side, which fails less loudly than the scope side (the run
+        // still errors, but on an unexplained missing-Examples violation).
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        // `nope/mod.py` is the missing skip entry under test -- never created.
+        let cfg = cfg_for_stale(rootdir, "nope/mod.py", false);
+        assert_eq!(
+            stale_count(&cfg, &[]),
+            1,
+            "a missing path must name the mistyped skip entry rather than let \
+             it silently widen coverage",
+        );
+    }
+
+    #[test]
+    fn stale_entry_naming_a_missing_path_is_stale_under_any_invocation() {
+        // Integration tests run `oxitest <tmpdir>`: an explicit CLI path, which
+        // three earlier predicates treated as a reason to abstain.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        // `src/nope.py` is the missing entry under test -- never created.
+        let cfg = cfg_for_stale(rootdir, "src/nope.py", false);
+        assert_eq!(
+            stale_count(&cfg, &[]),
+            1,
+            "a path that is not on disk is a typo under every invocation shape \
+             -- the verdict must not depend on how the run was narrowed, which \
+             is exactly what let a mistyped entry pass CI green (#1796)",
+        );
+    }
+
+    #[test]
+    fn stale_scope_file_entry_that_exists_is_never_stale() {
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        root.child("mod.py")
+            .write_str("def _private():\n    pass\n")
+            .expect("write the scope entry's file");
+        let cfg = cfg_for_stale(rootdir, "mod.py", true);
+        assert_eq!(
+            stale_count(&cfg, &[rootdir.join("mod.py")]),
+            0,
+            "a File entry whose path exists is never stale -- zero subjects is \
+             routine (private-only modules, test_*.py, conftest.py) and is not \
+             evidence of a typo, which is the mistake that reopened #1796 \
+             three times",
+        );
+    }
+
+    #[test]
+    fn stale_prefix_entry_whose_directory_exists_is_never_stale() {
+        // The literal shape from the #1796 report: `skip = ["python/tests/helpers/"]`
+        // on a run that scanned nothing under it. Added because Mutation A
+        // (existence check always fires) survived the rest of the suite --
+        // the File case was pinned, the Prefix case was not.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        root.child("helpers/runners.py")
+            .write_str("def build():\n    pass\n")
+            .expect("populate the directory the skip entry names");
+        let cfg = cfg_for_stale(rootdir, "helpers/", false);
+        assert_eq!(
+            stale_count(&cfg, &[]),
+            0,
+            "a directory that is on disk is not a typo, whatever this run \
+             happened to scan -- firing here is the exact hard-fail every \
+             narrowed run hit in #1796",
+        );
+    }
+
+    #[test]
+    fn stale_symbol_entry_that_matched_a_subject_is_never_stale() {
+        // The hit path through `classify`: file scanned, symbol found. Added
+        // alongside the Prefix case so a mutation that makes the existence
+        // check unconditional cannot survive on the Symbol arm either.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        root.child("mod.py")
+            .write_str("def thing():\n    pass\n")
+            .expect("write the symbol entry's file");
+        // Built inline rather than via `cfg_for_stale`: the fixture's entry is
+        // overwritten wholesale below, so passing it a path would be dead.
+        let mut cfg = crate::config::Config::default();
+        cfg.markers.strict = Some(crate::config::StrictMode::Abort);
+        cfg.rootdir = rootdir.to_owned();
+        cfg.doctest = Some(crate::config::DoctestConfig {
+            scope: Some(crate::config::DoctestScope::Public),
+            skip: vec![crate::config::ScopeEntry::Symbol {
+                file: Utf8PathBuf::from("mod.py"),
+                name: "thing".to_string(),
+            }],
+        });
+        assert_eq!(
+            stale_count(&cfg, &[rootdir.join("mod.py")]),
+            0,
+            "an entry that did its job -- it skipped a real subject -- must \
+             never be reported stale, or the only way to silence a coverage \
+             violation would itself fail the run",
+        );
+    }
+
+    #[test]
+    fn stale_prefix_entry_naming_a_regular_file_is_stale() {
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        root.child("helpers")
+            .write_str("not a directory")
+            .expect("write a regular file where a directory is named");
+        let cfg = cfg_for_stale(rootdir, "helpers/", false);
+        assert_eq!(
+            stale_count(&cfg, &[]),
+            1,
+            "Prefix entries keep their trailing slash, so POSIX rejects a \
+             regular file with ENOTDIR and `exists()` covers the type check -- \
+             this pins behaviour that is otherwise accidental and would \
+             silently regress if the slash were normalised away",
+        );
+    }
+
+    #[test]
+    fn stale_symbol_entry_abstains_when_its_file_was_not_scanned() {
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        root.child("mod.py")
+            .write_str("def thing():\n    pass\n")
+            .expect("write the symbol entry's file");
+        // Built inline rather than via `cfg_for_stale`: the fixture's entry is
+        // overwritten wholesale below, so passing it a path would be dead.
+        let mut cfg = crate::config::Config::default();
+        cfg.markers.strict = Some(crate::config::StrictMode::Abort);
+        cfg.rootdir = rootdir.to_owned();
+        cfg.doctest = Some(crate::config::DoctestConfig {
+            scope: Some(crate::config::DoctestScope::Public),
+            skip: vec![crate::config::ScopeEntry::Symbol {
+                file: Utf8PathBuf::from("mod.py"),
+                name: "thing".to_string(),
+            }],
+        });
+        assert_eq!(
+            stale_count(&cfg, &[]),
+            0,
+            "a run that never scanned the file has no evidence about the \
+             symbol, so it must abstain -- guessing here is what made every \
+             narrowed run hard-fail in #1796",
         );
     }
 
