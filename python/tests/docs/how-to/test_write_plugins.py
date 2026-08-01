@@ -8,7 +8,6 @@ import inspect
 import json
 import logging
 import tempfile
-from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, fields
 from pathlib import Path
@@ -316,15 +315,6 @@ class ExecutionWrapper(Protocol):
 
     def wrap(self, *, test_fn: Any, marker_args: dict[str, Any]) -> Any: ...
 # --8<-- [end:execution-wrapper-protocol]
-
-# --8<-- [start:helper-provider-protocol]
-class HelperProvider(Protocol):
-    @property
-    def name(self) -> str: ...
-
-    @property
-    def helper(self) -> Callable[..., Any]: ...
-# --8<-- [end:helper-provider-protocol]
 # fmt: on
 
 
@@ -378,14 +368,6 @@ def test_execution_wrapper_protocol_matches_doc():
     )
 
 
-def test_helper_provider_protocol_matches_doc():
-    from oxitest.plugin import HelperProvider as Actual
-
-    assert _protocol_methods(Actual) == {"name", "helper"}, (
-        "HelperProvider protocol changed — update write-plugins.md signatures"
-    )
-
-
 def test_coverage_provider_protocol_matches_doc():
     from oxitest.plugin import CoverageProvider as Actual
 
@@ -399,7 +381,6 @@ def test_plugin_fields_match_doc():
     documented = {
         "log_backends",
         "fixture_providers",
-        "helper_providers",
         "execution_wrappers",
         "collectors",
         "reporters",
