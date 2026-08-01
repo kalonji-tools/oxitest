@@ -22,7 +22,7 @@ Both modes share the same graph, navigation model, and progressive loading infra
 The inspect graph is built in two phases so the TUI can start immediately without waiting
 for a Python session:
 
-- **Phase 1 (instant-tier):** Rust AST extraction produces tests, marks, and helpers
+- **Phase 1 (instant-tier):** Rust AST extraction produces tests and marks
   synchronously before the TUI starts. Startup filters (`--affected`, `-E`, `--lf`) are
   applied during this phase.
 - **Phase 2 (Python-tier):** A background thread initializes a `FixtureSession`, collects
@@ -133,7 +133,7 @@ Matching is case-insensitive substring on `graph.node_name()`.
 
 ### InspectGraph
 
-Six typed vectors, one per node kind:
+Five typed vectors, one per node kind:
 
 | Field | Node struct | Sigil | Identity field |
 |-------|-------------|-------|----------------|
@@ -142,7 +142,6 @@ Six typed vectors, one per node kind:
 | `marks` | `MarkNode` | `M` | `name` |
 | `conftests` | `ConftestNode` | `C` | `path` |
 | `plugins` | `PluginNode` | `P` | `name` |
-| `helpers` | `HelperNode` | `H` | `name` |
 
 Plus `broken_edges: Vec<BrokenEdge>` for unresolved fixture references.
 
@@ -154,13 +153,11 @@ search, and rendering use `NodeRef` to reference nodes without borrowing the gra
 `src/inspect/graph/builder.rs:GraphBuilder` constructs the graph incrementally:
 
 1. **`add_*_entries()`** methods accept `&[QueryEntry]` slices and populate the typed
-   vectors. Deduplication is by name (or name+source for helpers) via `HashMap` lookup
-   tables.
+   vectors. Deduplication is by name via `HashMap` lookup tables.
 2. **`resolve_edges()`** wires cross-references after all entries are added:
    - Test-to-mark edges (from the `mark` field in test entries)
    - Fixture-to-conftest edges (by source path)
    - Fixture-to-plugin edges (by `<plugin:name>` source prefix)
-   - Helper-to-conftest inverse edges
    - Parametrize grouping (strip `[param_id]` suffix, set `variants` and `param_count`)
 3. **`build()`** consumes the builder and returns the finished `InspectGraph`.
 
@@ -198,7 +195,6 @@ After the split in #1189, the detail module has this layout:
 | `detail/mark.rs` | `render_mark()`, `preview_mark()`, `collect_edges()` |
 | `detail/conftest.rs` | `render_conftest()`, `preview_conftest()`, `collect_edges()` |
 | `detail/plugin.rs` | `render_plugin()`, `preview_plugin()`, `collect_edges()` |
-| `detail/helper.rs` | `render_helper()`, `preview_helper()`, `collect_edges()` |
 
 ### Three-function pattern
 
@@ -336,8 +332,8 @@ Four sections in fixed order:
 1. **Fixture Gravity** -- fixtures with >0 consumers, sorted descending by consumer count.
    Only available after phase 2.
 2. **Marks** -- all marks, sorted descending by test count. Available from phase 1.
-3. **Conftests** -- all conftests, sorted descending by fixture count. Helper counts from
-   phase 1, fixture counts from phase 2.
+3. **Conftests** -- all conftests, sorted descending by fixture count. Available from
+   phase 2.
 4. **Signals** -- graph-derived diagnostics from `detect_signals()`. Only populated when
    fixtures are present (phase 2).
 
@@ -354,7 +350,6 @@ corresponding `NodeRef`.
 | Variant | Condition |
 |---------|-----------|
 | `UnusedFixtures` | Conftest-defined fixtures with no consumers and `autouse = false`. Builtins and plugin fixtures are excluded. |
-| `UnusedHelpers` | Reserved -- requires import analysis (deferred). |
 | `BrokenEdges` | Unresolved fixture dependency references from `graph.broken_edges`. |
 | `HighFanIn` | Fixtures consumed by >50% of all tests (threshold: `tests.len() / 2`). Skipped when fewer than 2 tests. |
 | `DeepChains` | Reserved -- requires fixture-to-fixture dependency edges (not yet captured). |

@@ -58,7 +58,7 @@ test modules are loaded. If you run `tests/unit/test_auth.py`, conftests in
 ## Plugin Loading
 
 Plugins declaring only **lazy protocols** (`fixture_provider`, `log_backend`,
-`execution_wrapper`, `debugger_backend`, `helper_provider`) can opt into deferred import:
+`execution_wrapper`, `debugger_backend`) can opt into deferred import:
 
 ```toml
 [tool.oxitest.plugin_settings.my-plugin]

@@ -171,10 +171,6 @@ prek run --all-files
 - `_mark_api.py` — mark evaluation: skip, xfail, timeout, and custom marks
 - `_mark_registry.py` — mark registration and custom mark definitions
 
-*Helper system:*
-- `_helpers.py` — `Helpers` registry class and `HelperDef`
-- `_helper_registry.py` — helper namespace resolution and access
-
 *Plugin system:*
 - `plugin_loader.py` — plugin import, validation, `PluginRegistry` (frozen dataclass), `_PluginRegistryBuilder`
 - `_plugin_config.py` — plugin settings resolution
@@ -188,7 +184,7 @@ prek run --all-files
 
 *Collection:*
 - `importer.py` — `collect_module()`: imports test file, discovers `test_*` functions, returns `CollectedItem` list
-- `conftest_loader.py` — loads `conftest.py` files, registers their `Fixtures()` and `Helpers()` instances
+- `conftest_loader.py` — loads `conftest.py` files, registers their `Fixtures()` instances
 - `_loader.py` — module loading infrastructure
 
 *Infrastructure:*
@@ -196,7 +192,7 @@ prek run --all-files
 - `_debugger.py` — debugger backend integration
 - `_fn_metadata.py` — `FunctionMetadata` frozen dataclass
 - `_violation_checkers.py` — strict-mode violation checking
-- `_namespace_validation.py` — fixture/helper namespace validation
+- `_namespace_validation.py` — fixture namespace validation
 - `_diagnostic_collector.py` — `ContextVar`-based `emit_diagnostic()` and `_diagnostic_collector_var`
 - `_assert_error.py` — `_OxitestAssertionError` and enriched assertion diagnostics
 

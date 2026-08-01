@@ -203,7 +203,7 @@ Detected during test collection.
         return Database()
     ```
 
-Flagged when a `Fixtures()` or `Helpers()` registrar appears in a test module
+Flagged when a `Fixtures()` registrar appears in a test module
 instead of `conftest.py`. Registrars in test modules are not visible to other
 test modules and indicate a structural mistake.
 

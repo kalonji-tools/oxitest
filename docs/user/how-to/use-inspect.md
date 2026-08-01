@@ -2,9 +2,9 @@
 
 !!! abstract "How-to"
     Explore your test suite interactively — browse tests, fixtures, marks,
-    conftests, plugins, and helpers in a terminal UI without running any tests.
+    conftests, and plugins in a terminal UI without running any tests.
 
-`oxitest inspect` opens a ratatui-based TUI over your project's six built-in
+`oxitest inspect` opens a ratatui-based TUI over your project's five built-in
 **Inspect Node** kinds:
 
 | Kind | Sigil | What it represents |
@@ -12,11 +12,10 @@
 | Test | `T` | Collected test functions |
 | Fixture | `F` | Registered fixtures from conftests and plugins |
 | Mark | `M` | Marks used across test files |
-| Conftest | `C` | Conftest files and their fixture/helper ownership |
+| Conftest | `C` | Conftest files and their fixture ownership |
 | Plugin | `P` | Registered plugins and the protocols they implement |
-| Helper | `H` | Conftest helper namespaces |
 
-The TUI starts instantly because phase-1 data (tests, marks, helpers) is
+The TUI starts instantly because phase-1 data (tests, marks) is
 extracted from the Rust AST before any Python session starts. Phase-2 data
 (fixture types, plugin metadata, fixture-derived signals) loads in the
 background and appears automatically when ready.
@@ -123,9 +122,8 @@ It shows four fixed **Sections** in this order:
    fixtures the test suite leans on most. *(phase 2)*
 2. **Marks** — every registered mark with the number of tests that carry it.
    *(phase 1)*
-3. **Conftests** — every `conftest.py` with its fixture and helper counts.
-   *(helper counts are phase 1; fixture counts are phase 2)*
-4. **Signals** — graph-derived diagnostics: unused fixtures, unused helpers,
+3. **Conftests** — every `conftest.py` with its fixture count. *(phase 2)*
+4. **Signals** — graph-derived diagnostics: unused fixtures,
    broken edges, high-fan-in fixtures, deep dependency chains, and scope
    mismatches. *(phase 2)*
 
@@ -156,7 +154,7 @@ another along its edges.
 ### Source view
 
 Node Focus exposes the underlying source for nodes that have code (Fixture,
-Test, Helper):
+Test):
 
 - **`s`** — show the node's source in-TUI, syntax-highlighted, read-only.
 - **`e`** — open the node's source in `$EDITOR` (or `$VISUAL`) at the correct

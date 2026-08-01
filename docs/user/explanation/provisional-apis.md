@@ -23,7 +23,6 @@ Some oxitest plugin protocols are marked **provisional**. This means:
 | `ExecutionWrapper` | 1.0.0 |
 | `Reporter` | 1.0.0 |
 | `CoverageProvider` | 1.0.0 |
-| `HelperProvider` | 1.0.0 |
 
 ## Graduation policy
 

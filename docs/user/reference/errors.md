@@ -55,11 +55,11 @@ Python 2 syntax in a Python 3 file.
 "<name>" is a Python keyword and cannot be used as a namespace name.
 ```
 
-**Cause:** A `Helpers()` or `Fixtures()` variable name (or directory name)
+**Cause:** A `Fixtures()` variable name (or directory name)
 used as a namespace matches a Python reserved keyword
 (e.g. `class`, `for`, `match`).
 
-**Fix:** Rename the `Helpers()` or `Fixtures()` variable, or rename the directory.
+**Fix:** Rename the `Fixtures()` variable, or rename the directory.
 
 ---
 
@@ -67,22 +67,10 @@ used as a namespace matches a Python reserved keyword
 "<name>" is a Python builtin and cannot be used as a namespace name.
 ```
 
-**Cause:** A `Helpers()` or `Fixtures()` variable name (or directory name)
+**Cause:** A `Fixtures()` variable name (or directory name)
 matches a Python builtin name (e.g. `int`, `list`, `print`).
 
-**Fix:** Rename the `Helpers()` or `Fixtures()` variable, or rename the directory.
-
----
-
-```text
-Two conftest files use the same helpers namespace "<name>":
-```
-
-**Cause:** Two conftest.py files in the ancestor chain produce the same
-namespace name from their `Helpers()` or `Fixtures()` variable names.
-
-**Fix:** Rename the `Helpers()` or `Fixtures()` variable in one of the two
-conftest files listed in the error message.
+**Fix:** Rename the `Fixtures()` variable, or rename the directory.
 
 ---
 
