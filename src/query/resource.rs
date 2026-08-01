@@ -17,8 +17,6 @@ pub(crate) enum ResourceKind {
     Fixtures,
     /// Registered marker names.
     Marks,
-    /// Conftest helper namespaces.
-    Helpers,
     /// Registered plugins.
     Plugins,
 }
@@ -30,7 +28,6 @@ impl ResourceKind {
             ResourceKind::Tests => &["name", "source", "mark", "async", "uses"],
             ResourceKind::Fixtures => &["name", "source", "shared", "autouse", "async", "uses"],
             ResourceKind::Marks => &["name", "used_in"],
-            ResourceKind::Helpers => &["name", "source", "namespace", "docstring", "signature"],
             ResourceKind::Plugins => &["name", "protocol"],
         }
     }
@@ -41,7 +38,6 @@ impl ResourceKind {
             ResourceKind::Tests => "tests",
             ResourceKind::Fixtures => "fixtures",
             ResourceKind::Marks => "marks",
-            ResourceKind::Helpers => "helpers",
             ResourceKind::Plugins => "plugins",
         }
     }

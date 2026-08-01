@@ -131,53 +131,6 @@ def test_query_invalid_predicate(tmp: TempDir) -> None:
     assert rc != 0, f"expected non-zero exit for invalid predicate, got {rc}"
 
 
-def test_query_helpers(tmp: TempDir) -> None:
-    """``query helpers`` shows helper functions from conftest."""
-    integ.write_project(
-        tmp,
-        tests={
-            "test_a.py": "def test_one(): pass\n",
-        },
-        conftest="""\
-            from oxitest import Helpers
-
-            utils = Helpers()
-
-            @utils.helper
-            def my_helper():
-                return 42
-        """,
-    )
-    out, _err, rc = helpers.run_oxitest_subcmd(tmp, "query", "helpers")
-    integ.assert_passed(out, rc)
-    integ.assert_contains(out, "my_helper")
-
-
-def test_query_helpers_shows_docstring(tmp: TempDir) -> None:
-    """``query helpers --detail`` includes helper docstrings."""
-    integ.write_project(
-        tmp,
-        tests={
-            "test_a.py": "def test_one(): pass\n",
-        },
-        conftest="""\
-            from oxitest import Helpers
-
-            utils = Helpers()
-
-            @utils.helper
-            def make_db():
-                \"\"\"Create a test database.\"\"\"
-                return {}
-        """,
-    )
-    out, _err, rc = helpers.run_oxitest_subcmd(
-        tmp, "query", "helpers", "--detail", "make_db"
-    )
-    integ.assert_passed(out, rc)
-    integ.assert_contains(out, "Create a test database.")
-
-
 def test_query_fixtures_uses_predicate(tmp: TempDir) -> None:
     """``query fixtures -E 'uses(db)'`` filters fixtures by dependency."""
     integ.write_project(
