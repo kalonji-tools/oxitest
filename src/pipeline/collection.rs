@@ -697,7 +697,7 @@ pub(super) fn collect_coverage_diagnostics(
         })
         .collect();
 
-    let (mut diagnostics, (scope_hits, skip_hits)) =
+    let (mut diagnostics, (scope_hits, skip_hits), parsed_files) =
         run_coverage_check(&rel_files, &root, severity.clone(), &dt.scope, &dt.skip);
 
     let scope_entries: &[crate::config::ScopeEntry] = match dt.scope.as_ref() {
@@ -706,7 +706,7 @@ pub(super) fn collect_coverage_diagnostics(
     };
     let inputs = StalenessInputs {
         rootdir: &config.rootdir,
-        scanned: &rel_files,
+        scanned: &parsed_files,
     };
     diagnostics.extend(stale_diagnostics(
         scope_entries,
@@ -736,8 +736,17 @@ pub(super) fn collect_coverage_diagnostics(
 /// predicates violated it and each one reopened #1796 in a new shape.
 struct StalenessInputs<'a> {
     rootdir: &'a Utf8Path,
-    /// Files that actually entered the coverage scan, relative to `rootdir` --
-    /// the post-prescreen set handed to `run_coverage_check`.
+    /// Files the coverage scanner actually opened and parsed, relative to
+    /// `rootdir` -- what `run_coverage_check` reports back, not what it was
+    /// offered.
+    ///
+    /// The distinction is the whole point. The scanner drops any file whose
+    /// dotted module path has an underscore-prefixed component unless a scope
+    /// entry names it explicitly, and drops any file `parse_file` cannot read.
+    /// A dropped file was never opened, so the run holds no evidence about the
+    /// symbols inside it -- an entry naming one must abstain, not be reported
+    /// stale. Gating on the offered set instead told users to "check the symbol
+    /// name" for symbols that were fine (#1796).
     scanned: &'a [Utf8PathBuf],
 }
 
@@ -1796,6 +1805,48 @@ mod tests {
             "a run that never scanned the file has no evidence about the \
              symbol, so it must abstain -- guessing here is what made every \
              narrowed run hard-fail in #1796",
+        );
+    }
+
+    #[test]
+    fn stale_symbol_entry_abstains_when_the_privacy_gate_skipped_its_file() {
+        // The #1796 shape this plan fixes: the file is offered to the scanner,
+        // but its dotted module path has an underscore-prefixed component, so
+        // the scanner's privacy gate drops it before `parse_file` ever runs.
+        // Offered is not parsed, and only parsed is evidence.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        // `__init__.py` is load-bearing, not decoration: without it `_internal`
+        // is not a package, so the dotted path for `mod.py` walks no further up
+        // than `mod` -- public -- and the privacy gate never engages.
+        root.child("_internal/__init__.py")
+            .write_str("")
+            .expect("make the private directory an importable package");
+        root.child("_internal/mod.py")
+            .write_str("def helper():\n    pass\n")
+            .expect("write a real function inside a private module");
+        // Built inline rather than via `cfg_for_stale`: the fixture's entry is
+        // overwritten wholesale below, so passing it a path would be dead.
+        let mut cfg = crate::config::Config::default();
+        cfg.markers.strict = Some(crate::config::StrictMode::Abort);
+        cfg.rootdir = rootdir.to_owned();
+        cfg.doctest = Some(crate::config::DoctestConfig {
+            // Public scope on purpose: under `List`, an explicitly-named file
+            // bypasses the privacy gate, so the bug cannot be expressed there.
+            scope: Some(crate::config::DoctestScope::Public),
+            skip: vec![crate::config::ScopeEntry::Symbol {
+                file: Utf8PathBuf::from("_internal/mod.py"),
+                name: "helper".to_string(),
+            }],
+        });
+        assert_eq!(
+            stale_count(&cfg, &[rootdir.join("_internal/mod.py")]),
+            0,
+            "the scanner's privacy gate skips `_`-prefixed module paths before \
+             parsing, so this run never opened the file and knows nothing about \
+             `helper` -- reporting it stale tells the user to check a symbol \
+             name that is correct, and under strict = abort fails CI on a wrong \
+             diagnosis (#1796)",
         );
     }
 
