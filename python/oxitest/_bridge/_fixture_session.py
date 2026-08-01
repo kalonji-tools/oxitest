@@ -840,7 +840,7 @@ class FixtureSession:
 
             # Autouse: run for side effects; value NOT injected unless
             # explicitly requested
-            for defn in self._registry.get_autouse():
+            for defn in self._registry.get_autouse(meta.module_path):
                 if defn.name not in requested_names:
                     self.get_fixture_by_name(defn.name, meta.module_path, fn_teardowns)
 

@@ -70,6 +70,43 @@ def test_shared_and_autouse_both_apply(tmp: TempDir) -> None:
     integ.assert_passed(out, rc, count=2)
 
 
+def test_legacy_conftest_autouse_fires_for_sibling_package(tmp: TempDir) -> None:
+    """autouse=True in alpha/conftest.py is run-wide ambient: beta/ gets it too."""
+    # Arrange — the empirical baseline from #1774: legacy conftest autouse is
+    # documented as "runs for every test" and must survive B1 filtering.
+    (tmp / "alpha").mkdir()
+    (tmp / "beta").mkdir()
+    (tmp / "alpha" / "conftest.py").write_text(
+        "from pathlib import Path\n"
+        "import oxitest as oxi\n"
+        "fx = oxi.Fixtures()\n"
+        "\n"
+        "@fx.fixture(autouse=True)\n"
+        "def record_firing() -> None:\n"
+        "    log = Path(__file__).resolve().parent.parent / 'firings.txt'\n"
+        "    with log.open('a') as fh:\n"
+        "        fh.write('fired\\n')\n"
+    )
+    (tmp / "alpha" / "test_alpha.py").write_text(
+        "def test_in_alpha():\n    assert True, 'placeholder'\n"
+    )
+    (tmp / "beta" / "test_beta.py").write_text(
+        "def test_in_beta():\n    assert True, 'placeholder'\n"
+    )
+
+    # Act
+    out, _, rc = helpers.run_oxitest(tmp)
+
+    # Assert
+    integ.assert_passed(out, rc, count=2)
+    firings = (tmp / "firings.txt").read_text().splitlines()
+    assert len(firings) == 2, (
+        "legacy conftest autouse is exempt from B1 (unanchored sources are "
+        "ambient); if the sibling-package firing disappears, #1774's filter "
+        "broke documented run-wide behaviour instead of only anchored sources"
+    )
+
+
 def test_yield_fixture_teardown_lifo(tmp: TempDir) -> None:
     """Yield fixtures tear down in LIFO order (reverse of setup)."""
     (tmp / "conftest.py").write_text(

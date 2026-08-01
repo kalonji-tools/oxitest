@@ -402,11 +402,34 @@ class FixtureRegistry:
         """Return fixture definitions registered for the given type."""
         return tuple(self._by_type.get(t, ()))
 
-    def get_autouse(self) -> Iterator[FixtureDef[Any]]:
-        """Yield all autouse fixtures (most-local version of each name)."""
-        return (
-            defs[-1] for defs in self._by_name.values() if defs and defs[-1].autouse
-        )
+    def get_autouse(self, module_path: str | None) -> Iterator[FixtureDef[Any]]:
+        """Yield the effective autouse def for each name.
+
+        *module_path* selects the query mode, mirroring :meth:`get` vs
+        :meth:`get_visible` — and it has no default so a call site cannot
+        silently stay unfiltered:
+
+        - a path — the resolution query (#1774). Each name's def-list goes
+          through ``_deepest_visible``, the same predicate :meth:`get_visible`
+          uses, and the winner is yielded iff it is autouse. One predicate
+          picks both the candidate and the resolution target, so the def whose
+          ``autouse=True`` queues a name *is* the def resolution returns, and
+          out-of-boundary anchored defs are never yielded — which is what
+          keeps them from reaching the raise-on-missing filtered lookup.
+          Unanchored sources are ambient (ADR-0009 Rules 6 and 7) and keep
+          firing run-wide.
+        - ``None`` — the full-catalog query: last-registered wins, no
+          filtering. For introspection/validation (``find_unused_fixtures``),
+          where an autouse fixture anywhere in the run counts as used.
+        """
+        for defs in self._by_name.values():
+            if not defs:
+                continue
+            effective = (
+                defs[-1] if module_path is None else _deepest_visible(defs, module_path)
+            )
+            if effective is not None and effective.autouse:
+                yield effective
 
     def defs_in_namespace(
         self, name: str, namespace: str

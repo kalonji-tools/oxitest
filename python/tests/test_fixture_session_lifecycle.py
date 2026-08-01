@@ -8,6 +8,12 @@ from typing import Never
 from oxitest import Fixture, raises
 from oxitest._bridge._builtin_context import TestContext as OxiTestContext
 from oxitest._bridge._errors import FixtureSetupError
+from oxitest._bridge._fixture_registry import (
+    FixtureDef,
+    FixtureScope,
+    ModuleSource,
+)
+from oxitest._bridge._lifetime import Lifetime
 from tests import helpers
 
 # ── FixtureSession: function scope ────────────────────────────────────────────
@@ -181,6 +187,70 @@ def test_autouse_teardown_still_runs() -> None:
     assert torn_down == [True], (
         f"autouse yield fixture teardown should run when fn_teardowns are called, got "
         f"{torn_down!r}"
+    )
+
+
+def _anchored_autouse_def(calls: list[str]) -> FixtureDef[None]:
+    """An autouse def anchored at /t/api that records each firing (#1774)."""
+
+    def setup() -> None:
+        calls.append("fired")
+
+    return FixtureDef(
+        name="api_setup",
+        fixture_type=object,
+        scope=FixtureScope.EACH,
+        source=ModuleSource(
+            func=setup,
+            defining_module_path="/t/api/__fixtures__.py",
+            anchor_package_path="/t/api",
+            lifetime=Lifetime.FUNCTION,
+        ),
+        autouse=True,
+    )
+
+
+def test_anchored_autouse_out_of_boundary_neither_fires_nor_raises() -> None:
+    """The autouse pass must not resolve an anchored fixture past its boundary."""
+    # Arrange
+    calls: list[str] = []
+    session = helpers.make_session(_anchored_autouse_def(calls))
+
+    def outside_test() -> None:
+        pass
+
+    # Act — must not raise: unfiltered enumeration feeds the name into the
+    # B1-filtered lookup, which raises FixtureNotFoundError (#1774)
+    kwargs, _ = session.resolve_for_test(
+        outside_test, helpers.make_meta("/t/admin/test_other.py")
+    )
+
+    # Assert
+    assert kwargs == {} and calls == [], (
+        "an autouse fixture anchored at /t/api firing (or erroring) for a test "
+        "in /t/admin would break every out-of-boundary test on a fixture it "
+        "never requested the moment #1716 ships anchored autouse"
+    )
+
+
+def test_anchored_autouse_fires_inside_boundary() -> None:
+    """Inside its boundary an anchored autouse fixture still runs per test."""
+    # Arrange
+    calls: list[str] = []
+    session = helpers.make_session(_anchored_autouse_def(calls))
+
+    def inside_test() -> None:
+        pass
+
+    # Act
+    kwargs, _ = session.resolve_for_test(
+        inside_test, helpers.make_meta("/t/api/test_inside.py")
+    )
+
+    # Assert
+    assert kwargs == {} and calls == ["fired"], (
+        "B1-filtering the candidate set must only drop out-of-boundary defs; "
+        "eating the in-boundary firing would make anchored autouse a no-op"
     )
 
 

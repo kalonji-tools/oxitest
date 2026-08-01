@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from oxitest import Fixture, raises
@@ -15,6 +16,7 @@ from oxitest._bridge._fixture_registry import (
     FixtureRegistry,
     FixtureScope,
     ModuleSource,
+    PluginSource,
 )
 from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge.result import Diagnostic, ViolationKind
@@ -59,7 +61,7 @@ def test_registry_get_autouse_returns_only_autouse() -> None:
     auto = helpers.make_fixture_def("setup", autouse=True, conftest_path="/c.py")
     manual = helpers.make_fixture_def("db", conftest_path="/c.py")
     reg = helpers.make_registry(auto, manual)
-    result = list(reg.get_autouse())
+    result = list(reg.get_autouse(None))
     assert len(result) == 1, (
         f"get_autouse() should return only 1 autouse fixture, got {len(result)}: "
         f"{[d.name for d in result]}"
@@ -72,7 +74,7 @@ def test_registry_get_autouse_returns_only_autouse() -> None:
 def test_registry_get_autouse_empty() -> None:
     """get_autouse() on an empty registry returns an empty sequence."""
     reg = helpers.make_registry()
-    assert list(reg.get_autouse()) == [], (
+    assert list(reg.get_autouse(None)) == [], (
         "get_autouse() on an empty registry should return an empty list"
     )
 
@@ -478,7 +480,9 @@ def test_registry_override_precedence() -> None:
 # ── FixtureRegistry: anchor-aware filtered queries (B1, #1713) ────────────────
 
 
-def _module_def(name: str, namespace: str, anchor: str) -> FixtureDef[Any]:
+def _module_def(
+    name: str, namespace: str, anchor: str, *, autouse: bool = False
+) -> FixtureDef[Any]:
     """A package-anchored FixtureDef, the only source B1 constrains."""
     return FixtureDef(
         name=name,
@@ -490,6 +494,7 @@ def _module_def(name: str, namespace: str, anchor: str) -> FixtureDef[Any]:
             anchor_package_path=anchor,
             lifetime=Lifetime.FUNCTION,
         ),
+        autouse=autouse,
         namespace=namespace,
     )
 
@@ -594,4 +599,104 @@ def test_namespace_visibility_and_anchors_are_separate_queries() -> None:
         "the BoundaryError message names where the namespace actually lives, "
         "so the registry has to be able to report it to a test that cannot "
         "see it"
+    )
+
+
+# ── FixtureRegistry: B1-filtered autouse enumeration (#1774) ──────────────────
+
+
+@dataclass(frozen=True)
+class _ProviderDouble:
+    """Stand-in for a FixtureProvider; enumeration never calls it."""
+
+    plugin_name: str = "plug"
+
+
+def test_anchored_autouse_not_yielded_outside_boundary() -> None:
+    """An anchored autouse def is enumerated only inside its B1 boundary."""
+    # Arrange
+    registry = FixtureRegistry()
+    registry.register(_module_def("api_setup", "api", "/t/api", autouse=True))
+
+    # Act
+    inside = [defn.name for defn in registry.get_autouse("/t/api/v1/test_a.py")]
+    outside = list(registry.get_autouse("/t/admin/test_b.py"))
+
+    # Assert
+    assert inside == ["api_setup"], (
+        "tests inside the anchor's subtree are exactly who the autouse fixture "
+        "was declared for — B1 filtering must not drop in-boundary candidates"
+    )
+    assert outside == [], (
+        "resolution B1-filters and raises FixtureNotFoundError for names it "
+        "cannot see, so an out-of-boundary candidate yielded here becomes a "
+        "spurious hard error on a fixture the test never requested (#1774)"
+    )
+
+
+def test_unanchored_autouse_yielded_regardless_of_module_path() -> None:
+    """Conftest and plugin autouse defs are ambient — they fire run-wide."""
+    # Arrange
+    conftest_def = helpers.make_fixture_def(
+        "legacy_setup", autouse=True, conftest_path="/t/alpha/conftest.py"
+    )
+    plugin_def = FixtureDef(
+        name="plugin_setup",
+        fixture_type=object,
+        scope=FixtureScope.EACH,
+        source=PluginSource(provider=_ProviderDouble(), plugin_module="plug"),
+        autouse=True,
+    )
+    registry = helpers.make_registry(conftest_def, plugin_def)
+
+    # Act
+    yielded = {defn.name for defn in registry.get_autouse("/t/beta/test_b.py")}
+
+    # Assert
+    assert yielded == {"legacy_setup", "plugin_setup"}, (
+        "unanchored sources are exempt from B1 by design (ADR-0009 Rules 6-7); "
+        "if the filter swallows them, every legacy conftest and plugin autouse "
+        "fixture silently stops running for sibling packages"
+    )
+
+
+def test_autouse_enumeration_and_resolution_agree_on_multi_def_names() -> None:
+    """The def that decides autouse-ness is the def resolution returns."""
+    # Arrange — anchored autouse registered FIRST, unanchored non-autouse LAST,
+    # so a defs[-1] implementation sees a non-autouse def and yields nothing.
+    registry = FixtureRegistry()
+    anchored = _module_def("setup", "api", "/t/api", autouse=True)
+    registry.register(anchored)
+    registry.register(helpers.make_fixture_def("setup", conftest_path="/t/conftest.py"))
+    module_path = "/t/api/test_a.py"
+
+    # Act
+    yielded = list(registry.get_autouse(module_path))
+    resolved = registry.get_visible("setup", module_path)
+
+    # Assert
+    assert yielded == [anchored] and resolved is anchored, (
+        "enumeration deciding autouse-ness on defs[-1] while resolution picks "
+        "deepest-visible means the def whose autouse=True queued the name is "
+        "not the def that actually runs — one predicate must choose both (#1774)"
+    )
+
+
+def test_autouse_full_catalog_mode_uses_last_registered() -> None:
+    """module_path=None is the validator's query: no filtering, defs[-1] wins."""
+    # Arrange
+    registry = FixtureRegistry()
+    registry.register(_module_def("api_setup", "api", "/t/api", autouse=True))
+    registry.register(
+        helpers.make_fixture_def("legacy_setup", autouse=True, conftest_path="/c.py")
+    )
+
+    # Act
+    names = {defn.name for defn in registry.get_autouse(None)}
+
+    # Assert
+    assert names == {"api_setup", "legacy_setup"}, (
+        "find_unused_fixtures seeds used-ness from every autouse fixture in "
+        "the run — filtering the catalog query would let a fixture used only "
+        "inside its own boundary be flagged as unused"
     )
