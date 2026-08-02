@@ -71,7 +71,7 @@ class NamespaceProxy(_CachingProxy):
         module_path: str,
         fn_teardowns: list[Callable[[], None]],
         *,
-        test_is_async: bool = True,
+        test_is_async: bool,
     ) -> None:
         object.__setattr__(self, "_namespace", namespace)
         object.__setattr__(self, "_session", session)
@@ -181,7 +181,7 @@ class FixturesProxy(_CachingProxy):
         fn_teardowns: list[Callable[[], None]],
         fn_name: str = "",
         *,
-        test_is_async: bool = True,
+        test_is_async: bool,
     ) -> None:
         object.__setattr__(self, "_session", session)
         object.__setattr__(self, "_module_path", module_path)

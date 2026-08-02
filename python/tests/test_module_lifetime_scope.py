@@ -73,8 +73,12 @@ def test_one_instance_per_module_path() -> None:
     session = _session_with(_module_defn("resource", resource))
     teardowns: list[Callable[[], None]] = []
 
-    first = session.get_fixture_in_namespace("resource", "pkg", _MOD_A, teardowns)
-    second = session.get_fixture_in_namespace("resource", "pkg", _MOD_A, teardowns)
+    first = session.get_fixture_in_namespace(
+        "resource", "pkg", _MOD_A, teardowns, test_is_async=True
+    )
+    second = session.get_fixture_in_namespace(
+        "resource", "pkg", _MOD_A, teardowns, test_is_async=True
+    )
 
     assert len(calls) == 1, (
         f"factory ran {len(calls)} times for one module — module lifetime means "
@@ -95,8 +99,12 @@ def test_distinct_instances_across_modules() -> None:
     session = _session_with(_module_defn("resource", resource))
     teardowns: list[Callable[[], None]] = []
 
-    from_a = session.get_fixture_in_namespace("resource", "pkg", _MOD_A, teardowns)
-    from_b = session.get_fixture_in_namespace("resource", "pkg", _MOD_B, teardowns)
+    from_a = session.get_fixture_in_namespace(
+        "resource", "pkg", _MOD_A, teardowns, test_is_async=True
+    )
+    from_b = session.get_fixture_in_namespace(
+        "resource", "pkg", _MOD_B, teardowns, test_is_async=True
+    )
 
     assert len(calls) == 2, (
         f"factory ran {len(calls)} times across two modules — module scope must "
@@ -120,7 +128,9 @@ def test_end_module_drains_teardowns() -> None:
     session = _session_with(_module_defn("resource", resource))
     teardowns: list[Callable[[], None]] = []
 
-    session.get_fixture_in_namespace("resource", "pkg", _MOD_A, teardowns)
+    session.get_fixture_in_namespace(
+        "resource", "pkg", _MOD_A, teardowns, test_is_async=True
+    )
     assert events == ["setup"], (
         f"teardown fired early (events={events}) — module-lifetime teardown must "
         "wait for end_module, not run at resolution time"
@@ -147,8 +157,12 @@ def test_end_module_pops_the_scope() -> None:
     session = _session_with(_module_defn("resource", resource))
     teardowns: list[Callable[[], None]] = []
 
-    session.get_fixture_in_namespace("resource", "pkg", _MOD_A, teardowns)
-    session.get_fixture_in_namespace("resource", "pkg", _MOD_B, teardowns)
+    session.get_fixture_in_namespace(
+        "resource", "pkg", _MOD_A, teardowns, test_is_async=True
+    )
+    session.get_fixture_in_namespace(
+        "resource", "pkg", _MOD_B, teardowns, test_is_async=True
+    )
     session.end_module(_MOD_A)
     session.end_module(_MOD_B)
 
@@ -203,8 +217,12 @@ def test_same_short_name_in_two_namespaces_stays_distinct() -> None:
     )
     teardowns: list[Callable[[], None]] = []
 
-    from_a = session.get_fixture_in_namespace("resource", "pkg", module_path, teardowns)
-    from_b = session.get_fixture_in_namespace("resource", "sub", module_path, teardowns)
+    from_a = session.get_fixture_in_namespace(
+        "resource", "pkg", module_path, teardowns, test_is_async=True
+    )
+    from_b = session.get_fixture_in_namespace(
+        "resource", "sub", module_path, teardowns, test_is_async=True
+    )
 
     assert from_a == "from-a", "pkg.resource must resolve to its own factory"
     assert from_b == "from-b", (
@@ -240,8 +258,12 @@ def test_function_lifetime_still_uncached() -> None:
     session = _session_with(each_defn)
     teardowns: list[Callable[[], None]] = []
 
-    session.get_fixture_in_namespace("resource", "pkg", _MOD_A, teardowns)
-    session.get_fixture_in_namespace("resource", "pkg", _MOD_A, teardowns)
+    session.get_fixture_in_namespace(
+        "resource", "pkg", _MOD_A, teardowns, test_is_async=True
+    )
+    session.get_fixture_in_namespace(
+        "resource", "pkg", _MOD_A, teardowns, test_is_async=True
+    )
 
     assert len(calls) == 2, (
         f"function-lifetime fixture built {len(calls)} time(s) for two "
@@ -276,7 +298,9 @@ def test_module_fixture_may_depend_on_another_module_fixture() -> None:
     session = _session_with(_module_defn("inner", inner), _module_defn("outer", outer))
     teardowns: list[Callable[[], None]] = []
 
-    value = session.get_fixture_in_namespace("outer", "pkg", _MOD_A, teardowns)
+    value = session.get_fixture_in_namespace(
+        "outer", "pkg", _MOD_A, teardowns, test_is_async=True
+    )
     assert value == "outer", (
         f"outer fixture resolved to {value!r} — expected its own yielded value"
     )
@@ -322,8 +346,12 @@ def test_failing_module_teardown_does_not_abort_the_drain() -> None:
     )
     teardowns: list[Callable[[], None]] = []
 
-    session.get_fixture_in_namespace("survivor", "pkg", _MOD_A, teardowns)
-    session.get_fixture_in_namespace("boom", "pkg", _MOD_A, teardowns)
+    session.get_fixture_in_namespace(
+        "survivor", "pkg", _MOD_A, teardowns, test_is_async=True
+    )
+    session.get_fixture_in_namespace(
+        "boom", "pkg", _MOD_A, teardowns, test_is_async=True
+    )
 
     session.end_module(_MOD_A)
 

@@ -115,7 +115,7 @@ class _SessionProtocol(Protocol):
         module_path: str,
         fn_teardowns: list[Callable[[], None]],
         *,
-        test_is_async: bool = True,
+        test_is_async: bool,
     ) -> Any: ...
 
     def get_fixture_shortcut(
@@ -124,7 +124,7 @@ class _SessionProtocol(Protocol):
         module_path: str,
         fn_teardowns: list[Callable[[], None]],
         *,
-        test_is_async: bool = True,
+        test_is_async: bool,
     ) -> Any: ...
 
     def get_namespace_for_func(
@@ -944,7 +944,7 @@ class FixtureSession:
         module_path: str,
         fn_teardowns: list[Callable[[], None]],
         *,
-        test_is_async: bool = True,
+        test_is_async: bool,
     ) -> Any:
         defn = self._registry.get_visible_in_namespace(name, namespace, module_path)
         if defn is None:
@@ -967,7 +967,7 @@ class FixtureSession:
         module_path: str,
         fn_teardowns: list[Callable[[], None]],
         *,
-        test_is_async: bool = True,
+        test_is_async: bool,
     ) -> Any:
         """Resolve ``fx.<name>`` — shortcut access, no package prefix (#1714).
 

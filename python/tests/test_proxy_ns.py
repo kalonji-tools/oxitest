@@ -30,7 +30,7 @@ def test_namespace_proxy_resolves_fixture() -> None:
     session = helpers.make_session(
         helpers.make_fixture_def("conn", lambda: "db-val", namespace="db")
     )
-    proxy = NamespaceProxy("db", session, "/fake/test.py", [])
+    proxy = NamespaceProxy("db", session, "/fake/test.py", [], test_is_async=True)
     assert proxy.conn == "db-val", (
         f"NamespaceProxy('db').conn should resolve to 'db-val', got {proxy.conn!r}"
     )
@@ -47,7 +47,7 @@ def test_namespace_proxy_is_lazy() -> None:
     session = helpers.make_session(
         helpers.make_fixture_def("conn", make_conn, namespace="db")
     )
-    proxy = NamespaceProxy("db", session, "/fake/test.py", [])
+    proxy = NamespaceProxy("db", session, "/fake/test.py", [], test_is_async=True)
     assert called == [], "fixture factory must not be called before attribute access"
     _ = proxy.conn
     assert called == [1], (
@@ -62,8 +62,10 @@ def test_namespace_proxy_isolates_namespaces() -> None:
         helpers.make_fixture_def("conn", lambda: "db-conn", namespace="db"),
         helpers.make_fixture_def("conn", lambda: "http-conn", namespace="http"),
     )
-    db_proxy = NamespaceProxy("db", session, "/fake/test.py", [])
-    http_proxy = NamespaceProxy("http", session, "/fake/test.py", [])
+    db_proxy = NamespaceProxy("db", session, "/fake/test.py", [], test_is_async=True)
+    http_proxy = NamespaceProxy(
+        "http", session, "/fake/test.py", [], test_is_async=True
+    )
     assert db_proxy.conn == "db-conn", (
         f"db namespace proxy should resolve conn to 'db-conn', got {db_proxy.conn!r}"
     )
@@ -81,7 +83,7 @@ def test_fixtures_proxy_getattr_returns_namespace_proxy() -> None:
     session = helpers.make_session(
         helpers.make_fixture_def("conn", lambda: 1, namespace="db")
     )
-    proxy = FixturesProxy(session, "/fake/test.py", [])
+    proxy = FixturesProxy(session, "/fake/test.py", [], test_is_async=True)
     ns = proxy.db
     assert isinstance(ns, NamespaceProxy), (
         f"FixturesProxy.db should return a NamespaceProxy, got {type(ns).__name__}"
@@ -91,7 +93,7 @@ def test_fixtures_proxy_getattr_returns_namespace_proxy() -> None:
 def test_fixtures_proxy_getattr_returns_oxi_proxy() -> None:
     """Accessing the 'oxi' attribute on FixturesProxy returns an OxiNamespaceProxy."""
     session = helpers.make_session()
-    proxy = FixturesProxy(session, "/fake/test.py", [])
+    proxy = FixturesProxy(session, "/fake/test.py", [], test_is_async=True)
     oxi = proxy.oxi
     assert isinstance(oxi, OxiNamespaceProxy), (
         f"FixturesProxy.oxi should return an OxiNamespaceProxy, got "
@@ -107,7 +109,7 @@ def test_fixtures_proxy_unknown_namespace_raises() -> None:
     same taxonomy as the rest of fixture lookup.
     """
     session = helpers.make_session()
-    proxy = FixturesProxy(session, "/fake/test.py", [])
+    proxy = FixturesProxy(session, "/fake/test.py", [], test_is_async=True)
     with oxitest.raises(FixtureNotFoundError, match="unknown_ns"):
         _ = proxy.unknown_ns
 
@@ -141,7 +143,7 @@ def test_unknown_segment_names_the_modern_declaration_route() -> None:
     """The stale hint pointed at conftest.py, which slice 1 displaced."""
     # Arrange
     session = _api_session()
-    proxy = FixturesProxy(session, "/t/api/test_a.py", [])
+    proxy = FixturesProxy(session, "/t/api/test_a.py", [], test_is_async=True)
 
     # Act
     with oxitest.raises(FixtureNotFoundError) as exc_info:
@@ -168,7 +170,7 @@ def test_an_unreachable_segment_is_inert_until_a_leaf_is_touched() -> None:
     """
     # Arrange
     session = _api_session()
-    proxy = FixturesProxy(session, "/t/admin/test_admin.py", [])
+    proxy = FixturesProxy(session, "/t/admin/test_admin.py", [], test_is_async=True)
 
     # Act — reaching the segment from outside its package must not raise
     namespace_proxy = proxy.api
@@ -262,7 +264,7 @@ def test_shared_fixture_accessed_via_namespace_is_frozen_proxy() -> None:
             namespace="db",
         )
     )
-    proxy = FixturesProxy(session, "/fake/test.py", [])
+    proxy = FixturesProxy(session, "/fake/test.py", [], test_is_async=True)
     result = proxy.db.conn
     assert isinstance(result, FrozenProxy), (
         f"shared fixture accessed via namespace proxy should be wrapped in "
@@ -288,7 +290,7 @@ def test_fixtures_proxy_caches_namespace_proxy_on_repeated_access(
     fixture_session: Fixture[FixtureSession],
 ) -> None:
     """FixturesProxy.oxi caches and returns the same OxiNamespaceProxy each access."""
-    proxy = FixturesProxy(fixture_session, "/fake/test.py", [])
+    proxy = FixturesProxy(fixture_session, "/fake/test.py", [], test_is_async=True)
     oxi1 = proxy.oxi
     oxi2 = proxy.oxi
     assert oxi1 is oxi2, (

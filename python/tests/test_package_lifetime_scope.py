@@ -71,8 +71,12 @@ def test_one_instance_across_modules_in_the_anchor() -> None:
     teardowns: list[Callable[[], None]] = []
 
     # Act
-    from_a = session.get_fixture_in_namespace("engine", "api", _MOD_A, teardowns)
-    from_b = session.get_fixture_in_namespace("engine", "api", _MOD_B, teardowns)
+    from_a = session.get_fixture_in_namespace(
+        "engine", "api", _MOD_A, teardowns, test_is_async=True
+    )
+    from_b = session.get_fixture_in_namespace(
+        "engine", "api", _MOD_B, teardowns, test_is_async=True
+    )
 
     # Assert — keying on module_path, as the module tier does, would build one
     # instance per module. That is the silent duplicate the whole tier exists to
@@ -97,8 +101,12 @@ def test_descendant_packages_share_the_ancestor_instance() -> None:
     teardowns: list[Callable[[], None]] = []
 
     # Act
-    from_top = session.get_fixture_in_namespace("engine", "api", _MOD_A, teardowns)
-    from_sub = session.get_fixture_in_namespace("engine", "api", _SUB_MOD, teardowns)
+    from_top = session.get_fixture_in_namespace(
+        "engine", "api", _MOD_A, teardowns, test_is_async=True
+    )
+    from_sub = session.get_fixture_in_namespace(
+        "engine", "api", _SUB_MOD, teardowns, test_is_async=True
+    )
 
     # Assert — B1 makes a package fixture usable from descendant packages, so a
     # subpackage resolving its own instance would violate the boundary rule as
@@ -126,9 +134,11 @@ def test_distinct_anchors_get_distinct_instances() -> None:
     teardowns: list[Callable[[], None]] = []
 
     # Act
-    from_api = session.get_fixture_in_namespace("engine", "api", _MOD_A, teardowns)
+    from_api = session.get_fixture_in_namespace(
+        "engine", "api", _MOD_A, teardowns, test_is_async=True
+    )
     from_core = session.get_fixture_in_namespace(
-        "engine", "core", _OTHER_MOD, teardowns
+        "engine", "core", _OTHER_MOD, teardowns, test_is_async=True
     )
 
     # Assert — sharing across anchors would make package lifetime behave like
@@ -152,7 +162,9 @@ def test_end_package_drains_teardowns() -> None:
 
     session = _session_with(_package_defn("engine", engine))
     teardowns: list[Callable[[], None]] = []
-    session.get_fixture_in_namespace("engine", "api", _MOD_A, teardowns)
+    session.get_fixture_in_namespace(
+        "engine", "api", _MOD_A, teardowns, test_is_async=True
+    )
 
     # Act — a module in the package ends, but the package has not.
     session.end_module(_MOD_A)

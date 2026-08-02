@@ -95,7 +95,19 @@ class FixtureAccessor:
         namespace = self._fa_fixtures.namespace_name
         if namespace:
             resolved = session.get_fixture_in_namespace(
-                self._oxitest_fixture_name, namespace, module_path, fn_teardowns
+                self._oxitest_fixture_name,
+                namespace,
+                module_path,
+                fn_teardowns,
+                # Asserted, not derived: this accessor resolves out of a
+                # ContextVar that carries no test kind. It is not the hole
+                # #1876 closed, because the next line does
+                # ``getattr(resolved, attr)`` — an async fixture therefore
+                # arrives as an AsyncFixtureHandle and fails on the attribute
+                # with "await it before use", which is true whichever kind the
+                # test is. Passing False would print "cannot be used by a sync
+                # test" at an async test.
+                test_is_async=True,
             )
         else:
             resolved = session.get_fixture_by_name(
