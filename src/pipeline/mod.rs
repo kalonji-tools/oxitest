@@ -129,6 +129,18 @@ pub(crate) struct PipelineShared {
 }
 
 impl PipelineShared {
+    /// The `--json` CTRF path this invocation asked for, if any.
+    ///
+    /// Every early exit needs it, not just the happy path in
+    /// [`execute`](Pipeline::execute): `--json PATH` promises that `PATH` exists
+    /// once the process is gone, whatever the exit code (#1682).
+    pub(in crate::pipeline) fn json_path(&self) -> Option<Utf8PathBuf> {
+        match &self.command {
+            config::Command::Run(args) => args.json.clone(),
+            _ => None,
+        }
+    }
+
     fn make_error_reporter(&self) -> Box<dyn reporter::Reporter> {
         reporter::make_reporter(
             self.base
@@ -136,7 +148,11 @@ impl PipelineShared {
                 .verbosity(config::Verbosity::Normal)
                 .build(),
             self.is_tty,
-            None,
+            self.json_path(),
+            // `--junit-xml` deliberately stays absent: `JunitReporter::finish`
+            // discards its collect errors, so wiring it here would write
+            // `<testsuites tests="0" failures="0"/>` — an artifact that reports
+            // an aborted run as clean.
             None,
             vec![],
         )

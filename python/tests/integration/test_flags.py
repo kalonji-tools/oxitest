@@ -77,6 +77,85 @@ def test_json_output(tmp: TempDir) -> None:
     assert passed >= 2, f"summary.passed should be >= 2, got {passed}"
 
 
+def test_json_written_on_collection_failure(tmp: TempDir) -> None:
+    """--json must still write a CTRF file when a test file fails to import.
+
+    Automation that promises "one CTRF per run" cannot tell "the job never
+    started" from "the job ran and collection failed" if the artifact is
+    missing (#1682).
+    """
+    integ.write_project(
+        tmp,
+        tests={
+            "test_bad_import.py": """\
+                import definitely_not_a_real_module_xyz
+
+                def test_thing() -> None:
+                    assert definitely_not_a_real_module_xyz, "module must import"
+            """,
+        },
+    )
+    json_path = Path(tmp) / "results.json"
+
+    out, _, rc = helpers.run_oxitest(tmp, "--json", str(json_path))
+
+    integ.assert_collection_error(out, rc)
+    assert json_path.exists(), (
+        "--json promises the file exists after the run; a collection failure "
+        "that writes nothing looks identical to a job that never started"
+    )
+    data = json.loads(json_path.read_text())
+    summary = data["results"]["summary"]
+    assert summary["failed"] >= 1, (
+        "the collection error must be counted as failed — summary.failed == 0 "
+        "makes every CTRF consumer render the aborted run green"
+    )
+    names = [t["name"] for t in data["results"]["tests"]]
+    assert any("test_bad_import.py" in name for name in names), (
+        "the artifact must name the file that failed to import, or a dashboard "
+        f"cannot point at the cause; got {names}"
+    )
+
+
+def test_json_written_on_strict_abort(tmp: TempDir) -> None:
+    """--json must still write a CTRF file when strict=abort halts the run.
+
+    A second, independent early-exit route: it prints and returns before any
+    reporter is built, so it needs its own artifact write (#1682).
+    """
+    integ.write_project(
+        tmp,
+        pyproject="""\
+            [project]
+            name = "strict-abort-json"
+            version = "0.0.0"
+
+            [tool.oxitest]
+            strict = "abort"
+        """,
+        tests={
+            "test_bare.py": """\
+                def test_bare_assert() -> None:
+                    assert 1 + 1 == 2
+            """,
+        },
+    )
+    json_path = Path(tmp) / "results.json"
+
+    out, _, rc = helpers.run_oxitest(tmp, "--json", str(json_path))
+
+    integ.assert_collection_error(out, rc)
+    assert json_path.exists(), (
+        "strict=abort exits before any reporter is constructed, so it is the "
+        "route most likely to silently drop the --json artifact"
+    )
+    data = json.loads(json_path.read_text())
+    assert data["results"]["summary"]["failed"] >= 1, (
+        "an aborted run must not serialise as a clean run, or CI treats a "
+        "suite that never executed as green"
+    )
+
+
 def test_junit_xml_output(tmp: TempDir) -> None:
     """--junit-xml writes a valid JUnit XML file with expected structure."""
     (tmp / "test_jx.py").write_text(

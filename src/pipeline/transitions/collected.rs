@@ -47,8 +47,7 @@ impl Pipeline {
         };
         let shared = self.shared;
 
-        let result =
-            helpers::apply_strict_mode(&shared.cfg, items, raw_violations, shared.use_color)?;
+        let result = helpers::apply_strict_mode(&shared, items, raw_violations)?;
 
         // ── Item-level filtering (formerly PreFilter::filter) ────────────
 

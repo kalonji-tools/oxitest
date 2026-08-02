@@ -134,13 +134,49 @@ pub(super) struct StrictModeResult {
     pub suite_lines: Vec<String>,
 }
 
+/// Write the `--json` CTRF artifact for a `--strict=abort` run and return its
+/// exit code.
+///
+/// This path renders its own console output via
+/// [`print_strict_abort`](reporter::print_strict_abort), so it cannot reuse
+/// `make_error_reporter` — that builds a console reporter too, and the
+/// violations would print twice. Each violation becomes one `failed` entry
+/// named after the test it belongs to; suite-level violations have no node ID
+/// and fall back to `<strict>` (#1682).
+fn write_strict_abort_report(
+    shared: &super::PipelineShared,
+    violations: &[strict::StrictViolation],
+) -> ExitCode {
+    let Some(path) = shared.json_path() else {
+        return ExitCode::CollectError;
+    };
+
+    use reporter::Reporter as _;
+
+    let mut json_reporter = reporter::json::JsonReporter::new(path);
+    for violation in violations {
+        let name = violation
+            .node_id()
+            .map_or_else(|| "<strict>".to_string(), ToString::to_string);
+        json_reporter.record_run_failure(name, strict::format_violation_line(violation));
+    }
+
+    // A failed write votes `UsageError` (4), which outranks `CollectError` (3) —
+    // matching the documented "`--json` output file cannot be written" rule.
+    // A successful write abstains, which `code()` reads as `Success` (0).
+    json_reporter
+        .finish(&[], false, &reporter::ReporterSession::new(0))
+        .code()
+        .max(ExitCode::CollectError)
+}
+
 /// Evaluate strict-mode violations and partition items accordingly.
 pub(super) fn apply_strict_mode(
-    cfg: &config::Config,
+    shared: &super::PipelineShared,
     items: Vec<std::sync::Arc<types::TestItem>>,
     raw_violations: Vec<bridge::RawViolation>,
-    use_color: bool,
 ) -> Result<StrictModeResult, types::ExitCode> {
+    let cfg = &shared.cfg;
     if cfg.markers.strict.is_none() {
         return Ok(StrictModeResult {
             clean_items: items,
@@ -160,8 +196,8 @@ pub(super) fn apply_strict_mode(
             .iter()
             .map(strict::format_violation_line)
             .collect();
-        reporter::print_strict_abort(&abort_lines, use_color);
-        return Err(ExitCode::CollectError);
+        reporter::print_strict_abort(&abort_lines, shared.use_color);
+        return Err(write_strict_abort_report(shared, &all_violations));
     }
 
     // Enforce mode: build suite-level violation lines.
