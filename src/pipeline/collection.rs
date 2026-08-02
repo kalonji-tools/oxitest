@@ -392,7 +392,8 @@ pub(super) fn collect_items(
         let prescan = crate::prescan::prescan_with_ast(file, collect_violations);
         let prescan_us = prescan_start.elapsed().as_micros() as u64;
 
-        let cached_ast = match prescan {
+        // `declares_inline_fixtures` gates the item cache below — see there.
+        let (declares_inline_fixtures, cached_ast) = match prescan {
             crate::prescan::PrescanResult::NoTests => {
                 tracing::debug!(path = file.as_str(), "pre-scan: no tests, skipping");
                 if profile_enabled {
@@ -405,14 +406,17 @@ pub(super) fn collect_items(
                 }
                 continue;
             }
-            crate::prescan::PrescanResult::Unavailable => None,
+            // Could not be parsed: prescan cannot rule inline declarations
+            // out, and "we could not tell" must not silently drop registration.
+            crate::prescan::PrescanResult::Unavailable => (true, None),
             crate::prescan::PrescanResult::HasTests(p) => {
                 errors.extend(reject_inline_lifetime_over_cap(file, &p.declarations));
-                if collect_violations && !p.source.is_empty() {
+                let ast = if collect_violations && !p.source.is_empty() {
                     Some((p.source, p.stmts))
                 } else {
                     None
-                }
+                };
+                (!p.declarations.is_empty(), ast)
             }
         };
 
@@ -454,7 +458,24 @@ pub(super) fn collect_items(
         }
 
         let mtime = file_mtime_secs(file);
-        let cached = if collect_violations {
+        // The item cache may serve a file only when prescan positively
+        // establishes that the file declares no inline fixtures (#1850).
+        //
+        // An inline `@oxi.fixture` is registered as a side effect of importing
+        // the test module — `collect_module` calls `_register_inline_fixtures`
+        // — and the cache hit below `continue`s past that import. Unlike the
+        // declaration homes registered above, there is nothing to hoist: with
+        // no module object there are no fixture functions to register, and
+        // re-importing the file to find them would run every module-level
+        // statement twice on cold runs and hand warm runs a *different* module
+        // object than the one the tests execute from.
+        //
+        // So the file pays for its own import on every run. That import is not
+        // extra work serially — `collect_module` stores the module on the
+        // session's `ModuleCache`, so `run_test` reuses it instead of loading
+        // it later — and it is bounded by the files that declare inline
+        // fixtures; every other file keeps the cache.
+        let cached = if collect_violations || declares_inline_fixtures {
             None
         } else {
             cache.cached_module_items(file, mtime)
