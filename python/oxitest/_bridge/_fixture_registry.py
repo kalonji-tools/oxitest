@@ -632,6 +632,14 @@ class FixtureRegistry:
         is ignored).  When multiple fixtures match, *qualifier* (the parameter
         name) is used to disambiguate.  Raises ``FixtureNotFoundError`` if no
         fixture matches, ``AmbiguousFixtureError`` if disambiguation fails.
+
+        **Unfiltered.** ``_by_type`` has no B1 counterpart the way ``get`` has
+        ``get_visible``, so this answers "anywhere in the run", not "reachable
+        from here". Both callers hand the result straight on to a name-based,
+        B1-filtered step rather than letting it stand — ``resolve_param``'s name
+        branch, and ``get_fixture_by_type``'s ``resolve_by_source``, which routes
+        user-source defs back through ``resolve_fixture``. Read #1768 before
+        changing either: the filtering lives downstream of this method, not in it.
         """
         candidates = self._by_type.get(fixture_type, [])
         if not candidates:
