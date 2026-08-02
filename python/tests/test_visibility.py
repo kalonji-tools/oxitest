@@ -176,6 +176,12 @@ class AnchorOverlapCase:
     prefix_trap=AnchorOverlapCase(
         label="prefix-trap", first="/t/api", second="/t/apiv2", expected=False
     ),
+    empty_first=AnchorOverlapCase(
+        label="empty-first", first="", second="/t/api", expected=False
+    ),
+    empty_second=AnchorOverlapCase(
+        label="empty-second", first="/t/api", second="", expected=False
+    ),
 )
 def test_anchors_overlap_decides_real_collisions(case: AnchorOverlapCase) -> None:
     """Same (namespace, name) in disjoint subtrees is legal, not a clash."""
@@ -187,7 +193,9 @@ def test_anchors_overlap_decides_real_collisions(case: AnchorOverlapCase) -> Non
         f"anchor pair {case.label!r}: namespaces are directory basenames, so "
         f"tests/api/v1 and tests/admin/v1 both derive 'v1' — treating that as a "
         f"duplicate declaration kills the run for two packages that can never "
-        f"see each other's fixtures"
+        f"see each other's fixtures. The empty cases are the other direction: "
+        f"'' has no components, and a prefix test that accepts it would make a "
+        f"path-less module overlap every anchor in the run"
     )
 
 
