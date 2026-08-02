@@ -208,11 +208,7 @@ fn drain_diagnostics_from(
         let file: String = diag.getattr("file")?.extract()?;
         let lineno: u32 = diag.getattr("lineno")?.extract()?;
 
-        let severity = match severity_str.as_str() {
-            "error" => DiagnosticSeverity::Error,
-            "warning" => DiagnosticSeverity::Warning,
-            _ => DiagnosticSeverity::Notice,
-        };
+        let severity = DiagnosticSeverity::from_wire(&severity_str);
 
         entries.push(DiagnosticEntry {
             severity,

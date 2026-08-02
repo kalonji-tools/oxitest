@@ -27,6 +27,17 @@ pub(crate) struct WorkerResult {
     pub worker_id: usize,
 }
 
+/// One message from a worker thread to the coordinator's consumer loop.
+///
+/// Diagnostics ride the same channel as results rather than a side bag: the
+/// consumer loop breaks early on maxfail, so anything drained only after the
+/// loop would be silently skipped on exactly that path — which is the
+/// missable-drain failure #1840 exists to remove, one layer down.
+pub(crate) enum WorkerMessage {
+    Result(WorkerResult),
+    Diagnostic(crate::reporter::stats::DiagnosticEntry),
+}
+
 /// Result of a test execution phase (serial or parallel).
 pub(crate) struct PhaseResult {
     /// Whether execution was interrupted (e.g., by maxfail).
@@ -104,7 +115,7 @@ pub(crate) fn run_phase_parallel(
     let show_internals = cfg.output.show_internals;
     let python_bin: Arc<str> = Arc::from(python_bin);
 
-    let (tx, rx) = crossbeam_channel::unbounded::<WorkerResult>();
+    let (tx, rx) = crossbeam_channel::unbounded::<WorkerMessage>();
 
     // Use pre-warmed workers first, fall back to spawning fresh ones.
     let mut prewarmed = pool.unwrap_or_default();
@@ -143,11 +154,17 @@ pub(crate) fn run_phase_parallel(
     let mut interrupted = false;
     let mut timings: Vec<types::TestTiming> = Vec::with_capacity(total);
 
-    for result in rx {
+    for message in rx {
         let WorkerResult {
             resolved,
             worker_id,
-        } = result;
+        } = match message {
+            WorkerMessage::Diagnostic(entry) => {
+                rep.record_diagnostics(vec![entry]);
+                continue;
+            }
+            WorkerMessage::Result(result) => result,
+        };
         let node_id = resolved.node_id.clone(); // Arc refcount bump — cheap
         {
             in_flight.lock().remove(node_id.as_ref());

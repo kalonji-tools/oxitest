@@ -220,8 +220,11 @@ fn default_result_type() -> String {
 }
 
 /// A diagnostic message from a worker subprocess.
+///
+/// Every field is consumed by `parallel::drain::forward_diagnostic`, which
+/// turns it into a `DiagnosticEntry` for the reporter (#1840). The follow-up
+/// PR the old `dead_code` expectation was waiting for is that one.
 #[derive(serde::Deserialize)]
-#[expect(dead_code, reason = "fields consumed by reporter in a follow-up PR")]
 pub(crate) struct WireDiagnostic {
     pub severity: String,
     pub context: String,
