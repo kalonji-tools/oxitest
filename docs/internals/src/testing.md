@@ -143,8 +143,14 @@ Plain modules, reached by plain import — there is no registry and no decorator
 
 `assert_result(result, Variant, why=...)` narrows a `TestResult` to one variant
 and returns it typed as that variant, so subsequent field access type-checks.
-Prefer it over a bare `assert result.status == "..."` whenever the test then
-reads a variant-specific field.
+Prefer it over a bare `assert result.status == "..."` — not only where the test
+then reads a variant-specific field. Each variant's `status` is a constant and
+the union is closed, so the narrowing is strictly stronger than the comparison
+it replaces, and two idioms in one file teach a rule that does not exist (#1794).
+
+`why` is required and asserted non-empty (#1793). It states why *that variant*
+is the contract under test — the distinction the variant draws and what breaks
+without it — not a restatement of the assertion.
 
 ### Running Python tests
 
