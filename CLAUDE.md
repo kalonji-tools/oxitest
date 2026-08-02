@@ -53,7 +53,7 @@ just
 
 ### Two rules that govern this section
 
-**Arity — exactly one file defines each fact.** `CLAUDE.md` is that file *unless another consumer already owns it*. Where another consumer does own a fact, point at the live source instead of restating it: label values come from `gh label list`, gate definitions from the `justfile`, skill names from `docs/agents/required-skills.txt`. A restatement is a copy, and copies drift — three of this file's recorded defects were restatements that went stale while the thing they described moved.
+**Arity — exactly one file defines each fact.** `CLAUDE.md` is that file *unless another consumer already owns it*. Where another consumer does own a fact, point at the live source instead of restating it: label values come from `gh label list`, gate definitions from the `justfile`, skill names from `docs/agents/required-skills.txt`. A restatement is a copy, and copies drift — two of this file's recorded defects were restatements that went stale while the thing they described moved.
 
 **Enforcement tiers — every obligation below declares one.** Prose an agent may silently skip is a legitimate choice, but it must be a *chosen* one, so that a step nobody performs can be told apart from a step nobody thought about.
 
@@ -67,10 +67,13 @@ just
 ### Track A — the change pipeline (one change, linear)
 
 ```
-Grill → Issue → Triage → Spec → Draft PR → Plan → Implement → Review → Preflight → Rebase → Merge
-                           ▲
-                           └─ a re-scoped or re-grilled issue re-enters here (Track B)
+  1       2       3       4        5        6         7         8        9       10
+Grill → Issue → Triage → Spec → Draft PR → Plan → Implement → Review → Merge → Debrief
+                          ▲
+                          └─ a re-scoped or re-grilled issue re-enters here (Track B)
 ```
+
+The numbers are the stages below. Rebase, preflight and waiting for CI are *inside* stage 9 — see its merge sequence.
 
 **1. Grill new ideas.** Any new feature, concept, or design direction MUST go through `grill-with-docs` before anything else. This ensures ideas are stress-tested against the existing domain model and documented decisions before committing to them.
 
@@ -94,7 +97,7 @@ git commit --amend
 git push --force-with-lease
 ```
 
-`--force-with-lease` rather than `--force`: it refuses if the remote moved since your last fetch, so a force-push can never silently discard someone else's work. The scaffold is pushed before it is amended, so this step is unavoidable — not an accident.
+`--force-with-lease` rather than `--force`: it refuses if the remote moved since your last fetch, so a force-push can never silently discard someone else's work.
 
 Assignment is **folded into `gh pr create`** (`fold-in`) — there is no separate `gh pr edit --add-assignee` step left to forget. The previous separate step was skipped on 4/4 PRs in one session with nothing surfacing it.
 
@@ -173,7 +176,7 @@ The pipeline gates code. This gates *conclusions*.
 A subtracting claim MUST carry:
 
 1. the **exact command** re-run, and its output;
-2. evidence the command is **the one the claim is about** — a verdict citing `just check` against an issue whose reproduction used a different invocation has measured a different thing;
+2. evidence the command is **the one the claim is about** — one real verdict cited `just check` against an issue whose reproduction used a different clippy invocation, and so measured a different thing. That particular gap was later closed in #1815; the lesson is the mismatch, not the command;
 3. evidence the run **executed** rather than replaying a cache — a cached `cargo clippy` once returned 0 where a forced rebuild found 11. "Green" and "ran" are different claims.
 
 This is `artifact` tier: it binds when someone reads the comment. Its value is that the omission becomes visible — a missing quote is the tell — where today there is nothing to look for.
@@ -182,7 +185,7 @@ This is `artifact` tier: it binds when someone reads the comment. Its value is t
 
 **Name the gate that covers your change. If you cannot name one, verify it by hand and describe how in the PR.**
 
-The `justfile` is authoritative for what the gates do; this file deliberately does not restate it. Gates get added — strict mkdocs, mdbook and `cargo doc` all entered preflight recently — so any coverage table written here would already have been wrong three times.
+The `justfile` is authoritative for what the gates do; this file deliberately does not restate it. Gates get added — strict mkdocs, mdbook and `cargo doc` each entered preflight in separate changes — so any coverage table written here would have been wrong three times over.
 
 Illustrative only, **not exhaustive**. Note that syntax-valid is not verified:
 
