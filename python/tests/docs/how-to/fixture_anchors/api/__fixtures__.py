@@ -50,18 +50,12 @@ class Client:
         self.closed = True
 
 
-LIVE_SCHEMAS: set[str] = set()
-"""Stands in for a database, so the ``ctx-fixture`` example has something to act on."""
-
-
 def create_schema(name: str) -> None:
-    """Stub — the doc example needs a real call, not a placeholder."""
-    LIVE_SCHEMAS.add(name)
+    """Stub — the ``ctx-fixture`` example needs a real call, not a placeholder."""
 
 
 def drop_schema(name: str) -> None:
     """Stub — registered as a finalizer by the ``ctx-fixture`` example."""
-    LIVE_SCHEMAS.discard(name)
 
 
 # fmt: off

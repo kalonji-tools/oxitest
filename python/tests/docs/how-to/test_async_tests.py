@@ -16,10 +16,6 @@ async def test_sleep_completes() -> None:
     assert True, "async test should complete"
 # --8<-- [end:basic-async]
 
-# --8<-- [start:async-fixture-test]
-async def test_client_connected(async_client: Fixture[dict]) -> None:
-    assert async_client["connected"] is True, "async fixture should provide connected client"
-# --8<-- [end:async-fixture-test]
 # fmt: on
 
 

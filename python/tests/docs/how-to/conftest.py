@@ -1,10 +1,10 @@
 """Fixtures for how-to doc examples.
 
-Provides stub fixtures referenced by parametrize, async, and fixture examples.
-"""
+Provides stub fixtures referenced by parametrize and fixture examples.
 
-import asyncio
-from collections.abc import AsyncGenerator
+No page under ``docs/user/`` sources a ``--8<--`` snippet from this file — #1720
+deletes it, so an example anchored here would take its page down with it (#1869).
+"""
 
 from oxitest import Fixtures
 
@@ -40,16 +40,3 @@ def mock_db() -> _StubConnection:
 def real_db() -> _StubConnection:
     """Real DB stub — alias for db_conn pattern."""
     return _StubConnection(rows=[1, 2, 3])
-
-
-# fmt: off
-# --8<-- [start:async-fixture]
-@fx.fixture
-async def async_client() -> AsyncGenerator[dict, None]:
-    # async setup
-    conn = await asyncio.sleep(0) or {"connected": True}
-    yield conn
-    # async teardown
-    await asyncio.sleep(0)
-# --8<-- [end:async-fixture]
-# fmt: on

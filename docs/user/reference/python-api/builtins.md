@@ -140,30 +140,53 @@ keep_tmp = "failed"
 
 ### Usage for Fixture Authors
 
+A fixture consumes `TestContext` the same way a test does — annotate a
+parameter with it. Declare the fixture with `@oxi.fixture` in a
+`__fixtures__.py`; `lifetime` is a required keyword.
+
 ```python
+--8<-- "python/tests/docs/how-to/fixture_anchors/api/__fixtures__.py:ctx-fixture"
+```
+
+```python
+--8<-- "python/tests/docs/how-to/fixture_anchors/api/test_api.py:ctx-test"
+```
+
+!!! warning "`ctx` inside a fixture currently describes the fixture, not the test"
+    The `TestContext` injected into a **fixture** body carries that fixture's
+    own identity: `ctx.name` reads `"db_schema"`, not the name of the test
+    being set up, so every test in the run sees the same value. Do not derive
+    per-test names from it. Use `ctx` in a fixture for `addfinalizer`, and read
+    `ctx.name`, `ctx.node_id`, `ctx.marks` and `ctx.param_id` from the test's
+    own `ctx` parameter, where they describe the test. This holds on both
+    fixture routes.
+
+#### Legacy: the same fixture on a `Fixtures()` registrar
+
+!!! warning "Supported, but no longer the primary route"
+    This still works and is not deprecated. It is scheduled for removal in
+    [#1720](https://github.com/kalonji-tools/oxitest/issues/1720), at which
+    point `Fixtures()` and `conftest.py` discovery both go away together. New
+    fixtures belong in a `__fixtures__.py`.
+
+```python
+# conftest.py
 import oxitest as oxi
-from oxitest import Fixture, TestContext
+from oxitest import TestContext
 
 fixtures = oxi.Fixtures()
 
 @fixtures.fixture
 def db_schema(ctx: TestContext) -> str:
-    """Create a test-specific database schema."""
-    schema = f"test_{ctx.name}"
+    schema = "test_schema"
     create_schema(schema)
     ctx.addfinalizer(lambda: drop_schema(schema))
     return schema
-
-def test_create_user(schema: Fixture[str], ctx: TestContext) -> None:
-    # ctx.name      → "test_create_user"
-    # ctx.node_id   → "tests/test_db.py::test_create_user"
-    # ctx.marks     → frozenset({"slow"})
-    # ctx.param_id  → None (not parametrized)
-    ...
 ```
 
 ## See also
 
 - [Use built-in fixtures](../../how-to/use-builtin-fixtures.md) — how-to guide with examples
+- [Fixture declaration](fixture-declaration.md) — `@oxi.fixture`, where a declaration may live, and the lifetime tiers
 - [Fixture types](fixture-types.md) — `Fixture[T]`, `Yields[T]`, and other type annotations
 - [Configuration](../../reference/configuration.md) — `keep_tmp` setting
