@@ -18,7 +18,46 @@ from __future__ import annotations
 
 __all__ = ["anchor_depth", "anchors_overlap", "is_visible"]
 
+from functools import lru_cache
 from pathlib import Path
+
+
+@lru_cache(maxsize=4096)
+def _parts(path: str) -> tuple[str, ...]:
+    """*path* split into components, memoised.
+
+    ``Path`` construction is the whole cost of this module — roughly 31 µs a
+    call — and it was invisible while every predicate here ran once per
+    declaration. It is not any more: ``FixtureRegistry.register`` scans every
+    prior def sharing a name (#1766 Decision 2), so registering *k*
+    declarations of one name decomposes anchors O(k²) times, and
+    :func:`is_visible` runs on every fixture resolution.
+
+    Memoising the decomposition rather than reimplementing it keeps
+    ``pathlib`` as the authority on what a component is. Keys are canonical
+    absolute paths — ``collector.rs`` canonicalises and
+    ``_module_source_registrar`` reconciles ``__file__`` — so they are stable
+    and bounded by the number of distinct anchors in a run.
+    """
+    return Path(path).parts
+
+
+def _is_prefix(prefix: tuple[str, ...], parts: tuple[str, ...]) -> bool:
+    """Whether *prefix* is a leading component run of *parts*.
+
+    ``Path(a).is_relative_to(b)`` is exactly this predicate over their
+    components, equal paths included. Spelled out rather than delegated so the
+    comparison stays component-wise: string prefixes are the one thing this
+    module exists to prevent.
+
+    The empty prefix is rejected rather than treated as universal. ``()`` is
+    what ``Path("").parts`` yields, and a bare slice test would make it a
+    prefix of everything — the exact inversion ``_canonical_module_path``
+    guards against when it keeps an empty ``__file__`` empty so a path-less
+    module stays obviously path-less instead of matching the project root.
+    ``Path(x).is_relative_to("")`` is ``False``, and so is this.
+    """
+    return bool(prefix) and parts[: len(prefix)] == prefix
 
 
 def is_visible(*, anchor: str, defining: str, module_path: str) -> bool:
@@ -49,12 +88,12 @@ def is_visible(*, anchor: str, defining: str, module_path: str) -> bool:
     """
     if anchor == defining:
         return module_path == anchor
-    return Path(module_path).is_relative_to(anchor)
+    return _is_prefix(_parts(anchor), _parts(module_path))
 
 
 def anchor_depth(anchor: str) -> int:
     """Component count of *anchor* — the order behind "deepest visible wins"."""
-    return len(Path(anchor).parts)
+    return len(_parts(anchor))
 
 
 def anchors_overlap(first: str, second: str) -> bool:
@@ -66,4 +105,7 @@ def anchors_overlap(first: str, second: str) -> bool:
     so ``tests/api/v1`` and ``tests/admin/v1`` both derive ``v1`` while being
     mutually invisible.
     """
-    return Path(first).is_relative_to(second) or Path(second).is_relative_to(first)
+    first_parts, second_parts = _parts(first), _parts(second)
+    return _is_prefix(second_parts, first_parts) or _is_prefix(
+        first_parts, second_parts
+    )
