@@ -74,7 +74,7 @@ pub(crate) struct RawFrame {
 
 impl From<RawFrame> for Frame {
     fn from(f: RawFrame) -> Self {
-        Frame {
+        Self {
             file: Utf8PathBuf::from(f.file),
             lineno: LineNo::new(usize::try_from(f.lineno).unwrap_or(0)),
             name: f.name,

@@ -21,17 +21,17 @@ pub enum ExitCode {
 impl ExitCode {
     pub fn as_i32(self) -> i32 {
         match self {
-            ExitCode::Success => 0,
-            ExitCode::Failure => 1,
-            ExitCode::Interrupted => 2,
-            ExitCode::CollectError => 3,
-            ExitCode::UsageError => 4,
+            Self::Success => 0,
+            Self::Failure => 1,
+            Self::Interrupted => 2,
+            Self::CollectError => 3,
+            Self::UsageError => 4,
         }
     }
 }
 
 impl From<ExitCode> for i32 {
-    fn from(code: ExitCode) -> i32 {
+    fn from(code: ExitCode) -> Self {
         code.as_i32()
     }
 }

@@ -267,10 +267,10 @@ impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for RawArrangedEntry {
         use crate::types::ArrangedEntry;
         if ob.is_instance_of::<pyo3::types::PyType>() {
             let name: String = ob.getattr("__name__")?.extract()?;
-            Ok(RawArrangedEntry(ArrangedEntry::Type(name)))
+            Ok(Self(ArrangedEntry::Type(name)))
         } else {
             let name: String = ob.extract()?;
-            Ok(RawArrangedEntry(ArrangedEntry::Name(name)))
+            Ok(Self(ArrangedEntry::Name(name)))
         }
     }
 }
@@ -294,6 +294,19 @@ pub(crate) enum ViolationKind {
 impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for ViolationKind {
     type Error = pyo3::PyErr;
 
+    /// # Machine-parsed — do not rewrite `ViolationKind::` to `Self::`
+    ///
+    /// `python/tests/test_bridge_contract.py` scrapes these arms with the regex
+    /// `"(\w+)"\s*=>\s*ViolationKind::` to check that every Python `ViolationKind`
+    /// value has a Rust arm here. Spelling them `Self::` makes that regex match
+    /// nothing, and the contract test fails with an empty Rust-side set.
+    ///
+    /// The `_ => Unknown` arm has no string literal and is not scraped; it keeps the
+    /// long spelling so the block does not read half-one-way, half-the-other.
+    #[expect(
+        clippy::use_self,
+        reason = "test_bridge_contract.py regex-scrapes these arms for `ViolationKind::` to keep bridge.rs and result.py in sync"
+    )]
     fn extract(ob: pyo3::Borrowed<'a, 'py, pyo3::PyAny>) -> pyo3::PyResult<Self> {
         let s: String = ob.extract()?;
         Ok(match s.as_str() {

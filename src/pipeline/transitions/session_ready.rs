@@ -12,7 +12,7 @@ use crate::{bridge, collector, config, query};
 impl Pipeline {
     // 5a. session from FilesCollected: FilesCollected -> SessionReady
     // 5b. session from MetadataFiltered: MetadataFiltered -> SessionReady
-    pub(crate) fn session(self, py: Python<'_>) -> Result<Pipeline, ExitCode> {
+    pub(crate) fn session(self, py: Python<'_>) -> Result<Self, ExitCode> {
         match self.phase {
             PipelinePhase::FilesCollected => {
                 let (session, fixture_violations) =
@@ -20,7 +20,7 @@ impl Pipeline {
                         self.make_error_reporter()
                     })?;
                 let (shared, _) = self.into_parts();
-                Ok(Pipeline {
+                Ok(Self {
                     shared,
                     phase: PipelinePhase::SessionReady {
                         session,
@@ -39,7 +39,7 @@ impl Pipeline {
                 };
                 // Replace test_files with the filtered modules to import.
                 shared.test_files = modules_to_import;
-                Ok(Pipeline {
+                Ok(Self {
                     shared,
                     phase: PipelinePhase::SessionReady {
                         session,
@@ -52,7 +52,7 @@ impl Pipeline {
     }
 
     // 6. collect: SessionReady -> Collected
-    pub(crate) fn collect(self, py: Python<'_>) -> Result<Pipeline, ExitCode> {
+    pub(crate) fn collect(self, py: Python<'_>) -> Result<Self, ExitCode> {
         let PipelinePhase::SessionReady {
             session,
             session_violations,
@@ -135,7 +135,7 @@ impl Pipeline {
             eprintln!("{}", collection::format_collection_profile(prof));
         }
 
-        Ok(Pipeline {
+        Ok(Self {
             shared,
             phase: PipelinePhase::Collected {
                 session,

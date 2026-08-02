@@ -22,8 +22,8 @@ impl ExitVote {
     /// Extract the exit code, treating `Abstain` as `ExitCode::Success`.
     pub fn code(self) -> ExitCode {
         match self {
-            ExitVote::Abstain => ExitCode::Success,
-            ExitVote::Code(c) => c,
+            Self::Abstain => ExitCode::Success,
+            Self::Code(c) => c,
         }
     }
 }

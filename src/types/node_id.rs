@@ -16,12 +16,12 @@ impl NodeId {
         if let Some(id) = param_id {
             let _ = write!(s, "[{id}]");
         }
-        NodeId(s.into())
+        Self(s.into())
     }
 
     /// Create a NodeId from an already-formatted string (e.g. received from a worker subprocess).
     pub fn from_raw(s: &str) -> Self {
-        NodeId(Arc::from(s))
+        Self(Arc::from(s))
     }
 
     /// Extract the module path (file path before the first `::`) from a node ID.
@@ -34,7 +34,7 @@ impl NodeId {
 
 impl Default for NodeId {
     fn default() -> Self {
-        NodeId(Arc::from(""))
+        Self(Arc::from(""))
     }
 }
 
@@ -73,10 +73,10 @@ impl std::borrow::Borrow<str> for NodeId {
 pub struct DurationMs(f64);
 
 impl DurationMs {
-    pub const ZERO: DurationMs = DurationMs(0.0);
+    pub const ZERO: Self = Self(0.0);
 
     pub fn new(ms: f64) -> Self {
-        DurationMs(ms)
+        Self(ms)
     }
 
     pub fn as_f64(self) -> f64 {
@@ -93,7 +93,7 @@ impl std::fmt::Display for DurationMs {
 impl std::ops::Add for DurationMs {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
-        DurationMs(self.0 + rhs.0)
+        Self(self.0 + rhs.0)
     }
 }
 
@@ -106,7 +106,7 @@ impl std::ops::AddAssign for DurationMs {
 impl std::ops::Sub for DurationMs {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self {
-        DurationMs(self.0 - rhs.0)
+        Self(self.0 - rhs.0)
     }
 }
 
@@ -120,14 +120,14 @@ impl std::ops::Sub for DurationMs {
 pub struct LineNo(usize);
 
 impl LineNo {
-    pub const ZERO: LineNo = LineNo(0);
+    pub const ZERO: Self = Self(0);
 
     pub fn new(n: usize) -> Self {
-        LineNo(n)
+        Self(n)
     }
 
     pub fn from_u32(n: u32) -> Self {
-        LineNo(n as usize)
+        Self(n as usize)
     }
 }
 

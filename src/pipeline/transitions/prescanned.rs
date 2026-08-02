@@ -8,7 +8,7 @@ use crate::{collector, config};
 
 impl Pipeline {
     // 4. filter_metadata: Prescanned -> MetadataFiltered
-    pub(crate) fn filter_metadata(self) -> Result<Pipeline, ExitCode> {
+    pub(crate) fn filter_metadata(self) -> Result<Self, ExitCode> {
         let PipelinePhase::Prescanned {
             ref prescan_data,
             ref module_markers,
@@ -31,7 +31,7 @@ impl Pipeline {
             let all_modules: Vec<camino::Utf8PathBuf> =
                 prescan_data.iter().map(|m| m.path.clone()).collect();
             let (shared, _) = self.into_parts();
-            return Ok(Pipeline {
+            return Ok(Self {
                 shared,
                 phase: PipelinePhase::MetadataFiltered {
                     modules_to_import: all_modules,
@@ -95,7 +95,7 @@ impl Pipeline {
 
         let (mut shared, _) = self.into_parts();
         shared.conftest_files = filtered_conftests;
-        Ok(Pipeline {
+        Ok(Self {
             shared,
             phase: PipelinePhase::MetadataFiltered { modules_to_import },
         })

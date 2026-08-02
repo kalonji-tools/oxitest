@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 
 impl Pipeline {
     // 2. affected: FilesCollected -> FilesCollected
-    pub(crate) fn affected(mut self) -> Result<Pipeline, ExitCode> {
+    pub(crate) fn affected(mut self) -> Result<Self, ExitCode> {
         let PipelinePhase::FilesCollected = &self.phase else {
             unreachable!("affected called outside FilesCollected phase")
         };
@@ -68,7 +68,7 @@ impl Pipeline {
     }
 
     // 3. prescan: FilesCollected -> Prescanned
-    pub(crate) fn prescan(self) -> Result<Pipeline, ExitCode> {
+    pub(crate) fn prescan(self) -> Result<Self, ExitCode> {
         let PipelinePhase::FilesCollected = &self.phase else {
             unreachable!("prescan called outside FilesCollected phase")
         };
@@ -135,7 +135,7 @@ impl Pipeline {
             None
         };
 
-        Ok(Pipeline {
+        Ok(Self {
             shared,
             phase: PipelinePhase::Prescanned {
                 prescan_data,
