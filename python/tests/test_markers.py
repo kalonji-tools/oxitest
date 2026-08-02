@@ -417,11 +417,13 @@ def test_skip_handler_returns_short_circuit() -> None:
     assert isinstance(action, ShortCircuit), (
         "_SkipHandler should produce a ShortCircuit action"
     )
-    assert action.result.status == "skipped", (
-        "_SkipHandler must produce a 'skipped' status so the reporter counts it"
-        " correctly"
+    helpers.assert_result(
+        action.result,
+        SkippedResult,
+        why="the reason given to @mark.skip must survive the handler into the result"
+        " -- it is the only explanation the report can show for a test that never ran",
+        message="not ready",
     )
-    helpers.assert_result(action.result, SkippedResult, message="not ready")
     assert not isinstance(action, Wrap), "_SkipHandler should not produce a wrapper"
 
 
@@ -530,8 +532,13 @@ def test_timeout_handler_wrapper_returns_timeout_on_expiry() -> None:
         return PassedResult()
 
     outcome = wrapper(slow_next)
-    r = helpers.assert_result(outcome, TimeoutResult)
-    assert "1s" in r.message, (
+    timed_out = helpers.assert_result(
+        outcome,
+        TimeoutResult,
+        why="an overrun must be reported as a timeout in its own right, not folded"
+        " into a generic failure -- only TimeoutResult carries the limit exceeded",
+    )
+    assert "1s" in timed_out.message, (
         "timeout result must include the limit so the developer knows which deadline"
         " was exceeded"
     )
@@ -717,8 +724,13 @@ def test_plugin_mark_handler_wraps_correctly() -> None:
     # Execute the wrapper — use WarnedResult since it has a message field
     inner_result = WarnedResult(message="original")
     wrapped_result = action.wrapper(lambda: inner_result)
-    r = helpers.assert_result(wrapped_result, WarnedResult)
-    assert "wrapped:" in r.message, (
+    wrapped = helpers.assert_result(
+        wrapped_result,
+        WarnedResult,
+        why="a plugin wrapper may edit the result it is handed but never reclassify"
+        " it -- swapping the variant rewrites the outcome of every test with its mark",
+    )
+    assert "wrapped:" in wrapped.message, (
         "plugin wrapper must transform the result so its side effects are visible to"
         " the reporter"
     )
@@ -736,11 +748,14 @@ def test_marker_composition_skip_takes_precedence_over_others() -> None:
     assert isinstance(outcome, MarksHalt), (
         "evaluate_marks with skip mark should return MarksHalt to short-circuit"
     )
-    assert outcome.result.status == "skipped", (
-        "skip must win over xfail and timeout — running a skipped test wastes time and"
-        " produces misleading results"
+    helpers.assert_result(
+        outcome.result,
+        SkippedResult,
+        why="when skip wins the composition it must win whole -- the surviving result"
+        " has to be the skip's own, reason and all, not one built from the mark that"
+        " lost",
+        message="not ready",
     )
-    helpers.assert_result(outcome.result, SkippedResult, message="not ready")
 
 
 def test_evaluate_marks_dispatches_plugin_handlers() -> None:

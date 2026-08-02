@@ -135,10 +135,11 @@ def test_arrange_missing_fixture_returns_error_result(tmp: TempDir) -> None:
         "test_missing_arrange",
         session=session,
     )
-    assert result.status == "error", (
-        "a missing arranged fixture is an infrastructure error — "
-        "the test cannot run, so status must be 'error' not 'passed': "
-        f"got status={result.status!r}"
+    helpers.assert_result(
+        result,
+        ErrorResult,
+        why="the body never ran, so reporting this as failed would blame the"
+        " developer's assertions for what is a wiring error",
     )
 
 
