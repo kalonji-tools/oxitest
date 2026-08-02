@@ -752,7 +752,7 @@ mod tests {
             "record should attribute to outermost function"
         );
         assert!(
-            ctx.by_fn.get("inner").is_none(),
+            !ctx.by_fn.contains_key("inner"),
             "inner function should not appear in by_fn"
         );
     }

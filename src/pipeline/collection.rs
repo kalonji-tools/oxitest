@@ -1155,15 +1155,20 @@ mod tests {
             .expect("tempdir path must be valid UTF-8");
         write_pkg_with_missing_examples(&root);
 
-        let mut cfg = crate::config::Config::default();
-        cfg.rootdir = root.clone();
-        cfg.markers.strict = Some(StrictMode::Enforce);
-        cfg.doctest = Some(DoctestConfig {
-            scope: Some(DoctestScope::Public),
-            ..Default::default()
-        });
-
         let files = vec![root.join("mypkg/__init__.py")];
+        let cfg = crate::config::Config {
+            rootdir: root,
+            markers: crate::config::MarkerConfig {
+                strict: Some(StrictMode::Enforce),
+                ..Default::default()
+            },
+            doctest: Some(DoctestConfig {
+                scope: Some(DoctestScope::Public),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
         let diags = collect_coverage_diagnostics(&files, &cfg);
         assert_eq!(
             diags.len(),
@@ -1191,15 +1196,20 @@ mod tests {
             .expect("tempdir path must be valid UTF-8");
         write_pkg_with_missing_examples(&root);
 
-        let mut cfg = crate::config::Config::default();
-        cfg.rootdir = root.clone();
-        cfg.markers.strict = Some(StrictMode::Off);
-        cfg.doctest = Some(DoctestConfig {
-            scope: Some(DoctestScope::Public),
-            ..Default::default()
-        });
-
         let files = vec![root.join("mypkg/__init__.py")];
+        let cfg = crate::config::Config {
+            rootdir: root,
+            markers: crate::config::MarkerConfig {
+                strict: Some(StrictMode::Off),
+                ..Default::default()
+            },
+            doctest: Some(DoctestConfig {
+                scope: Some(DoctestScope::Public),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
         let diags = collect_coverage_diagnostics(&files, &cfg);
         assert!(
             diags.is_empty(),
@@ -1216,15 +1226,17 @@ mod tests {
             .expect("tempdir path must be valid UTF-8");
         write_pkg_with_missing_examples(&root);
 
-        let mut cfg = crate::config::Config::default();
-        cfg.rootdir = root.clone();
-        // markers.strict is None by default
-        cfg.doctest = Some(DoctestConfig {
-            scope: Some(DoctestScope::Public),
-            ..Default::default()
-        });
-
         let files = vec![root.join("mypkg/__init__.py")];
+        // markers.strict is None by default
+        let cfg = crate::config::Config {
+            rootdir: root,
+            doctest: Some(DoctestConfig {
+                scope: Some(DoctestScope::Public),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
         let diags = collect_coverage_diagnostics(&files, &cfg);
         assert!(
             diags.is_empty(),
@@ -1239,11 +1251,13 @@ mod tests {
             .expect("tempdir path must be valid UTF-8");
         write_pkg_with_missing_examples(&root);
 
-        let mut cfg = crate::config::Config::default();
-        cfg.rootdir = root.clone();
-        cfg.doctest = None;
-
         let files = vec![root.join("mypkg/__init__.py")];
+        let cfg = crate::config::Config {
+            rootdir: root,
+            doctest: None,
+            ..Default::default()
+        };
+
         let diags = collect_coverage_diagnostics(&files, &cfg);
         assert!(
             diags.is_empty(),
@@ -1259,13 +1273,18 @@ mod tests {
 
         let tmp = tempfile::tempdir().unwrap();
         let root = Utf8PathBuf::from_path_buf(tmp.path().to_owned()).unwrap();
-        let mut cfg = crate::config::Config::default();
-        cfg.rootdir = root;
-        cfg.markers.strict = strict;
-        cfg.doctest = Some(DoctestConfig {
-            scope: Some(scope),
+        let cfg = crate::config::Config {
+            rootdir: root,
+            markers: crate::config::MarkerConfig {
+                strict,
+                ..Default::default()
+            },
+            doctest: Some(DoctestConfig {
+                scope: Some(scope),
+                ..Default::default()
+            }),
             ..Default::default()
-        });
+        };
         (cfg, tmp)
     }
 

@@ -145,11 +145,8 @@ mod filter_phase_contract_tests {
                 raw_violations: vec![],
                 session: crate::bridge::FixtureSession::stub(py),
             });
-            match &mut p.command {
-                crate::config::Command::Run(a) => {
-                    a.filter.expression = Some("name(alpha)".to_string())
-                }
-                _ => {}
+            if let crate::config::Command::Run(a) = &mut p.command {
+                a.filter.expression = Some("name(alpha)".to_string())
             }
 
             let result = p.strict_or_skip(py);
@@ -235,11 +232,8 @@ mod context_threading_tests {
                 session: crate::bridge::FixtureSession::stub(py),
             });
             p.cfg.markers.strict = Some(StrictMode::Enforce);
-            match &mut p.command {
-                crate::config::Command::Run(a) => {
-                    a.filter.expression = Some("name(alpha)".to_string())
-                }
-                _ => {}
+            if let crate::config::Command::Run(a) = &mut p.command {
+                a.filter.expression = Some("name(alpha)".to_string())
             }
 
             // strict_or_skip now does strict-mode split AND filtering in one step
@@ -316,11 +310,8 @@ mod context_threading_tests {
                 session: crate::bridge::FixtureSession::stub(py),
             });
             p.cfg.markers.strict = Some(StrictMode::Enforce);
-            match &mut p.command {
-                crate::config::Command::Run(a) => {
-                    a.filter.expression = Some("name(good)".to_string())
-                }
-                _ => {}
+            if let crate::config::Command::Run(a) = &mut p.command {
+                a.filter.expression = Some("name(good)".to_string())
             }
 
             let p = p.strict_or_skip(py).unwrap();

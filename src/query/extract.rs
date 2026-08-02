@@ -201,7 +201,7 @@ mod tests {
     fn test_entries_sync_function() {
         let f = write_temp_py("def test_foo(): pass\n");
         let path = temp_path(&f);
-        let entries = extract_test_entries(&[path.clone()]);
+        let entries = extract_test_entries(std::slice::from_ref(&path));
         assert_eq!(entries.len(), 1);
         let e = &entries[0];
         assert_eq!(e.get("name"), Some(format!("{path}::test_foo").as_str()));
@@ -214,7 +214,7 @@ mod tests {
     fn test_entries_async_function() {
         let f = write_temp_py("async def test_bar(): pass\n");
         let path = temp_path(&f);
-        let entries = extract_test_entries(&[path.clone()]);
+        let entries = extract_test_entries(std::slice::from_ref(&path));
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].get("async"), Some("true"));
     }
@@ -223,7 +223,7 @@ mod tests {
     fn test_entries_with_mark() {
         let f = write_temp_py("import oxitest as oxi\n\n@oxi.mark.slow\ndef test_it(): pass\n");
         let path = temp_path(&f);
-        let entries = extract_test_entries(&[path.clone()]);
+        let entries = extract_test_entries(std::slice::from_ref(&path));
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].get("mark"), Some("slow"));
     }
@@ -234,7 +234,7 @@ mod tests {
             "class TestGroup:\n    def test_a(self): pass\n    def test_b(self): pass\n    def helper(self): pass\n",
         );
         let path = temp_path(&f);
-        let entries = extract_test_entries(&[path.clone()]);
+        let entries = extract_test_entries(std::slice::from_ref(&path));
         assert_eq!(entries.len(), 2);
         let names: Vec<_> = entries.iter().filter_map(|e| e.get("name")).collect();
         assert!(
@@ -251,7 +251,7 @@ mod tests {
     fn test_entries_async_class_method_includes_class_name() {
         let f = write_temp_py("class TestGroup:\n    async def test_async(self): pass\n");
         let path = temp_path(&f);
-        let entries = extract_test_entries(&[path.clone()]);
+        let entries = extract_test_entries(std::slice::from_ref(&path));
         assert_eq!(entries.len(), 1);
         let name = entries[0].get("name").unwrap();
         assert!(
@@ -265,7 +265,7 @@ mod tests {
     fn test_entries_non_test_class_ignored() {
         let f = write_temp_py("class Helper:\n    def test_method(self): pass\n");
         let path = temp_path(&f);
-        let entries = extract_test_entries(&[path.clone()]);
+        let entries = extract_test_entries(std::slice::from_ref(&path));
         assert_eq!(entries.len(), 0);
     }
 
@@ -292,7 +292,7 @@ mod tests {
     fn mark_entries_from_decorator() {
         let f = write_temp_py("import oxitest as oxi\n\n@oxi.mark.slow\ndef test_it(): pass\n");
         let path = temp_path(&f);
-        let entries = extract_mark_entries(&[path.clone()], &[]);
+        let entries = extract_mark_entries(std::slice::from_ref(&path), &[]);
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].get("name"), Some("slow"));
         assert!(entries[0].get("used_in").unwrap().contains(path.as_str()));
@@ -311,7 +311,8 @@ mod tests {
         let f =
             write_temp_py("import oxitest as oxi\n\n@oxi.mark.integration\ndef test_it(): pass\n");
         let path = temp_path(&f);
-        let entries = extract_mark_entries(&[path.clone()], &["integration".to_string()]);
+        let entries =
+            extract_mark_entries(std::slice::from_ref(&path), &["integration".to_string()]);
         // integration appears once (deduplicated)
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].get("name"), Some("integration"));
@@ -336,7 +337,7 @@ mod tests {
             "import oxitest as oxi\n\n@oxi.mark.parametrize(\"x\", [1, 2])\ndef test_it(x): pass\n",
         );
         let path = temp_path(&f);
-        let entries = extract_mark_entries(&[path.clone()], &[]);
+        let entries = extract_mark_entries(std::slice::from_ref(&path), &[]);
         assert_eq!(entries.len(), 0);
     }
 

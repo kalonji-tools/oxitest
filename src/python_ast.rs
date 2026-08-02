@@ -605,7 +605,7 @@ pub(crate) mod tests {
 
     // ── is_stub_body ──────────────────────────────────────────────────
 
-    fn get_body<'a>(stmts: &'a [ast::Stmt]) -> &'a [ast::Stmt] {
+    fn get_body(stmts: &[ast::Stmt]) -> &[ast::Stmt] {
         match &stmts[0] {
             ast::Stmt::FunctionDef(f) => &f.body,
             ast::Stmt::AsyncFunctionDef(f) => &f.body,

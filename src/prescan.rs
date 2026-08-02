@@ -1084,7 +1084,7 @@ mod tests {
     #[test]
     fn prescan_no_dynamic_flag_for_clean_file() {
         pyo3::Python::initialize();
-        pyo3::Python::attach(|py| init_stdlib_names(py));
+        pyo3::Python::attach(init_stdlib_names);
         let f = write_temp_py("import os\nfrom typing import *\ndef test_it(): pass\n");
         let result = prescan_with_ast(&temp_path(&f), false);
         match result {
