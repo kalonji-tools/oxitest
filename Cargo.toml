@@ -48,11 +48,9 @@ unsafe_code = "forbid"
 warnings = "deny"
 
 [lints.clippy]
-# `priority = -1` is required, not stylistic: cargo refuses to build when a
-# group and a specific lint share the default priority of 0. It makes specific
-# lints below win over the group, which is what any of them would want.
+# `priority = -1` is mandatory: cargo refuses to build when a group and a
+# specific lint share the default priority of 0.
 all = { level = "deny", priority = -1 }
-# Nursery lint, so not covered by `all`. `deny` rather than `warn` because
-# `[lints.rust] warnings = "deny"` above escalates it either way — measured, see
-# #1817 — and a line reading `warn` beside behaviour that hard-fails misleads.
+# Nursery, so `all` misses it. `deny` not `warn` — `warnings = "deny"` above
+# escalates either spelling to an error anyway (measured, #1817).
 redundant_clone = "deny"

@@ -436,7 +436,7 @@ fn setup_with_plugin_recovery(
     // Build extended parser with plugin args
     use clap::CommandFactory;
     let base_cmd = config::OxitestCli::command();
-    let extended_cmd = config::cli::add_plugin_args(base_cmd, &extensions);
+    let mut extended_cmd = config::cli::add_plugin_args(base_cmd, &extensions);
 
     use clap::error::ErrorKind;
     let is_help = phase1_err.kind() == ErrorKind::DisplayHelp
@@ -444,7 +444,7 @@ fn setup_with_plugin_recovery(
 
     if is_help {
         // Show help with plugin flags included, then exit.
-        let _ = extended_cmd.clone().print_help();
+        let _ = extended_cmd.print_help();
         println!();
         return Ok(Err(ExitCode::Success));
     }

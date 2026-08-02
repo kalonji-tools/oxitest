@@ -463,8 +463,8 @@ mod tests {
             base_ref: "HEAD".to_string(),
             total_changed: 2,
             non_python_count: non_python,
-            conftest_files: classified.conftest_files.clone(),
-            source_files: classified.source_files.clone(),
+            conftest_files: classified.conftest_files,
+            source_files: classified.source_files,
             ..Default::default()
         };
         assert_eq!(diag.non_python_count, 1, "README.md is non-Python");

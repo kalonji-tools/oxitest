@@ -1297,7 +1297,7 @@ B = A
         .unwrap();
 
         let module_root = ModuleRoot {
-            root: root.clone(),
+            root,
             use_gitignore: true,
         };
         let files = vec![Utf8PathBuf::from("mypkg/__init__.py")];

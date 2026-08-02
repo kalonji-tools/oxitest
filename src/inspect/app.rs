@@ -685,13 +685,13 @@ mod tests {
         state.results = vec![node_a.clone(), node_b.clone()];
         assert_eq!(
             state.selected(),
-            Some(node_a.clone()),
+            Some(node_a),
             "selected at index 0 should return first result"
         );
         state.select_next();
         assert_eq!(
             state.selected(),
-            Some(node_b.clone()),
+            Some(node_b),
             "selected at index 1 should return second result"
         );
     }
@@ -1062,7 +1062,7 @@ mod tests {
         };
 
         history.push(node.clone());
-        history.push(node.clone());
+        history.push(node);
 
         assert_eq!(
             history.len(),
