@@ -1,6 +1,7 @@
 nav:
   - Marks: marks.md
   - Arrange: arrange.md
+  - Fixture declaration: fixture-declaration.md
   - Fixture types: fixture-types.md
   - Built-in fixtures: builtins.md
   - Async backend: async-backend.md

@@ -187,9 +187,8 @@ def engine() -> Iterator[Engine]:
     once per run — a schema migration, a shared artifact build — belongs at
     rootdir `package` and pays the parallelism cost. See
     [Run in parallel](run-in-parallel.md#understand-session-scoped-fixture-behaviour-in-parallel-runs)
-    for the subprocess model behind this — noting that that section describes the
-    legacy `shared=True` tier and still states the count as once per worker
-    process, which is being re-checked separately.
+    for the subprocess model behind this, described there for the legacy
+    `shared=True` tier, which is rebuilt per task group for the same reason.
 
 ## Understand fixture visibility: the B1 boundary
 
@@ -535,5 +534,6 @@ than the B1 boundary that governs `@oxi.fixture`. Tracked as
 ## See also
 
 - [Use built-in fixtures](use-builtin-fixtures.md) — `TempDir`, `StdCapture`, `Patcher`, `LogCapture`, and other auto-injected fixtures
+- [Fixture declaration reference](../reference/python-api/fixture-declaration.md) — `@oxi.fixture`, the declaration-home rules, and the lifetime cap
 - [Fixture types reference](../reference/python-api/fixture-types.md) — API docs for `Fixture[T]`, `FixtureRef[T]`, `Yields[T]`, and `Fixtures`
 - [Error reference](../reference/errors.md#fixture-errors) — `BoundaryError`, `FixtureNotFoundError`, and the rest of the fixture error surface
