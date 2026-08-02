@@ -262,7 +262,7 @@ def _check_unannotated_params(
 class FixtureSession:
     """Manages fixture lifecycle for a single oxitest run.
 
-    Owns five fixture scopes:
+    Owns six fixture scopes:
 
     - **function scope** (`_function_scope`) — default for all user-defined
       fixtures; one `_Scope` per test, created by `resolve_for_test` and
@@ -275,7 +275,12 @@ class FixtureSession:
     - **shared scope** (`_shared_scope`) — for fixtures declared with
       ``shared=True``; initialised once and torn down at `end_task`.
     - **session scope** (`_session_scope`) — for built-in session-lifetime
-      fixtures such as `TempDirFactory`.
+      fixtures such as `TempDirFactory`; drained at `end_task`.
+    - **process scope** (`_process_scope`) — for fixtures declared
+      ``@oxi.fixture(lifetime="session")``, the tier #1777 makes genuinely
+      per-process; drained at `end_process`. Separate from the builtins' bucket
+      on purpose: hoisting `TempDirFactory` here would retain every temp dir a
+      worker ever made until the process exits.
 
     Built-in fixtures (e.g. `TempDir`, `LogCapture`) are injected by type via
     `Fixture[T]` annotations.  User fixtures are looked up by parameter name in
@@ -297,6 +302,11 @@ class FixtureSession:
         self._plugin_registry = plugin_registry or PluginRegistry()
         self._async_mgr = SharedAsyncManager(async_backend or AsyncioBackend())
         self._session_scope = _Scope()
+        # lifetime="session" user fixtures (#1777). Distinct from
+        # _session_scope, which stays the builtins' bucket, because the two
+        # drain at different boundaries: this one at end_process, that one at
+        # end_task.
+        self._process_scope = _Scope()
         self._shared_scope = (
             _Scope()
         )  # shared=True fixtures — init once, drain at end_task
@@ -390,6 +400,7 @@ class FixtureSession:
             self._plugin_registry,
             self._async_mgr,
             session_scope=self._session_scope,
+            process_scope=self._process_scope,
         )
         self._validator = _FixtureValidator(
             self._registry, self._plugin_registry, self._module_cache
@@ -479,20 +490,27 @@ class FixtureSession:
             if s is None:
                 s = self._package_scopes[anchor] = _Scope()
             return ScopeRefs(s.cache, s.teardowns, s.hits, s.misses)
-        if defn.scope is FixtureScope.SESSION:
+        if defn.scope in (FixtureScope.PROCESS, FixtureScope.SESSION):
             # One bucket for the whole process, ignoring both module_path and
-            # anchor. session is the tier that does not constrain the scheduler
-            # (ADR-0009 Rule 2), so its boundary is the worker process itself,
-            # not any directory — which is exactly why it cannot be a run-wide
-            # singleton. Drained by end_task.
+            # anchor. These are the tiers that do not constrain the scheduler
+            # (ADR-0009 Rule 2), so their boundary is the process itself, not
+            # any directory — which is exactly why neither can be a run-wide
+            # singleton.
             #
-            # This branch is what makes a *user-declared* lifetime="session"
-            # fixture reach the session scope. Builtins arrive there by a
-            # different route (the FixtureScope.SESSION mapping applied when
-            # registering `impl_cls`), so their working behaviour said nothing
-            # about this path; without this branch a declared session fixture
-            # fell through to function scope and was rebuilt per test.
-            scope = self._session_scope
+            # Two buckets share this branch but are NOT interchangeable: they
+            # drain at different boundaries (#1777). PROCESS drains at
+            # end_process and is where a *user-declared* lifetime="session"
+            # fixture lands. SESSION drains at end_task and is the builtins'
+            # bucket (`_TempDirFactoryFixture`), kept on the narrower rung so a
+            # worker's temp dirs are released at its task boundary instead of
+            # accumulating for the life of the process. Before #1777 both
+            # routes shared one bucket, and that is precisely how the user tier
+            # inherited the builtins' per-task boundary.
+            scope = (
+                self._process_scope
+                if defn.scope is FixtureScope.PROCESS
+                else self._session_scope
+            )
             return ScopeRefs(scope.cache, scope.teardowns, scope.hits, scope.misses)
         if defn.shared:
             s = self._shared_scope
@@ -663,14 +681,14 @@ class FixtureSession:
 
         Called once per process — from the worker's ``main()`` ``finally`` and
         once by the coordinator after every execution phase — rather than once
-        per task group. Nothing is drained here yet; the process-lifetime scope
-        arrives with ``FixtureScope.PROCESS`` and the async manager follows it.
+        per task group.
 
         Restoring the contextvars belongs here rather than in :meth:`end_task`
         because both vars are process-global: the worker sets the diagnostic
         collector once in ``main()`` for the life of its pipe, and every
         collector downstream defers to an already-active one.
         """
+        self._process_scope.drain()
         # Only restore contextvars if this session was the one that set them
         # (i.e., _prev was None, meaning we were the outermost session).
         prev_fx = getattr(self, "_prev_fixtures_var", None)
@@ -916,10 +934,14 @@ class FixtureSession:
                 resolved, value = self._instantiator.resolve_param(
                     param_name,
                     hint,
-                    meta,
-                    fn_teardowns=fn_teardowns,
-                    resolve_user_fixture=lambda n: self.get_fixture_by_name(
-                        n, meta.module_path, fn_teardowns
+                    DispatchContext(
+                        meta=meta,
+                        fn_teardowns=fn_teardowns,
+                        resolve_user_fixture=lambda n: self.get_fixture_by_name(
+                            n, meta.module_path, fn_teardowns
+                        ),
+                        # Test level: a builtin here keeps its own scope.
+                        owner_scope=None,
                     ),
                 )
                 if resolved:

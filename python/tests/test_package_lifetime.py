@@ -49,11 +49,14 @@ def test_session_maps_to_a_different_scope_than_package() -> None:
     session_scope = LIFETIME_SCOPES.get(Lifetime.SESSION)
 
     # Assert
-    assert session_scope is FixtureScope.SESSION, (
-        f"session lifetime must map to FixtureScope.SESSION, got {session_scope}"
+    assert session_scope is FixtureScope.PROCESS, (
+        f"session lifetime must map to FixtureScope.PROCESS, not the builtins' "
+        f"SESSION bucket, got {session_scope} — sharing that bucket is what "
+        f"gave the tier a per-task-group boundary instead of a per-process one "
+        f"(#1777)"
     )
     assert package_scope is not session_scope, (
         "package and session must not share a scope: they cache in different "
-        "buckets (per anchor directory vs per task group), and sharing one "
+        "buckets (per anchor directory vs per process), and sharing one "
         "would make the declaring subtree's co-location apply to both"
     )

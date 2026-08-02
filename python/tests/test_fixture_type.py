@@ -263,23 +263,32 @@ def test_fixture_wrapper_on_injectable_still_works() -> None:
 
 
 def test_fixture_scope_values() -> None:
-    """FixtureScope has five tiers: each, module, package, shared, session.
+    """FixtureScope has six tiers: each, module, package, shared, session, process.
 
-    ``module`` arrived with ADR-0009 slice 2, ``package`` with slice 3 (#1710).
-    The count assertion is deliberate — the caching machinery branches on this
-    enum, so a new member must be a considered addition, not an accident.
+    ``module`` arrived with ADR-0009 slice 2, ``package`` with slice 3 (#1710),
+    ``process`` with #1777. The count assertion is deliberate — the caching
+    machinery branches on this enum, so a new member must be a considered
+    addition, not an accident.
 
     ``package`` is its own member rather than a reuse of ``shared``: ``shared``
     belongs to the legacy ``Fixtures(shared=True)`` API and is still live, so
     reusing it would make every legacy shared fixture look package-scoped to the
     scheduler and collapse parallelism for suites that never asked for the tier.
+
+    ``process`` is its own member rather than a reuse of ``session`` for the
+    same shape of reason one tier up: ``session`` is where the builtins cache,
+    and the two drain at different boundaries — ``session`` at ``end_task``,
+    ``process`` at ``end_process``. Merging them would either give the builtins
+    process lifetime, retaining every temp dir a worker made, or give the user
+    tier the per-task-group boundary #1777 exists to remove.
     """
     assert FixtureScope.EACH == "each", "EACH should be 'each'"
     assert FixtureScope.MODULE == "module", "MODULE should be 'module'"
     assert FixtureScope.PACKAGE == "package", "PACKAGE should be 'package'"
     assert FixtureScope.SHARED == "shared", "SHARED should be 'shared'"
     assert FixtureScope.SESSION == "session", "SESSION should be 'session'"
-    assert len(FixtureScope) == 5, "FixtureScope should have exactly 5 members"
+    assert FixtureScope.PROCESS == "process", "PROCESS should be 'process'"
+    assert len(FixtureScope) == 6, "FixtureScope should have exactly 6 members"
 
 
 # ── Source variants ──────────────────────────────────────────────────────────

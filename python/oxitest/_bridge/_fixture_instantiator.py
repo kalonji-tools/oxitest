@@ -99,11 +99,15 @@ class DispatchContext:
         meta: forwarded to BuiltinSource injection
         fn_teardowns: accumulator for PluginSource teardown lambdas
         resolve_user_fixture: cycle-safe resolver for ConftestSource
+        owner_scope: tier of the fixture whose dependencies are being
+            resolved, or None at test level. Only ``PROCESS`` changes
+            anything — see ``resolve_by_source`` (#1777).
     """
 
     meta: TestMeta
     fn_teardowns: list[Callable[[], None]]
     resolve_user_fixture: Callable[[str], Any]
+    owner_scope: FixtureScope | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +127,10 @@ class _ResolutionContext:
     resolving: frozenset[str]
     scope_callback: Callable[[FixtureDef[Any], str], ScopeRefs | None]
     boundary_path: str
+    #: Tier of the fixture currently being instantiated, so a builtin resolved
+    #: underneath it can follow that tier's teardown boundary (#1777). None at
+    #: test level, where the builtin keeps its own scope.
+    owner_scope: FixtureScope | None = None
 
 
 def _cache_key(defn: FixtureDef[Any]) -> str:
@@ -206,9 +214,12 @@ def _resolve_deps(
         resolved, value = instantiator.resolve_param(
             param_name,
             hint,
-            dep_meta,
-            fn_teardowns=ctx.fn_teardowns,
-            resolve_user_fixture=resolve_user,
+            DispatchContext(
+                meta=dep_meta,
+                fn_teardowns=ctx.fn_teardowns,
+                resolve_user_fixture=resolve_user,
+                owner_scope=ctx.owner_scope,
+            ),
         )
         if resolved:
             deps[param_name] = value
@@ -274,11 +285,15 @@ class FixtureInstantiator:
         plugin_registry: PluginRegistry,
         async_mgr: Any = None,  # SharedAsyncManager, optional to avoid import
         session_scope: _Scope | None = None,
+        process_scope: _Scope | None = None,
     ) -> None:
         self._registry = registry
         self._plugin_registry = plugin_registry
         self._async_mgr = async_mgr
         self._session_scope = session_scope
+        # Where a session-scoped builtin caches when the fixture asking for it
+        # is itself process-lifetime (#1777). See `resolve_by_source`.
+        self._process_scope = process_scope
         self._setup_times: dict[str, list[float]] = defaultdict(list)
         self._teardown_times: dict[str, list[float]] = defaultdict(list)
 
@@ -304,9 +319,7 @@ class FixtureInstantiator:
         self,
         param_name: str,
         hint: Any,
-        meta: TestMeta,
-        fn_teardowns: list[Callable[[], None]],
-        resolve_user_fixture: Callable[[str], Any],
+        ctx: DispatchContext,
     ) -> tuple[bool, Any]:
         """Resolve a single parameter by its type hint.
 
@@ -314,19 +327,16 @@ class FixtureInstantiator:
         injected for this parameter. Returns (False, None) if the hint is not
         injectable (not Fixture[T]).
 
+        The caller supplies *ctx*, which carries ``owner_scope`` — the tier of
+        the fixture these parameters belong to, or None when resolving a test's
+        own parameters.
+
         Note: bare ``Fixtures`` hints are handled by the caller before this
         method is called.
         """
         is_fx, inner = _fixture_inner_type(hint)
         if not is_fx:
             return False, None
-
-        # Hoist ctx once — reused by both branches below
-        ctx = DispatchContext(
-            meta=meta,
-            fn_teardowns=fn_teardowns,
-            resolve_user_fixture=resolve_user_fixture,
-        )
 
         # Broad type fallback (Fixture[Any] / Fixture[object])
         if inner is Any or inner is object:
@@ -350,7 +360,7 @@ class FixtureInstantiator:
         except FixtureNotFoundError:
             # No type-based match. Fall back to name-based lookup.
             if self._registry.get(param_name) is not None:
-                return True, resolve_user_fixture(param_name)
+                return True, ctx.resolve_user_fixture(param_name)
             raise FixtureNotFoundError(param_name) from None
 
         # For Builtin/Plugin sources found by type, use direct instantiation
@@ -362,7 +372,7 @@ class FixtureInstantiator:
         resolve_name = (
             param_name if self._registry.get(param_name) is not None else defn.name
         )
-        return True, resolve_user_fixture(resolve_name)
+        return True, ctx.resolve_user_fixture(resolve_name)
 
     def resolve_by_source(
         self,
@@ -390,8 +400,24 @@ class FixtureInstantiator:
                 ctx.fn_teardowns.append(lambda v=value, p=provider: p.teardown(value=v))
                 return value
             case BuiltinSource(impl_cls=impl_cls):
+                # A session-scoped builtin normally caches in the session
+                # scope, which drains at end_task. A process-lifetime fixture
+                # outlives that, so depending on one would hand it a value
+                # whose owner was disposed at the task boundary — silently,
+                # since TempDirFactory.close() uses ignore_errors (#1777).
+                #
+                # Give it a process-scoped instance instead of rejecting the
+                # dependency: the fixture asked for process lifetime, and this
+                # is what that means for the resources it builds on. Ordinary
+                # tests are untouched — they keep the per-task instance, so no
+                # suite accumulates temp dirs without opting in.
+                owner_is_process = ctx.owner_scope is FixtureScope.PROCESS
                 return self.inject_builtin(
-                    impl_cls, ctx.meta, "function", ctx.fn_teardowns
+                    impl_cls,
+                    ctx.meta,
+                    "function",
+                    ctx.fn_teardowns,
+                    session_scope=self._process_scope if owner_is_process else None,
                 )
 
     # ── Fixture resolution ───────────────────────────────────────────────
@@ -445,7 +471,13 @@ class FixtureInstantiator:
         # From here down we are inside *defn*'s own declarations, so B1 is read
         # against its anchor. Covers _instantiate and _resolve_shared_async,
         # both of which reach dependencies through this ctx.
-        ctx = replace(ctx, boundary_path=_boundary_for(defn, ctx))
+        #
+        # owner_scope rides along for the same reason, one concern over: a
+        # builtin resolved as one of *defn*'s dependencies must follow *defn*'s
+        # teardown boundary, not its own (#1777).
+        ctx = replace(
+            ctx, boundary_path=_boundary_for(defn, ctx), owner_scope=defn.scope
+        )
         scope_refs = ctx.scope_callback(defn, ctx.module_path)
 
         if scope_refs is not None and scope_refs.per_test:
