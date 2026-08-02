@@ -40,6 +40,29 @@ def test_serial_reports_every_teardown_failure() -> None:
     )
 
 
+def test_parallel_reports_kept_tmp_notices() -> None:
+    """The other payload #1840 loses: a NOTICE, not a teardown failure.
+
+    Scope, stated precisely because it was measured rather than assumed: this
+    pins the *sink*, not the tail window. A worker emits one ``end_session``
+    per task group, and with more modules than workers most of those land in a
+    non-final group, where the next group's drain still collects them. Disabling
+    the tail read leaves this test green while the parity test below goes red.
+    The tail window is that test's job; this one's is that NOTICE-severity
+    diagnostics reach the reporter at all.
+    """
+    # Act
+    stdout, stderr, _rc = helpers.run_oxitest(
+        _PROJECT, "--warnings", "--keep-tmp=always", "-n", "2"
+    )
+
+    # Assert
+    assert "KEPT" in (stdout + stderr), (
+        "a --keep-tmp notice tells the user where preserved directories went; "
+        "losing it in parallel leaves them with files on disk and no path"
+    )
+
+
 def test_parallel_reports_teardown_failures_like_serial() -> None:
     """The whole point of #1840: parallel must not silently swallow teardowns."""
     # Act

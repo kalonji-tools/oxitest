@@ -102,6 +102,29 @@ pub(crate) struct DiagnosticEntry {
     pub(crate) lineno: Option<crate::types::LineNo>,
 }
 
+impl DiagnosticEntry {
+    /// Build an entry from the wire fields the PyO3 and LDJSON paths share.
+    ///
+    /// Both carry `file`/`lineno` as an empty string and a zero rather than as
+    /// options, so both need the same "absent means empty" decoding. Keeping it
+    /// here means the two paths cannot disagree about what absent looks like.
+    pub(crate) fn from_wire(
+        severity: &str,
+        context: &str,
+        message: String,
+        file: String,
+        lineno: u32,
+    ) -> Self {
+        Self {
+            severity: DiagnosticSeverity::from_wire(severity),
+            context: Arc::from(context),
+            message,
+            file: (!file.is_empty()).then(|| camino::Utf8PathBuf::from(file)),
+            lineno: (lineno != 0).then(|| crate::types::LineNo::new(lineno as usize)),
+        }
+    }
+}
+
 /// Outcome counters indexed by [`OutcomeKind`].
 #[derive(Clone, Debug)]
 pub(crate) struct OutcomeCounters {
