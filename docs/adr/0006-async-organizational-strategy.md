@@ -75,7 +75,7 @@ Any future async APIs (`Patcher` async variant, async helpers, async marks, etc.
 
 - **Future async APIs inherit the pattern.** Any async helper, `Patcher` variant, or new async infrastructure added later dispatches on kind + scope and rejects the sync-test / function-scope-async cell at the same seam. Consistent by construction; no per-feature debate.
 - **Docs impact scoped to `@arrange`.** One user doc page needs a section on async fixture interaction; the error reference needs the B′ rejection message documented with its 3 legal exits. No new doc pages, no subpackage navigation, no import-diff table for users.
-- **`strict` semantics unchanged.** `strict = "abort" | "warn" | "off"` continues to toggle style rules (bare asserts, dict parametrize, missing mark reasons). B′ rejection is orthogonal and always-on.
+- **`strict` semantics unchanged.** `strict = "off" | "enforce" | "abort"`, defaulting to *absent* (which is silent), continues to toggle style rules (bare asserts, dict parametrize, missing mark reasons). B′ rejection is orthogonal and always-on. *This bullet as accepted spelled the dial `"abort" | "warn" | "off"`; there has never been a `warn` position — see [Amendment 1](#amendment-1--the-strict-dial-has-no-warn-position-2026-08-02).*
 
 ## Alternatives Considered
 
@@ -86,6 +86,52 @@ Any future async APIs (`Patcher` async variant, async helpers, async marks, etc.
 - **B + B′** — subpackage split plus loud rejection. Rejected implicitly by rejecting B. B′ is a policy layer that composes on either A or B; the axes were evaluated independently. Subpackage split (B) failed on its own merits; layering B′ on top does not rescue it.
 
 - **B′ gated by `strict`.** Considered. Rejected in favour of always-on because `strict` toggles style, not correctness. Pytest's own arc from gated (#12930) to always-on (#14015) is direct evidence that gating was insufficient.
+
+## Amendments
+
+### Amendment 1 — the `strict` dial has no `warn` position (2026-08-02)
+
+Tracked by [#1771](https://github.com/kalonji-tools/oxitest/issues/1771). Amends one Consequences bullet — "`strict` semantics unchanged". Everything that bullet exists to say stands as accepted: `strict` toggles style rules, B′ rejection is orthogonal to it, and B′ is always-on. What is corrected is the *enumeration of the dial's values*, which named a position oxitest has never had.
+
+As accepted, the bullet read:
+
+> - **`strict` semantics unchanged.** `strict = "abort" | "warn" | "off"` continues to toggle style rules (bare asserts, dict parametrize, missing mark reasons). B′ rejection is orthogonal and always-on.
+
+| The bullet claimed | `main` |
+|---|---|
+| `strict = "abort"` | `StrictMode::Abort` exists |
+| `strict = "warn"` | **never existed.** Not renamed, not deprecated, not removed — no `Warn` variant has ever been in `StrictMode`, so no oxitest release has ever accepted the value |
+| `strict = "off"` | `StrictMode::Off` exists, and normalises straight back to *absent* — it takes the same code path as the key not being there, rather than being a fourth behaviour |
+| *(unstated)* | `strict = "enforce"` — the position the bullet omitted entirely, and the only soft one |
+
+`StrictMode { Abort, Enforce, Off }` lives at `src/config/mod.rs:117`–`121` under `#[serde(rename_all = "lowercase")]`, read from a `strict` key sitting directly under `[tool.oxitest]` (`src/config/pyproject.rs:170`) — not under a `markers` sub-table, as the flat spelling in the bullet correctly implied. The `"off"` → absent normalisation is `src/config/merge.rs:253`–`255`.
+
+The key is **fail-closed**, in the sense [ADR-0008](0008-config-fail-closed-narrow-scope.md) established: a value outside the enum is printed and the process exits with `UsageError` (4) at `Config::load`, before collection begins (`src/config/mod.rs:601`–`602`). So this was not a cosmetic documentation defect. A reader who copied the bullet into their `pyproject.toml` got a hard error and no test run, reported in #1771 as:
+
+```
+error: pyproject.toml: unknown variant `warn`, expected one of `abort`, `enforce`, `off`
+in `strict`
+```
+
+**The corrected statement.** The dial is `off | enforce | abort`. Its default is **absent**, which is silent — not `off`-as-a-behaviour, and not any implied soft default:
+
+| `strict` | Style violations (bare asserts, dict parametrize, missing mark reasons) | Diagnostic severity |
+|---|---|---|
+| absent, or `"off"` | not checked | none emitted |
+| `"enforce"` | reported; the rest of the run proceeds (`src/pipeline/helpers.rs:168`–`188`) | `Warning` |
+| `"abort"` | printed, then `Err(ExitCode::CollectError)` before any test executes (`src/pipeline/helpers.rs:158`–`164`) | `Error` |
+
+The severity column is `src/pipeline/collection.rs:646`–`648`.
+
+**The two-position reading survives, with `enforce` in `"warn"`'s place — but it has to be stated, not inferred.** If this ADR's author read the dial as "one soft position and one hard position", that reading still holds; the soft position is simply not called `warn`. `enforce` maps to `DiagnosticSeverity::Warning` and never to `Error` — a deliberate invariant from [#1613](https://github.com/kalonji-tools/oxitest/issues/1613), guarded by a test at `src/pipeline/collection.rs:1319`–`1341`, which on `main` is scoped to doctest-coverage diagnostics. [ADR-0009's Amendment 3](0009-fixture-system-redesign.md#amendment-3--the-shortcut-strict-dial-is-retracted-2026-07-30) turned down a proposal to add a real `Warn` variant partly on that ground: `enforce` already *is* warn.
+
+One thing "soft" must not be read to mean. Under `enforce` the run continues, but violating items are not merely annotated — they are withheld from worker dispatch and reported as per-test `Error` outcomes (`src/pipeline/execution.rs:514`). `enforce` is warn-*severity*, not nothing-fails. The distinction between `enforce` and `abort` is whether the *rest of the suite* still gets to run.
+
+**Nothing about B′ changes.** B′ rejection of the sync-test / function-scope-async-fixture cell was never gated by `strict` — see the Decision's "The one illegal cell" and the rejected "B′ gated by `strict`" alternative, both of which reason about `strict` as a *style* dial without enumerating its values, and are therefore untouched by this amendment. The `strict = "abort"` references elsewhere in this ADR name a real value and stand.
+
+**Provenance.** The fictional value was found while grilling [#1714](https://github.com/kalonji-tools/oxitest/issues/1714), which hit the same spelling in [ADR-0009](0009-fixture-system-redesign.md) Rule 5. ADR-0009's occurrences and the user-facing copies in `CONTEXT.md`, `docs/user/how-to/use-fixtures.md` and `docs/user/reference/errors.md` were corrected in PR #1770; ADR-0006's was deliberately left alone there, because a fixture-slice PR is the wrong place to amend an unrelated accepted ADR. This closes that deferral, and with it the last normative document presenting `strict = "warn"` as usable config.
+
+This belongs to the same class of defect as ADR-0009's five amendments and the [#1769](https://github.com/kalonji-tools/oxitest/issues/1769) conformance sweep: a normative claim about oxitest that was never checked against oxitest. ADR-0006's *decision* is unaffected — A + B′ with always-on rejection stands exactly as accepted.
 
 ## Related
 
