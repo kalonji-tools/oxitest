@@ -407,21 +407,24 @@ oxitest finds the fixture by its return type `list[int]`.
 ### Share a fixture across all tests with shared
 
 !!! note
-    "Shared" means session-scoped: the fixture runs once per session and its return value is frozen (immutable) to prevent cross-test interference.
+    "Shared" means cached beyond a single test, and frozen (immutable) to prevent cross-test interference. It does **not** mean one instance per run — see the parallel-mode note below.
 
-A fixture with `shared=True` is created once for the entire session and shared
-across all tests. The value is immutable — any attribute or item write raises
-`SharedFixtureMutationError` at runtime.
+A fixture with `shared=True` is created once per **task group** and shared across
+every test in that group. In a serial run that is the whole run; under parallel
+execution a task group is a single test module unless a `lifetime="package"`
+declaration merges a subtree. The value is immutable — any attribute or item
+write raises `SharedFixtureMutationError` at runtime.
 
 ```python
 --8<-- "python/tests/docs/how-to/fixtures/conftest.py:shared-fixture"
 ```
 
-Use `shared=True` for read-only session-wide resources such as loaded
-configurations, compiled schemas, or database connection pools where mutation
-would cause cross-test interference. In parallel mode each worker subprocess
-has its own fixture session, so a `shared=True` fixture runs once **per
-worker**, not once per run — see
+Use `shared=True` for read-only resources that are safe to rebuild, such as
+loaded configurations, compiled schemas, or database connection pools where
+mutation would cause cross-test interference. In parallel mode a worker builds a
+fresh fixture session for every task group it picks up, so a `shared=True`
+fixture is rebuilt once **per task group** — not once per run, and not once per
+worker. See
 [Run in parallel](run-in-parallel.md#understand-session-scoped-fixture-behaviour-in-parallel-runs).
 
 ### Run fixtures automatically with autouse

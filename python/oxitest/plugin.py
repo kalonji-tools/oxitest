@@ -136,14 +136,10 @@ class FixtureProvider(Protocol):
 
         `'shared'` and `'session'` are both built once per **task group** — the
         unit of work a worker picks up, which is a single module unless a
-        `lifetime="package"` declaration merges a subtree. They differ in drain
-        timing, not in instance count: both caches hang off the same
-        per-task-group `FixtureSession`. Neither is once per run, and neither is
-        once per worker process — a worker pops task groups until the queue
-        drains and builds a fresh session for each (ADR-0009 Amendment 4).
-
-        Size a pooled resource against the task-group count, not the worker
-        count; the former can exceed the latter.
+        `lifetime="package"` declaration merges a subtree. Both caches hang off
+        the same per-task-group `FixtureSession`. Neither is once per run, and
+        neither is once per worker process — a worker pops task groups until the
+        queue drains and builds a fresh session for each (ADR-0009 Amendment 4).
 
         Optional. Defaults to 'each' if not implemented.
         """
