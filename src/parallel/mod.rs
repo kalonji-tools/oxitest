@@ -11,7 +11,9 @@
 mod drain;
 mod pool;
 
-pub(crate) use drain::{DrainContext, DrainOutcome, drain_worker_results, handle_drain_outcome};
+pub(crate) use drain::{
+    DrainContext, DrainOutcome, drain_until_eof, drain_worker_results, handle_drain_outcome,
+};
 pub(crate) use pool::{PoolGuard, PrewarmedWorker, kill_pool, prewarm_workers};
 
 use crate::{

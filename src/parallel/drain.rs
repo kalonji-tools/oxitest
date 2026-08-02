@@ -7,6 +7,13 @@ use crate::{reporter, scheduler, types, worker_result::WireResult};
 
 use super::{WorkerMessage, WorkerResult};
 
+/// Most lines [`drain_until_eof`] will read from one worker's tail.
+///
+/// Teardown output is a handful of lines in practice. The cap exists so a
+/// worker stuck in a loop that keeps printing cannot hold the coordinator open
+/// or grow the reporter's diagnostic bag without bound (#1840).
+const MAX_TAIL_LINES: usize = 1024;
+
 /// Forward one test outcome to the coordinator's consumer loop.
 ///
 /// Exists so the call sites read as sending a result rather than as wrapping
@@ -21,26 +28,53 @@ fn send_result(tx: &crossbeam_channel::Sender<WorkerMessage>, result: WorkerResu
 /// fail a run that is otherwise fine, and the result path already has its own
 /// salvage-and-report handling for the lines that decide an outcome.
 fn forward_diagnostic(trimmed: &str, tx: &crossbeam_channel::Sender<WorkerMessage>) {
-    use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
-
     let Ok(wd) = serde_json::from_str::<crate::worker_result::WireDiagnostic>(trimmed) else {
         return;
     };
-    let _ = tx.send(WorkerMessage::Diagnostic(DiagnosticEntry {
-        severity: DiagnosticSeverity::from_wire(&wd.severity),
-        context: std::sync::Arc::from(wd.context.as_str()),
-        message: wd.message,
-        file: if wd.file.is_empty() {
-            None
-        } else {
-            Some(camino::Utf8PathBuf::from(wd.file))
-        },
-        lineno: if wd.lineno == 0 {
-            None
-        } else {
-            Some(crate::types::LineNo::new(wd.lineno as usize))
-        },
-    }));
+    let _ = tx.send(WorkerMessage::Diagnostic(
+        crate::reporter::stats::DiagnosticEntry::from_wire(
+            &wd.severity,
+            &wd.context,
+            wd.message,
+            wd.file,
+            wd.lineno,
+        ),
+    ));
+}
+
+/// Handle one worker line that is not a test result.
+///
+/// Returns `true` when the line was consumed, `false` when the caller should
+/// treat it as a result. Shared by both drain loops so the set of recognised
+/// message types cannot drift between them (#1840).
+fn dispatch_non_result(trimmed: &str, tx: &crossbeam_channel::Sender<WorkerMessage>) -> bool {
+    let msg_type = match serde_json::from_str::<crate::worker_result::WireEnvelope>(trimmed) {
+        Ok(env) => env.msg_type,
+        Err(_) => "result".to_string(), // fallback: assume result
+    };
+    match msg_type.as_str() {
+        "diagnostic" => {
+            forward_diagnostic(trimmed, tx);
+            true
+        }
+        "trace" => {
+            if let Ok(wt) = serde_json::from_str::<crate::worker_result::WireTrace>(trimmed) {
+                match wt.level.as_str() {
+                    "debug" => tracing::debug!(module = %wt.module, "{}", wt.message),
+                    "info" => tracing::info!(module = %wt.module, "{}", wt.message),
+                    "warn" => tracing::warn!(module = %wt.module, "{}", wt.message),
+                    "error" => tracing::error!(module = %wt.module, "{}", wt.message),
+                    _ => tracing::trace!(module = %wt.module, "{}", wt.message),
+                }
+            }
+            true
+        }
+        "result" => false,
+        other => {
+            tracing::warn!(msg_type = %other, "unknown worker message type — skipping");
+            true
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -94,38 +128,9 @@ pub(crate) fn drain_worker_results(
                 }
                 // Dispatch non-result message types first; they don't count
                 // toward `received` and are handled inline.
-                let msg_type =
-                    match serde_json::from_str::<crate::worker_result::WireEnvelope>(trimmed) {
-                        Ok(env) => env.msg_type,
-                        Err(_) => "result".to_string(), // fallback: assume result
-                    };
-                match msg_type.as_str() {
-                    "diagnostic" => {
-                        result_deadline = Instant::now() + watchdog;
-                        forward_diagnostic(trimmed, tx);
-                        continue;
-                    }
-                    "trace" => {
-                        result_deadline = Instant::now() + watchdog;
-                        if let Ok(wt) =
-                            serde_json::from_str::<crate::worker_result::WireTrace>(trimmed)
-                        {
-                            match wt.level.as_str() {
-                                "debug" => tracing::debug!(module = %wt.module, "{}", wt.message),
-                                "info" => tracing::info!(module = %wt.module, "{}", wt.message),
-                                "warn" => tracing::warn!(module = %wt.module, "{}", wt.message),
-                                "error" => tracing::error!(module = %wt.module, "{}", wt.message),
-                                _ => tracing::trace!(module = %wt.module, "{}", wt.message),
-                            }
-                        }
-                        continue;
-                    }
-                    "result" => {} // fall through to result handling below
-                    _ => {
-                        result_deadline = Instant::now() + watchdog;
-                        tracing::warn!(msg_type = %msg_type, "unknown worker message type — skipping");
-                        continue;
-                    }
+                if dispatch_non_result(trimmed, tx) {
+                    result_deadline = Instant::now() + watchdog;
+                    continue;
                 }
 
                 // Result handling — unchanged from pre-v3 protocol.
@@ -204,6 +209,72 @@ pub(crate) fn drain_worker_results(
             Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
                 return (DrainOutcome::Disconnected, received);
             }
+        }
+    }
+}
+
+/// Reads a worker's output after its last task group, until stdout closes.
+///
+/// [`drain_worker_results`] returns the moment it has the results it expects,
+/// so anything written after a group's final result line is read only at the
+/// head of the *next* group's drain. A worker's final group has no next drain,
+/// so its teardown diagnostics and `--keep-tmp` notices were discarded (#1840).
+///
+/// The deadline is per-line and resets on every non-empty line, matching
+/// [`drain_worker_results`]: a silent wedged worker is abandoned one watchdog
+/// after it goes quiet, while a worker still emitting is allowed to finish.
+/// Empty lines deliberately do not reset it.
+///
+/// Because the deadline resets per line, a worker looping while emitting valid
+/// output would otherwise be read forever — and every diagnostic it produced
+/// would accumulate in the reporter. [`MAX_TAIL_LINES`] bounds that; the
+/// dispatch loop proper has no such need because `expected` bounds it.
+pub(crate) fn drain_until_eof(
+    line_rx: &crossbeam_channel::Receiver<String>,
+    watchdog: std::time::Duration,
+    tx: &crossbeam_channel::Sender<WorkerMessage>,
+    worker_id: usize,
+) {
+    use std::time::Instant;
+
+    let mut deadline = Instant::now() + watchdog;
+    let mut lines_read = 0usize;
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            tracing::warn!(
+                worker_id,
+                "worker did not close stdout within the watchdog; abandoning its remaining output"
+            );
+            return;
+        }
+        match line_rx.recv_timeout(remaining) {
+            Ok(line) => {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                lines_read += 1;
+                if lines_read > MAX_TAIL_LINES {
+                    tracing::warn!(
+                        worker_id,
+                        max = MAX_TAIL_LINES,
+                        "worker emitted more than the tail cap after its final task group; \
+                         abandoning the rest"
+                    );
+                    return;
+                }
+                deadline = Instant::now() + watchdog;
+                // A result here belongs to no group the coordinator is still
+                // tracking: every group was drained to its expected count
+                // before we got here, so counting it would corrupt the tally
+                // rather than rescue a test.
+                if !dispatch_non_result(trimmed, tx) {
+                    tracing::warn!("unexpected result after the final task group — skipping");
+                }
+            }
+            Err(crossbeam_channel::RecvTimeoutError::Timeout) => return,
+            Err(crossbeam_channel::RecvTimeoutError::Disconnected) => return,
         }
     }
 }
@@ -689,6 +760,111 @@ mod drain_tests {
         assert_eq!(count, 1);
         // Result must still be forwarded despite version mismatch
         let _r = result_rx.try_recv().expect("result should be forwarded");
+    }
+
+    // ── Test 12 ─────────────────────────────────────────────────────────────────
+    // The tail reader must stop when the worker closes stdout, not hang.
+    #[test]
+    fn drain_until_eof_returns_on_disconnect() {
+        let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
+
+        line_tx
+            .send(
+                r#"{"type":"diagnostic","severity":"warning","context":"fixture teardown","message":"boom"}"#
+                    .to_string(),
+            )
+            .unwrap();
+        drop(line_tx); // worker exited → stdout closed
+
+        let start = std::time::Instant::now();
+        drain_until_eof(&line_rx, Duration::from_secs(30), &result_tx, 0);
+
+        assert!(
+            start.elapsed() < Duration::from_secs(1),
+            "EOF is a real termination signal; waiting for the watchdog instead \
+             would add the full deadline to every clean shutdown"
+        );
+        assert_eq!(
+            result_rx.len(),
+            1,
+            "the diagnostic emitted after the final result must be forwarded — \
+             that is the entire defect #1840 describes"
+        );
+    }
+
+    // ── Test 13 ─────────────────────────────────────────────────────────────────
+    // A wedged worker that never closes stdout must not hang the run.
+    #[test]
+    fn drain_until_eof_gives_up_after_the_deadline() {
+        let (_line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
+
+        let watchdog = Duration::from_millis(50);
+        let start = std::time::Instant::now();
+        drain_until_eof(&line_rx, watchdog, &result_tx, 0);
+        let elapsed = start.elapsed();
+
+        assert!(
+            elapsed >= watchdog,
+            "giving up before the deadline would truncate a slow teardown"
+        );
+        assert!(
+            elapsed < watchdog * 5,
+            "a worker holding stdout open must not hold the whole run open"
+        );
+    }
+
+    // ── Test 14 ─────────────────────────────────────────────────────────────────
+    // Empty lines must not hold the tail read open indefinitely.
+    #[test]
+    fn drain_until_eof_empty_lines_do_not_reset_the_deadline() {
+        let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
+
+        std::thread::spawn(move || {
+            let stop = std::time::Instant::now() + Duration::from_millis(400);
+            while std::time::Instant::now() < stop {
+                if line_tx.send("\n".to_string()).is_err() {
+                    break;
+                }
+            }
+        });
+
+        let start = std::time::Instant::now();
+        drain_until_eof(&line_rx, Duration::from_millis(50), &result_tx, 0);
+
+        assert!(
+            start.elapsed() <= Duration::from_millis(200),
+            "blank output must not reset the deadline, or a spamming worker \
+             keeps the coordinator reading forever"
+        );
+    }
+
+    // ── Test 15 ─────────────────────────────────────────────────────────────────
+    // A worker that keeps emitting valid output must not be read forever. Each
+    // non-empty line resets the deadline, so without a cap the coordinator would
+    // never return and every diagnostic would accumulate in the reporter.
+    #[test]
+    fn drain_until_eof_stops_at_the_line_cap() {
+        let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
+
+        // A worker stuck in a loop: never closes stdout, never goes quiet.
+        std::thread::spawn(move || {
+            let line =
+                r#"{"type":"diagnostic","severity":"notice","context":"spam","message":"x"}"#;
+            while line_tx.send(format!("{line}\n")).is_ok() {}
+        });
+
+        drain_until_eof(&line_rx, Duration::from_secs(30), &result_tx, 0);
+
+        assert!(
+            result_rx.len() <= MAX_TAIL_LINES,
+            "the tail read must stop at the cap; an unbounded reader would grow \
+             the diagnostic bag until the run ran out of memory, and would never \
+             return because every line resets the deadline"
+        );
     }
 
     // ── Test 11 ─────────────────────────────────────────────────────────────────

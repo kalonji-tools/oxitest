@@ -191,7 +191,7 @@ pub(crate) fn drain_session_diagnostics(
 fn drain_diagnostics_from(
     session_obj: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<crate::reporter::stats::DiagnosticEntry>> {
-    use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
+    use crate::reporter::stats::DiagnosticEntry;
 
     let diag_list = session_obj.getattr("diagnostics")?;
     let len: usize = diag_list.len()?;
@@ -208,23 +208,13 @@ fn drain_diagnostics_from(
         let file: String = diag.getattr("file")?.extract()?;
         let lineno: u32 = diag.getattr("lineno")?.extract()?;
 
-        let severity = DiagnosticSeverity::from_wire(&severity_str);
-
-        entries.push(DiagnosticEntry {
-            severity,
-            context: Arc::from(context.as_str()),
+        entries.push(DiagnosticEntry::from_wire(
+            &severity_str,
+            &context,
             message,
-            file: if file.is_empty() {
-                None
-            } else {
-                Some(Utf8PathBuf::from(file))
-            },
-            lineno: if lineno == 0 {
-                None
-            } else {
-                Some(LineNo::new(lineno as usize))
-            },
-        });
+            file,
+            lineno,
+        ));
     }
 
     // Clear the Python list

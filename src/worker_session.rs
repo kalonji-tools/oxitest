@@ -12,7 +12,9 @@
 const MAX_LINE_LENGTH: usize = 10 * 1024 * 1024;
 
 use crate::{
-    parallel::{DrainContext, DrainOutcome, drain_worker_results, handle_drain_outcome},
+    parallel::{
+        DrainContext, DrainOutcome, drain_until_eof, drain_worker_results, handle_drain_outcome,
+    },
     scheduler, types,
     worker_result::{WorkerTask, WorkerTaskItem, WorkerTaskModule},
 };
@@ -109,7 +111,10 @@ pub(crate) fn setup_worker_process(
 /// so that `spawn_worker()` can express the task dispatch loop in terms of
 /// `send_task()` / `drain_results()` instead of juggling three locals.
 struct WorkerSession {
-    stdin: std::io::BufWriter<std::process::ChildStdin>,
+    /// `None` once closed. Closing stdin is what tells the worker to begin its
+    /// teardown, and it must happen without dropping `line_rx` — the tail that
+    /// teardown writes is read through it (#1840).
+    stdin: Option<std::io::BufWriter<std::process::ChildStdin>>,
     line_rx: crossbeam_channel::Receiver<String>,
     watchdog: std::time::Duration,
 }
@@ -121,7 +126,7 @@ impl WorkerSession {
         watchdog: std::time::Duration,
     ) -> Self {
         Self {
-            stdin,
+            stdin: Some(stdin),
             line_rx,
             watchdog,
         }
@@ -133,9 +138,30 @@ impl WorkerSession {
     /// flush are both required for the message to be delivered immediately.
     fn send_task(&mut self, task: &WorkerTask<'_>) -> std::io::Result<()> {
         use std::io::Write;
-        serde_json::to_writer(&mut self.stdin, task).map_err(std::io::Error::other)?;
-        writeln!(self.stdin)?;
-        self.stdin.flush()
+        let stdin = self
+            .stdin
+            .as_mut()
+            .ok_or_else(|| std::io::Error::other("worker stdin is already closed"))?;
+        serde_json::to_writer(&mut *stdin, task).map_err(std::io::Error::other)?;
+        writeln!(stdin)?;
+        stdin.flush()
+    }
+
+    /// Close the worker's stdin, leaving `line_rx` alive.
+    ///
+    /// Dropping the whole session would drop the receiver too, which ends the
+    /// reader thread and discards the very output we are about to read.
+    fn close_stdin(&mut self) {
+        self.stdin = None;
+    }
+
+    /// Read whatever the worker writes between stdin closing and process exit.
+    fn drain_tail(
+        &self,
+        tx: &crossbeam_channel::Sender<crate::parallel::WorkerMessage>,
+        worker_id: usize,
+    ) {
+        drain_until_eof(&self.line_rx, self.watchdog, tx, worker_id);
     }
 
     /// Drains up to `expected` result lines from the worker, forwarding each to `tx`.
@@ -337,6 +363,14 @@ fn run_worker_loop(
         );
     }
 
+    // Only a worker that finished its groups normally has a tail worth reading.
+    // A timed-out worker has already been killed and a disconnected one has
+    // closed its stdout, so skipping them keeps "no new wait on the kill path"
+    // true by construction rather than by waiting for a deadline to expire.
+    if subprocess_alive {
+        session.close_stdin();
+        session.drain_tail(&tx, worker_id);
+    }
     drop(session);
     let _ = child.wait();
 }
@@ -478,6 +512,67 @@ mod worker_session_tests {
             })
             .collect();
         crate::scheduler::ModuleGroup::new(camino::Utf8PathBuf::from(path), items)
+    }
+
+    #[test]
+    fn close_stdin_really_closes_it() {
+        // Arrange
+        let (mut child, mut session) = cat_session();
+
+        // Act
+        session.close_stdin();
+
+        // Assert
+        let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
+        let fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
+        let task = minimal_task(&conftest, &fixtures);
+        assert!(
+            session.send_task(&task).is_err(),
+            "closing stdin must actually release the pipe — the worker begins its \
+             teardown only on EOF, so a close that did not close would leave the \
+             tail this reads for permanently unwritten (#1840)"
+        );
+
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    #[test]
+    fn the_tail_read_survives_closing_stdin() {
+        // Arrange — `cat` echoes stdin, so writing a diagnostic then closing
+        // stdin reproduces exactly the shape #1840 loses: output that arrives
+        // after the last result line, with no further drain to pick it up.
+        let (mut child, mut session) = cat_session();
+        let (result_tx, result_rx) =
+            crossbeam_channel::unbounded::<crate::parallel::WorkerMessage>();
+        {
+            use std::io::Write;
+            let stdin = session
+                .stdin
+                .as_mut()
+                .expect("session starts with stdin open");
+            writeln!(
+                stdin,
+                r#"{{"type":"diagnostic","severity":"warning","context":"fixture teardown","message":"late"}}"#
+            )
+            .unwrap();
+            stdin.flush().unwrap();
+        }
+
+        // Act
+        session.close_stdin();
+        session.drain_tail(&result_tx, 0);
+
+        // Assert
+        assert_eq!(
+            result_rx.len(),
+            1,
+            "a diagnostic written after the final result must still be read; \
+             dropping the session instead of closing stdin would drop line_rx \
+             with it and discard exactly this (#1840)"
+        );
+
+        let _ = child.wait();
     }
 
     #[test]
