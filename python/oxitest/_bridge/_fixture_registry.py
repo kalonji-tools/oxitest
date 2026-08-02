@@ -32,7 +32,7 @@ from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import AmbiguousFixtureError, FixtureNotFoundError
 from oxitest._bridge._fixture_type import _FixtureMarker
 from oxitest._bridge._lifetime import Lifetime
-from oxitest._bridge._visibility import anchor_depth, is_visible
+from oxitest._bridge._visibility import anchor_depth, anchors_overlap, is_visible
 from oxitest._bridge.result import CollectedViolation, DiagnosticSeverity, ViolationKind
 
 T = TypeVar("T")
@@ -293,6 +293,24 @@ def _merge_components(
     return tuple(sorted(components))
 
 
+def _shadow_order(defn: FixtureDef[Any], index: int) -> tuple[int, int]:
+    """Which of two mutually visible defs wins; higher is nearer.
+
+    The one key both resolution and the shadow notice sort by. Resolution picks
+    a winner and the notice names one, so a second copy of this rule would let
+    the message describe a run that did not happen — ``_deepest_visible`` and
+    ``_shadowing_pairs`` share this function rather than each computing depth
+    for themselves.
+
+    *index* is the registration position, which breaks equal-depth ties toward
+    the later declaration. Unanchored sources score 0, so they lose to any
+    anchored declaration that can see them, and a list with no ``ModuleSource``
+    in it reduces to last-registered-wins unchanged.
+    """
+    anchor = defn.anchor
+    return (anchor_depth(anchor) if anchor is not None else 0, index)
+
+
 def _deepest_visible(
     defs: Sequence[FixtureDef[Any]], module_path: str
 ) -> FixtureDef[Any] | None:
@@ -306,19 +324,76 @@ def _deepest_visible(
     where one anchor is an ancestor of the other, and there the nearer
     declaration should override, exactly as conftest locality already does.
 
-    Unanchored sources score 0, so a list with no ``ModuleSource`` in it reduces
-    to the previous last-registered-wins behaviour unchanged.
+    The ordering itself lives in ``_shadow_order`` — see there for how
+    unanchored sources and equal-depth ties are scored.
     """
     best: FixtureDef[Any] | None = None
-    best_depth = -1
-    for defn in defs:
+    best_order = (-1, -1)
+    for index, defn in enumerate(defs):
         if not defn.is_visible_from(module_path):
             continue
-        anchor = defn.anchor
-        depth = anchor_depth(anchor) if anchor is not None else 0
-        if depth >= best_depth:  # >= so the last of equal-depth ties wins
-            best, best_depth = defn, depth
+        order = _shadow_order(defn, index)
+        if order > best_order:
+            best, best_order = defn, order
     return best
+
+
+def _can_see_both(first: FixtureDef[Any], second: FixtureDef[Any]) -> bool:
+    """Whether one module could resolve both defs — the shadowing precondition.
+
+    Two declarations of a name clash only where a single test sees both, and
+    disjoint subtrees never can: a namespace is a directory basename, so
+    ``tests/api/v1`` and ``tests/admin/v1`` both derive ``v1`` while being
+    mutually invisible. An inline anchor is a file, so two test modules are
+    disjoint for the same reason.
+
+    ``anchor is None`` is not a missing value — it marks a source exempt from
+    B1. Conftest, plugin and builtin defs are ambient (ADR-0009 Rules 6 and 7)
+    and reach every module in the run, so they overlap with everything,
+    including each other. That arm is what keeps the one *true* shadow warning
+    alive: a conftest fixture really is overridden inside a package that
+    redeclares its name, and gating on ``anchors_overlap`` alone — which cannot
+    be called without two anchors — would silently delete it.
+    """
+    first_anchor, second_anchor = first.anchor, second.anchor
+    if first_anchor is None or second_anchor is None:
+        return True
+    return anchors_overlap(first_anchor, second_anchor)
+
+
+def _shadowing_pairs(
+    existing: Sequence[FixtureDef[Any]], incoming: FixtureDef[Any]
+) -> list[tuple[FixtureDef[Any], FixtureDef[Any]]]:
+    """``(shadower, shadowed)`` for each real clash *incoming* introduces.
+
+    Scanning every prior rather than only the last is what suppression forces:
+    while all pairs emitted, a chain covered the whole set incidentally; once
+    disjoint pairs go quiet, a def spanning two mutually invisible subtrees
+    would be compared against exactly one of them.
+
+    Only **maximal** priors are reported. A prior that another overlapping
+    prior already shadows is an interior link, and naming it too would turn a
+    three-conftest chain's two notices into three. Reporting only the single
+    winner instead fails the other way: two disjoint priors shadow each other
+    not at all, so both are maximal and both genuinely clash.
+    """
+    overlapping = [
+        (_shadow_order(prior, index), prior)
+        for index, prior in enumerate(existing)
+        if prior.conftest_path != incoming.conftest_path
+        and _can_see_both(prior, incoming)
+    ]
+    incoming_order = _shadow_order(incoming, len(existing))
+    return [
+        (incoming, prior) if incoming_order > order else (prior, incoming)
+        for order, prior in overlapping
+        # No self-comparison guard: orders carry a distinct index each, so a
+        # def is never strictly greater than itself.
+        if not any(
+            rival_order > order and _can_see_both(rival, prior)
+            for rival_order, rival in overlapping
+        )
+    ]
 
 
 class FixtureRegistry:
@@ -349,14 +424,15 @@ class FixtureRegistry:
         self._namespace_defs: dict[str, list[FixtureDef[Any]]] = {}
 
     def register(self, defn: FixtureDef[Any]) -> list[CollectedViolation]:
-        existing = self._by_name.get(defn.name)
-        if existing and existing[-1].conftest_path != defn.conftest_path:
-            parent = existing[-1]
+        for shadower, shadowed in _shadowing_pairs(
+            self._by_name.get(defn.name, ()), defn
+        ):
+            scope = f" within {shadower.anchor}" if shadower.anchor is not None else ""
             emit_diagnostic(
                 DiagnosticSeverity.NOTICE,
                 "fixture registration",
-                f"fixture '{defn.name}' in {defn.conftest_path} "
-                f"shadows definition in {parent.conftest_path}",
+                f"fixture '{defn.name}' in {shadower.conftest_path} "
+                f"shadows definition in {shadowed.conftest_path}{scope}",
             )
         self._by_name.setdefault(defn.name, []).append(defn)
         self._by_type.setdefault(defn.fixture_type, []).append(defn)
