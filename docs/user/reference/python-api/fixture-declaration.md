@@ -100,6 +100,39 @@ see the errors below.
 The rules, the worked tree, and the rendered diagnostic are in
 [Use fixtures](../../how-to/use-fixtures.md#understand-fixture-visibility-the-b1-boundary).
 
+## How a `Fixture[T]` parameter resolves
+
+A `Fixture[T]` parameter is matched to a fixture by the **parameter's name**. `T`
+is checked, but it never selects.
+
+```python
+# __fixtures__.py
+@oxi.fixture(lifetime="function")
+def db_schema() -> str: ...
+```
+
+```python
+def test_a(db_schema: Fixture[str]) -> None: ...  # resolves
+def test_b(schema: Fixture[str]) -> None: ...     # refused: nothing is named `schema`
+```
+
+`test_b` is refused **at collection**, before any test executes, however well its
+type matches. The same name-based pass validates both declaration routes — a
+`@oxi.fixture` in a declaration file and a legacy `Fixtures()` registrar are not
+matched differently.
+
+!!! note "Why the name and not the type"
+    Name matching is what holds the [B1 boundary](#visibility) closed. Fixtures
+    *are* indexed by return type internally, and that index carries no visibility
+    filtering — so a parameter that could resolve by type alone would let a test
+    reach a fixture anchored in a package it cannot see, just by naming its type
+    ([#1768](https://github.com/kalonji-tools/oxitest/issues/1768)).
+
+Fixtures you do **not** declare are the exception. A built-in is injected by its
+own type annotation (`tmp: TempDir` — see [built-in fixtures](builtins.md)), and a
+plugin-provided fixture resolves through its provider's type, so neither depends
+on what you call the parameter.
+
 ## Errors
 
 | Error | Raised | When |
