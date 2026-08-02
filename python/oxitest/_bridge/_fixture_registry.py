@@ -61,10 +61,12 @@ class FixtureScope(StrEnum):
 #: scheduler, collapsing parallelism for suites that never asked for the tier.
 #:
 #: ``SESSION`` reuses the existing scope member the builtins already cache under
-#: (``_TempDirFactoryFixture``). Per ADR-0009 Rule 2 it means once per **worker
-#: process**, not once per run: it is the tier that does not constrain the
-#: scheduler, so a value cannot be shared across the process boundary. Work that
-#: must happen exactly once per run belongs at rootdir ``package`` instead.
+#: (``_TempDirFactoryFixture``). Per ADR-0009 Rule 2 as corrected by Amendment 4
+#: it means once per **task group** — one module unless a ``package``
+#: declaration merges the subtree — not once per run and not once per worker
+#: process: it is the tier that does not constrain the scheduler, so its
+#: instance count is set by another tier's declarations. Work that must happen
+#: exactly once per run belongs at rootdir ``package`` instead.
 LIFETIME_SCOPES: Final = MappingProxyType(
     {
         Lifetime.FUNCTION: FixtureScope.EACH,

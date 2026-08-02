@@ -65,7 +65,8 @@ def test_session_lifetime_is_accepted() -> None:
     """lifetime="session" produces a working decorator with a SESSION marker.
 
     This was a rejection test until slice 4 (#1711) settled the semantics —
-    ``session`` is once per **worker process**, not once per run. All four
+    ``session`` is once per **task group**, not once per run and not once per
+    worker process (ADR-0009 Amendment 4). All four
     ADR-0009 tiers are now declarable, so ``LIFETIME_SCOPES`` is total over
     ``Lifetime`` and no tier is gated any more.
     """

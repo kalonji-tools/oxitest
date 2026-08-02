@@ -38,10 +38,11 @@ def test_session_maps_to_a_different_scope_than_package() -> None:
     """The two wide tiers must not share a scope.
 
     Slice 4 (#1711) settled the semantics this file used to assert were
-    undecided: ``session`` is once per **worker process**, ``package`` exactly
-    once per run. They sit at opposite ends of the same trade — package buys
-    exactness and charges parallelism, session the reverse — so collapsing them
-    onto one scope would silently give one tier the other's behaviour.
+    undecided: ``session`` is once per **task group** (ADR-0009 Amendment 4),
+    ``package`` exactly once per run. They sit at opposite ends of the same
+    trade — package buys exactness and charges parallelism, session the
+    reverse — so collapsing them onto one scope would silently give one tier
+    the other's behaviour.
     """
     # Act
     package_scope = LIFETIME_SCOPES.get(Lifetime.PACKAGE)
@@ -53,6 +54,6 @@ def test_session_maps_to_a_different_scope_than_package() -> None:
     )
     assert package_scope is not session_scope, (
         "package and session must not share a scope: they cache in different "
-        "buckets (per anchor directory vs per worker process), and sharing one "
+        "buckets (per anchor directory vs per task group), and sharing one "
         "would make the declaring subtree's co-location apply to both"
     )

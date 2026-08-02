@@ -123,8 +123,15 @@ def test_the_session_fixture_is_built_once_per_worker(tmp: TempDir) -> None:
     """The assertion this slice exists for.
 
     Scheduling decides how many workers receive work, so asserting a count
-    would be flaky. The invariant is per-PID and scheduling-independent:
-    every PID that ran a test built the fixture exactly once.
+    would be flaky. The invariant is per-PID: every PID that ran a test built
+    the fixture exactly once.
+
+    That invariant encodes the **per-process** contract, which ``main`` does
+    not provide — ADR-0009 Amendment 4 measured ``session`` as once per **task
+    group**. It passes here only because this data project has four modules and
+    the run hardcodes ``-n 4``; at ``-n 2`` it fails deterministically. See
+    #1843, which owns that finding, and #1777, which makes the contract real
+    under the name ``lifetime="process"``.
     """
     # Act
     run = _run_project(tmp, "-n", "4")
@@ -136,7 +143,7 @@ def test_the_session_fixture_is_built_once_per_worker(tmp: TempDir) -> None:
     )
     assert sorted(run.setup_pids) == sorted(run.running_pids), (
         f"SETUP fired on PIDs {sorted(run.setup_pids)} but tests ran on "
-        f"{sorted(run.running_pids)}. session is once per worker process: a PID "
+        f"{sorted(run.running_pids)}. this asserts one build per worker PID: a PID "
         f"appearing twice means the fixture was rebuilt within one worker, and a "
         f"running PID missing entirely means a worker served tests without it"
     )
