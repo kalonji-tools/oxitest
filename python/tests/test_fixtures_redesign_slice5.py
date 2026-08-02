@@ -12,8 +12,10 @@ asserts that a package-level fixture stays visible from both files.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+from oxitest import TempDir
 from tests import helpers
 
 _DATA_ROOT = Path(__file__).parent / "data"
@@ -139,4 +141,89 @@ def test_a_module_level_mark_object_does_not_break_registration() -> None:
     )
     assert "1 passed" in stdout, (
         f"the real inline fixture must still register and resolve; got:\n{stdout}"
+    )
+
+
+def test_inline_fixtures_survive_a_warm_module_cache(tmp: TempDir) -> None:
+    """#1850: the second run of a suite using inline fixtures must still pass.
+
+    Inline registration rides on the import `collect_module` performs during
+    collection, and a module-cache hit skips that import. Before the fix the
+    fixture was therefore absent from the registry on every run after the
+    first, and every consuming test failed collection with
+    ``fixture 'client' not found``.
+
+    The sibling guard for the package path is
+    ``test_warm_cache_preserves_fixture_registration`` in the slice-1 file.
+
+    Two things are load-bearing and easy to break by accident:
+
+    * **no ``strict`` key in the pyproject.** ``strict = "enforce"`` and
+      ``strict = "abort"`` both turn on violation collection, which bypasses
+      the item cache entirely — under either value this test passes against
+      the unfixed code. oxitest's own suite runs ``strict = "abort"``, which
+      is exactly why the defect survived in-tree.
+    * **the project is built in a TempDir**, not checked in, so the first run
+      is guaranteed cold. A ``data/`` project carries an ``.oxitest_cache``
+      from earlier suite runs and two suite processes would share it.
+    """
+    # Arrange
+    project = Path(tmp)
+    (project / "pyproject.toml").write_text(
+        '[tool.oxitest]\ntestpaths = ["proj"]\npython_files = ["test_*.py"]\n'
+    )
+    package = project / "proj"
+    package.mkdir()
+    (package / "test_inline_client.py").write_text(
+        "from __future__ import annotations\n\n"
+        "import oxitest as oxi\n"
+        "from oxitest import Fixture\n\n\n"
+        '@oxi.fixture(lifetime="function")\n'
+        "def client() -> str:\n"
+        '    return "connected"\n\n\n'
+        "def test_uses_the_inline_fixture(client: Fixture[str]) -> None:\n"
+        '    assert client == "connected", (\n'
+        '        "an inline fixture must resolve on every run, warm cache or not"\n'
+        "    )\n"
+    )
+
+    # Act — first run, cold cache.
+    cold_out, cold_err, cold_rc = helpers.run_oxitest(project)
+
+    # Assert — the fixture works at all, and the run really is the
+    # cache-eligible configuration the defect needs. Without the cache checks
+    # this guard would go vacuously green the day item caching stopped
+    # happening (or a `strict` key crept into the pyproject) and would still
+    # look like a passing regression test.
+    assert cold_rc == 0, (
+        f"the cold run must pass — inline fixtures are broken at the root, not "
+        f"just on warm cache; rc={cold_rc}\n"
+        f"stdout:\n{cold_out}\nstderr:\n{cold_err}"
+    )
+    timings = project / ".oxitest_cache" / "timings.json"
+    assert timings.exists(), (
+        f"the cold run must write the item cache; if nothing is cached the "
+        f"second run cannot be a warm-cache run and proves nothing:\n"
+        f"stdout:\n{cold_out}"
+    )
+    cached_modules = json.loads(timings.read_text()).get("modules", {})
+    assert any("test_inline_client.py" in key for key in cached_modules), (
+        f"the test module itself must reach the item cache — that entry is what "
+        f"the unfixed code serves on the second run instead of importing (and "
+        f"registering) the module; cached keys: {sorted(cached_modules)}"
+    )
+
+    # Act — second run, warm cache.
+    warm_out, warm_err, warm_rc = helpers.run_oxitest(project)
+
+    # Assert
+    assert warm_rc == 0, (
+        f"the warm-cache run regressed (#1850): the module-cache hit skipped "
+        f"the import that registers the inline @oxi.fixture, so the fixture "
+        f"vanished from the registry on the second run; rc={warm_rc}\n"
+        f"stdout:\n{warm_out}\nstderr:\n{warm_err}"
+    )
+    assert "1 passed" in warm_out, (
+        f"the test must actually run on the warm pass — a collection error "
+        f"reports no test at all; got:\n{warm_out}"
     )
