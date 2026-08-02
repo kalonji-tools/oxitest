@@ -53,7 +53,7 @@ import os
 import sys
 import time
 import types
-from typing import TYPE_CHECKING, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
 
 if TYPE_CHECKING:
     # Type-only — `from __future__ import annotations` keeps these out of the
@@ -252,39 +252,60 @@ def _maybe_start_coverage() -> None:
         _coverage.process_startup()
 
 
-def run(task: WorkerTask) -> None:
+def build_session(task: WorkerTask) -> Any:
+    """Build this worker process's one ``FixtureSession`` (#1777).
+
+    Called once per process rather than once per task. That is sound because
+    every field it reads is run-constant: the coordinator serialises
+    ``conftest_paths`` and ``fixture_modules`` a single time for the whole run
+    and hands every worker the same bytes, and ``rootdir`` comes from the
+    config. A task carries them so a worker needs no separate handshake, not
+    because they can differ between tasks.
+
+    Registering the fixture modules belongs here for the same reason. Repeating
+    it per task would re-register an identical list against a session that
+    already has it.
+    """
+    from oxitest._bridge.conftest_loader import create_session
+
+    conftest_paths: list[str] = task.get("conftest_paths", [])
+    # Optional on the Python side purely so in-process unit tests can build a
+    # task dict without mutating the interpreter's sys.path. The coordinator
+    # always sends it.
+    rootdir: str | None = task.get("rootdir")
+    session, _violations, _diagnostics = create_session(conftest_paths, rootdir=rootdir)
+    _register_fixture_modules(session, task.get("fixture_modules", []))
+    return session
+
+
+def run(task: WorkerTask, session: Any) -> None:
+    """Run one task's tests against the process-lifetime *session*.
+
+    The caller owns the session and has already validated the task protocol;
+    ``run`` disposes only what this task's own tiers own, through
+    ``_end_task_session``. Anything wider survives for the next task, which is
+    what makes ``lifetime="session"`` per process rather than per task group.
+    """
     # Imports are kept lazy — top-level loading adds ~35ms to worker subprocess startup.
     # PLC0415 is suppressed for this file in ruff per-file-ignores.
     from oxitest._bridge._runners import DebugContext
     from oxitest._bridge._test_kind import from_wire
     from oxitest._bridge._test_meta import TestMeta
-    from oxitest._bridge.conftest_loader import create_session
     from oxitest._bridge.executor import run_test
     from oxitest._bridge.importer import collect_module
 
-    _check_task_protocol(task)
-
     modules: list[WorkerTaskModule] = task["modules"]
-    conftest_paths: list[str] = task.get("conftest_paths", [])
     timeout_secs: int | None = task.get("timeout_secs")
     keep_tmp: str = task.get("keep_tmp", "cleanup")
-    # Optional on the Python side purely so in-process unit tests can build a
-    # task dict without mutating the interpreter's sys.path. The coordinator
-    # always sends it.
-    rootdir: str | None = task.get("rootdir")
     debug = DebugContext(
         show_locals=task.get("show_locals", False),
         show_internals=task.get("show_internals", False),
     )
 
-    # Read every module path before the session exists: a malformed entry raises
-    # here, where there is nothing to leak. Reading it after create_session would
-    # strand a live session, and reading it inside the finally would mask
-    # whatever exception was already in flight.
+    # Read every module path up front: a malformed entry raises here, before any
+    # test has run, rather than inside the finally where it would mask whatever
+    # exception was already in flight.
     module_paths = [module["module_path"] for module in modules]
-
-    session, _violations, _diagnostics = create_session(conftest_paths, rootdir=rootdir)
-    _register_fixture_modules(session, task.get("fixture_modules", []))
 
     # Register fixtures declared in the test module itself (e.g. a Fixtures()
     # instance at module level). This mirrors what the serial runner does via
@@ -331,18 +352,17 @@ def _end_task_session(session: _TeardownTarget, module_paths: list[str]) -> None
     the task drain, so every module teardown must finish first or a module
     teardown could reach a value that is already gone.
 
-    ``end_process`` follows immediately here only because the session is still
-    built per task; #1777 moves that call to ``main()``'s ``finally``, which is
-    the whole point of the seam. Until then the pair stays adjacent so this
-    commit changes no behaviour.
+    ``end_process`` is deliberately absent. The session outlives this task, and
+    draining its process tier here is exactly the bug #1777 fixes — it is what
+    made ``lifetime="session"`` rebuild once per task group. ``main()`` owns
+    that call.
 
     Each drain gets its own ``try`` so a failing ``end_module`` cannot skip the
-    modules after it, or ``end_task``, or ``end_process``.
+    modules after it, or ``end_task``.
     """
     for path in module_paths:
         _drain(f"end_module({path})", session.end_module, path)
     _drain("end_task", session.end_task)
-    _drain("end_process", session.end_process)
 
 
 def _drain(context: str, teardown: Callable[..., None], *args: str) -> None:
@@ -383,23 +403,39 @@ def main() -> None:
     from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 
     _diagnostic_collector_var.set(_StreamingDiagnosticSink())
-    for raw in sys.stdin:
-        line = raw.strip()
-        if line:
-            try:
-                task: WorkerTask = json.loads(line)
-            except json.JSONDecodeError as exc:
-                from oxitest._bridge.result import Diagnostic, DiagnosticSeverity
+    # One session for the whole process, built from the first task that arrives
+    # (#1777). Every task carries identical session inputs, so the first one is
+    # as good as any; building lazily keeps a worker that receives no work from
+    # paying for conftest loading.
+    session: Any = None
+    try:
+        for raw in sys.stdin:
+            line = raw.strip()
+            if line:
+                try:
+                    task: WorkerTask = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    from oxitest._bridge.result import Diagnostic, DiagnosticSeverity
 
-                _emit(
-                    Diagnostic(
-                        severity=DiagnosticSeverity.WARNING,
-                        context="worker",
-                        message=f"malformed JSON from coordinator: {exc}",
-                    ).to_wire()
-                )
-                continue
-            run(task)
+                    _emit(
+                        Diagnostic(
+                            severity=DiagnosticSeverity.WARNING,
+                            context="worker",
+                            message=f"malformed JSON from coordinator: {exc}",
+                        ).to_wire()
+                    )
+                    continue
+                _check_task_protocol(task)
+                if session is None:
+                    session = build_session(task)
+                run(task, session)
+    finally:
+        # `finally`, not `atexit` and not a signal handler: this process has
+        # neither, so it is the only thing that survives the KeyboardInterrupt
+        # a Ctrl-C delivers mid-task. Without it every process-lifetime
+        # teardown would be skipped on interrupt.
+        if session is not None:
+            _drain("end_process", session.end_process)
 
 
 if __name__ == "__main__":
