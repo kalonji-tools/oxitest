@@ -690,7 +690,7 @@ def test_tempdir_factory_session_scoped() -> None:
         "TempDirFactory is session-scoped and should return the same instance across "
         "resolves"
     )
-    session.end_session()  # trigger factory cleanup to avoid /tmp leakage
+    session.end_task()  # trigger factory cleanup to avoid /tmp leakage
 
 
 def test_stdcapture_injected_via_session() -> None:

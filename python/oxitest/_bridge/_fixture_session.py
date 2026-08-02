@@ -273,7 +273,7 @@ class FixtureSession:
       fixtures declared ``@oxi.fixture(lifetime="module")``; created on first
       use and drained at `end_module`.
     - **shared scope** (`_shared_scope`) — for fixtures declared with
-      ``shared=True``; initialised once and torn down at `end_session`.
+      ``shared=True``; initialised once and torn down at `end_task`.
     - **session scope** (`_session_scope`) — for built-in session-lifetime
       fixtures such as `TempDirFactory`.
 
@@ -299,7 +299,7 @@ class FixtureSession:
         self._session_scope = _Scope()
         self._shared_scope = (
             _Scope()
-        )  # shared=True fixtures — init once, drain at end_session
+        )  # shared=True fixtures — init once, drain at end_task
         # lifetime="module" fixtures — one scope per module path, created on
         # first use and popped+drained by end_module. Popping (rather than
         # clearing) keeps a long run from retaining one _Scope per module.
@@ -484,7 +484,7 @@ class FixtureSession:
             # anchor. session is the tier that does not constrain the scheduler
             # (ADR-0009 Rule 2), so its boundary is the worker process itself,
             # not any directory — which is exactly why it cannot be a run-wide
-            # singleton. Drained by end_session.
+            # singleton. Drained by end_task.
             #
             # This branch is what makes a *user-declared* lifetime="session"
             # fixture reach the session scope. Builtins arrive there by a
@@ -601,7 +601,7 @@ class FixtureSession:
         """Dispose everything scoped to *package_path*.
 
         Peer to :meth:`end_module` one tier up. The seam exists because package
-        disposal cannot ride on ``end_session``: a serial run uses one session
+        disposal cannot ride on ``end_task``: a serial run uses one session
         for the whole run, so the session drain fires long after the package's
         last test.
 
@@ -631,7 +631,18 @@ class FixtureSession:
         finally:
             _current_teardown_node_id.reset(token)
 
-    def end_session(self) -> None:
+    def end_task(self) -> None:
+        """Dispose everything whose lifetime ends with this task group.
+
+        The wider half of the old ``end_session`` (#1777). A worker calls this
+        once per task it pops off the scheduler; the serial path calls it once,
+        because a serial run's task group is the whole run.
+
+        Peer to :meth:`end_process`, which owns the rungs that outlive a task.
+        The pair must fire in that order — task first, then process — because a
+        process-lifetime value may depend on nothing narrower, but the reverse
+        is exactly what the tiers permit.
+        """
         # Tear down shared async fixtures first (reverse order), then sync scopes.
         self._async_mgr.cleanup()
         # Any package scope still held is drained here as a backstop. The serial
@@ -646,6 +657,20 @@ class FixtureSession:
         # so that shared fixture teardowns can still access session-scoped builtins.
         self._shared_scope.drain()
         self._session_scope.drain()
+
+    def end_process(self) -> None:
+        """Dispose everything whose lifetime ends with this *process* (#1777).
+
+        Called once per process — from the worker's ``main()`` ``finally`` and
+        once by the coordinator after every execution phase — rather than once
+        per task group. Nothing is drained here yet; the process-lifetime scope
+        arrives with ``FixtureScope.PROCESS`` and the async manager follows it.
+
+        Restoring the contextvars belongs here rather than in :meth:`end_task`
+        because both vars are process-global: the worker sets the diagnostic
+        collector once in ``main()`` for the life of its pipe, and every
+        collector downstream defers to an already-active one.
+        """
         # Only restore contextvars if this session was the one that set them
         # (i.e., _prev was None, meaning we were the outermost session).
         prev_fx = getattr(self, "_prev_fixtures_var", None)

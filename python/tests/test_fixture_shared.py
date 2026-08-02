@@ -101,8 +101,8 @@ def test_shared_fixture_proxy_raises_on_item_mutation() -> None:
         k["cfg"]["x"] = 2
 
 
-def test_shared_fixture_teardown_runs_on_end_session() -> None:
-    """Shared yield fixture teardown is deferred to end_session, not end_module."""
+def test_shared_fixture_teardown_runs_on_end_task() -> None:
+    """Shared yield fixture teardown is deferred to end_task, not end_module."""
     torn_down: list[bool] = []
 
     def factory() -> Generator[str]:
@@ -119,8 +119,8 @@ def test_shared_fixture_teardown_runs_on_end_session() -> None:
     session.resolve_for_test(fn, helpers.make_meta("t.py"))
     session.end_module("t.py")
     assert not torn_down, "teardown must not run at end_module for shared fixtures"
-    session.end_session()
-    assert torn_down == [True], "teardown must run at end_session"
+    session.end_task()
+    assert torn_down == [True], "teardown must run at end_task"
 
 
 # ── Shared fixtures introspection ──────────────────────────────────────────────

@@ -4,7 +4,7 @@
 without draining it, so ``_session_scope`` (session-scoped builtins such as
 ``TempDirFactory``) and ``_shared_scope`` (``shared=True`` user fixtures) never
 ran their teardowns in parallel mode. The serial path has always been correct —
-``src/pipeline/execution.rs`` calls ``end_module``/``end_session`` — so every
+``src/pipeline/execution.rs`` calls ``end_module``/``end_task`` — so every
 test here contrasts ``--serial`` against ``-n``.
 
 Projects are built inline rather than kept under ``data/`` because each needs a
@@ -42,8 +42,11 @@ class _StubSession:
     def end_module(self, _module_path: str) -> None:
         self._record("end_module")
 
-    def end_session(self) -> None:
-        self._record("end_session")
+    def end_task(self) -> None:
+        self._record("end_task")
+
+    def end_process(self) -> None:
+        self._record("end_process")
 
 
 def _write_tempdir_project(root: Path, log: Path) -> None:
@@ -100,7 +103,7 @@ def test_tempdir_factory_cleaned_up_in_parallel(tmp: TempDir) -> None:
     """TempDirFactory dirs must be removed after a parallel run.
 
     ``_TempDirFactoryFixture`` is session-scoped and registers ``factory.close``
-    on the session teardown stack, which only ``end_session()`` drains. With no
+    on the session teardown stack, which only ``end_task()`` drains. With no
     teardown call in the worker, every temp dir a parallel run creates survives
     it — an unbounded disk leak under stock config, since nothing here opts in
     to any non-default setting.
@@ -135,7 +138,7 @@ def test_tempdir_factory_cleaned_up_in_parallel(tmp: TempDir) -> None:
     survivors = _surviving(log)
     assert not survivors, (
         f"{len(survivors)} temp dir(s) outlived the parallel run — the worker "
-        "returned without calling end_session(), so TempDirFactory.close never "
+        "returned without calling end_task(), so TempDirFactory.close never "
         "ran. Every parallel run leaks its temp dirs:\n"
         + "\n".join(str(p) for p in survivors[:5])
     )
@@ -198,29 +201,31 @@ def test_shared_fixture_teardown_runs_in_worker(tmp: TempDir) -> None:
     assert len(teardowns) == len(setups), (
         f"{len(setups)} setup(s) but {len(teardowns)} teardown(s) — each worker "
         "session builds its own shared fixture, so each must drain it; the "
-        "worker returned without calling end_session()"
+        "worker returned without calling end_task()"
     )
 
 
-def test_end_task_session_calls_both_teardowns_in_order() -> None:
-    """end_module must run before end_session, matching the serial path.
+def test_end_task_session_calls_every_teardown_in_order() -> None:
+    """end_module runs before end_task, and end_task before end_process.
 
-    execution.rs drains modules as the run proceeds and the session at the end;
-    reversing that here would let a session-scoped teardown run before a
-    module-scoped one that may still depend on it.
+    execution.rs drains modules as the run proceeds and the wider tiers at the
+    end; reversing that here would let a task- or process-scoped teardown run
+    before a narrower one that may still depend on it.
     """
     session = _StubSession()
 
     _end_task_session(session, ["pkg/test_a.py"])
 
-    assert session.calls == ["end_module", "end_session"], (
-        f"expected end_module then end_session, got {session.calls} — order "
-        "mirrors src/pipeline/execution.rs and must not drift from it"
+    assert session.calls == ["end_module", "end_task", "end_process"], (
+        f"expected end_module, end_task, end_process, got {session.calls} — "
+        "order mirrors src/pipeline/execution.rs and must not drift from it"
     )
 
 
-def test_end_module_failure_does_not_skip_end_session(capture: StdCapture) -> None:
-    """A failing end_module must not strand the session scopes.
+def test_end_module_failure_does_not_skip_the_wider_drains(
+    capture: StdCapture,
+) -> None:
+    """A failing end_module must not strand the task or process scopes.
 
     These are independent drains. Sharing one try block would mean a module
     cache eviction error silently leaks every temp dir the session created —
@@ -233,8 +238,8 @@ def test_end_module_failure_does_not_skip_end_session(capture: StdCapture) -> No
 
     _end_task_session(session, ["pkg/test_a.py"])
 
-    assert session.calls == ["end_module", "end_session"], (
-        f"end_session must still run after end_module raised, got {session.calls}"
+    assert session.calls == ["end_module", "end_task", "end_process"], (
+        f"the wider drains must still run after end_module raised, got {session.calls}"
     )
     contexts = [
         json.loads(ln)["context"]
@@ -243,7 +248,7 @@ def test_end_module_failure_does_not_skip_end_session(capture: StdCapture) -> No
     ]
     assert contexts == ["end_module(pkg/test_a.py)"], (
         f"only the failing teardown should be reported, got {contexts} — "
-        "a diagnostic for the successful end_session would be a false alarm"
+        "a diagnostic for a successful wider drain would be a false alarm"
     )
 
 
@@ -256,7 +261,7 @@ def test_teardown_failure_is_reported_and_swallowed(capture: StdCapture) -> None
     is usually never consumed. The swallowing is what matters; the diagnostic
     is a bonus when anything is still listening.
     """
-    session = _StubSession(fail_on="end_session")
+    session = _StubSession(fail_on="end_task")
 
     _end_task_session(session, ["pkg/test_a.py"])
 
@@ -272,7 +277,7 @@ def test_teardown_failure_is_reported_and_swallowed(capture: StdCapture) -> None
         f"teardown failure is a warning, not an error: {diagnostics[0]} — an "
         "error severity would imply the run itself failed, which it did not"
     )
-    assert diagnostics[0]["context"] == "end_session", (
+    assert diagnostics[0]["context"] == "end_task", (
         f"context must name the failing teardown so the user can locate it, "
         f"got {diagnostics[0]['context']!r}"
     )

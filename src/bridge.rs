@@ -89,8 +89,8 @@ impl FixtureSession {
     /// Signal that every module in the package has finished; runs package teardowns.
     ///
     /// Peer to [`Self::end_module`] one tier up. Package disposal cannot ride on
-    /// `end_session`: a serial run uses one session for the whole run, so the
-    /// session drain fires long after the package's last test.
+    /// `end_task`: a serial run uses one session for the whole run, so the
+    /// task drain fires long after the package's last test.
     pub fn end_package(&self, py: Python<'_>, package_path: &Utf8Path) -> PyResult<()> {
         self.0
             .bind(py)
@@ -98,9 +98,22 @@ impl FixtureSession {
         Ok(())
     }
 
-    /// Run session-scoped teardowns at the end of the run.
-    pub fn end_session(&self, py: Python<'_>) -> PyResult<()> {
-        self.0.bind(py).call_method0("end_session")?;
+    /// Run the teardowns whose lifetime ends with this task group.
+    ///
+    /// Peer to [`Self::end_process`]. Always call this one first: a
+    /// process-lifetime value may outlive a task-lifetime one, never the
+    /// reverse (#1777).
+    pub fn end_task(&self, py: Python<'_>) -> PyResult<()> {
+        self.0.bind(py).call_method0("end_task")?;
+        Ok(())
+    }
+
+    /// Run the teardowns whose lifetime ends with this *process* (#1777).
+    ///
+    /// Fires once per process, not once per task group — which for the
+    /// coordinator means once after every execution phase has finished.
+    pub fn end_process(&self, py: Python<'_>) -> PyResult<()> {
+        self.0.bind(py).call_method0("end_process")?;
         Ok(())
     }
 
@@ -139,7 +152,7 @@ impl FixtureSession {
 
     /// Returns sorted names of all fixtures marked with `shared=True` in the registry.
     /// Returns an empty Vec on any Python error (treated as "no shared fixtures").
-    /// Unlike `end_module`/`end_session`, errors are absorbed here because this
+    /// Unlike `end_module`/`end_task`, errors are absorbed here because this
     /// method is advisory-only; a failure must not abort the run.
     pub fn shared_fixture_names(&self, py: Python<'_>) -> Vec<String> {
         self.0

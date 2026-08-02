@@ -44,9 +44,9 @@ impl Default for DebugOptions<'_> {
 ///
 /// Must run after every lifecycle call, not only after each test. Scope
 /// teardowns swallow their exception and emit a `Diagnostic` instead of
-/// raising, so `end_module` / `end_session` returning `Ok` does **not** mean
+/// raising, so `end_module` / `end_task` returning `Ok` does **not** mean
 /// nothing went wrong. Draining only inside the test loop means a failing
-/// module- or session-scope teardown surfaces just when a later test happens
+/// module- or task-scope teardown surfaces just when a later test happens
 /// to trigger a drain — and is lost outright when nothing runs afterwards.
 fn drain_diagnostics(
     py: Python<'_>,
@@ -267,7 +267,7 @@ impl<'a> ExecutionDispatch<'a> {
                 // Modules drain as they finish; the package drains once the whole
                 // group has. A package-lifetime value must outlive every module
                 // in its subtree, so end_package cannot fire per module — and it
-                // cannot ride on end_session either, because a serial run uses
+                // cannot ride on end_task either, because a serial run uses
                 // one session for the entire run.
                 'run: for group in &groups {
                     for ModuleGroup { module_path, items } in &group.modules {
@@ -308,7 +308,11 @@ impl<'a> ExecutionDispatch<'a> {
                         session.end_package(*py, package),
                     );
                 }
-                end_scope(rep, "end_session".to_string(), session.end_session(*py));
+                // Adjacent only for now: #1777 hoists end_process out of
+                // execute_groups to a single post-phase call, which is what
+                // makes the process tier genuinely once-per-process.
+                end_scope(rep, "end_task".to_string(), session.end_task(*py));
+                end_scope(rep, "end_process".to_string(), session.end_process(*py));
 
                 parallel::PhaseResult {
                     interrupted,

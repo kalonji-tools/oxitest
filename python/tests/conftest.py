@@ -24,7 +24,10 @@ def fixture_session() -> Yields[FixtureSession]:
     """Provide a fresh ``FixtureSession`` with an empty registry."""
     session = FixtureSession([], PluginRegistry())
     yield session
-    session.end_session()
+    # Both rungs: the fixture owns the whole session, so it must leave nothing
+    # behind — the task tiers and the process-lifetime ones (#1777).
+    session.end_task()
+    session.end_process()
 
 
 @fx.fixture
