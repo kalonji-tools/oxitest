@@ -43,6 +43,18 @@ struct CtrfTest {
     message: Option<String>,
 }
 
+/// The `tests[].name` to report a collection error under.
+///
+/// A file path, never a node ID, so a synthesised entry can never be mistaken
+/// for — or collide with — a real test. Errors that carry no path fall back to
+/// a literal `<collection>`.
+fn collect_error_name(error: &CollectError) -> String {
+    match error {
+        CollectError::ImportError { path, .. } => path.to_string(),
+        CollectError::PyError(_) | CollectError::Affected(_) => "<collection>".to_string(),
+    }
+}
+
 // ─── JsonReporter ─────────────────────────────────────────────────────────────
 
 pub struct JsonReporter {
@@ -60,6 +72,25 @@ impl JsonReporter {
 }
 
 impl JsonReporter {
+    /// Record a failure that belongs to the run rather than to a test.
+    ///
+    /// Collection errors and `--strict=abort` violations abort the run before
+    /// any test executes. They are serialised as `failed` CTRF entries rather
+    /// than left out of an empty `tests: []`, because `summary.failed == 0`
+    /// makes every CTRF consumer render an aborted run as green — a quieter
+    /// version of the missing-artifact bug this replaces (#1682).
+    ///
+    /// `name` is a file path or a node ID; `duration` is `0.0` because nothing
+    /// ran.
+    pub(crate) fn record_run_failure(&mut self, name: String, message: String) {
+        self.tests.push(CtrfTest {
+            name,
+            status: "failed",
+            duration: 0.0,
+            message: Some(message),
+        });
+    }
+
     fn write_json(&self, output: &CtrfOutput) -> std::io::Result<()> {
         let json = serde_json::to_string_pretty(output).map_err(std::io::Error::other)?;
         std::fs::write(&self.path, json)
@@ -84,10 +115,14 @@ impl Reporter for JsonReporter {
 
     fn finish(
         &mut self,
-        _collect_errors: &[CollectError],
+        collect_errors: &[CollectError],
         _interrupted: bool,
         _session: &super::ReporterSession,
     ) -> super::ExitVote {
+        for error in collect_errors {
+            self.record_run_failure(collect_error_name(error), error.to_string());
+        }
+
         let passed = self.tests.iter().filter(|t| t.status == "passed").count();
         let failed = self.tests.iter().filter(|t| t.status == "failed").count();
         let skipped = self.tests.iter().filter(|t| t.status == "skipped").count();
@@ -265,6 +300,90 @@ mod tests {
         assert!(
             !json.contains("\"message\""),
             "empty message must not appear as a key in JSON"
+        );
+    }
+
+    /// Run `finish` with no tests and the given collect errors, returning the
+    /// parsed CTRF document. Panics if no file was written.
+    fn finish_with_collect_errors(errors: &[CollectError]) -> serde_json::Value {
+        let dir = TempDir::new().unwrap();
+        let path = camino::Utf8PathBuf::from_path_buf(dir.path().join("out.json")).unwrap();
+        let mut rep = JsonReporter::new(path.clone());
+        rep.finish(errors, false, &crate::reporter::ReporterSession::new(0));
+        assert!(
+            path.exists(),
+            "--json promises the file exists after the run; an aborted run that writes nothing is indistinguishable from a job that never started"
+        );
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn test_collect_errors_are_serialized_as_failed_entries() {
+        let doc = finish_with_collect_errors(&[CollectError::ImportError {
+            path: camino::Utf8PathBuf::from("tests/test_bad.py"),
+            message: "ModuleNotFoundError: No module named 'nope'".to_string(),
+        }]);
+
+        let summary = &doc["results"]["summary"];
+        assert_eq!(
+            summary["failed"], 1,
+            "a collection error must count as failed — summary.failed == 0 makes every CTRF consumer render the aborted run green"
+        );
+        assert_eq!(
+            summary["tests"], 1,
+            "the failed entry must be counted in the total, or failed/tests is inconsistent"
+        );
+        assert_eq!(
+            doc["results"]["tests"][0]["name"], "tests/test_bad.py",
+            "the entry must name the file that failed to import so a dashboard can point at it"
+        );
+        assert!(
+            doc["results"]["tests"][0]["message"]
+                .as_str()
+                .unwrap()
+                .contains("ModuleNotFoundError"),
+            "the underlying Python error must survive into the artifact — the CTRF file is all CI keeps"
+        );
+    }
+
+    #[test]
+    fn test_pathless_collect_error_uses_placeholder_name() {
+        let doc =
+            finish_with_collect_errors(&[CollectError::PyError("conftest exploded".to_string())]);
+
+        assert_eq!(
+            doc["results"]["tests"][0]["name"], "<collection>",
+            "an error with no file must not borrow a node ID shape, or it could collide with a real test"
+        );
+        assert_eq!(
+            doc["results"]["summary"]["failed"], 1,
+            "a pathless collection error is still a failed run"
+        );
+    }
+
+    #[test]
+    fn test_run_failures_and_tests_are_summed_together() {
+        let dir = TempDir::new().unwrap();
+        let path = camino::Utf8PathBuf::from_path_buf(dir.path().join("out.json")).unwrap();
+        let mut rep = JsonReporter::new(path.clone());
+        rep.test_completed(
+            &TestItem::builder("tests/test_foo.py", "test_a").arc(),
+            &TestOutcome::Passed { tips: None },
+            DurationMs::new(1.0),
+            None,
+        );
+        rep.record_run_failure("tests/test_bar.py".to_string(), "boom".to_string());
+        rep.finish(&[], false, &crate::reporter::ReporterSession::new(0));
+
+        let doc: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            doc["results"]["summary"]["passed"], 1,
+            "a recorded run failure must not swallow the tests that did execute"
+        );
+        assert_eq!(
+            doc["results"]["summary"]["failed"], 1,
+            "record_run_failure must reach the summary, not just the tests array"
         );
     }
 
