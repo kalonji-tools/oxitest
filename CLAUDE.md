@@ -311,6 +311,7 @@ Parameters annotated with `Fixture[T]` are injected; unannotated parameters are 
 - **Python integration tests** (`just test-python`): Run real commands. Tests use oxitest itself as the runner (`strict = "abort"`).
 - **CI**: GitHub Actions. Two parallel jobs: `check` (static analysis via `just check`) and `test` (`just test-rust`, `just build`, `just test-python`). Uses `dtolnay/rust-toolchain`, `astral-sh/setup-uv`, `Swatinem/rust-cache` — no devenv in CI.
 - **Every `assert` MUST have a message.** oxitest runs with `strict = "abort"` — bare asserts are violations. The message explains *why* the assertion matters — oxitest already shows the where, when, and what (expected vs actual). The message gives the developer the *why* so they can debug the *how*. Bad: `"expected 4 methods, got 3"` (oxitest already shows that). Good: `"FixtureProvider protocol added a method — HostProvider needs to implement it to avoid runtime TypeError"`.
+- **Mutation checks need a clean baseline.** A test proves nothing until a mutation makes it fail — but applying a mutant to a file that also holds uncommitted work, then reverting with `git checkout -- <file>`, destroys that work along with the mutant. Commit or stash **before** applying any mutant, and after reverting confirm `git status` shows only the mutant gone. This has bitten twice, in `src/types/outcome.rs` and `src/parallel/pool.rs`, caught both times only by reading `git status` before amending.
 
 ### Testing guidelines
 
