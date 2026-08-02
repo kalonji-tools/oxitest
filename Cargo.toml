@@ -67,3 +67,8 @@ exit = "deny"
 # shipping sites today (#1830) — `allow-panic-in-tests` in `clippy.toml` exempts
 # the 190 legitimate ones in tests, so this is a ratchet, not a cleanup.
 panic = "deny"
+# Pedantic, so `all` misses this one too — verified against clippy 0.1.94's own
+# `-Whelp` group listing, not assumed from the lint's category history, which
+# has moved it between `style` and `pedantic` more than once. `deny` for the
+# same reason as above.
+uninlined_format_args = "deny"
