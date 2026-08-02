@@ -1,7 +1,9 @@
 """Isolated conftest for the autouse fixture example.
 
-Lives in its own subdirectory so the autouse fixture only applies
-to tests in this directory — oxitest's autouse is session-wide.
+Lives in its own subdirectory to bound which tests the autouse fixture
+applies to — a conftest's fixtures are visible to every test at or below
+its own directory, so an autouse fixture declared higher up would fire
+for unrelated examples.
 """
 
 from collections.abc import Generator
