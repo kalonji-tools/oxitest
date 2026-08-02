@@ -1,9 +1,9 @@
 """Isolated conftest for the autouse fixture example.
 
-Lives in its own subdirectory to bound which tests the autouse fixture
-applies to — a conftest's fixtures are visible to every test at or below
-its own directory, so an autouse fixture declared higher up would fire
-for unrelated examples.
+Kept in its own subdirectory to separate this autouse fixture from the
+other fixture examples. That separation is organisational, not enforced:
+conftest fixtures are registered run-wide rather than scoped to their own
+subtree (#1760).
 """
 
 from collections.abc import Generator

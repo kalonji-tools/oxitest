@@ -87,15 +87,26 @@ See [Use markers](use-markers.md) for details.
 ## Understand session-scoped fixture behaviour in parallel runs
 
 Fixtures declared with `shared=True` are intended to run once per test session.
-In parallel mode, oxitest spawns each worker as a separate subprocess, and each
-subprocess creates its own fixture session. A `shared=True` fixture therefore
-executes once **per worker process**, not once per run.
+They do not. A worker does not build one fixture session and keep it: it pops
+**task groups** off a shared queue until the queue drains, and builds a fresh
+fixture session for each one. A `shared=True` fixture is therefore rebuilt once
+**per task group** — not once per run, and not once per worker process.
 
-oxitest emits a warning when it detects this situation. With the default `fmt`
-log layer and `RUST_LOG=warn`:
+A task group is a single module unless a `lifetime="package"` declaration merges
+a subtree, so a run can build **more instances than it has workers**. Four
+single-module test files across two workers build the fixture four times, not
+twice.
+
+By default you will not see a warning about this, because auto-arrange usually
+prevents it: tests sharing a fixture are grouped together and run serially on the
+main process, and when that group exceeds `auto_arrange`'s threshold (70% of the
+tests eligible for parallel execution, by default) the whole run collapses to
+serial and the fixture is built exactly once. The warning
+is emitted only when auto-arrange is **disabled** (`auto_arrange = false`). With
+the default `fmt` log layer and `RUST_LOG=warn`:
 
 ```console
-WARN oxitest::lib: shared fixture will run once per worker; session-scoped fixtures are not shared across parallel worker processes — use --serial to run them once, or remove shared=True from fixtures that can be function-scoped fixtures="my_db" fixture_count=1 workers=2
+WARN _oxitest::pipeline::execution: shared fixture will be rebuilt once per task group, not once per run; a task group is a single module unless a `package` declaration merges a subtree, so a run can build more instances than it has workers — use --serial to run them once, or remove shared=True from fixtures that can be function-scoped fixtures=my_db fixture_count=1 workers=2
 ```
 
 To resolve it, choose one of these options:
