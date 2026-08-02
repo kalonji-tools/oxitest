@@ -153,8 +153,9 @@ regardless of pass or fail:
 
 ### Access parametrize info
 
-For parametrized tests, `ctx.param_id` and `ctx.param` provide the current
-case identifier and value:
+For parametrized tests, `ctx.param_id` gives the current case identifier. The
+case's *values* arrive as ordinary parameters, by name — there is no need to
+reach for them through `ctx`:
 
 ```python
 --8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:testcontext-parametrize"

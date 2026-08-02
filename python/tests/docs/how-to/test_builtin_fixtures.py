@@ -156,6 +156,12 @@ def test_with_cleanup(ctx: TestContext):
 @oxitest.parametrize(one={"n": 1}, two={"n": 2}, three={"n": 3})
 def test_positive(n: int, ctx: TestContext):
     assert ctx.param_id in ("one", "two", "three"), "param_id should match case name"
+    assert n in (1, 2, 3), "the case's values arrive as named parameters, not via ctx"
+    assert ctx.param is None, (
+        "ctx.param is None even here, on a parametrized test — the page must not "
+        "promise a case value, and this is the assertion that makes the doc gate "
+        "able to see it"
+    )
 # --8<-- [end:testcontext-parametrize]
 
 # --8<-- [start:fx-oxi]
