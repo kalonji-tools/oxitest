@@ -118,12 +118,12 @@ in `strict`
 | `strict` | Style violations (bare asserts, dict parametrize, missing mark reasons) | Diagnostic severity |
 |---|---|---|
 | absent, or `"off"` | not checked | none emitted |
-| `"enforce"` | reported; the rest of the run proceeds (`src/pipeline/helpers.rs:168`–`188`) | `Warning` |
-| `"abort"` | printed, then `Err(ExitCode::CollectError)` before any test executes (`src/pipeline/helpers.rs:158`–`164`) | `Error` |
+| `"enforce"` | reported; the rest of the run proceeds (`src/pipeline/helpers.rs:203`–`226`) | `Warning` |
+| `"abort"` | printed, then an early `Err` before any test executes — `ExitCode::CollectError`, or `UsageError` when a `--json` artifact is requested and cannot be written (`src/pipeline/helpers.rs:193`–`201`, [#1682](https://github.com/kalonji-tools/oxitest/issues/1682)) | `Error` |
 
-The severity column is `src/pipeline/collection.rs:646`–`648`.
+The severity column is `src/pipeline/collection.rs:673`–`677`.
 
-**The two-position reading survives, with `enforce` in `"warn"`'s place — but it has to be stated, not inferred.** If this ADR's author read the dial as "one soft position and one hard position", that reading still holds; the soft position is simply not called `warn`. `enforce` maps to `DiagnosticSeverity::Warning` and never to `Error` — a deliberate invariant from [#1613](https://github.com/kalonji-tools/oxitest/issues/1613), guarded by a test at `src/pipeline/collection.rs:1319`–`1341`, which on `main` is scoped to doctest-coverage diagnostics. [ADR-0009's Amendment 3](0009-fixture-system-redesign.md#amendment-3--the-shortcut-strict-dial-is-retracted-2026-07-30) turned down a proposal to add a real `Warn` variant partly on that ground: `enforce` already *is* warn.
+**The two-position reading survives, with `enforce` in `"warn"`'s place — but it has to be stated, not inferred.** If this ADR's author read the dial as "one soft position and one hard position", that reading still holds; the soft position is simply not called `warn`. `enforce` maps to `DiagnosticSeverity::Warning` and never to `Error` — a deliberate invariant from [#1613](https://github.com/kalonji-tools/oxitest/issues/1613), guarded by a test at `src/pipeline/collection.rs:1331`–`1345`, which on `main` is scoped to doctest-coverage diagnostics. [ADR-0009's Amendment 3](0009-fixture-system-redesign.md#amendment-3--the-shortcut-strict-dial-is-retracted-2026-07-30) turned down a proposal to add a real `Warn` variant partly on that ground: `enforce` already *is* warn.
 
 One thing "soft" must not be read to mean. Under `enforce` the run continues, but violating items are not merely annotated — they are withheld from worker dispatch and reported as per-test `Error` outcomes (`src/pipeline/execution.rs:514`). `enforce` is warn-*severity*, not nothing-fails. The distinction between `enforce` and `abort` is whether the *rest of the suite* still gets to run.
 
