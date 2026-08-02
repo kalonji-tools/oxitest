@@ -229,7 +229,17 @@ def _load_and_resolve(
             namespace = session.get_namespace_for_func(fixture_name, fixture_fn)
             if namespace:
                 param_kwargs[field_name] = session.get_fixture_in_namespace(
-                    fixture_name, namespace, meta.module_path, fn_teardowns
+                    fixture_name,
+                    namespace,
+                    meta.module_path,
+                    fn_teardowns,
+                    # A FixtureRef lands in param_kwargs, which
+                    # AsyncDepGuardMiddleware inspects for coroutines — and a
+                    # wider-than-function async fixture is not one. Omitting
+                    # this used to inherit the permissive default and hand a
+                    # sync test an AsyncFixtureHandle it could only fail on
+                    # (#1876).
+                    test_is_async=inspect.iscoroutinefunction(fn),
                 )
             else:
                 param_kwargs[field_name] = session.get_fixture_by_name(

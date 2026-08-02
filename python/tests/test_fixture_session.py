@@ -678,5 +678,5 @@ def test_cross_boundary_resolution_raises_rather_than_reporting_not_found() -> N
     # Act / Assert
     with oxitest.raises(BoundaryError):
         session.get_fixture_in_namespace(
-            "api_conn", "api", "/t/admin/test_a.py", teardowns
+            "api_conn", "api", "/t/admin/test_a.py", teardowns, test_is_async=True
         )

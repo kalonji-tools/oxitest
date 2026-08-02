@@ -371,13 +371,17 @@ def test_get_fixture_in_namespace_resolves_correct_fixture() -> None:
         helpers.make_fixture_def("conn", lambda: "http-conn", namespace="http"),
     )
 
-    result = session.get_fixture_in_namespace("conn", "db", "/fake/test.py", [])
+    result = session.get_fixture_in_namespace(
+        "conn", "db", "/fake/test.py", [], test_is_async=True
+    )
     assert result == "db-conn", (
         f"get_fixture_in_namespace('conn', 'db') should return 'db-conn', got "
         f"{result!r}"
     )
 
-    result = session.get_fixture_in_namespace("conn", "http", "/fake/test.py", [])
+    result = session.get_fixture_in_namespace(
+        "conn", "http", "/fake/test.py", [], test_is_async=True
+    )
     assert result == "http-conn", (
         f"get_fixture_in_namespace('conn', 'http') should return 'http-conn', got "
         f"{result!r}"
@@ -389,7 +393,9 @@ def test_get_fixture_in_namespace_raises_not_found_with_namespace() -> None:
     session = helpers.make_session()
 
     with raises(FixtureNotFoundError) as exc_info:
-        session.get_fixture_in_namespace("conn", "db", "/fake/test.py", [])
+        session.get_fixture_in_namespace(
+            "conn", "db", "/fake/test.py", [], test_is_async=True
+        )
 
     assert "conn" in str(exc_info.value), (
         f"FixtureNotFoundError should mention fixture name 'conn', got "
