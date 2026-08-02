@@ -142,7 +142,7 @@ impl WorkerSession {
     fn drain_results(
         &self,
         expected: usize,
-        tx: &crossbeam_channel::Sender<crate::parallel::WorkerResult>,
+        tx: &crossbeam_channel::Sender<crate::parallel::WorkerMessage>,
         worker_id: usize,
     ) -> (DrainOutcome, usize) {
         drain_worker_results(&self.line_rx, expected, self.watchdog, tx, worker_id)
@@ -177,7 +177,7 @@ pub(crate) struct WorkerParams {
     /// Whether to include oxitest-internal frames in tracebacks.
     pub show_internals: bool,
     /// Channel for sending results back to the coordinator.
-    pub tx: crossbeam_channel::Sender<crate::parallel::WorkerResult>,
+    pub tx: crossbeam_channel::Sender<crate::parallel::WorkerMessage>,
     /// Set of node IDs currently executing across all workers.
     pub in_flight: std::sync::Arc<parking_lot::Mutex<ahash::AHashSet<String>>>,
 }
@@ -299,14 +299,16 @@ fn run_worker_loop(
                 "failed to send task to worker — emitting error for all group items"
             );
             for item in &group_items {
-                let _ = tx.send(crate::parallel::WorkerResult {
-                    resolved: types::ResolvedOutcome {
-                        node_id: item.node_id.clone(),
-                        duration_ms: types::DurationMs::ZERO,
-                        outcome: types::TestOutcome::crashed_sentinel(),
+                let _ = tx.send(crate::parallel::WorkerMessage::Result(
+                    crate::parallel::WorkerResult {
+                        resolved: types::ResolvedOutcome {
+                            node_id: item.node_id.clone(),
+                            duration_ms: types::DurationMs::ZERO,
+                            outcome: types::TestOutcome::crashed_sentinel(),
+                        },
+                        worker_id,
                     },
-                    worker_id,
-                });
+                ));
             }
             break;
         }

@@ -73,6 +73,21 @@ pub(crate) enum DiagnosticSeverity {
     Notice,
 }
 
+impl DiagnosticSeverity {
+    /// Map a wire severity string onto a severity.
+    ///
+    /// Shared by the PyO3 path and the worker LDJSON path so the two cannot
+    /// drift. An unknown string becomes a notice rather than an error: a newer
+    /// worker inventing a severity should not be reported as a failure.
+    pub(crate) fn from_wire(severity: &str) -> Self {
+        match severity {
+            "error" => Self::Error,
+            "warning" => Self::Warning,
+            _ => Self::Notice,
+        }
+    }
+}
+
 /// A diagnostic message emitted by the Python bridge or Rust pipeline.
 ///
 /// Replaces `WarningEntry` — carries severity for differentiated rendering.

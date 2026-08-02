@@ -5,7 +5,43 @@
 
 use crate::{reporter, scheduler, types, worker_result::WireResult};
 
-use super::WorkerResult;
+use super::{WorkerMessage, WorkerResult};
+
+/// Forward one test outcome to the coordinator's consumer loop.
+///
+/// Exists so the call sites read as sending a result rather than as wrapping
+/// one in a channel envelope — the envelope is a transport detail (#1840).
+fn send_result(tx: &crossbeam_channel::Sender<WorkerMessage>, result: WorkerResult) {
+    let _ = tx.send(WorkerMessage::Result(result));
+}
+
+/// Parse a wire diagnostic and hand it to the coordinator for reporting.
+///
+/// Silently drops a line that will not parse: a malformed diagnostic must not
+/// fail a run that is otherwise fine, and the result path already has its own
+/// salvage-and-report handling for the lines that decide an outcome.
+fn forward_diagnostic(trimmed: &str, tx: &crossbeam_channel::Sender<WorkerMessage>) {
+    use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
+
+    let Ok(wd) = serde_json::from_str::<crate::worker_result::WireDiagnostic>(trimmed) else {
+        return;
+    };
+    let _ = tx.send(WorkerMessage::Diagnostic(DiagnosticEntry {
+        severity: DiagnosticSeverity::from_wire(&wd.severity),
+        context: std::sync::Arc::from(wd.context.as_str()),
+        message: wd.message,
+        file: if wd.file.is_empty() {
+            None
+        } else {
+            Some(camino::Utf8PathBuf::from(wd.file))
+        },
+        lineno: if wd.lineno == 0 {
+            None
+        } else {
+            Some(crate::types::LineNo::new(wd.lineno as usize))
+        },
+    }));
+}
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum DrainOutcome {
@@ -27,7 +63,7 @@ pub(crate) fn drain_worker_results(
     line_rx: &crossbeam_channel::Receiver<String>,
     expected: usize,
     watchdog: std::time::Duration,
-    tx: &crossbeam_channel::Sender<WorkerResult>,
+    tx: &crossbeam_channel::Sender<WorkerMessage>,
     worker_id: usize,
 ) -> (DrainOutcome, usize) {
     use std::time::Instant;
@@ -66,16 +102,7 @@ pub(crate) fn drain_worker_results(
                 match msg_type.as_str() {
                     "diagnostic" => {
                         result_deadline = Instant::now() + watchdog;
-                        if let Ok(wd) =
-                            serde_json::from_str::<crate::worker_result::WireDiagnostic>(trimmed)
-                        {
-                            tracing::info!(
-                                severity = %wd.severity,
-                                context = %wd.context,
-                                "worker diagnostic: {}",
-                                wd.message
-                            );
-                        }
+                        forward_diagnostic(trimmed, tx);
                         continue;
                     }
                     "trace" => {
@@ -117,10 +144,13 @@ pub(crate) fn drain_worker_results(
                         }
                         result_deadline = Instant::now() + watchdog;
                         let resolved = r.into_outcome();
-                        let _ = tx.send(WorkerResult {
-                            resolved,
-                            worker_id,
-                        });
+                        send_result(
+                            tx,
+                            WorkerResult {
+                                resolved,
+                                worker_id,
+                            },
+                        );
                     }
                     Err(e) => {
                         received += 1;
@@ -134,28 +164,36 @@ pub(crate) fn drain_worker_results(
                                 node_id = %minimal.node_id,
                                 "Unknown outcome from worker — treating as error"
                             );
-                            let _ = tx.send(WorkerResult {
-                                resolved: types::ResolvedOutcome {
-                                    node_id: types::NodeId::from_raw(&minimal.node_id),
-                                    duration_ms: types::DurationMs::new(minimal.duration_ms),
-                                    outcome: types::TestOutcome::error_sentinel(format!(
-                                        "Unknown wire result: {e}"
-                                    )),
+                            send_result(
+                                tx,
+                                WorkerResult {
+                                    resolved: types::ResolvedOutcome {
+                                        node_id: types::NodeId::from_raw(&minimal.node_id),
+                                        duration_ms: types::DurationMs::new(minimal.duration_ms),
+                                        outcome: types::TestOutcome::error_sentinel(format!(
+                                            "Unknown wire result: {e}"
+                                        )),
+                                    },
+                                    worker_id,
                                 },
-                                worker_id,
-                            });
+                            );
                         } else {
                             tracing::warn!(error = %e, output = %trimmed, "bad worker output");
-                            let _ = tx.send(WorkerResult {
-                                resolved: types::ResolvedOutcome {
-                                    node_id: types::NodeId::from_raw("<worker>::malformed_output"),
-                                    duration_ms: types::DurationMs::ZERO,
-                                    outcome: types::TestOutcome::error_sentinel(format!(
-                                        "Malformed worker output (not valid JSON): {e}"
-                                    )),
+                            send_result(
+                                tx,
+                                WorkerResult {
+                                    resolved: types::ResolvedOutcome {
+                                        node_id: types::NodeId::from_raw(
+                                            "<worker>::malformed_output",
+                                        ),
+                                        duration_ms: types::DurationMs::ZERO,
+                                        outcome: types::TestOutcome::error_sentinel(format!(
+                                            "Malformed worker output (not valid JSON): {e}"
+                                        )),
+                                    },
+                                    worker_id,
                                 },
-                                worker_id,
-                            });
+                            );
                         }
                     }
                 }
@@ -176,7 +214,7 @@ pub(crate) struct DrainContext<'a> {
     pub items: &'a [std::sync::Arc<crate::types::TestItem>],
     pub watchdog: std::time::Duration,
     pub module_path: &'a camino::Utf8Path,
-    pub tx: &'a crossbeam_channel::Sender<WorkerResult>,
+    pub tx: &'a crossbeam_channel::Sender<WorkerMessage>,
     pub worker_id: usize,
 }
 
@@ -198,27 +236,33 @@ pub(crate) fn handle_drain_outcome(
             let _ = ctx.child.kill();
             for item in ctx.items.iter().skip(received) {
                 let (outcome, duration_ms) = types::TestOutcome::timed_out_sentinel(ctx.watchdog);
-                let _ = ctx.tx.send(WorkerResult {
-                    resolved: types::ResolvedOutcome {
-                        node_id: item.node_id.clone(),
-                        duration_ms,
-                        outcome,
+                send_result(
+                    ctx.tx,
+                    WorkerResult {
+                        resolved: types::ResolvedOutcome {
+                            node_id: item.node_id.clone(),
+                            duration_ms,
+                            outcome,
+                        },
+                        worker_id: ctx.worker_id,
                     },
-                    worker_id: ctx.worker_id,
-                });
+                );
             }
             false
         }
         DrainOutcome::Disconnected => {
             for item in ctx.items.iter().skip(received) {
-                let _ = ctx.tx.send(WorkerResult {
-                    resolved: types::ResolvedOutcome {
-                        node_id: item.node_id.clone(),
-                        duration_ms: types::DurationMs::ZERO,
-                        outcome: types::TestOutcome::crashed_sentinel(),
+                send_result(
+                    ctx.tx,
+                    WorkerResult {
+                        resolved: types::ResolvedOutcome {
+                            node_id: item.node_id.clone(),
+                            duration_ms: types::DurationMs::ZERO,
+                            outcome: types::TestOutcome::crashed_sentinel(),
+                        },
+                        worker_id: ctx.worker_id,
                     },
-                    worker_id: ctx.worker_id,
-                });
+                );
             }
             false
         }
@@ -291,6 +335,20 @@ mod drain_tests {
     use super::*;
     use std::time::Duration;
 
+    /// Unwrap a channel message the test expects to be a result.
+    ///
+    /// Panics on a diagnostic rather than silently skipping it: a test that
+    /// asserts on an outcome and instead receives a diagnostic has found a
+    /// real dispatch bug, and swallowing it would hide exactly that.
+    fn expect_result(message: WorkerMessage) -> WorkerResult {
+        match message {
+            WorkerMessage::Result(result) => result,
+            WorkerMessage::Diagnostic(entry) => {
+                panic!("expected a result message, got a diagnostic: {entry:?}")
+            }
+        }
+    }
+
     fn valid_json(node_id: &str) -> String {
         format!(
             r#"{{"node_id":"{node_id}","outcome":"passed","duration_ms":1.0,"protocol_version":{}}}"#,
@@ -306,7 +364,7 @@ mod drain_tests {
     #[test]
     fn empty_lines_do_not_reset_deadline() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
 
         // Send 50 empty lines then close the channel.
         for _ in 0..50 {
@@ -336,7 +394,7 @@ mod drain_tests {
     #[test]
     fn valid_result_resets_deadline() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
 
         let watchdog = Duration::from_millis(100);
 
@@ -361,7 +419,7 @@ mod drain_tests {
     #[test]
     fn empty_lines_before_valid_result_still_complete() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
 
         // 10 empty lines, then the real result.
         for _ in 0..10 {
@@ -383,7 +441,7 @@ mod drain_tests {
     #[test]
     fn disconnected_mid_group_returns_received_count() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
 
         line_tx.send(valid_json("t::a")).unwrap();
         line_tx.send(valid_json("t::b")).unwrap();
@@ -405,7 +463,7 @@ mod drain_tests {
     #[test]
     fn exact_expected_results_returns_complete() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
 
         for i in 0..3 {
             line_tx.send(valid_json(&format!("t::{i}"))).unwrap();
@@ -425,7 +483,7 @@ mod drain_tests {
     #[test]
     fn silent_channel_triggers_timeout() {
         let (_line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
 
         let watchdog = Duration::from_millis(30);
         let start = std::time::Instant::now();
@@ -600,7 +658,7 @@ mod drain_tests {
             0,
         );
         assert_eq!(received, 1);
-        let result = result_rx.try_recv().expect("should have received a result");
+        let result = expect_result(result_rx.try_recv().expect("should have received a result"));
         assert_eq!(result.resolved.node_id.as_ref(), "t");
         assert!(matches!(
             result.resolved.outcome,
@@ -639,7 +697,7 @@ mod drain_tests {
     #[test]
     fn completely_malformed_json_emits_error_sentinel() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
 
         line_tx.send("not json at all\n".to_string()).unwrap();
         drop(line_tx);
@@ -656,9 +714,11 @@ mod drain_tests {
             received, 1,
             "the malformed line must be counted as received"
         );
-        let result = result_rx
-            .try_recv()
-            .expect("an error sentinel must be sent for completely malformed JSON");
+        let result = expect_result(
+            result_rx
+                .try_recv()
+                .expect("an error sentinel must be sent for completely malformed JSON"),
+        );
         assert!(
             matches!(
                 result.resolved.outcome,
@@ -786,7 +846,7 @@ mod repro_tests {
     #[test]
     fn bug44_empty_lines_spin_without_progress() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
-        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerResult>();
+        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
 
         // Thread that sends empty lines for 300ms — simulates a panicked
         // Python subprocess continuously flushing its stdout buffer.
