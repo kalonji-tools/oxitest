@@ -392,8 +392,8 @@ pub(super) fn collect_items(
         let prescan = crate::prescan::prescan_with_ast(file, collect_violations);
         let prescan_us = prescan_start.elapsed().as_micros() as u64;
 
-        // `declares_inline_fixtures` gates the item cache below — see there.
-        let (declares_inline_fixtures, cached_ast) = match prescan {
+        // `may_declare_inline_fixtures` gates the item cache below — see there.
+        let (may_declare_inline_fixtures, cached_ast) = match prescan {
             crate::prescan::PrescanResult::NoTests => {
                 tracing::debug!(path = file.as_str(), "pre-scan: no tests, skipping");
                 if profile_enabled {
@@ -416,7 +416,7 @@ pub(super) fn collect_items(
                 } else {
                     None
                 };
-                (!p.declarations.is_empty(), ast)
+                (p.has_fixture_shaped_decorator, ast)
             }
         };
 
@@ -461,6 +461,13 @@ pub(super) fn collect_items(
         // The item cache may serve a file only when prescan positively
         // establishes that the file declares no inline fixtures (#1850).
         //
+        // "Positively" is why the flag is `has_fixture_shaped_decorator` and
+        // not `!declarations.is_empty()`: registration happens by marker
+        // attribute at import, so `import oxitest as alias` declares a real
+        // fixture that the declaration list — which only recognizes the
+        // documented spellings — cannot see. Erring wide costs a cache miss;
+        // erring narrow silently reinstates this bug for that file.
+        //
         // An inline `@oxi.fixture` is registered as a side effect of importing
         // the test module — `collect_module` calls `_register_inline_fixtures`
         // — and the cache hit below `continue`s past that import. Unlike the
@@ -475,7 +482,7 @@ pub(super) fn collect_items(
         // session's `ModuleCache`, so `run_test` reuses it instead of loading
         // it later — and it is bounded by the files that declare inline
         // fixtures; every other file keeps the cache.
-        let cached = if collect_violations || declares_inline_fixtures {
+        let cached = if collect_violations || may_declare_inline_fixtures {
             None
         } else {
             cache.cached_module_items(file, mtime)

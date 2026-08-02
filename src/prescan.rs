@@ -63,6 +63,18 @@ pub(crate) struct PrescanPayload {
     /// rule that governs declaration homes (#1711): at the rootdir package that
     /// rule permits `session`, and only the home-kind cap rejects it inline.
     pub(crate) declarations: Vec<PrescanDeclaration>,
+    /// Whether any top-level function carries a decorator *shaped* like a
+    /// fixture declaration, under any import spelling (#1850).
+    ///
+    /// A strict superset of `!declarations.is_empty()`, and the two answer
+    /// different questions. `declarations` is what oxitest will *act* on, so it
+    /// only counts the spellings the runtime is documented to recognize. This
+    /// flag decides whether the module-item cache may serve the file, where the
+    /// safe direction is the other one: registration happens by marker
+    /// attribute at import time, so `import oxitest as alias` declares a real
+    /// fixture that `declarations` cannot see. Missing one silently
+    /// reintroduces #1850 for that file; an extra one costs a cache miss.
+    pub(crate) has_fixture_shaped_decorator: bool,
 }
 
 /// Result of pre-scanning a Python file for test functions.
@@ -666,6 +678,7 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
     // both stays in both lists: the two walks answer independent questions, and
     // collapsing them here would hide a user error a later slice should report.
     let declarations = collect_declarations(&parsed.1, &line_index);
+    let fixture_shaped = has_fixture_shaped_decorator(&parsed.1);
 
     if keep_ast {
         PrescanResult::HasTests(PrescanPayload {
@@ -675,6 +688,7 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
             has_dynamic_collection,
             module_markers,
             declarations,
+            has_fixture_shaped_decorator: fixture_shaped,
         })
     } else {
         PrescanResult::HasTests(PrescanPayload {
@@ -686,6 +700,7 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
             // `keep_ast`, which is driven by strict-mode violation collection.
             module_markers,
             declarations,
+            has_fixture_shaped_decorator: fixture_shaped,
         })
     }
 }
@@ -781,6 +796,36 @@ fn extract_fixture_decorator_lifetime(dec: &ast::Expr) -> Option<String> {
     }
 }
 
+/// Whether any top-level function is decorated by a call to something named
+/// `fixture` — `oxi.fixture(...)`, `pkg.fixture(...)`, or bare `fixture(...)`.
+///
+/// Deliberately looser than [`is_fixture_call`]: the namespace is not checked,
+/// because the point is to catch the spellings that function makes invisible.
+/// Used **only** for module-item cache eligibility (#1850), never to accept a
+/// declaration — a false positive costs one cache miss, while a false negative
+/// silently drops the fixture on every warm run.
+///
+/// Still requires a *call*: `@oxi.fixture` without arguments cannot be a
+/// fixture, since `fixture(*, lifetime)` takes a required keyword-only
+/// argument and would raise at import.
+fn has_fixture_shaped_decorator(stmts: &[ast::Stmt]) -> bool {
+    stmts.iter().any(|stmt| {
+        let decorators = match stmt {
+            ast::Stmt::FunctionDef(f) => &f.decorator_list,
+            ast::Stmt::AsyncFunctionDef(f) => &f.decorator_list,
+            _ => return false,
+        };
+        decorators.iter().any(|dec| match dec {
+            ast::Expr::Call(call) => match call.func.as_ref() {
+                ast::Expr::Attribute(attr) => attr.attr.as_str() == "fixture",
+                ast::Expr::Name(name) => name.id.as_str() == "fixture",
+                _ => false,
+            },
+            _ => false,
+        })
+    })
+}
+
 /// Read `path` from disk and prescan it as a fixture module.
 ///
 /// Returns `Unavailable` if the file can't be read or parsed.
@@ -871,6 +916,59 @@ mod tests {
             declarations.is_empty(),
             "an ordinary test file declares nothing; a false positive here would \
              make every existing suite pay the cap check — got {declarations:?}"
+        );
+    }
+
+    // ── cache-eligibility signal (#1850) ──────────────────────────────────
+
+    fn fixture_shaped(src: &str) -> bool {
+        let file = write_temp_py(src);
+        match prescan_with_ast(&temp_path(&file), false) {
+            PrescanResult::HasTests(payload) => payload.has_fixture_shaped_decorator,
+            other => panic!("expected HasTests, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn an_unrecognized_alias_still_counts_as_a_possible_declaration() {
+        // `ox` is not in the recognized namespace set, so `declarations` is
+        // empty here — but the decorator still attaches the fixture marker at
+        // import, so the module-item cache must not serve this file.
+        let src = "import oxitest as ox\n\n@ox.fixture(lifetime=\"function\")\ndef client(): return 1\n\ndef test_uses_it(): pass\n";
+
+        assert!(
+            inline_declarations(src).is_empty(),
+            "guard for this test's premise: if the declaration scan ever learns \
+             this spelling, the cache signal is no longer the only thing \
+             standing between an aliased import and #1850"
+        );
+        assert!(
+            fixture_shaped(src),
+            "an aliased fixture decorator must make the file cache-ineligible; \
+             missing it drops the fixture on every warm run, which is the exact \
+             defect #1850 fixed for the documented spelling"
+        );
+    }
+
+    #[test]
+    fn a_bare_fixture_decorator_call_counts() {
+        assert!(
+            fixture_shaped(
+                "from oxitest import fixture\n\n@fixture(lifetime=\"module\")\ndef conn(): return 1\n\ndef test_uses_it(): pass\n"
+            ),
+            "the `from oxitest import fixture` spelling is documented and must \
+             be cache-ineligible like the dotted ones"
+        );
+    }
+
+    #[test]
+    fn an_ordinary_test_file_stays_cache_eligible() {
+        assert!(
+            !fixture_shaped(
+                "import oxitest as oxi\n\n@oxi.mark.skip(reason=\"x\")\ndef test_marked(): pass\n"
+            ),
+            "marks are not fixtures; treating any decorator as a possible \
+             declaration would cost every marked suite its item cache"
         );
     }
 
