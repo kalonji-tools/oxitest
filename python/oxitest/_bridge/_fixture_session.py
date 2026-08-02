@@ -876,9 +876,12 @@ class FixtureSession:
                 if hint is Fixtures:
                     kwargs[param_name] = FixturesProxy(
                         self,
-                        meta.module_path,
+                        # The whole meta, not module_path + fn_name: fx.oxi.ctx
+                        # rebuilds a TestContext downstream, and the two fields
+                        # this used to pass are the two that are NOT its
+                        # identity (#1874).
+                        meta,
                         fn_teardowns,
-                        fn_name=meta.fn_name,
                         # A sync test cannot await, so the proxy rejects async
                         # fixtures at access rather than handing back a
                         # coroutine nothing will ever await (ADR-0006).
@@ -920,14 +923,20 @@ class FixtureSession:
         plugin (via FixtureProvider), or conftest fixture registered by return type.
         Raises ``FixtureNotFoundError`` if ``t`` is not resolvable.
 
-        Note: ``TestContext`` resolved via this method will have empty ``name``,
-        ``node_id``, and ``marks`` — no test identity is available outside a test.
+        Note: this route runs outside a test, so a ``TestContext`` resolved
+        through it raises ``TestIdentityUnavailableError`` on ``name``,
+        ``node_id``, ``marks`` and ``param_id`` (#1874). It used to return
+        empty strings, which was true but silent — a caller could not tell an
+        unnamed test from no test. ``addfinalizer`` and ``module_path`` are
+        unaffected.
         """
         try:
             defn = self._registry.resolve(t, qualifier=t.__name__)
         except FixtureNotFoundError:
             raise FixtureTypeNotFoundError(t.__name__) from None
-        meta = TestMeta(module_path=module_path, fn_name="", node_id="")
+        meta = TestMeta(
+            module_path=module_path, fn_name="", node_id="", describes_a_test=False
+        )
         ctx = DispatchContext(
             meta=meta,
             fn_teardowns=fn_teardowns,

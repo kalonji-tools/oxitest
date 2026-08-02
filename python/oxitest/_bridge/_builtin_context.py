@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from oxitest._bridge._errors import TestIdentityUnavailableError
 from oxitest._bridge._fixture_type import injectable
 
 if TYPE_CHECKING:
@@ -38,12 +39,23 @@ class _BuiltinContext:
 class TestContext:
     """Test identity metadata and imperative teardown registration.
 
-    Injected when a test parameter is annotated with ``TestContext``. Exposes
-    the current test's name, node id, module path, applied marks, and the
+    Injected when a **test** parameter is annotated with ``TestContext``.
+    Exposes that test's name, node id, module path, applied marks, and the
     current parametrize case value. Use :meth:`addfinalizer` (or its alias
     :meth:`on_teardown`) to register cleanup callbacks — all registered
     callbacks run after the test completes, in LIFO order, regardless of
     pass or fail.
+
+    A **fixture** may also declare ``ctx: TestContext``, and there the promise
+    is narrower. A fixture is resolved for whichever test arrives first at its
+    lifetime tier, so "the current test" has no answer: at ``module`` lifetime
+    and wider it is genuinely undefined, and even at ``function`` lifetime the
+    identity is not threaded to the resolution site. So inside a fixture body
+    :attr:`name`, :attr:`node_id`, :attr:`marks` and :attr:`param_id` raise
+    ``TestIdentityUnavailableError`` (#1874) rather than reporting the
+    fixture's own name as if it were the test's. :meth:`addfinalizer`,
+    :meth:`on_teardown` and :attr:`module_path` work exactly as they do on a
+    test — they are what ``ctx`` is for in a fixture.
 
     See Also:
         - :class:`Patcher` — for scoped attribute / env / cwd overrides
@@ -92,24 +104,44 @@ class TestContext:
         self._param: Any = None
         self._teardown_stack = teardown_stack
 
+    def _require_test_identity(self, accessed: str) -> None:
+        """Refuse an identity read on a context that describes no test (#1874).
+
+        The four accessors below are the whole reason ``TestContext`` exists,
+        and inside a fixture body none of them has an answer. Returning one
+        anyway failed silently and plausibly: ``f"test_{ctx.name}"`` yielded a
+        well-formed string that looked per-test in every log line while being
+        identical for the whole run.
+        """
+        if not self._meta.describes_a_test:
+            raise TestIdentityUnavailableError(accessed)
+
     @property
     def name(self) -> str:
         """Test function name (e.g. ``"test_create"``)."""
+        self._require_test_identity("name")
         return self._meta.fn_name
 
     @property
     def module_path(self) -> str:
-        """Absolute filesystem path to the test module."""
+        """Absolute filesystem path to the test module.
+
+        Unguarded, unlike the identity accessors: this is *where resolution
+        is*, not *who the test is*, and it is correct inside a fixture body —
+        it is the same value that selects the module-lifetime scope bucket.
+        """
         return self._meta.module_path
 
     @property
     def node_id(self) -> str:
         """Full qualified test ID (e.g. ``"tests/test_db.py::test_create[case_a]"``)."""
+        self._require_test_identity("node_id")
         return self._meta.node_id
 
     @property
     def param_id(self) -> str | None:
         """Parametrize case ID string, or ``None`` for non-parametrized tests."""
+        self._require_test_identity("param_id")
         return self._meta.param_id
 
     @property
@@ -119,6 +151,7 @@ class TestContext:
         Includes both built-in marks (``skip``, ``xfail``, ``timeout``)
         and custom marks.
         """
+        self._require_test_identity("marks")
         return self._meta.markers
 
     @property

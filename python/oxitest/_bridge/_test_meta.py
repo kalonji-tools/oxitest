@@ -23,6 +23,19 @@ class TestMeta:
     node_id: str
     kind: TestKind = field(default_factory=Solitary)
     markers: frozenset[str] = frozenset()
+    #: Whether this bundle describes a *test*. ``False`` marks the synthetic
+    #: bundles built for fixture resolution, where ``node_id``, ``markers`` and
+    #: ``kind`` have no answer and ``fn_name`` names the fixture rather than
+    #: any test (#1874). ``TestContext`` reads this and refuses the identity
+    #: accessors rather than reporting a wrong-but-well-formed value.
+    #:
+    #: Not inferable from field emptiness: the fixture-to-fixture bundle
+    #: carries a plausible non-empty ``fn_name``, which is exactly the case
+    #: that returned ``"db_schema"`` where a test name belonged. And
+    #: ``module_path``/``fn_name`` stay meaningful here — the first selects the
+    #: module-lifetime scope bucket, the second prefixes ``TempDir`` — so this
+    #: is a claim about identity only, not about the whole bundle.
+    describes_a_test: bool = True
 
     @property
     def param_id(self) -> str | None:

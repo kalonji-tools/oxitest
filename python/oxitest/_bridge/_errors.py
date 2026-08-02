@@ -27,6 +27,7 @@ __all__ = [
     "OxitestTimeoutError",
     "ParametrizeError",
     "SharedFixtureMutationError",
+    "TestIdentityUnavailableError",
     "UnannotatedFixtureParamError",
     "UsageError",
 ]
@@ -207,6 +208,28 @@ class FixtureSetupError(FixtureError):
             f"If using a yield fixture, the error is in setup (before yield)."
         )
         self.fixture_name = name
+
+
+class TestIdentityUnavailableError(FixtureError):
+    """Raised when ``TestContext`` identity is read outside a test (#1874).
+
+    A ``TestContext`` injected into a *fixture* describes the resolution, not a
+    test: there is no node id, no marks, and no test name. Reading one used to
+    hand back a wrong-but-well-formed value — ``ctx.name`` returned the
+    fixture's own name, so ``f"test_{ctx.name}"`` produced an identical string
+    for every test in the run.
+    """
+
+    def __init__(self, accessed: str) -> None:
+        super().__init__(
+            f"TestContext.{accessed} is not available here.\n"
+            f"  This TestContext was built for a fixture resolution, not for a "
+            f"test, so there is no test to name.\n"
+            f"  Inside a fixture, ctx supports teardown registration only: "
+            f"ctx.addfinalizer(...) / ctx.on_teardown(...).\n"
+            f"  To read a test's identity, declare `ctx: TestContext` on the "
+            f"test itself and pass what you need into the fixture."
+        )
 
 
 class UnannotatedFixtureParamError(FixtureError):

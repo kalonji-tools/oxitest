@@ -105,19 +105,17 @@ class OxiNamespaceProxy(_CachingProxy):
     returns the same `LogCapture` instance within a single test.
     """
 
-    __slots__ = ("_cache", "_fn_name", "_fn_teardowns", "_module_path", "_session")
+    __slots__ = ("_cache", "_fn_teardowns", "_meta", "_session")
 
     def __init__(
         self,
         session: FixtureSession,
-        module_path: str,
+        meta: TestMeta,
         fn_teardowns: list[Callable[[], None]],
-        fn_name: str = "",
     ) -> None:
         object.__setattr__(self, "_session", session)
-        object.__setattr__(self, "_module_path", module_path)
+        object.__setattr__(self, "_meta", meta)
         object.__setattr__(self, "_fn_teardowns", fn_teardowns)
-        object.__setattr__(self, "_fn_name", fn_name)
         object.__setattr__(self, "_cache", {})
 
     def __getattr__(self, name: str) -> Any:
@@ -140,14 +138,14 @@ class OxiNamespaceProxy(_CachingProxy):
                     " — this is a bug"
                 )
                 raise RuntimeError(msg)
-            meta = TestMeta(
-                module_path=self._module_path,
-                fn_name=self._fn_name,
-                node_id="",
-            )
+            # The running test's own meta, forwarded whole. This used to
+            # rebuild a synthetic TestMeta from module_path + fn_name and drop
+            # node_id, markers and kind — so `fx.oxi.ctx.node_id` returned ""
+            # from a real test whose node id was in scope the entire time
+            # (#1874).
             return self._session.inject_builtin(
                 impl_cls,
-                meta,
+                self._meta,
                 "function",
                 self._fn_teardowns,
             )
@@ -167,9 +165,8 @@ class FixturesProxy(_CachingProxy):
 
     __slots__ = (
         "_cache",
-        "_fn_name",
         "_fn_teardowns",
-        "_module_path",
+        "_meta",
         "_session",
         "_test_is_async",
     )
@@ -177,16 +174,14 @@ class FixturesProxy(_CachingProxy):
     def __init__(
         self,
         session: FixtureSession,
-        module_path: str,
+        meta: TestMeta,
         fn_teardowns: list[Callable[[], None]],
-        fn_name: str = "",
         *,
         test_is_async: bool,
     ) -> None:
         object.__setattr__(self, "_session", session)
-        object.__setattr__(self, "_module_path", module_path)
+        object.__setattr__(self, "_meta", meta)
         object.__setattr__(self, "_fn_teardowns", fn_teardowns)
-        object.__setattr__(self, "_fn_name", fn_name)
         object.__setattr__(self, "_test_is_async", test_is_async)
         object.__setattr__(self, "_cache", {})
 
@@ -209,9 +204,8 @@ class FixturesProxy(_CachingProxy):
             if name == "oxi":
                 return OxiNamespaceProxy(
                     self._session,
-                    self._module_path,
+                    self._meta,
                     self._fn_teardowns,
-                    self._fn_name,
                 )
             if self._session.has_namespace(name):
                 # Deliberately the FULL-catalog query. A segment this test
@@ -222,7 +216,7 @@ class FixturesProxy(_CachingProxy):
                 return NamespaceProxy(
                     name,
                     self._session,
-                    self._module_path,
+                    self._meta.module_path,
                     self._fn_teardowns,
                     test_is_async=self._test_is_async,
                 )
@@ -234,7 +228,7 @@ class FixturesProxy(_CachingProxy):
             # get_fixture_shortcut owns one message that is true either way.
             return self._session.get_fixture_shortcut(
                 name,
-                self._module_path,
+                self._meta.module_path,
                 self._fn_teardowns,
                 test_is_async=self._test_is_async,
             )

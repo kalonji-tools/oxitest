@@ -301,6 +301,34 @@ See [async fixtures](../how-to/use-async-tests.md#async-fixtures).
 ---
 
 ```text
+TestContext.name is not available here.
+  This TestContext was built for a fixture resolution, not for a test, so
+  there is no test to name.
+  Inside a fixture, ctx supports teardown registration only:
+  ctx.addfinalizer(...) / ctx.on_teardown(...).
+  To read a test's identity, declare `ctx: TestContext` on the test itself and
+  pass what you need into the fixture.
+```
+
+**Cause:** A **fixture** body read `ctx.name`, `ctx.node_id`, `ctx.marks` or
+`ctx.param_id`. A fixture is built once per lifetime tier, for whichever test
+reaches it first, so above `function` lifetime there is no single test to name
+— and at `function` lifetime the identity is not threaded to the resolution
+site. These reads used to return the fixture's own name, silently, so
+`f"test_{ctx.name}"` produced one identical value for the whole run.
+
+**Fix:** Use `ctx` in a fixture for `addfinalizer` / `on_teardown` (and
+`module_path`, which is unaffected). If the fixture needs the test's identity,
+declare `ctx: TestContext` on the test and pass the value in from there.
+
+The error surfaces wrapped in `FixtureSetupError`, since it is raised while the
+fixture factory runs.
+
+See [`TestContext`](python-api/builtins.md#testcontext).
+
+---
+
+```text
 AutouseRegistrationError: cannot register async fixture '<name>' as function-scope autouse.
   Defined at:  <file>:<lineno>
   Scope:       each  (autouse=True)
