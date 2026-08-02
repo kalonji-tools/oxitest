@@ -15,14 +15,25 @@ fn shared_handle() -> PbHandle {
     Arc::clone(HANDLE.get_or_init(|| Arc::new(Mutex::new(None))))
 }
 
+/// Store `pb` in `handle`. Split out from [`register`] so the lifecycle is
+/// testable against a caller-owned handle rather than the process-global one.
+fn register_in(handle: &PbHandle, pb: ProgressBar) {
+    *handle.lock() = Some(pb);
+}
+
+/// Clear `handle`. The counterpart to [`register_in`].
+fn deregister_in(handle: &PbHandle) {
+    *handle.lock() = None;
+}
+
 /// Register a progress bar so tracing output routes through `pb.println()`.
 pub(crate) fn register(pb: ProgressBar) {
-    *shared_handle().lock() = Some(pb);
+    register_in(&shared_handle(), pb);
 }
 
 /// Deregister the progress bar so tracing output falls back to stderr.
 pub(crate) fn deregister() {
-    *shared_handle().lock() = None;
+    deregister_in(&shared_handle());
 }
 
 // ─── MakeWriter ──────────────────────────────────────────────────────────────
@@ -158,11 +169,24 @@ mod tests {
         assert_ne!(w1.buf, w2.buf, "writers must have independent buffers");
     }
 
+    /// Drives the seam against a locally owned handle rather than the
+    /// process-global one: `cargo test` runs lib tests on a thread pool, and
+    /// `TtyReporter::new`/`pre_finish` write the global from `reporter::tty`
+    /// tests running concurrently, which flipped this assertion (#1860).
     #[test]
     fn test_register_and_deregister_lifecycle() {
-        register(ProgressBar::hidden());
-        assert!(shared_handle().lock().is_some());
-        deregister();
-        assert!(shared_handle().lock().is_none());
+        let handle: PbHandle = Arc::new(Mutex::new(None));
+
+        register_in(&handle, ProgressBar::hidden());
+        assert!(
+            handle.lock().is_some(),
+            "register must store the progress bar, or PbWriter falls back to stderr and tracing output corrupts the progress line"
+        );
+
+        deregister_in(&handle);
+        assert!(
+            handle.lock().is_none(),
+            "deregister must clear the same slot register wrote, or tracing keeps calling println() on a finished progress bar"
+        );
     }
 }
