@@ -167,10 +167,26 @@ class _Scope:
         return self.cache[name]
 
     def drain(self) -> None:
-        """Run teardowns in reverse, then clear the stack."""
+        """Run teardowns in reverse, then empty the scope.
+
+        The cache is cleared alongside the stack, and that pairing is
+        load-bearing (#1777). ``_shared_scope`` and ``_session_scope`` are
+        drained *in place* rather than popped like the module and package
+        buckets, so anything left in ``cache`` outlives the teardown that was
+        just run. That could not bite while a worker built a session per task —
+        the whole scope died with it — but a session that spans task groups
+        would hand the next one a cached value whose teardown has already
+        fired, and whose replacement teardown was cleared with the stack. For
+        ``TempDirFactory`` that means every temp dir created after a worker's
+        first task group leaks, silently.
+
+        ``hits``/``misses`` deliberately survive: they are cumulative counters
+        that ``get_cache_stats`` reports, not scope contents.
+        """
         for fn in reversed(self.teardowns):
             safe_teardown(fn, warn=_warn_teardown)
         self.teardowns.clear()
+        self.cache.clear()
 
 
 class _TrackedTaskGroup:

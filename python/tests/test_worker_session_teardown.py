@@ -78,6 +78,89 @@ def _write_tempdir_project(root: Path, log: Path) -> None:
     )
 
 
+_MULTI_GROUP_MODULES = ("a", "b", "c", "d")
+
+
+def _write_multi_group_project(root: Path, log: Path) -> None:
+    """Four single-test modules, forced into four separate task groups.
+
+    ``auto_arrange = false`` stops the arrange stage pinning modules to the
+    main process, and ``min_parallel_tests = 1`` stops a small suite falling
+    back to serial. Four groups over two workers is what makes at least one
+    worker drain more than one group — the shape that only exists at all once
+    a worker's session spans task groups (#1777).
+    """
+    pkg = root / "pkg"
+    pkg.mkdir()
+    for mod in _MULTI_GROUP_MODULES:
+        (pkg / f"test_{mod}.py").write_text(
+            "import os\n"
+            "import pathlib\n"
+            "from oxitest import TempDirFactory\n\n"
+            f"LOG = pathlib.Path({str(log)!r})\n\n\n"
+            f"def test_{mod}(factory: TempDirFactory) -> None:\n"
+            "    d = factory.mktemp('x').path\n"
+            "    with LOG.open('a') as fh:\n"
+            "        fh.write(f'{os.getpid()} {d}\\n')\n"
+            "    assert d.exists(), 'temp dir must exist while the test runs'\n"
+        )
+    (root / "pyproject.toml").write_text(
+        "[tool.oxitest]\n"
+        'testpaths = ["pkg"]\n'
+        'python_files = ["test_*.py"]\n'
+        "auto_arrange = false\n"
+        "min_parallel_tests = 1\n"
+    )
+
+
+def test_tempdir_factory_survives_a_worker_draining_several_task_groups(
+    tmp: TempDir,
+) -> None:
+    """A worker's second task group must still clean up its temp dirs (#1777).
+
+    ``test_tempdir_factory_cleaned_up_in_parallel`` cannot catch this: two
+    modules over four workers gives every worker at most one task group, so the
+    second-group path never runs. Four modules over two workers forces it.
+
+    The defect this pins is not the teardown call — it is the *cache*.
+    ``_Scope.drain()`` used to clear only the teardown stack, so a session
+    spanning task groups handed the second group the same ``TempDirFactory``
+    whose ``close`` had already fired and been popped. Every directory that
+    group created then had nothing left to remove it, and
+    ``shutil.rmtree(..., ignore_errors=True)`` means no error was ever raised.
+    """
+    # Arrange
+    root = Path(tmp) / "proj"
+    root.mkdir()
+    log = Path(tmp) / "dirs.log"
+    _write_multi_group_project(root, log)
+
+    # Act
+    out, err, rc = helpers.run_oxitest(None, "-n", "2", cwd=str(root))
+
+    # Assert
+    assert rc == 0, f"the run must pass\nstdout:\n{out}\nstderr:\n{err}"
+    entries = _entries(log)
+    assert len(entries) == len(_MULTI_GROUP_MODULES), (
+        f"every module must have recorded a temp dir, got {len(entries)} — "
+        f"the leak assertion below is vacuous otherwise\nstdout:\n{out}"
+    )
+    pids = _worker_pids(log)
+    assert 1 < len(pids) < len(_MULTI_GROUP_MODULES), (
+        f"tests ran on {pids} across {len(_MULTI_GROUP_MODULES)} modules — this "
+        f"test needs strictly fewer workers than modules so that some worker "
+        f"drains more than one task group, and more than one worker so the "
+        f"parallel path is real. One PID per module proves nothing here"
+    )
+    survivors = _surviving(log)
+    assert not survivors, (
+        f"{len(survivors)} temp dir(s) outlived the run. A worker's later task "
+        f"groups reused a TempDirFactory whose teardown had already run and "
+        f"been cleared, so nothing was left to remove what they created:\n"
+        + "\n".join(str(p) for p in survivors[:5])
+    )
+
+
 def _entries(log: Path) -> list[tuple[str, Path]]:
     """``(pid, path)`` pairs recorded by the run."""
     if not log.exists():
@@ -206,19 +289,24 @@ def test_shared_fixture_teardown_runs_in_worker(tmp: TempDir) -> None:
 
 
 def test_end_task_session_calls_every_teardown_in_order() -> None:
-    """end_module runs before end_task, and end_task before end_process.
+    """end_module runs before end_task, and end_process does not run at all.
 
-    execution.rs drains modules as the run proceeds and the wider tiers at the
-    end; reversing that here would let a task- or process-scoped teardown run
-    before a narrower one that may still depend on it.
+    execution.rs drains modules as the run proceeds and the task tier at the
+    end; reversing that here would let a task-scoped teardown run before a
+    narrower one that may still depend on it.
+
+    ``end_process`` is absent on purpose. The session outlives this task, so
+    draining its process tier here would rebuild every ``lifetime="session"``
+    fixture once per task group — the defect #1777 removes. ``main()`` owns it.
     """
     session = _StubSession()
 
     _end_task_session(session, ["pkg/test_a.py"])
 
-    assert session.calls == ["end_module", "end_task", "end_process"], (
-        f"expected end_module, end_task, end_process, got {session.calls} — "
-        "order mirrors src/pipeline/execution.rs and must not drift from it"
+    assert session.calls == ["end_module", "end_task"], (
+        f"expected end_module then end_task, got {session.calls} — order "
+        "mirrors src/pipeline/execution.rs and must not drift from it, and "
+        "end_process belongs to main(), not to a task drain (#1777)"
     )
 
 
@@ -238,8 +326,8 @@ def test_end_module_failure_does_not_skip_the_wider_drains(
 
     _end_task_session(session, ["pkg/test_a.py"])
 
-    assert session.calls == ["end_module", "end_task", "end_process"], (
-        f"the wider drains must still run after end_module raised, got {session.calls}"
+    assert session.calls == ["end_module", "end_task"], (
+        f"end_task must still run after end_module raised, got {session.calls}"
     )
     contexts = [
         json.loads(ln)["context"]

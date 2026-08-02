@@ -121,16 +121,13 @@ def test_end_module_fires_per_module_then_the_wider_drains_once() -> None:
 
     # Assert — a package-lifetime fixture disposes at the task drain, so every
     # module's teardown must run before it; otherwise a wider value would
-    # already be gone while a module teardown could still reach it. The same
-    # argument one tier up puts end_process last (#1777).
-    assert target.calls == [
-        "end_module:a.py",
-        "end_module:b.py",
-        "end_task",
-        "end_process",
-    ], (
+    # already be gone while a module teardown could still reach it.
+    #
+    # end_process is absent: the session outlives the task, and draining its
+    # process tier per task is the defect #1777 removes. main() owns it.
+    assert target.calls == ["end_module:a.py", "end_module:b.py", "end_task"], (
         "module teardown must complete for every module in the task before the "
-        "task drains, and the task before the process"
+        "task drains, and the process tier must not drain here at all"
     )
 
 
@@ -142,15 +139,11 @@ def test_end_task_session_continues_after_a_failing_end_module() -> None:
     # Act
     _end_task_session(target, ["a.py", "b.py"])
 
-    # Assert — skipping the wider drains would leak every task- and
-    # process-lifetime resource in the run, which is the bug #1728 fixed for
-    # the single-module case.
-    assert target.calls == [
-        "end_module:a.py",
-        "end_module:b.py",
-        "end_task",
-        "end_process",
-    ], "a failing end_module must not skip the modules after it or the wider drains"
+    # Assert — skipping the task drain would leak every task-lifetime resource
+    # in the run, which is the bug #1728 fixed for the single-module case.
+    assert target.calls == ["end_module:a.py", "end_module:b.py", "end_task"], (
+        "a failing end_module must not skip the modules after it or the task drain"
+    )
 
 
 def test_end_task_session_drains_each_module_exactly_once() -> None:
@@ -168,7 +161,6 @@ def test_end_task_session_drains_each_module_exactly_once() -> None:
         "end_module:b.py",
         "end_module:c.py",
         "end_task",
-        "end_process",
     ], "each module must be drained once, in the order the task listed them"
 
 

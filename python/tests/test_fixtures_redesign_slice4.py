@@ -15,6 +15,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+import oxitest as oxi
 from oxitest import TempDir
 from tests import helpers
 
@@ -119,33 +120,56 @@ def test_the_parallel_run_actually_uses_more_than_one_worker(tmp: TempDir) -> No
     )
 
 
-def test_the_session_fixture_is_built_once_per_worker(tmp: TempDir) -> None:
+@dataclass(frozen=True)
+class _WorkerCount:
+    """One ``-n`` value for the per-process assertion."""
+
+    label: str
+    workers: str
+
+
+_ONE_WORKER = _WorkerCount(label="-n 1", workers="1")
+#: Two workers over four modules — the count that makes a worker drain more
+#: than one task group, and the only one of the three that discriminates
+#: per-process from per-task-group.
+_TWO_WORKERS = _WorkerCount(label="-n 2", workers="2")
+_FOUR_WORKERS = _WorkerCount(label="-n 4", workers="4")
+
+
+@oxi.parametrize(one=_ONE_WORKER, two=_TWO_WORKERS, four=_FOUR_WORKERS)
+def test_the_session_fixture_is_built_once_per_worker(
+    tmp: TempDir, case: _WorkerCount
+) -> None:
     """The assertion this slice exists for.
 
     Scheduling decides how many workers receive work, so asserting a count
     would be flaky. The invariant is per-PID: every PID that ran a test built
     the fixture exactly once.
 
-    That invariant encodes the **per-process** contract, which ``main`` does
-    not provide — ADR-0009 Amendment 4 measured ``session`` as once per **task
-    group**. It passes here only because this data project has four modules and
-    the run hardcodes ``-n 4``; at ``-n 2`` it fails deterministically. See
-    #1843, which owns that finding, and #1777, which makes the contract real
-    under the name ``lifetime="process"``.
+    **Parameterised over worker counts on purpose (#1777).** The data project
+    has four modules, so at ``-n 4`` the old per-task-group behaviour is
+    indistinguishable from the per-process contract — one module per worker
+    means one build per worker either way. Only a worker count that does *not*
+    divide the module count exercises a worker draining more than one task
+    group, and ``-n 2`` did fail deterministically here until the worker built
+    its session once per process rather than once per task. Pinning only
+    ``-n 4`` is what let that gap sit unnoticed; see #1843, which owns the
+    finding.
     """
     # Act
-    run = _run_project(tmp, "-n", "4")
+    run = _run_project(tmp, "-n", case.workers)
 
     # Assert
     assert run.rc == 0, (
-        f"the parallel run must pass; rc={run.rc}\nstdout:\n{run.stdout}\n"
-        f"stderr:\n{run.stderr}"
+        f"the parallel run must pass at {case.label}; rc={run.rc}\n"
+        f"stdout:\n{run.stdout}\nstderr:\n{run.stderr}"
     )
     assert sorted(run.setup_pids) == sorted(run.running_pids), (
-        f"SETUP fired on PIDs {sorted(run.setup_pids)} but tests ran on "
-        f"{sorted(run.running_pids)}. this asserts one build per worker PID: a PID "
-        f"appearing twice means the fixture was rebuilt within one worker, and a "
-        f"running PID missing entirely means a worker served tests without it"
+        f"at {case.label}: SETUP fired on PIDs {sorted(run.setup_pids)} but tests "
+        f"ran on {sorted(run.running_pids)}. this asserts one build per worker PID: "
+        f"a PID appearing twice means the fixture was rebuilt within one worker — "
+        f"the per-task-group behaviour — and a running PID missing entirely means "
+        f"a worker served tests without it"
     )
 
 
