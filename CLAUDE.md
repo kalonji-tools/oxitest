@@ -88,9 +88,13 @@ At creation, apply exactly one **category** label, **one or more** `area:` label
 git commit --allow-empty -m "chore: scaffold (#N)"
 git push -u origin <branch>
 gh pr create --draft --assignee @me --title "..." --body "..."
-# the first real commit absorbs the scaffold:
+# the first real commit absorbs the scaffold — this rewrites an already-pushed
+# commit, so the next push must be forced:
 git commit --amend
+git push --force-with-lease
 ```
+
+`--force-with-lease` rather than `--force`: it refuses if the remote moved since your last fetch, so a force-push can never silently discard someone else's work. The scaffold is pushed before it is amended, so this step is unavoidable — not an accident.
 
 Assignment is **folded into `gh pr create`** (`fold-in`) — there is no separate `gh pr edit --add-assignee` step left to forget. The previous separate step was skipped on 4/4 PRs in one session with nothing surfacing it.
 
