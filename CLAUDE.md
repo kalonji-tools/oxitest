@@ -74,20 +74,32 @@ Grill → Issue → Triage → Spec → Draft PR → Plan → Implement → Revi
 
 **1. Grill new ideas.** Any new feature, concept, or design direction MUST go through `grill-with-docs` before anything else. This ensures ideas are stress-tested against the existing domain model and documented decisions before committing to them.
 
-**2. Create issues.** Once an idea survives grilling and is deemed worth implementing, create GitHub issues. Every issue MUST state the "why" — why is this change needed? What problem does it solve? Organize into milestones if the work spans multiple issues. Every issue MUST be triaged. Apply one **category label** (`bug` or `enhancement`) and one **component label** (`rust` or `python`) to each issue.
+**2. Create issues.** Once an idea survives grilling and is deemed worth implementing, create GitHub issues. Every issue MUST state the "why" — why is this change needed? What problem does it solve? Organize into milestones if the work spans multiple issues.
 
-**3. Triage issues.** Every issue gets a **state label** reflecting its triage status. See `docs/agents/triage-labels.md` for the label vocabulary.
+At creation, apply exactly one **category** label, **one or more** `area:` labels, and one **triage state** label. Run `gh label list` for the current vocabulary — this file deliberately does not restate it, because the tracker cannot disagree with itself and a restatement can.
+
+**3. Triage issues.** Every issue gets a **state label** reflecting its triage status. See `docs/agents/triage-labels.md` for the state vocabulary. Triage is also where `priority:` and `size:` are applied — they are judgements, not facts known at filing time, and a guessed `size: M` is worse than no label at all.
 
 **4. Spec every issue.** By the time a PR is created, every issue in that PR MUST have a design spec. If no issue exists yet for the work being specced, create one first — every spec needs a home issue. Specs can be written when the issue is picked up or ahead of time — but never skipped. Use the `superpowers:brainstorming` skill for spec design. Post each issue's spec section as a comment on that issue. When issues share a grouped spec, post only the section relevant to each issue — not the entire spec on every issue.
 
-**5. Create a draft PR.** Push the branch and open a draft PR before any implementation begins. This gives reviewers a chance to evaluate the approach early. Always assign the user to the PR on creation (`gh pr edit --add-assignee @me`).
+**5. Create a draft PR.** Open the draft PR *before* any implementation, so the approach can be reviewed early. GitHub requires at least one commit, so scaffold with an empty one and fold it away later:
+
+```bash
+git commit --allow-empty -m "chore: scaffold (#N)"
+git push -u origin <branch>
+gh pr create --draft --assignee @me --title "..." --body "..."
+# the first real commit absorbs the scaffold:
+git commit --amend
+```
+
+Assignment is **folded into `gh pr create`** (`fold-in`) — there is no separate `gh pr edit --add-assignee` step left to forget. The previous separate step was skipped on 4/4 PRs in one session with nothing surfacing it.
 
 **6. Plan before implementing.** Use the `superpowers:writing-plans` skill. Multiple issues can be grouped into one plan if they are tightly coupled or logically sequential. The plan MUST be posted as a comment on the PR — never on individual issues.
 
 **7. Implement via subagents or inline.** Use `superpowers:subagent-driven-development` or `superpowers:executing-plans`.
 
 **8. Post-implementation review.** After all plan tasks are implemented and pushed, run these passes before marking the PR ready:
-- **`ponytail:ponytail-review`** on the branch diff — hunt over-engineering, dead code, and unnecessary complexity.
+- **`ponytail:ponytail-review`** on the branch diff — hunt over-engineering, dead code, and unnecessary complexity. May be skipped on a single-commit PR touching no public surface, **provided the skip and its reason are recorded in the PR checklist** (`artifact`). No size threshold is set: the yield data is currently too thin to justify removing a gate, and the recorded skips are how that data gets collected.
 - **`/improve branch`** — audit the branch changes for correctness, security, test coverage gaps, and tech debt.
 - **Explore findings before acting.** Present findings to the user. For each finding, explore the cited code to verify it's real and determine if the fix is safe. Only fix after exploration confirms the finding is actionable. Never blindly apply review suggestions.
 - **Docs evaluation.** Check whether the changes affect user-facing documentation. Scan `docs/user/`, `docs/internals/`, `CONTEXT.md`, and error references for stale content. If docs need updating, fix them in the same PR — don't let stale docs ship.
@@ -101,6 +113,24 @@ Grill → Issue → Triage → Spec → Draft PR → Plan → Implement → Revi
 - **PR closing keywords**: GitHub requires the keyword before EACH issue number. Write `Closes #1, Closes #2, Closes #3` — NOT `Closes #1, #2, #3` (only the first gets closed).
 - **Pre-merge commit hygiene**: When a merge is triggered (e.g., "merge", "merge rebase delete branch"), evaluate the commit history first. If commits are too granular or disorganized, logically rebase them into coherent commits before merging. Each commit should represent a logical unit of work.
 - Run `just preflight` before pushing.
+
+**Merge sequence** — this order, every time:
+
+1. rebase onto latest `main`;
+2. re-run `just preflight` **after** the rebase — even if CI was green before it;
+3. push; wait for CI green;
+4. `gh pr merge --rebase`.
+
+`.config/wt.toml` sets `pre-merge = "just preflight"`, so step 2 happens automatically for `wt merge` and is **bypassed by `gh pr merge`**. That asymmetry is why the sequence is written here rather than assumed.
+
+**Never pass `--delete-branch`.** `main` is pinned to the primary worktree, so the merge lands but local cleanup cannot succeed — it failed 4/4 times in one session. Do the cleanup directly instead:
+
+```bash
+gh pr merge --rebase
+git push origin --delete <branch>
+git -C <primary-worktree> pull --ff-only
+wt remove <branch> -D --foreground
+```
 
 **10. Post-merge debrief.** After a PR is merged, if the implementation diverged from the plan, add a debrief comment to the closed PR explaining how, where, and why it diverged. Apply the `diverged-from-plan` label to the PR. This label is only applied to closed/merged PRs.
 
