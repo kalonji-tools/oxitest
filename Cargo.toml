@@ -72,3 +72,6 @@ panic = "deny"
 # has moved it between `style` and `pedantic` more than once. `deny` for the
 # same reason as above.
 uninlined_format_args = "deny"
+# Nursery too (measured: `-W clippy::nursery` fires it, `pedantic` does not), so
+# `all` misses it as well. `deny` for the same reason as above (#1835).
+use_self = "deny"
