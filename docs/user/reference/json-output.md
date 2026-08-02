@@ -107,11 +107,17 @@ file, and each such error appears as its own `failed` entry:
 
 | Field | Value for an aborted run |
 |-------|--------------------------|
-| `tests[].name` | The failing file's path for a collection error, the node ID for a `--strict=abort` violation, or `<collection>` for an error that names no file. Never a node ID that could belong to a real test. |
+| `tests[].name` | For a collection error: the failing file's path, or `<collection>` if the error names no file. For a `--strict=abort` violation: the node ID of the test the violation belongs to, or `<strict>` for a suite-level violation. |
 | `tests[].status` | Always `"failed"` |
 | `tests[].duration` | `0.0` — nothing ran |
 | `tests[].message` | The same text the console prints |
 | `results.summary.failed` | The number of errors, so a dashboard summing failures sees a red run rather than an empty one |
+
+!!! warning "`name` is not a unique key"
+    A `--strict=abort` entry deliberately reuses the node ID of the test its violation belongs to.
+    The violation *is* about that test, and reusing the ID is what lets a consumer line the two up.
+    So do not treat `tests[].name` as identifying which kind of entry you are looking at, and do not
+    key a map on it.
 
 These entries are counted in `summary.tests` and `summary.failed`. The pass rate for such a run is
 `0` of `N`, which is accurate: no test executed.
