@@ -134,6 +134,62 @@ wt remove <branch> -D --foreground
 
 **10. Post-merge debrief.** After a PR is merged, if the implementation diverged from the plan, add a debrief comment to the closed PR explaining how, where, and why it diverged. Apply the `diverged-from-plan` label to the PR. This label is only applied to closed/merged PRs.
 
+### Track B — backlog maintenance (whole backlog, cyclical)
+
+Track A is per-change and linear. Backlog maintenance — triage sweeps, relevance audits, re-grilling existing issues — runs over the whole backlog at once and produces no merge. It is a **separate track, not a stage**, and it joins Track A at Spec when an issue is re-scoped.
+
+```
+Sweep → Verdict → Disposition ─→ re-scoped issue re-enters Track A at Spec
+```
+
+**Issues rot three ways, and only one of them justifies closing:**
+
+| Rot mode | What is stale | Disposition | Evidence required |
+|---|---|---|---|
+| (a) the defect is fixed | the issue itself | **close** | the citation in "Evidence for analysis outputs" below (`artifact`) |
+| (b) the defect stands, its *characterisation* is stale | the description | **re-scope** | comment recording what changed and why this is not a close (`artifact`) |
+| (c) the defect stands, its *vocabulary* names deleted concepts | the wording | **re-word** | comment mapping old term → current term (`artifact`) |
+
+The default disposition for a stale-*looking* issue is correct it, not close it. In the audit that produced this section, ~30 issues were reviewed: **0 were closeable and 8+ needed correction.** A "close what looks stale" pass would have destroyed information in eight places.
+
+Re-labelling and re-prioritising need no evidence (prose).
+
+### Evidence for analysis outputs (`artifact`)
+
+The pipeline gates code. This gates *conclusions*.
+
+**The rule fires on any claim whose acceptance subtracts work or a gate** — on consequence, not on wording. A wording trigger is evaded the moment someone writes "appears resolved" instead of "no longer reproduces".
+
+| Claim **adds** work | Claim **subtracts** work |
+|---|---|
+| "this looks wrong", "missing a test", "possible bug here" | "no longer reproduces", "this issue is stale", "clippy is green", "this file is unused" |
+| Wrong ⇒ someone investigates and finds nothing. Self-correcting. | Wrong ⇒ information is destroyed and nothing looks again. Silent and permanent. |
+| **no citation needed** | **citation required** |
+
+A subtracting claim MUST carry:
+
+1. the **exact command** re-run, and its output;
+2. evidence the command is **the one the claim is about** — a verdict citing `just check` against an issue whose reproduction used a different invocation has measured a different thing;
+3. evidence the run **executed** rather than replaying a cache — a cached `cargo clippy` once returned 0 where a forced rebuild found 11. "Green" and "ran" are different claims.
+
+This is `artifact` tier: it binds when someone reads the comment. Its value is that the omission becomes visible — a missing quote is the tell — where today there is nothing to look for.
+
+### Gate coverage (`artifact`)
+
+**Name the gate that covers your change. If you cannot name one, verify it by hand and describe how in the PR.**
+
+The `justfile` is authoritative for what the gates do; this file deliberately does not restate it. Gates get added — strict mkdocs, mdbook and `cargo doc` all entered preflight recently — so any coverage table written here would already have been wrong three times.
+
+Illustrative only, **not exhaustive**. Note that syntax-valid is not verified:
+
+| Semantically gated | Syntax-only or ungated |
+|---|---|
+| `src/**.rs` — fmt, clippy, `test-rust`, `cargo doc` | `bacon.toml`, `prek.toml`, `cliff.toml`, `codecov.yml` — `check-toml`/`check-yaml` parse them; nothing validates them |
+| `python/**.py` — ruff, ty, `test-python` | `justfile`, `devenv.nix`, `flake.nix`, `nix/` — no gate at all |
+| `docs/**.md` in the mkdocs nav — `mkdocs --strict` | `.github/workflows/*` — YAML syntax only, no actionlint |
+| `docs/internals/**` — mdbook | `.envrc`, `.config/wt.toml` — no gate |
+| `Cargo.lock`, `uv.lock` — lock checks | `*.md` outside the mkdocs nav — codespell only, no link check |
+
 ## Tools
 
 ### Worktrunk (`wt`)
