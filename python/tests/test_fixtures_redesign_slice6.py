@@ -72,7 +72,12 @@ _EXIT_FAILURE = 1
 def test_the_legal_tree_passes_whole(case: RunMode) -> None:
     """Descendant access, rootdir access, and two packages both named `v1`."""
     # Act
-    stdout, stderr, rc = helpers.run_oxitest(_LEGAL, *case.args)
+    # ``--warnings`` is load-bearing, not decoration: without it the reporter
+    # prints "N notices (--warnings to expand)" and never the message text, so
+    # the shadow assertion below has nothing to match and cannot fail. Caught
+    # by mutation — the assertion survived a `_can_see_both` that always
+    # returned True.
+    stdout, stderr, rc = helpers.run_oxitest(_LEGAL, "--warnings", *case.args)
 
     # Assert
     assert rc == 0, (
@@ -84,6 +89,13 @@ def test_the_legal_tree_passes_whole(case: RunMode) -> None:
         f"all {_LEGAL_TESTS} must run — an anchor-blind collision check kills "
         f"the run on the duplicate 'v1' namespace, and a collection-level "
         f"failure would skip every visibility assertion; got:\n{stdout}"
+    )
+    assert "shadows" not in stdout + stderr, (
+        f"api/v1 and admin/v1 are disjoint subtrees, so neither declaration of "
+        f"'thing' overrides the other. This is the only end-to-end coverage of "
+        f"the visibility gate under {case.label} — the unit tests build "
+        f"FixtureDefs by hand and would stay green if collection stopped "
+        f"passing real anchors to register()\nstdout:\n{stdout}\nstderr:\n{stderr}"
     )
 
 
