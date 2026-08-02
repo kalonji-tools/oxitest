@@ -152,14 +152,23 @@ parameter with it. Declare the fixture with `@oxi.fixture` in a
 --8<-- "python/tests/docs/how-to/fixture_anchors/api/test_api.py:ctx-test"
 ```
 
-!!! warning "`ctx` inside a fixture currently describes the fixture, not the test"
-    The `TestContext` injected into a **fixture** body carries that fixture's
-    own identity: `ctx.name` reads `"db_schema"`, not the name of the test
-    being set up, so every test in the run sees the same value. Do not derive
-    per-test names from it. Use `ctx` in a fixture for `addfinalizer`, and read
-    `ctx.name`, `ctx.node_id`, `ctx.marks` and `ctx.param_id` from the test's
-    own `ctx` parameter, where they describe the test. This holds on both
-    fixture routes.
+Inside a fixture, `ctx` is for teardown. The four identity fields raise:
+
+| Member | On a test | Inside a fixture |
+| --- | --- | --- |
+| `addfinalizer` / `on_teardown` | works | works — this is the point |
+| `module_path` | works | works |
+| `name`, `node_id`, `marks`, `param_id` | works | **`TestIdentityUnavailableError`** |
+
+A fixture is built for whichever test arrives first at its lifetime tier, so
+"the current test" has no answer above `function` lifetime — and at `function`
+lifetime the identity is not threaded to the resolution site either. Reading
+one used to return the *fixture's* own name, so `f"test_{ctx.name}"` produced
+one identical string for the whole run.
+
+If a fixture needs the test's identity, declare `ctx: TestContext` on the
+**test** — where the four fields are real — and hand the value to the fixture
+from the test body.
 
 #### Legacy: the same fixture on a `Fixtures()` registrar
 

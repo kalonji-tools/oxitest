@@ -185,9 +185,19 @@ def _resolve_deps(
     resolve_user: Callable[[str], Any],
 ) -> dict[str, Any]:
     """Resolve fixture dependencies from type hints."""
-    # Build a minimal TestMeta for fixture-to-fixture resolution (builtins
-    # only need module_path and fn_name; node_id/markers are test-level).
-    dep_meta = TestMeta(module_path=ctx.module_path, fn_name=fn_name, node_id="")
+    # A minimal TestMeta for fixture-to-fixture resolution. module_path and
+    # fn_name are real — the first selects the scope bucket, the second
+    # prefixes TempDir — but nothing here describes a test: _ResolutionContext
+    # carries no node_id and no markers, and above `function` lifetime the
+    # fixture is built once for whichever test arrives first, so there is no
+    # test to describe. `describes_a_test=False` is what makes TestContext say
+    # so instead of reporting fn_name as the test's name (#1874).
+    dep_meta = TestMeta(
+        module_path=ctx.module_path,
+        fn_name=fn_name,
+        node_id="",
+        describes_a_test=False,
+    )
     hints = _get_hints(fn)
     deps: dict[str, Any] = {}
     for param_name, hint in hints.items():

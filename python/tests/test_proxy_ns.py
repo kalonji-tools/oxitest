@@ -16,6 +16,7 @@ from oxitest._bridge._fixture_registry import (
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge._read_fixtures import _fixtures_registry_var, _FixturesProxy
+from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.conftest_loader import load_fixtures_from_conftest
 from oxitest._bridge.proxy import FrozenProxy
 from oxitest._bridge.proxy_ns import FixturesProxy, NamespaceProxy, OxiNamespaceProxy
@@ -23,6 +24,21 @@ from oxitest._bridge.result import PassedResult
 from tests import helpers
 
 # ── NamespaceProxy ─────────────────────────────────────────────────────────
+
+
+def _meta(module_path: str, fn_name: str = "test_fake") -> TestMeta:
+    """A TestMeta for a proxy under test.
+
+    ``FixturesProxy`` and ``OxiNamespaceProxy`` take the running test's whole
+    ``TestMeta`` rather than a module path plus a name, because ``fx.oxi.ctx``
+    hands it straight to ``TestContext`` and the two fields they used to take
+    are the two that are *not* its identity (#1874).
+    """
+    return TestMeta(
+        module_path=module_path,
+        fn_name=fn_name,
+        node_id=f"{module_path}::{fn_name}",
+    )
 
 
 def test_namespace_proxy_resolves_fixture() -> None:
@@ -83,7 +99,7 @@ def test_fixtures_proxy_getattr_returns_namespace_proxy() -> None:
     session = helpers.make_session(
         helpers.make_fixture_def("conn", lambda: 1, namespace="db")
     )
-    proxy = FixturesProxy(session, "/fake/test.py", [], test_is_async=True)
+    proxy = FixturesProxy(session, _meta("/fake/test.py"), [], test_is_async=True)
     ns = proxy.db
     assert isinstance(ns, NamespaceProxy), (
         f"FixturesProxy.db should return a NamespaceProxy, got {type(ns).__name__}"
@@ -93,7 +109,7 @@ def test_fixtures_proxy_getattr_returns_namespace_proxy() -> None:
 def test_fixtures_proxy_getattr_returns_oxi_proxy() -> None:
     """Accessing the 'oxi' attribute on FixturesProxy returns an OxiNamespaceProxy."""
     session = helpers.make_session()
-    proxy = FixturesProxy(session, "/fake/test.py", [], test_is_async=True)
+    proxy = FixturesProxy(session, _meta("/fake/test.py"), [], test_is_async=True)
     oxi = proxy.oxi
     assert isinstance(oxi, OxiNamespaceProxy), (
         f"FixturesProxy.oxi should return an OxiNamespaceProxy, got "
@@ -109,7 +125,7 @@ def test_fixtures_proxy_unknown_namespace_raises() -> None:
     same taxonomy as the rest of fixture lookup.
     """
     session = helpers.make_session()
-    proxy = FixturesProxy(session, "/fake/test.py", [], test_is_async=True)
+    proxy = FixturesProxy(session, _meta("/fake/test.py"), [], test_is_async=True)
     with oxitest.raises(FixtureNotFoundError, match="unknown_ns"):
         _ = proxy.unknown_ns
 
@@ -143,7 +159,7 @@ def test_unknown_segment_names_the_modern_declaration_route() -> None:
     """The stale hint pointed at conftest.py, which slice 1 displaced."""
     # Arrange
     session = _api_session()
-    proxy = FixturesProxy(session, "/t/api/test_a.py", [], test_is_async=True)
+    proxy = FixturesProxy(session, _meta("/t/api/test_a.py"), [], test_is_async=True)
 
     # Act
     with oxitest.raises(FixtureNotFoundError) as exc_info:
@@ -170,7 +186,9 @@ def test_an_unreachable_segment_is_inert_until_a_leaf_is_touched() -> None:
     """
     # Arrange
     session = _api_session()
-    proxy = FixturesProxy(session, "/t/admin/test_admin.py", [], test_is_async=True)
+    proxy = FixturesProxy(
+        session, _meta("/t/admin/test_admin.py"), [], test_is_async=True
+    )
 
     # Act — reaching the segment from outside its package must not raise
     namespace_proxy = proxy.api
@@ -192,7 +210,7 @@ def test_oxi_proxy_tmp_injects_tempdir(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
 ) -> None:
     """oxi.tmp injects a TempDir builtin via the OxiNamespaceProxy."""
-    proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
+    proxy = OxiNamespaceProxy(fixture_session, _meta(str(tmp / "test.py")), [])
     result = proxy.tmp
     assert isinstance(result, TempDir), (
         f"oxi.tmp should inject a TempDir instance, got {type(result).__name__}"
@@ -204,7 +222,7 @@ def test_oxi_proxy_cap_injects_stdcapture(
 ) -> None:
     """oxi.cap injects a StdCapture builtin via the OxiNamespaceProxy."""
     teardowns: list = []
-    proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), teardowns)
+    proxy = OxiNamespaceProxy(fixture_session, _meta(str(tmp / "test.py")), teardowns)
     result = proxy.cap
     assert isinstance(result, StdCapture), (
         f"oxi.cap should inject a StdCapture instance, got {type(result).__name__}"
@@ -217,7 +235,7 @@ def test_oxi_proxy_patch_injects_patcher(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
 ) -> None:
     """oxi.patch injects a Patcher builtin via the OxiNamespaceProxy."""
-    proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
+    proxy = OxiNamespaceProxy(fixture_session, _meta(str(tmp / "test.py")), [])
     result = proxy.patch
     assert isinstance(result, Patcher), (
         f"oxi.patch should inject a Patcher instance, got {type(result).__name__}"
@@ -229,7 +247,7 @@ def test_oxi_proxy_log_injects_logcapture(
 ) -> None:
     """oxi.log injects a LogCapture builtin via the OxiNamespaceProxy."""
     teardowns: list = []
-    proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), teardowns)
+    proxy = OxiNamespaceProxy(fixture_session, _meta(str(tmp / "test.py")), teardowns)
     result = proxy.log
     assert isinstance(result, LogCapture), (
         f"oxi.log should inject a LogCapture instance, got {type(result).__name__}"
@@ -242,7 +260,7 @@ def test_oxi_proxy_unknown_raises_with_available_list(
     tmp: TempDir, fixture_session: Fixture[FixtureSession]
 ) -> None:
     """Unknown name on OxiNamespaceProxy raises AttributeError listing builtins."""
-    proxy = OxiNamespaceProxy(fixture_session, str(tmp / "test.py"), [])
+    proxy = OxiNamespaceProxy(fixture_session, _meta(str(tmp / "test.py")), [])
     with oxitest.raises(AttributeError, match="unknown") as exc:
         _ = proxy.unknown
     assert "tmp" in str(exc.value), (  # available list shown
@@ -264,7 +282,7 @@ def test_shared_fixture_accessed_via_namespace_is_frozen_proxy() -> None:
             namespace="db",
         )
     )
-    proxy = FixturesProxy(session, "/fake/test.py", [], test_is_async=True)
+    proxy = FixturesProxy(session, _meta("/fake/test.py"), [], test_is_async=True)
     result = proxy.db.conn
     assert isinstance(result, FrozenProxy), (
         f"shared fixture accessed via namespace proxy should be wrapped in "
@@ -279,7 +297,7 @@ def test_oxi_proxy_ctx_returns_test_context(
     fixture_session: Fixture[FixtureSession],
 ) -> None:
     """fx.oxi.ctx should return a TestContext instance."""
-    proxy = OxiNamespaceProxy(fixture_session, "/fake/test.py", [])
+    proxy = OxiNamespaceProxy(fixture_session, _meta("/fake/test.py"), [])
     result = proxy.ctx
     assert isinstance(result, OxiTestContext), (
         f"oxi.ctx should return a TestContext instance, got {type(result).__name__}"
@@ -290,7 +308,9 @@ def test_fixtures_proxy_caches_namespace_proxy_on_repeated_access(
     fixture_session: Fixture[FixtureSession],
 ) -> None:
     """FixturesProxy.oxi caches and returns the same OxiNamespaceProxy each access."""
-    proxy = FixturesProxy(fixture_session, "/fake/test.py", [], test_is_async=True)
+    proxy = FixturesProxy(
+        fixture_session, _meta("/fake/test.py"), [], test_is_async=True
+    )
     oxi1 = proxy.oxi
     oxi2 = proxy.oxi
     assert oxi1 is oxi2, (
@@ -304,7 +324,7 @@ def test_oxi_proxy_caches_builtin_on_repeated_access(
 ) -> None:
     """OxiNamespaceProxy caches builtins so repeated access returns the same object."""
     teardowns: list = []
-    proxy = OxiNamespaceProxy(fixture_session, "/fake/test.py", teardowns)
+    proxy = OxiNamespaceProxy(fixture_session, _meta("/fake/test.py"), teardowns)
     tmp1 = proxy.tmp
     tmp2 = proxy.tmp
     assert tmp1 is tmp2, (
