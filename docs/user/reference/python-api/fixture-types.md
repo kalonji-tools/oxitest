@@ -29,6 +29,10 @@ each for a different purpose:
       show_root_toc_entry: false
       heading_level: 3
 
+Which fixture a `Fixture[T]` parameter resolves to is decided by the parameter's
+**name**, not by `T` — see
+[how a `Fixture[T]` parameter resolves](fixture-declaration.md#how-a-fixturet-parameter-resolves).
+
 ## FixtureRef[T]
 
 ::: oxitest._bridge._fixture_type._FixtureRefType

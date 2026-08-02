@@ -187,6 +187,6 @@ def db_schema(ctx: TestContext) -> str:
 ## See also
 
 - [Use built-in fixtures](../../how-to/use-builtin-fixtures.md) — how-to guide with examples
-- [Fixture declaration](fixture-declaration.md) — `@oxi.fixture`, where a declaration may live, and the lifetime tiers
+- [Fixture declaration](fixture-declaration.md) — `@oxi.fixture`, where a declaration may live, the lifetime tiers, and how a `Fixture[T]` parameter resolves
 - [Fixture types](fixture-types.md) — `Fixture[T]`, `Yields[T]`, and other type annotations
 - [Configuration](../../reference/configuration.md) — `keep_tmp` setting
