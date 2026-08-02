@@ -691,6 +691,7 @@ def test_tempdir_factory_session_scoped() -> None:
         "resolves"
     )
     session.end_task()  # trigger factory cleanup to avoid /tmp leakage
+    session.end_process()
 
 
 def test_stdcapture_injected_via_session() -> None:

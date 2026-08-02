@@ -9,6 +9,7 @@ and _fixture_instantiator.py.
 from __future__ import annotations
 
 __all__ = [
+    "PROCESS_BOUNDARY",
     "SESSION_BOUNDARY",
     "AsyncPolicy",
     "SharedAsyncManager",
@@ -39,6 +40,13 @@ from oxitest._bridge._fixture_context import _warn_teardown
 #: key is the boundary's own identity — a module path, today. Not a valid
 #: module path itself, so it cannot collide with one.
 SESSION_BOUNDARY = "<session>"
+#: Teardowns that live as long as the *process* — ``lifetime="session"``
+#: fixtures, once #1777 made that tier genuinely per-process. Distinct from
+#: :data:`SESSION_BOUNDARY`, which now holds only the task-lifetime wide
+#: teardowns (``shared=True``): the two drain at different boundaries, and
+#: sharing one key is what let an async process-lifetime fixture be disposed at
+#: the end of its first task group and then handed to every later test.
+PROCESS_BOUNDARY = "<process>"
 
 # ── State variants for lazy session acquisition (ADR-0007 Rule 4) ────────────
 
@@ -222,7 +230,13 @@ class SharedAsyncManager:
             return self._state.session
         return None
 
-    def resolve(self, func: Callable[..., Any], deps: dict[str, Any]) -> Any:
+    def resolve(
+        self,
+        func: Callable[..., Any],
+        deps: dict[str, Any],
+        *,
+        boundary: str | None = None,
+    ) -> Any:
         """Run an async fixture, track teardowns, return the resolved value.
 
         Creates the shared session lazily on first call. Handles plain coroutines,
@@ -231,6 +245,12 @@ class SharedAsyncManager:
         Args:
             func: The fixture function to call.
             deps: Already-resolved dependency kwargs.
+            boundary: Scope whose exit disposes the teardown, forwarded to
+                :meth:`register_teardown`. ``PROCESS_BOUNDARY`` for the process
+                tier; ``None`` — task-lifetime — for everything else. Omitting
+                it sent every wide async fixture to ``SESSION_BOUNDARY``, so a
+                process-lifetime one was disposed at the end of its first task
+                group and reused by every test after it (#1777).
 
         Returns:
             The fixture value (awaited if async).
@@ -246,7 +266,9 @@ class SharedAsyncManager:
             result = func(**deps)
             if inspect.isasyncgen(result):
                 value = live_session.run(anext(result))
-                self.register_teardown(getattr(func, "__name__", ""), result)
+                self.register_teardown(
+                    getattr(func, "__name__", ""), result, boundary=boundary
+                )
             elif inspect.iscoroutine(result):
                 value = live_session.run(result)
             else:
@@ -257,12 +279,14 @@ class SharedAsyncManager:
 
         return value
 
-    def cleanup(self) -> None:
-        """Drain async teardowns in LIFO order, then close the session stack.
+    def drain_task(self) -> None:
+        """Drain every teardown whose lifetime ends with this task group (#1777).
 
-        Closing the :class:`~contextlib.ExitStack` runs the session's
-        ``__exit__`` (asyncgen shutdown, loop close) — session lifetime is
-        owned by the stack.
+        Everything except :data:`PROCESS_BOUNDARY`, and the session stack stays
+        **open**. Closing it runs the session's ``__exit__`` — asyncgen
+        shutdown and loop close — and a process-lifetime async fixture still
+        needs that loop alive to be resumed at process end. :meth:`cleanup`
+        owns the close.
         """
         if isinstance(self._state, _Idle):
             return
@@ -270,12 +294,33 @@ class SharedAsyncManager:
         # A boundary whose scope never exited would otherwise have its
         # teardown finalised by loop close instead of run — the failure mode
         # pytest-asyncio fixed in 0.25.3 and anyio in 4.1.0 (see #1739).
-        # Session-lifetime teardowns drain last, so a narrower fixture can
-        # still touch a wider one on its way out.
+        # Session-lifetime teardowns drain last of this set, so a narrower
+        # fixture can still touch a wider one on its way out.
         live_session = self._state.session
-        for boundary in [b for b in self._teardowns if b != SESSION_BOUNDARY]:
+        narrower = [
+            b for b in self._teardowns if b not in (SESSION_BOUNDARY, PROCESS_BOUNDARY)
+        ]
+        for boundary in narrower:
             self._drain_pairs(self._teardowns.pop(boundary), live_session)
         self._drain_pairs(self._teardowns.pop(SESSION_BOUNDARY, []), live_session)
+
+    def cleanup(self) -> None:
+        """Drain what is left, widest last, then close the session stack.
+
+        Called once per process. Closing the :class:`~contextlib.ExitStack`
+        runs the session's ``__exit__`` (asyncgen shutdown, loop close) —
+        session lifetime is owned by the stack.
+
+        Process-lifetime teardowns drain after everything else for the same
+        reason session-lifetime ones used to: the widest value must still be
+        reachable while narrower ones are being disposed.
+        """
+        if isinstance(self._state, _Idle):
+            return
+        self.drain_task()
+        # Still `_Live`: drain_task deliberately leaves the stack open.
+        live_session = self._state.session
+        self._drain_pairs(self._teardowns.pop(PROCESS_BOUNDARY, []), live_session)
         self._stack.close()
         self._state = _Idle()
         self._teardowns.clear()

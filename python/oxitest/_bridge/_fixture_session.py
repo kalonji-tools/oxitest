@@ -677,8 +677,10 @@ class FixtureSession:
         process-lifetime value may depend on nothing narrower, but the reverse
         is exactly what the tiers permit.
         """
-        # Tear down shared async fixtures first (reverse order), then sync scopes.
-        self._async_mgr.cleanup()
+        # Tear down task-lifetime async fixtures first (reverse order), then
+        # sync scopes. `drain_task`, not `cleanup`: the process tier's async
+        # teardowns and the event loop itself both outlive this task (#1777).
+        self._async_mgr.drain_task()
         # Any package scope still held is drained here as a backstop. The serial
         # path pops each one at end_package, so this normally finds nothing; a
         # worker never calls end_package at all, because its session covers
@@ -704,6 +706,10 @@ class FixtureSession:
         collector once in ``main()`` for the life of its pipe, and every
         collector downstream defers to an already-active one.
         """
+        # Async first, mirroring end_task: a process-lifetime async teardown
+        # may touch the sync values below, and the event loop it needs is
+        # closed by this same call (#1777).
+        self._async_mgr.cleanup()
         self._process_scope.drain()
         # Only restore contextvars if this session was the one that set them
         # (i.e., _prev was None, meaning we were the outermost session).

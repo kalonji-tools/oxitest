@@ -31,6 +31,7 @@ from oxitest._bridge._async_fixture_handle import (
     register_async_teardown,
 )
 from oxitest._bridge._async_orchestrator import (
+    PROCESS_BOUNDARY,
     AsyncPolicy,
     _check_async_dep,
     _reject_async_in_sync,
@@ -561,7 +562,13 @@ class FixtureInstantiator:
 
         with _fixture_scope(self, ctx.module_path, ctx.fn_teardowns):
             _start = time.monotonic()
-            value = self._async_mgr.resolve(defn.func, deps)
+            value = self._async_mgr.resolve(
+                defn.func,
+                deps,
+                boundary=(
+                    PROCESS_BOUNDARY if defn.scope is FixtureScope.PROCESS else None
+                ),
+            )
             self._setup_times[_cache_key(defn)].append(
                 (time.monotonic() - _start) * 1000.0
             )
@@ -708,7 +715,14 @@ class FixtureInstantiator:
             return
         if self._async_mgr is None:
             return
-        boundary = ctx.module_path if defn.scope is FixtureScope.MODULE else None
+        # The process tier gets its own key so it survives end_task: everything
+        # else here drains with the task group (#1777).
+        if defn.scope is FixtureScope.MODULE:
+            boundary = ctx.module_path
+        elif defn.scope is FixtureScope.PROCESS:
+            boundary = PROCESS_BOUNDARY
+        else:
+            boundary = None
         self._async_mgr.register_teardown(defn.name, agen, boundary=boundary)
 
     def _instantiate(
