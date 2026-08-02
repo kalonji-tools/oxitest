@@ -182,12 +182,14 @@ def test_resolve_param_by_type_not_name() -> None:
     resolved, value = inst.resolve_param(
         "different_name",
         Fixture[MyType],
-        meta,
-        fn_teardowns=teardowns,
-        resolve_user_fixture=lambda n: inst.resolve_fixture(
-            n,
-            _ResolutionContext(
-                "t.py", teardowns, frozenset(), lambda _defn, _mod: None, "t.py"
+        DispatchContext(
+            meta=meta,
+            fn_teardowns=teardowns,
+            resolve_user_fixture=lambda n: inst.resolve_fixture(
+                n,
+                _ResolutionContext(
+                    "t.py", teardowns, frozenset(), lambda _defn, _mod: None, "t.py"
+                ),
             ),
         ),
     )
@@ -216,12 +218,14 @@ def test_resolve_param_type_miss_name_fallback() -> None:
     resolved, value = inst.resolve_param(
         "my_fixture",
         Fixture[UnrelatedType],
-        meta,
-        fn_teardowns=teardowns,
-        resolve_user_fixture=lambda n: inst.resolve_fixture(
-            n,
-            _ResolutionContext(
-                "t.py", teardowns, frozenset(), lambda _defn, _mod: None, "t.py"
+        DispatchContext(
+            meta=meta,
+            fn_teardowns=teardowns,
+            resolve_user_fixture=lambda n: inst.resolve_fixture(
+                n,
+                _ResolutionContext(
+                    "t.py", teardowns, frozenset(), lambda _defn, _mod: None, "t.py"
+                ),
             ),
         ),
     )
@@ -243,9 +247,11 @@ def test_resolve_param_type_and_name_both_miss() -> None:
         inst.resolve_param(
             "no_such_fixture",
             Fixture[NoSuchType],
-            meta,
-            fn_teardowns=teardowns,
-            resolve_user_fixture=lambda _: None,
+            DispatchContext(
+                meta=meta,
+                fn_teardowns=teardowns,
+                resolve_user_fixture=lambda _: None,
+            ),
         )
 
 
@@ -274,9 +280,11 @@ def test_resolve_param_prefers_param_name_over_type_resolved_name() -> None:
     inst.resolve_param(
         "db",
         Fixture[DbConn],
-        meta,
-        fn_teardowns=teardowns,
-        resolve_user_fixture=tracking_resolve,
+        DispatchContext(
+            meta=meta,
+            fn_teardowns=teardowns,
+            resolve_user_fixture=tracking_resolve,
+        ),
     )
     assert resolved_names == ["db"], (
         "should resolve using param name 'db', not type-resolved name"

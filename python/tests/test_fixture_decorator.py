@@ -78,7 +78,7 @@ def test_session_lifetime_is_accepted() -> None:
     marker = getattr(engine, MARKER_ATTR)
     assert marker.lifetime is Lifetime.SESSION, (
         "marker must record SESSION so the registrar maps it to "
-        "FixtureScope.SESSION — any other marker routes the fixture to "
+        "FixtureScope.PROCESS — any other marker routes the fixture to "
         "function scope and rebuilds it per test"
     )
     assert engine() == "engine", (

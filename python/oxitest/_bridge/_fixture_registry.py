@@ -46,6 +46,7 @@ class FixtureScope(StrEnum):
     PACKAGE = auto()
     SHARED = auto()
     SESSION = auto()
+    PROCESS = auto()
 
 
 #: Declared tier → caching vocabulary. ``Lifetime`` is what users write;
@@ -60,19 +61,27 @@ class FixtureScope(StrEnum):
 #: Reusing it would make every legacy shared fixture look package-scoped to the
 #: scheduler, collapsing parallelism for suites that never asked for the tier.
 #:
-#: ``SESSION`` reuses the existing scope member the builtins already cache under
-#: (``_TempDirFactoryFixture``). Per ADR-0009 Rule 2 as corrected by Amendment 4
-#: it means once per **task group** — one module unless a ``package``
-#: declaration merges the subtree — not once per run and not once per worker
-#: process: it is the tier that does not constrain the scheduler, so its
-#: instance count is set by another tier's declarations. Work that must happen
-#: exactly once per run belongs at rootdir ``package`` instead.
+#: ``PROCESS`` is a member of its own for the same reason, one tier up, and the
+#: bucket it is *not* reusing is ``SESSION`` (#1777). ``SESSION`` is where the
+#: builtins cache (``_TempDirFactoryFixture``), and the two tiers now end at
+#: different boundaries: ``SESSION`` drains at ``end_task``, ``PROCESS`` at
+#: ``end_process``. Keeping the builtins on the narrower rung is deliberate —
+#: hoisting ``TempDirFactory`` to process lifetime would accumulate every temp
+#: dir a worker ever created until the process exits.
+#:
+#: The user-facing tier maps here rather than to ``SESSION`` because that is
+#: what makes it genuinely per-process. Before #1777 it shared the builtins'
+#: bucket, and so inherited their boundary: once per **task group** — one module
+#: unless a ``package`` declaration merged the subtree — which is not what
+#: "session" promised anyone. Work that must happen exactly once per *run*
+#: still belongs at rootdir ``package``; ``process`` is once per process, and
+#: the user sets that count with ``-n``.
 LIFETIME_SCOPES: Final = MappingProxyType(
     {
         Lifetime.FUNCTION: FixtureScope.EACH,
         Lifetime.MODULE: FixtureScope.MODULE,
         Lifetime.PACKAGE: FixtureScope.PACKAGE,
-        Lifetime.SESSION: FixtureScope.SESSION,
+        Lifetime.SESSION: FixtureScope.PROCESS,
     }
 )
 
