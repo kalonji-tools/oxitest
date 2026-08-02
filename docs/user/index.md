@@ -20,12 +20,20 @@ Install oxitest into your project:
 $ pip install oxitest
 ```
 
-Write a test:
+Declare a fixture in a `__fixtures__.py` beside your tests. `lifetime` says
+which unit of the test run disposes the value, and has no default — you always
+say it:
+
+```python
+--8<-- "python/tests/docs/tutorials/first_fixture/__fixtures__.py:declare-fixture"
+```
+
+Write a test that asks for it:
 
 ```python
 from oxitest import Fixture
---8<-- "python/tests/docs/conftest.py:quickstart-setup"
---8<-- "python/tests/docs/test_index.py:quickstart-test"
+
+--8<-- "python/tests/docs/tutorials/first_fixture/test_first_fixture.py:use-fixture"
 ```
 
 Run it:

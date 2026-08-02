@@ -18,6 +18,7 @@ each for a different purpose:
 ## See also
 
 - [Use fixtures](../../how-to/use-fixtures.md) — how-to guide with examples
+- [Fixture declaration](fixture-declaration.md) — the other half: `@oxi.fixture`, lifetimes, and anchors
 - [Built-in fixtures](builtins.md) — fixtures that don't need `Fixture[T]` wrapping
 
 ## Fixture[T]

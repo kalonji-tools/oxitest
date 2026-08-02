@@ -172,6 +172,42 @@ You can also filter with the `-E` flag and the query DSL. For example,
 $ oxitest -E 'name(addition)'
 ```
 
+## Step 8 — Share setup with a fixture
+
+Tests usually need something built before they run — a value, a connection, a
+temporary directory. In oxitest that is a **fixture**, and fixtures live in a
+file named `__fixtures__.py` in the same package as the tests that use them.
+
+Create `tests/__fixtures__.py`:
+
+```python
+--8<-- "python/tests/docs/tutorials/first_fixture/__fixtures__.py:declare-fixture"
+```
+
+`lifetime` is a required keyword — oxitest has no default, because the answer
+changes what your suite costs and it should never be guessed for you.
+`"function"` is the narrowest tier: the fixture is rebuilt for every test that
+asks for it, so no test can be affected by what another one did to the value.
+
+Now ask for it. A test parameter annotated `Fixture[T]` is injected; a
+parameter without that annotation is not. Add this to `tests/test_math.py`:
+
+```python
+from oxitest import Fixture
+
+--8<-- "python/tests/docs/tutorials/first_fixture/test_first_fixture.py:use-fixture"
+```
+
+Run oxitest again and the new test passes alongside the others:
+
+```console
+$ oxitest
+```
+
+Notice what you did *not* have to do: no `conftest.py`, no registration step,
+and no name-matching convention. oxitest found the declaration because of where
+the file is, and injected it because of the parameter's type.
+
 ## What you have learned
 
 - How to install oxitest
@@ -179,11 +215,13 @@ $ oxitest -E 'name(addition)'
 - How to read both passing and failing output
 - How to set persistent defaults in `pyproject.toml`
 - How to run a single test with a node ID or `-E` filter
+- How to declare a fixture in `__fixtures__.py` and inject it with `Fixture[T]`
 
 !!! tip "Next steps"
     - [Use markers](../how-to/use-markers.md) — `@mark.skip`, `@mark.xfail`, custom marks, `-E` filter
     - [Use parametrize](../how-to/use-parametrize.md) — run one test against multiple named cases
-    - [Use fixtures](../how-to/use-fixtures.md) — the `Fixtures()` registry, `shared=True`, yield teardown
+    - [Use fixtures](../how-to/use-fixtures.md) — the other three lifetime tiers, yield teardown, and which tests can see a fixture
+    - [Fixture declaration reference](../reference/python-api/fixture-declaration.md) — `@oxi.fixture`, where declarations may live, and what each lifetime costs
     - [Use built-in fixtures](../how-to/use-builtin-fixtures.md) — `TempDir`, `StdCapture`, `Patcher`, `LogCapture`
     - [Run tests in parallel](../how-to/run-in-parallel.md) — `--workers`, `--serial`, tuning thresholds
     - [Use the test cache](../how-to/use-test-cache.md) — `--lf`, `--ff`, `--durations`

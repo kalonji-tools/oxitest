@@ -13,8 +13,80 @@ The following pytest features are supported out of the box:
 
 ## Use fixtures with oxitest
 
-oxitest has its own fixture system. In `conftest.py` files, create a `Fixtures` instance
-and use it as a decorator:
+pytest's fixture home is `conftest.py`. oxitest's is a file named
+**`__fixtures__.py`**, placed in the package that holds the tests using it.
+There is no registry object to create and nothing to import into your tests —
+a decorated function in that file is a fixture.
+
+```python
+--8<-- "python/tests/docs/how-to/fixture_anchors/api/__fixtures__.py:declare-fixture"
+```
+
+`@pytest.fixture` has an optional `scope`; `@oxi.fixture` has a **required**
+`lifetime`, with no default. Teardown still hangs off `yield`, exactly as in
+pytest:
+
+```python
+--8<-- "python/tests/docs/how-to/fixture_anchors/api/__fixtures__.py:module-lifetime"
+```
+
+Injection is the other change you will feel immediately. pytest matches a test
+parameter to a fixture **by name**; oxitest injects only parameters annotated
+`Fixture[T]`, and matches **by type**, with the parameter name used to break
+ties between fixtures returning the same type. An unannotated parameter is
+never injected.
+
+```python
+--8<-- "python/tests/docs/how-to/fixture_anchors/api/test_api.py:injection-access"
+```
+
+Imperative teardown is available too — annotate a parameter with `TestContext`
+and register callbacks with `ctx.addfinalizer()`.
+
+### Translate `scope=` to `lifetime=`
+
+| pytest `scope=` | oxitest | Note |
+|---|---|---|
+| `"function"` (default) | `lifetime="function"` | Direct equivalent. Rebuilt per test. |
+| `"class"` | *no equivalent tier* | oxitest has no class-level boundary. Use `"function"`, or `"module"` when the class is the whole file. |
+| `"module"` | `lifetime="module"` | Direct equivalent. Disposed after the module's last test. |
+| `"package"` | `lifetime="package"` | Exactly once per run — and it collapses the declaring directory's subtree onto a single worker, so it costs parallelism. |
+| `"session"` | `lifetime="package"` in the rootdir package | This is the tier that is genuinely once per run. Do **not** reach for `lifetime="session"`, which is once per worker task group and is not a singleton. |
+
+The lifetime you may declare is also capped by where you declare it — a fixture
+written inline in a `test_*.py` cannot exceed `"module"`. See the
+[fixture declaration reference](../reference/python-api/fixture-declaration.md)
+for the full table.
+
+### Fixture visibility maps almost directly
+
+A pytest fixture in `tests/api/conftest.py` is visible to `tests/api/` and
+below, and nowhere else. `@oxi.fixture` uses the same rule, keyed on the
+directory holding the `__fixtures__.py` — so a pytest suite whose fixtures
+already sit at the right level ports without restructuring.
+
+Two differences are worth knowing before you hit them:
+
+- **The failure is named.** Reaching a fixture outside your directory raises
+  `BoundaryError` with the stable code `fixture-boundary`, which says the
+  fixture exists elsewhere — rather than pytest's "fixture not found", which
+  reads like a typo.
+- **The rootdir catch-all is not automatic.** pytest loads every `conftest.py`
+  on the walk-up path. oxitest resolves a `@oxi.fixture` against its anchor
+  directory, so a fixture every test needs belongs in a `__fixtures__.py` at
+  the rootdir package, not merely somewhere above the test.
+
+See [the B1 boundary](use-fixtures.md#understand-fixture-visibility-the-b1-boundary)
+and the [error reference](../reference/errors.md#fixture-errors).
+
+### Legacy: mapping onto `Fixtures()` in `conftest.py`
+
+!!! warning "Supported, but no longer the route to migrate onto"
+    oxitest still reads `conftest.py` and still supports `Fixtures()`. Both are
+    scheduled for removal in
+    [#1720](https://github.com/kalonji-tools/oxitest/issues/1720). A migration
+    starting today should target `__fixtures__.py`; this section is here for
+    suites already part-way through against the older API.
 
 ```python
 # conftest.py
@@ -33,25 +105,23 @@ def app():
     return create_app()
 ```
 
-`Fixtures.fixture` accepts `autouse`, `name`, and `shared`. Use `shared=True` instead of
-`scope="session"` — a shared fixture is created once per session and immutable. You can
-create multiple `Fixtures()` instances in one `conftest.py`; all are discovered automatically.
+`Fixtures.fixture` accepts `autouse`, `name`, and `shared`. You can create
+multiple `Fixtures()` instances in one `conftest.py`; all are discovered
+automatically.
 
-Fixture teardown uses `yield` or `TestContext` with `ctx.addfinalizer()`:
+`shared=True` is the nearest legacy analogue of `scope="session"`, but it is not
+a synonym: a shared fixture is built once per **task group** — a single test
+module unless a `lifetime="package"` declaration merges a subtree — and its
+value is frozen, so any attribute or item write raises
+`SharedFixtureMutationError`.
 
-```python
-from oxitest import TestContext
-
-@fx.fixture
-def tmp_file(ctx: TestContext):
-    path = make_temp_file()
-    ctx.addfinalizer(lambda: path.unlink())
-    return path
-```
-
-!!! tip "Migration step"
-    Replace `@pytest.fixture` declarations with a `Fixtures()` instance in each `conftest.py`.
-    See [Use fixtures](use-fixtures.md) for full details.
+Fixtures declared this way are registered **run-wide** and are exempt from the
+boundary above — more permissive than pytest, not less
+([#1760](https://github.com/kalonji-tools/oxitest/issues/1760)). A suite that
+migrates to `conftest.py` first can therefore acquire cross-directory fixture
+uses that pytest never allowed, and that break again on the move to
+`__fixtures__.py`. Migrating straight to `__fixtures__.py` avoids the round
+trip.
 
 ## Use markers
 
@@ -146,6 +216,7 @@ the key becomes the test ID (e.g. `test_add[basic]`).
 ## See also
 
 - [Use fixtures](use-fixtures.md) — oxitest's typed fixture system
+- [Fixture declaration reference](../reference/python-api/fixture-declaration.md) — `@oxi.fixture`, declaration homes, and the lifetime cap
 - [Use markers](use-markers.md) — `@oxitest.mark.*` decorators
 - [Use parametrize](use-parametrize.md) — named keyword-argument cases
 - [Configuration reference](../reference/configuration.md) — all `[tool.oxitest]` keys
