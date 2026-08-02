@@ -1,0 +1,10 @@
+[tool.oxitest]
+testpaths = ["worker_diag_teardown"]
+python_files = ["test_*.py"]
+strict = "abort"
+# Arrangement pins modules to the main process, which would collapse the run to
+# one PID and make this project prove nothing about the worker path.
+auto_arrange = false
+# Force parallelism regardless of test count: the serial answer was already
+# correct, so a run that quietly fell back to serial would pass vacuously.
+min_parallel_tests = 1
