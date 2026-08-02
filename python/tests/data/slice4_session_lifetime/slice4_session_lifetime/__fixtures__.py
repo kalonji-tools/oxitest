@@ -1,8 +1,10 @@
 """Session-lifetime fixture at the rootdir package (ADR-0009 slice 4).
 
-``session`` means once per **worker process**, not once per run — ADR-0009
-Rule 2 as amended by #1746. The acceptance test reads this log back rather
-than parsing runner output, so it asserts on what the fixture actually did.
+``session`` means once per **task group** — one module unless a ``package``
+declaration merges the subtree — not once per run and not once per worker
+process, per ADR-0009 Rule 2 as corrected by Amendment 4. The acceptance test
+reads this log back rather than parsing runner output, so it asserts on what
+the fixture actually did.
 
 Instance ids are PID-qualified because that is the whole question: under
 parallel execution there must be exactly one instance per PID that ran a test,
@@ -33,7 +35,7 @@ def _record(event: str) -> None:
 
 @oxi.fixture(lifetime="session")
 def engine() -> Iterator[str]:
-    """One instance per worker process."""
+    """One instance per task group."""
     instance_id = f"{os.getpid()}-{next(_COUNTER)}"
     _record(f"SETUP {instance_id}")
     yield instance_id
