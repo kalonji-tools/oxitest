@@ -583,7 +583,7 @@ impl Config {
         // misconfigured. A raw `2` would collide with `ExitCode::Interrupted`
         // and mislead CI (see `src/types/exit.rs`).
         if let Err(err) = pyproject::check_no_legacy_keys(&content) {
-            eprintln!("error: {}: {}", pyproject_path, err);
+            eprintln!("error: {pyproject_path}: {err}");
             std::process::exit(crate::types::ExitCode::UsageError.into());
         }
         let tc = match pyproject::parse_oxitest_config(&content) {
@@ -598,7 +598,7 @@ impl Config {
                 pyproject::OxitestConfig::default()
             }
             Err(err) => {
-                eprintln!("error: {}: {}", pyproject_path, err);
+                eprintln!("error: {pyproject_path}: {err}");
                 std::process::exit(crate::types::ExitCode::UsageError.into());
             }
         };

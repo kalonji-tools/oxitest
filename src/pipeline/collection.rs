@@ -1595,8 +1595,7 @@ mod tests {
         let err_msg = errors[0].to_string();
         assert!(
             err_msg.contains("mypkg.a"),
-            "promoted CollectError carries the original diagnostic message so the user sees which subject failed; got: {}",
-            err_msg
+            "promoted CollectError carries the original diagnostic message so the user sees which subject failed; got: {err_msg}"
         );
     }
 
@@ -2352,13 +2351,11 @@ mod tests {
         let msgs: Vec<String> = errors.iter().map(|e| e.to_string()).collect();
         assert!(
             msgs.iter().any(|m| m.contains("mypkg.x")),
-            "the analysis-error hard-fail must name the scanner failure; got: {:?}",
-            msgs
+            "the analysis-error hard-fail must name the scanner failure; got: {msgs:?}"
         );
         assert!(
             msgs.iter().any(|m| m.contains("mypkg.y")),
-            "the coverage-gap hard-fail must name the missing subject; got: {:?}",
-            msgs
+            "the coverage-gap hard-fail must name the missing subject; got: {msgs:?}"
         );
     }
 }

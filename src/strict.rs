@@ -296,7 +296,7 @@ impl std::fmt::Display for SuiteViolation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::MarkerNoDescription { marker_name } => {
-                write!(f, "markers[\"{}\"]   no description", marker_name)
+                write!(f, "markers[\"{marker_name}\"]   no description")
             }
         }
     }
@@ -335,38 +335,32 @@ pub fn per_test_error(v: &PerTestViolation) -> TestOutcome {
                     .collect::<Vec<_>>()
                     .join(", ");
                 let label = if lines.len() == 1 { "line" } else { "lines" };
-                format!("strict: bare assert on {} {}", label, nums)
+                format!("strict: bare assert on {label} {nums}")
             }
         }
         PerTestViolation::BroadFixtureType { detail, .. } => {
-            format!("strict: broad fixture type — {}", detail)
+            format!("strict: broad fixture type — {detail}")
         }
         PerTestViolation::DictParametrize { .. } => {
             "strict: use a frozen dataclass instead of dict for parametrize cases".to_string()
         }
         PerTestViolation::InvalidModuleMark { detail, .. } => {
-            format!("strict: invalid module-level mark {}", detail)
+            format!("strict: invalid module-level mark {detail}")
         }
         PerTestViolation::MissingMarkReason { mark_name, .. } => {
-            format!("strict: @mark.{} requires reason=", mark_name)
+            format!("strict: @mark.{mark_name} requires reason=")
         }
         PerTestViolation::MissingReturnAnnotation { fixture_name, .. } => {
-            format!(
-                "strict: fixture '{}' is missing a return type annotation",
-                fixture_name
-            )
+            format!("strict: fixture '{fixture_name}' is missing a return type annotation")
         }
         PerTestViolation::RegistrarInTestModule { detail, .. } => {
-            format!("strict: registrar in test module — {}", detail)
+            format!("strict: registrar in test module — {detail}")
         }
         PerTestViolation::SingleCaseParametrize { .. } => {
             "strict: @parametrize with a single case — use a plain test instead".to_string()
         }
         PerTestViolation::UnusedFixture { fixture_name, .. } => {
-            format!(
-                "strict: fixture '{}' is defined but never used",
-                fixture_name
-            )
+            format!("strict: fixture '{fixture_name}' is defined but never used")
         }
     };
     TestOutcome::Error(Box::new(crate::types::FailureDiagnostic::sentinel(message)))
@@ -384,7 +378,7 @@ mod tests {
         let toml = format!(
             "[tool.oxitest]\nmarkers = [{}]\n",
             raw.iter()
-                .map(|s| format!("\"{}\"", s))
+                .map(|s| format!("\"{s}\""))
                 .collect::<Vec<_>>()
                 .join(", ")
         );
@@ -549,13 +543,11 @@ mod tests {
             let message = &d.message;
             assert!(
                 !message.ends_with(' '),
-                "message must not have trailing space: {:?}",
-                message
+                "message must not have trailing space: {message:?}"
             );
             assert!(
                 message.contains("strict"),
-                "message must contain 'strict': {:?}",
-                message
+                "message must contain 'strict': {message:?}"
             );
         } else {
             panic!("expected Error outcome");
@@ -571,13 +563,11 @@ mod tests {
         let line = format_violation_line(&v);
         assert!(
             !line.ends_with(' '),
-            "line must not have trailing space: {:?}",
-            line
+            "line must not have trailing space: {line:?}"
         );
         assert!(
             line.contains("bare-assert"),
-            "line must contain 'bare-assert': {:?}",
-            line
+            "line must contain 'bare-assert': {line:?}"
         );
     }
 

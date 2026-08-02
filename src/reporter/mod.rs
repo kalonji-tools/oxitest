@@ -207,8 +207,7 @@ mod json_tests {
         assert!(
             names.iter().position(|n| n.contains("test_a"))
                 < names.iter().position(|n| n.contains("test_b")),
-            "JSON output must be sorted by node_id: got {:?}",
-            names
+            "JSON output must be sorted by node_id: got {names:?}"
         );
     }
 }

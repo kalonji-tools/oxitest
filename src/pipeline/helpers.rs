@@ -77,8 +77,7 @@ pub(super) fn init_session(
             Ok(pair) => pair,
             Err(e) => {
                 let err = crate::types::CollectError::PyError(format!(
-                    "Failed to load conftest fixtures: {}",
-                    e
+                    "Failed to load conftest fixtures: {e}"
                 ));
                 return Err(early_exit_with_error(&[err], &make_reporter));
             }
@@ -88,7 +87,7 @@ pub(super) fn init_session(
         if let Err(e) =
             session.load_plugins(py, &cfg.features.plugins, &cfg.features.plugin_settings)
         {
-            let err = crate::types::CollectError::PyError(format!("Plugin loading failed: {}", e));
+            let err = crate::types::CollectError::PyError(format!("Plugin loading failed: {e}"));
             return Err(early_exit_with_error(&[err], &make_reporter));
         }
 
@@ -101,15 +100,14 @@ pub(super) fn init_session(
             &cfg.features.plugin_cli_values,
         ) {
             let err = crate::types::CollectError::PyError(format!(
-                "Deferred plugin activation failed: {}",
-                e
+                "Deferred plugin activation failed: {e}"
             ));
             return Err(early_exit_with_error(&[err], &make_reporter));
         }
     }
 
     if let Err(e) = session.init_async_backend(py, &cfg.features.async_backend) {
-        let err = crate::types::CollectError::PyError(format!("Async backend init failed: {}", e));
+        let err = crate::types::CollectError::PyError(format!("Async backend init failed: {e}"));
         return Err(early_exit_with_error(&[err], &make_reporter));
     }
 

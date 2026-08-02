@@ -22,12 +22,9 @@ pub(crate) fn print_collected(total: usize, fn_count: usize, async_count: usize)
         String::new()
     };
     if async_count > 0 {
-        println!(
-            "collected {} item{}{} ({} async)\n",
-            total, suffix, from_fns, async_count
-        );
+        println!("collected {total} item{suffix}{from_fns} ({async_count} async)\n");
     } else {
-        println!("collected {} item{}{}\n", total, suffix, from_fns);
+        println!("collected {total} item{suffix}{from_fns}\n");
     }
 }
 
@@ -44,7 +41,7 @@ pub(crate) fn print_summary_section(
         opts.use_color,
     );
     let summary = fmt_summary(stats, collect_errors.len(), opts.use_color);
-    println!("\n{}", summary);
+    println!("\n{summary}");
     if let Some(n) = opts.show_durations {
         let slowest = stats.slowest(n);
         if !slowest.is_empty() {
@@ -104,10 +101,10 @@ pub(crate) fn print_summary_section(
         }
     }
     if !tip_block.is_empty() {
-        print!("{}", tip_block);
+        print!("{tip_block}");
     }
     if !warn_block.is_empty() {
-        print!("{}", warn_block);
+        print!("{warn_block}");
     }
     if !tip_block.is_empty() || !warn_block.is_empty() {
         println!(
@@ -129,7 +126,7 @@ pub(crate) fn print_collect_errors(collect_errors: &[CollectError], use_color: b
         println!("{}", colors::color_dim(&"═".repeat(sep_width()), use_color));
         let last = collect_errors.len() - 1;
         for (i, ce) in collect_errors.iter().enumerate() {
-            println!("{}", ce);
+            println!("{ce}");
             if i < last {
                 println!();
             }
@@ -146,9 +143,9 @@ pub(crate) fn print_strict_suite_section(opts: &ReporterOpts) {
                 opts.use_color,
             )
         );
-        println!("\n{}", hdr);
+        println!("\n{hdr}");
         for line in &opts.strict_suite_lines {
-            println!("  {}", line);
+            println!("  {line}");
         }
     }
 }
@@ -157,7 +154,7 @@ pub(crate) fn print_strict_abort(formatted_lines: &[String], use_color: bool) {
     println!("\nSTRICT VIOLATIONS");
     println!("{}", colors::color_dim(&"═".repeat(sep_width()), use_color));
     for line in formatted_lines {
-        println!("  {}", line);
+        println!("  {line}");
     }
     println!("strict violations found — aborting (exit 3)");
 }

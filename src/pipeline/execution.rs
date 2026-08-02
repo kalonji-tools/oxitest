@@ -289,7 +289,7 @@ impl<'a> ExecutionDispatch<'a> {
                                 interrupted = true;
                                 end_scope(
                                     rep,
-                                    format!("end_module({})", module_path),
+                                    format!("end_module({module_path})"),
                                     session.end_module(*py, module_path),
                                 );
                                 break 'run;
@@ -297,14 +297,14 @@ impl<'a> ExecutionDispatch<'a> {
                         }
                         end_scope(
                             rep,
-                            format!("end_module({})", module_path),
+                            format!("end_module({module_path})"),
                             session.end_module(*py, module_path),
                         );
                     }
                     let package = group.label();
                     end_scope(
                         rep,
-                        format!("end_package({})", package),
+                        format!("end_package({package})"),
                         session.end_package(*py, package),
                     );
                 }

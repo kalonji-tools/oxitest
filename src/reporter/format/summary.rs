@@ -120,7 +120,7 @@ pub(crate) fn fmt_summary(stats: &RunStats, collect_err_count: usize, use_color:
         parts.push("no tests ran".to_string());
     }
     let middle = parts.join(" · ");
-    format!("{}\n  {}\n{}", sep, middle, sep)
+    format!("{sep}\n  {middle}\n{sep}")
 }
 
 pub(crate) fn fmt_tip_block(
@@ -238,7 +238,7 @@ pub(crate) fn fmt_diagnostics_block(
         };
 
         let count_suffix = if count > 1 {
-            format!(" (×{})", count)
+            format!(" (×{count})")
         } else {
             String::new()
         };

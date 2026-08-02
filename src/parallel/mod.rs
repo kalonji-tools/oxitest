@@ -412,7 +412,7 @@ mod worker_count_tests {
                 assert_eq!(cmp.right, "2");
                 assert_eq!(cmp.op, "==");
             }
-            other => panic!("Expected Failed, got {:?}", other),
+            other => panic!("Expected Failed, got {other:?}"),
         }
     }
 
@@ -434,7 +434,7 @@ mod worker_count_tests {
                 assert_eq!(d.lineno, crate::types::LineNo::new(5));
                 assert_eq!(d.source_line, "import bad");
             }
-            other => panic!("Expected Error, got {:?}", other),
+            other => panic!("Expected Error, got {other:?}"),
         }
     }
 

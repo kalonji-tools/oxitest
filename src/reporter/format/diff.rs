@@ -28,9 +28,9 @@ fn fmt_single_line_diff(left: &str, right: &str, op: &str, use_color: bool) -> S
             " ".repeat(prefix_len),
             color_dim(&marker, use_color)
         );
-        format!("{}\n{}\n{}\n", left_line, right_line, marker_line)
+        format!("{left_line}\n{right_line}\n{marker_line}\n")
     } else {
-        format!("{}\n{}\n", left_line, right_line)
+        format!("{left_line}\n{right_line}\n")
     }
 }
 
