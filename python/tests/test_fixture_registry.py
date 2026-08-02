@@ -499,6 +499,236 @@ def _module_def(
     )
 
 
+# ── FixtureRegistry: shadow notice is visibility-aware (#1766) ────────────────
+
+
+def _inline_def(name: str, module_path: str) -> FixtureDef[Any]:
+    """An inline FixtureDef — the anchor is the test module itself (Rule 1).
+
+    ``anchor_package_path == defining_module_path`` is exactly what marks a
+    declaration inline, so the two arguments are deliberately the same value.
+    """
+    return FixtureDef(
+        name=name,
+        fixture_type=object,
+        scope=FixtureScope.EACH,
+        source=ModuleSource(
+            func=lambda: None,
+            defining_module_path=module_path,
+            anchor_package_path=module_path,
+            lifetime=Lifetime.FUNCTION,
+        ),
+        namespace=module_path.rsplit("/", 1)[-1].removesuffix(".py"),
+    )
+
+
+def _registration_notices(diags: list[Diagnostic]) -> list[str]:
+    """Messages of the fixture-registration diagnostics, in emission order."""
+    return [d.message for d in diags if d.context == "fixture registration"]
+
+
+def test_disjoint_package_anchors_emit_no_shadow_notice(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """`tests/api/v1` and `tests/admin/v1` are mutually invisible (#1766)."""
+    # Arrange
+    registry = FixtureRegistry()
+
+    # Act
+    registry.register(_module_def("thing", "v1", "/t/api/v1"))
+    registry.register(_module_def("thing", "v1", "/t/admin/v1"))
+
+    # Assert
+    notices = _registration_notices(diag_collector)
+    assert notices == [], (
+        "no test can resolve both declarations, so neither overrides the other "
+        "— a notice here tells the user to rename a fixture that is not in "
+        f"conflict with anything; got {notices}"
+    )
+
+
+def test_disjoint_inline_anchors_emit_no_shadow_notice(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """Two test modules declaring the same inline fixture name (#1766)."""
+    # Arrange
+    registry = FixtureRegistry()
+
+    # Act
+    registry.register(_inline_def("client", "/t/test_alpha.py"))
+    registry.register(_inline_def("client", "/t/test_beta.py"))
+
+    # Assert
+    notices = _registration_notices(diag_collector)
+    assert notices == [], (
+        "an inline declaration reaches only its own module, so two modules "
+        "picking the same fixture name never collide. This is the volume case: "
+        "n modules sharing a name would otherwise emit n-1 false notices; "
+        f"got {notices}"
+    )
+
+
+def test_the_nearer_package_is_named_as_the_shadower(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """Direction follows resolution, not registration order (#1766).
+
+    Registration walks deepest-first, so the rootdir declaration arrives last —
+    but ``_deepest_visible`` hands tests in ``/t/api`` the *api* declaration.
+    A message keyed on arrival order names the loser as the winner.
+    """
+    # Arrange
+    registry = FixtureRegistry()
+
+    # Act
+    registry.register(_module_def("thing", "api", "/t/api"))
+    registry.register(_module_def("thing", "t", "/t"))
+
+    # Assert
+    notices = _registration_notices(diag_collector)
+    assert len(notices) == 1, (
+        f"the two anchors overlap, so exactly one real clash exists; got {notices}"
+    )
+    assert notices[0].index("/t/api/__fixtures__.py") < notices[0].index(
+        "/t/__fixtures__.py"
+    ), (
+        "the shadower is named first in the message, and the shadower is the "
+        "def resolution actually returns — reporting the rootdir declaration "
+        "as the shadower sends the user to edit the file that already lost: "
+        f"{notices[0]!r}"
+    )
+
+
+def test_an_anchored_shadower_reports_the_subtree_it_shadows_within(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """A package declaration overrides a conftest one only inside its own tree."""
+    # Arrange
+    registry = FixtureRegistry()
+    conftest = helpers.make_fixture_def(
+        "thing", namespace="db", conftest_path="/t/conftest.py"
+    )
+
+    # Act
+    registry.register(conftest)
+    registry.register(_module_def("thing", "api", "/t/api"))
+
+    # Assert
+    notices = _registration_notices(diag_collector)
+    assert len(notices) == 1, (
+        f"a conftest def is ambient, so the package def does clash; got {notices}"
+    )
+    assert notices[0].endswith("within /t/api"), (
+        "without the subtree the notice reads as a run-wide override, and the "
+        "user goes looking for a break that does not exist — tests outside "
+        f"/t/api still resolve the conftest definition: {notices[0]!r}"
+    )
+
+
+def test_an_unanchored_shadower_reports_no_subtree(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """Conftest-over-conftest is run-wide, so there is no subtree to name."""
+    # Arrange
+    registry = FixtureRegistry()
+
+    # Act
+    registry.register(helpers.make_fixture_def("db", conftest_path="/t/conftest.py"))
+    registry.register(
+        helpers.make_fixture_def("db", conftest_path="/t/unit/conftest.py")
+    )
+
+    # Assert
+    notices = _registration_notices(diag_collector)
+    assert len(notices) == 1, f"one override, one notice; got {notices}"
+    assert "within" not in notices[0], (
+        "a conftest fixture is ambient, so appending a subtree would claim a "
+        "boundary the legacy API does not have — and this message is the one "
+        f"docs and users already know verbatim: {notices[0]!r}"
+    )
+
+
+def test_a_spanning_declaration_clashes_with_every_disjoint_prior(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """Two mutually invisible priors are both real clashes for a def above them.
+
+    Comparing only the last-registered prior was harmless while every pair
+    emitted — the chain covered everything. Once disjoint pairs are suppressed
+    it is not: `/t/admin/v1` is never compared and its override goes unreported.
+    """
+    # Arrange
+    registry = FixtureRegistry()
+
+    # Act
+    registry.register(_module_def("thing", "v1", "/t/admin/v1"))
+    registry.register(_module_def("thing", "v1", "/t/api/v1"))
+    registry.register(_module_def("thing", "t", "/t"))
+
+    # Assert
+    notices = _registration_notices(diag_collector)
+    assert len(notices) == 2, (
+        "the rootdir declaration is overridden in both subtrees and neither "
+        "subtree shadows the other, so both are maximal and both must be "
+        f"reported; got {notices}"
+    )
+    assert all("/t/__fixtures__.py" in notice for notice in notices), (
+        f"every notice here is about the rootdir def being shadowed; got {notices}"
+    )
+
+
+def test_a_conftest_chain_reports_consecutive_pairs_only(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """Three conftests declaring one name emit two notices, not three.
+
+    Every unanchored pair overlaps, so an all-pairs rule would add a
+    root-versus-leaf notice that says nothing the chain has not already said —
+    noise added by a fix whose purpose is removing noise.
+    """
+    # Arrange
+    registry = FixtureRegistry()
+
+    # Act
+    for path in ("/t/conftest.py", "/t/unit/conftest.py", "/t/unit/api/conftest.py"):
+        registry.register(helpers.make_fixture_def("db", conftest_path=path))
+
+    # Assert
+    notices = _registration_notices(diag_collector)
+    assert len(notices) == 2, (
+        "a three-link chain has two overrides; reporting the transitive pair "
+        f"as well would change long-standing conftest output; got {notices}"
+    )
+
+
+def test_many_disjoint_inline_declarations_stay_silent(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """The suppression path at the scale a real suite reaches (#1853).
+
+    Every other test here registers at most three defs, which exercises the
+    predicate but not the scan around it. `register` compares each incoming def
+    against every prior sharing the name, so this is the shape whose cost grows
+    — and one module per inline fixture name is the ordinary case, not a
+    pathological one.
+    """
+    # Arrange
+    registry = FixtureRegistry()
+    declarations = [_inline_def("client", f"/t/pkg/test_mod{i}.py") for i in range(200)]
+
+    # Act
+    for declaration in declarations:
+        registry.register(declaration)
+
+    # Assert
+    notices = _registration_notices(diag_collector)
+    assert notices == [], (
+        "200 test modules each declaring their own 'client' collide with "
+        "nothing — every anchor is a distinct file. One notice here means the "
+        f"scan reintroduced per-pair reporting; got {len(notices)}"
+    )
+
+
 def test_same_basename_siblings_resolve_to_their_own_anchor() -> None:
     """`tests/api/v1` and `tests/admin/v1` both derive the namespace 'v1'."""
     # Arrange
