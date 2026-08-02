@@ -41,9 +41,13 @@ class _TeardownRecorder:
             message = "boom"
             raise RuntimeError(message)
 
-    def end_session(self) -> None:
-        """Record the session drain."""
-        self.calls.append("end_session")
+    def end_task(self) -> None:
+        """Record the task drain."""
+        self.calls.append("end_task")
+
+    def end_process(self) -> None:
+        """Record the process drain."""
+        self.calls.append("end_process")
 
 
 def test_matching_version_is_accepted() -> None:
@@ -107,20 +111,26 @@ def test_mismatch_message_names_both_versions_and_the_fix() -> None:
     )
 
 
-def test_end_module_fires_per_module_then_end_session_once() -> None:
-    """Every module drains before the session does."""
+def test_end_module_fires_per_module_then_the_wider_drains_once() -> None:
+    """Every module drains before the task does, and the task before the process."""
     # Arrange
     target = _TeardownRecorder()
 
     # Act
     _end_task_session(target, ["a.py", "b.py"])
 
-    # Assert — a package-lifetime fixture disposes at the session drain, so
-    # every module's teardown must run before it; otherwise a wider value would
-    # already be gone while a module teardown could still reach it.
-    assert target.calls == ["end_module:a.py", "end_module:b.py", "end_session"], (
+    # Assert — a package-lifetime fixture disposes at the task drain, so every
+    # module's teardown must run before it; otherwise a wider value would
+    # already be gone while a module teardown could still reach it. The same
+    # argument one tier up puts end_process last (#1777).
+    assert target.calls == [
+        "end_module:a.py",
+        "end_module:b.py",
+        "end_task",
+        "end_process",
+    ], (
         "module teardown must complete for every module in the task before the "
-        "session drains"
+        "task drains, and the task before the process"
     )
 
 
@@ -132,11 +142,15 @@ def test_end_task_session_continues_after_a_failing_end_module() -> None:
     # Act
     _end_task_session(target, ["a.py", "b.py"])
 
-    # Assert — skipping end_session would leak every session-lifetime resource
-    # in the run, which is the bug #1728 fixed for the single-module case.
-    assert target.calls == ["end_module:a.py", "end_module:b.py", "end_session"], (
-        "a failing end_module must not skip the modules after it or the session drain"
-    )
+    # Assert — skipping the wider drains would leak every task- and
+    # process-lifetime resource in the run, which is the bug #1728 fixed for
+    # the single-module case.
+    assert target.calls == [
+        "end_module:a.py",
+        "end_module:b.py",
+        "end_task",
+        "end_process",
+    ], "a failing end_module must not skip the modules after it or the wider drains"
 
 
 def test_end_task_session_drains_each_module_exactly_once() -> None:
@@ -153,7 +167,8 @@ def test_end_task_session_drains_each_module_exactly_once() -> None:
         "end_module:a.py",
         "end_module:b.py",
         "end_module:c.py",
-        "end_session",
+        "end_task",
+        "end_process",
     ], "each module must be drained once, in the order the task listed them"
 
 

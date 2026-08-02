@@ -283,10 +283,10 @@ def test_failing_module_teardown_is_reported(tmp: TempDir) -> None:
 
 
 def test_failing_shared_teardown_is_reported(tmp: TempDir) -> None:
-    """The same guarantee at ``end_session`` for the old shared=True API.
+    """The same guarantee at ``end_task`` for the old shared=True API.
 
     Pre-existing gap with the same root cause: nothing drained diagnostics
-    after ``end_session``, so a shared fixture's teardown failure was lost on
+    after ``end_task``, so a shared fixture's teardown failure was lost on
     every run.
     """
     (tmp / "conftest.py").write_text(
@@ -313,7 +313,7 @@ def test_failing_shared_teardown_is_reported(tmp: TempDir) -> None:
     )
     assert "shared teardown boom" in out, (
         "the shared fixture's teardown failure was swallowed — diagnostics "
-        f"must be drained after end_session too\nstdout:\n{out}"
+        f"must be drained after end_task too\nstdout:\n{out}"
     )
 
 

@@ -69,7 +69,9 @@ if TYPE_CHECKING:
 
         def end_module(self, module_path: str, /) -> None: ...
 
-        def end_session(self) -> None: ...
+        def end_task(self) -> None: ...
+
+        def end_process(self) -> None: ...
 
     class _RegistryOwner(Protocol):
         """Just the registry, so fixture registration can take a stub."""
@@ -325,16 +327,22 @@ def _end_task_session(session: _TeardownTarget, module_paths: list[str]) -> None
     """Drain the task's fixture session, mirroring the serial path's teardown.
 
     Fires ``end_module`` for every module the task carried, in task order, then
-    ``end_session`` once. Ordering matters: a wider-lifetime fixture disposes at
-    the session drain, so every module teardown must finish first or a module
+    ``end_task`` once. Ordering matters: a wider-lifetime fixture disposes at
+    the task drain, so every module teardown must finish first or a module
     teardown could reach a value that is already gone.
 
+    ``end_process`` follows immediately here only because the session is still
+    built per task; #1777 moves that call to ``main()``'s ``finally``, which is
+    the whole point of the seam. Until then the pair stays adjacent so this
+    commit changes no behaviour.
+
     Each drain gets its own ``try`` so a failing ``end_module`` cannot skip the
-    modules after it or ``end_session``.
+    modules after it, or ``end_task``, or ``end_process``.
     """
     for path in module_paths:
         _drain(f"end_module({path})", session.end_module, path)
-    _drain("end_session", session.end_session)
+    _drain("end_task", session.end_task)
+    _drain("end_process", session.end_process)
 
 
 def _drain(context: str, teardown: Callable[..., None], *args: str) -> None:
@@ -369,7 +377,7 @@ def main() -> None:
     # Install before the first task, not per task. Every collector downstream
     # defers to an already-active one: conftest_loader only installs a temporary
     # list when none exists, FixtureSession.__init__ only claims the var when
-    # none is active, and end_session only clears it when that session was the
+    # none is active, and end_process only clears it when that session was the
     # one that set it. So this single set survives every task — which is right,
     # because a worker's pipe lives exactly as long as the process (#1840).
     from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var

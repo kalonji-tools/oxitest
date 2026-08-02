@@ -44,7 +44,7 @@ def test_parallel_reports_kept_tmp_notices() -> None:
     """The other payload #1840 loses: a NOTICE, not a teardown failure.
 
     Scope, stated precisely because it was measured rather than assumed: this
-    pins the *sink*, not the tail window. A worker emits one ``end_session``
+    pins the *sink*, not the tail window. A worker emits one ``end_task``
     per task group, and with more modules than workers most of those land in a
     non-final group, where the next group's drain still collects them. Disabling
     the tail read leaves this test green while the parity test below goes red.

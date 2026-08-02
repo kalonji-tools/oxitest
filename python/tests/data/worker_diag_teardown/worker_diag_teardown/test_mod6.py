@@ -5,7 +5,7 @@ from oxitest import Fixture, TempDirFactory
 
 def test_six(exploding: Fixture[str], factory: TempDirFactory) -> None:
     # The factory is session-scoped, so --keep-tmp makes its teardown emit a
-    # NOTICE at end_session. That exercises the non-teardown-failure half of
+    # NOTICE at end_task. That exercises the non-teardown-failure half of
     # what #1840 loses; which drain picks it up depends on whether this module
     # lands in a worker's final task group.
     factory.mktemp("kept")

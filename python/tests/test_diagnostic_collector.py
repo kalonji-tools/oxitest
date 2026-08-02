@@ -178,7 +178,11 @@ def test_session_sets_and_clears_diagnostic_collector() -> None:
 
 
 def test_session_end_clears_diagnostic_collector() -> None:
-    """FixtureSession.end_session() clears _diagnostic_collector_var."""
+    """FixtureSession.end_process() clears _diagnostic_collector_var.
+
+    The contextvar is process-global, so #1777 put its restore on the process
+    rung rather than the per-task one.
+    """
     token = _diagnostic_collector_var.set(None)
     try:
         session = FixtureSession([], PluginRegistry())
@@ -188,11 +192,11 @@ def test_session_end_clears_diagnostic_collector() -> None:
             "FixtureSession should set the diagnostic collector ContextVar"
         )
 
-        session.end_session()
+        session.end_process()
 
-        # Collector should be cleared after end_session
+        # Collector should be cleared after end_process
         assert _diagnostic_collector_var.get() is None, (
-            "end_session should clear the diagnostic collector ContextVar"
+            "end_process should clear the diagnostic collector ContextVar"
         )
     finally:
         _diagnostic_collector_var.reset(token)

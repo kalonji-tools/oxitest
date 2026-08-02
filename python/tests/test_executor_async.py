@@ -553,7 +553,7 @@ def test_shared_async_fixture_provides_value(tmp: TempDir) -> None:
             session=session,
         )
     finally:
-        session.end_session()
+        session.end_task()
     helpers.assert_result(
         result,
         PassedResult,
@@ -594,7 +594,7 @@ def test_shared_async_fixture_cached_across_tests(tmp: TempDir) -> None:
         r1 = helpers.run_test(str(f), "test_a", session)
         r2 = helpers.run_test(str(f), "test_b", session)
     finally:
-        session.end_session()
+        session.end_task()
     helpers.assert_result(
         r1,
         PassedResult,
@@ -668,11 +668,11 @@ def test_shared_async_stray_task_cleanup(tmp: TempDir) -> None:
         f" cancel them -- silent cleanup hides concurrency bugs, got"
         f" {session.diagnostics!r}"
     )
-    session.end_session()
+    session.end_task()
 
 
 def test_shared_async_yield_fixture_teardown_at_session_end(tmp: TempDir) -> None:
-    """Shared async yield fixture teardown runs when end_session is called."""
+    """Shared async yield fixture teardown runs when end_task is called."""
     f = tmp / "test_shared_td.py"
     f.write_text(
         "from oxitest import Fixture\n"
@@ -705,14 +705,14 @@ def test_shared_async_yield_fixture_teardown_at_session_end(tmp: TempDir) -> Non
         " -- failure here invalidates the teardown-timing assertions below",
     )
     assert log == ["setup"], (
-        f"shared fixture teardown must be deferred until end_session -- running it"
+        f"shared fixture teardown must be deferred until end_task -- running it"
         f" after "
         f"individual tests would destroy the value other tests still need, got {log!r}"
     )
 
-    session.end_session()
+    session.end_task()
     assert log == ["setup", "teardown"], (
-        f"end_session is the last chance to release shared resources -- skipping"
+        f"end_task is the last chance to release shared resources -- skipping"
         f" teardown "
         f"here leaks connections, temp files, or background tasks, got {log!r}"
     )
@@ -749,7 +749,7 @@ def test_non_shared_async_test_gets_own_loop(tmp: TempDir) -> None:
         r1 = helpers.run_test(str(f), "test_shared", session)
         r2 = helpers.run_test(str(f), "test_independent", session)
     finally:
-        session.end_session()
+        session.end_task()
     helpers.assert_result(
         r1,
         PassedResult,
@@ -864,7 +864,7 @@ def test_sync_fixture_depending_on_async_fixture_error(tmp: TempDir) -> None:
             session=session,
         )
     finally:
-        session.end_session()
+        session.end_task()
     result = helpers.assert_result(
         result,
         ErrorResult,
@@ -910,7 +910,7 @@ def test_shared_async_depending_on_non_shared_async_error(tmp: TempDir) -> None:
             session=session,
         )
     finally:
-        session.end_session()
+        session.end_task()
     result = helpers.assert_result(
         result,
         ErrorResult,
