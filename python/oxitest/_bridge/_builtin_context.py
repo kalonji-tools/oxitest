@@ -156,7 +156,21 @@ class TestContext:
 
     @property
     def param(self) -> Any:
-        """Current parametrize case value, or ``None`` if not parametrized."""
+        """Always ``None``. Use :attr:`param_id` to identify the current case.
+
+        This is not a "not parametrized" answer — it is ``None`` for
+        parametrized tests too. ``_param`` is assigned once in ``__init__`` and
+        never written again, on any path.
+
+        Not populated rather than removed: the case *value* has no single
+        meaning across the two parametrize forms. A dataclass case is one
+        object, but a dict case (``@oxi.parametrize(one={"n": 1})``) is a
+        mapping that is spread across several parameters, and the test already
+        receives each of them by name. Deciding what one attribute should
+        return for both — and threading it from ``resolve_parametrize`` through
+        ``resolve_for_test`` to reach here — is a design change, not a bug fix.
+        Until someone needs it, saying so beats a second silent ``None``.
+        """
         return self._param
 
     def addfinalizer(self, fn: Callable[[], None]) -> None:
