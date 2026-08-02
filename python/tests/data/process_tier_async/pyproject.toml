@@ -1,0 +1,9 @@
+[tool.oxitest]
+testpaths = ["process_tier_async"]
+python_files = ["test_*.py"]
+strict = "abort"
+# Four modules and no arrangement, so a two-worker run gives at least one
+# worker more than one task group — the only shape where a process-lifetime
+# teardown firing at the task boundary is observable.
+auto_arrange = false
+min_parallel_tests = 1

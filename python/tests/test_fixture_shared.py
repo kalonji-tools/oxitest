@@ -120,6 +120,7 @@ def test_shared_fixture_teardown_runs_on_end_task() -> None:
     session.end_module("t.py")
     assert not torn_down, "teardown must not run at end_module for shared fixtures"
     session.end_task()
+    session.end_process()
     assert torn_down == [True], "teardown must run at end_task"
 
 
