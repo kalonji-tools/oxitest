@@ -37,6 +37,8 @@ _CROSS = _DATA_ROOT / "slice6_cross_boundary"
 _UNKNOWN = _DATA_ROOT / "slice6_unknown_namespace"
 _DEPENDENCY = _DATA_ROOT / "slice6_dependency_anchor"
 _INJECTION = _DATA_ROOT / "slice6_injection_boundary"
+_TYPE_INDEX_GUARD = _DATA_ROOT / "b1_type_index_guard"
+_TYPE_INDEX_GUARD_ANCHOR = _TYPE_INDEX_GUARD / "b1_type_index_guard" / "vault"
 
 #: 1 in test_root.py + 2 in api/test_api.py + 2 in api/v1/test_v1.py
 #: + 1 in admin/v1/test_admin_v1.py. The rootdir one is not decoration:
@@ -66,6 +68,11 @@ _PARALLEL = RunMode(label="-n 2", args=("-n", "2"))
 #: invocation; a regression that turned a boundary violation into a collection
 #: abort would silently change that verdict.
 _EXIT_FAILURE = 1
+
+#: ``ExitCode::CollectError`` (``src/types/exit.rs``). Distinguishing it from
+#: ``_EXIT_FAILURE`` is the entire point of the #1768 guard below: the two
+#: verdicts differ by *when* the refusal happened, and that is the coupling.
+_EXIT_COLLECT_ERROR = 3
 
 
 @oxi.parametrize(serial=_SERIAL, parallel=_PARALLEL)
@@ -268,4 +275,79 @@ def test_a_fixture_cannot_depend_below_its_own_anchor() -> None:
         f"without that, 'api' might simply have failed to register and the "
         f"failure above would be about absence, not about the anchor; "
         f"got:\n{output}"
+    )
+
+
+def test_the_collection_validator_stays_name_based() -> None:
+    """Pin the coupling that keeps the unfiltered `_by_type` index harmless (#1768).
+
+    ``FixtureInstantiator.resolve_param`` resolves ``Fixture[T]`` by *type*
+    first, through ``FixtureRegistry.resolve``, which reads ``_by_type`` — an
+    index with no B1 filtering, unlike ``get_visible``. That type hit is
+    discarded today only because ``FixtureValidator.validate_fixture_names``
+    rejects, at collection time, any ``Fixture[T]`` parameter whose *name*
+    matches no registered fixture, however well its type matches. B1 survives
+    the index by an accident of ordering, not by construction, and this test is
+    where that accident is written down.
+
+    ``pool`` is registered nowhere; ``LedgerHandle`` is registered exactly once,
+    in a package ``audit/`` cannot see. One candidate of that type is
+    deliberate — ``resolve`` short-circuits on a lone candidate without
+    consulting the qualifier at all, which is the case closest to the type index
+    having the final say.
+
+    Drop the name branch from ``validate_fixture_names`` and both halves of the
+    verdict move: the run stops exiting 3 and ERRORs a *test* instead, and the
+    message starts naming ``vault_ledger`` — a fixture ``audit/test_audit.py``
+    never mentions, chosen for it by the type index. B1 itself still holds one
+    step further on, at ``resolve_fixture``'s ``get_visible``; that residual
+    guard is why #1768 is a latent hazard rather than a live bypass, and why the
+    *verdict* is the only thing there is to pin. There is no observable for
+    "resolution consulted ``_by_name`` before ``_by_type``" short of
+    monkeypatching.
+
+    If a future slice has to delete this test to make type-only resolution work,
+    the deletion is the moment to filter ``_by_type`` through the visibility
+    predicate — option 1 in #1768, deliberately not done here because filtering
+    an index nothing consults yet buys a scan and no behaviour.
+
+    No ``-n 2`` case, unlike the rest of this file: the refusal happens in the
+    Rust ``FixtureValidationPhase`` before any worker is spawned, so there is no
+    per-worker registration for the parallel path to disagree about. Verified —
+    ``-n 2`` produces the same exit 3 and the same message.
+    """
+    # Act
+    stdout, stderr, rc = helpers.run_oxitest(
+        _TYPE_INDEX_GUARD, cwd=str(_TYPE_INDEX_GUARD)
+    )
+    output = stdout + stderr
+    anchor_stdout, anchor_stderr, anchor_rc = helpers.run_oxitest(
+        _TYPE_INDEX_GUARD_ANCHOR, cwd=str(_TYPE_INDEX_GUARD)
+    )
+    anchor_output = anchor_stdout + anchor_stderr
+
+    # Assert
+    assert anchor_rc == 0 and "1 passed" in anchor_output, (
+        f"the anchor package's own injection must resolve — it is what proves "
+        f"LedgerHandle has a registered, injectable match, so the refusal below "
+        f"is about the parameter's name rather than about a type nothing "
+        f"provides\nstdout:\n{anchor_stdout}\nstderr:\n{anchor_stderr}"
+    )
+    assert rc == _EXIT_COLLECT_ERROR, (
+        f"a Fixture[T] parameter whose name matches nothing must be refused at "
+        f"collection, not at run time. Exit {_EXIT_FAILURE} here means the "
+        f"validator stopped being name-based and the refusal slid downstream to "
+        f"resolution, where the only thing still holding B1 is get_visible — "
+        f"see #1768\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    )
+    assert "fixture 'pool' not found" in output, (
+        f"the refusal must name the parameter the test actually wrote; naming "
+        f"anything else means the name was resolved to something before being "
+        f"reported; got:\n{output}"
+    )
+    assert "vault_ledger" not in output, (
+        f"the type-resolved fixture must never reach the user's screen. It is "
+        f"anchored where this test cannot see it, so a message naming it is the "
+        f"tell that the unfiltered _by_type index got the final say — the exact "
+        f"bypass #1768 exists to keep unreachable; got:\n{output}"
     )
