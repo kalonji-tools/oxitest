@@ -125,9 +125,9 @@ mod prewarm_tests {
         let pids: Vec<u32> = workers.iter().map(|(c, _, _)| c.id()).collect();
         let taken = {
             let mut guard = super::PoolGuard::new(workers);
-            let taken = guard.take();
-            // guard drops here — no workers left, so no kill
-            taken
+            // take() empties the guard, so the drop at the end of this block
+            // has no workers left to kill
+            guard.take()
         };
         // Workers must still be alive (or at least not waited) after guard drop.
         // Kill them manually now.

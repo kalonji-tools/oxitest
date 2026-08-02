@@ -53,7 +53,7 @@ check: (_log _blue "Running static checks...")
     cargo fmt --check
     ruff check python/
     ty check
-    cargo clippy -- -D warnings
+    cargo clippy --all-targets -- -D warnings
     codespell --toml pyproject.toml
 
 # Validate lock files match manifests (matches prek pre-push hooks)

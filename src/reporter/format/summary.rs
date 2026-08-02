@@ -291,8 +291,10 @@ mod tests {
         counts.by_kind[OutcomeKind::Warned as usize] = warned;
         counts.by_kind[OutcomeKind::XFailed as usize] = xfailed;
         counts.by_kind[OutcomeKind::XPassed as usize] = xpassed;
-        let mut strict = crate::reporter::stats::StrictCounts::default();
-        strict.xpassed_strict = xpassed_strict;
+        let strict = crate::reporter::stats::StrictCounts {
+            xpassed_strict,
+            ..Default::default()
+        };
         RunStats {
             counts,
             strict,
