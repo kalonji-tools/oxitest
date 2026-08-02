@@ -54,3 +54,11 @@ all = { level = "deny", priority = -1 }
 # Nursery, so `all` misses it. `deny` not `warn` — `warnings = "deny"` above
 # escalates either spelling to an error anyway (measured, #1817).
 redundant_clone = "deny"
+# `restriction` group, so `all` misses these too. All four measured at zero hits
+# on `main` — ratchets against new code, not a cleanup. `exit` is the
+# load-bearing one: it keeps `std::process::exit` from silently bypassing the
+# semver-protected exit-code contract and the `ExitVote` mechanism (#1829).
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+exit = "deny"
