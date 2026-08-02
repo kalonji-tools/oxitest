@@ -1,0 +1,12 @@
+[tool.oxitest]
+testpaths = ["process_tier_coordinator"]
+python_files = ["test_*.py"]
+strict = "abort"
+# Force parallelism regardless of test count, so the coordinator is one process
+# among several rather than the only one.
+min_parallel_tests = 1
+# auto_arrange stays ON — deliberately. The `shared=True` fixture below makes
+# the arrange stage pin its modules to the coordinator, which is what gives the
+# coordinator a *second* serial phase alongside the inprocess one. With
+# arrangement disabled there is only one such phase and the per-phase drain
+# this project exists to catch is unobservable.
