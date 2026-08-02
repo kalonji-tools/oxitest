@@ -14,6 +14,10 @@ $ oxitest --json results.json
 
 oxitest writes the file at the end of the run. If the file already exists, oxitest overwrites it.
 
+**The file is always written.** If `--json PATH` was passed, `PATH` exists once oxitest exits,
+whatever the exit code — including runs that abort before a single test executes. A missing
+artifact therefore means the job never started, never that it started and failed.
+
 ## Schema
 
 ```json
@@ -77,3 +81,40 @@ oxitest writes the file at the end of the run. If the file already exists, oxite
 | `Flaky` | `passed` |
 
 oxitest sorts tests in the output file alphabetically by `name`.
+
+## Aborted runs
+
+A run can end before any test executes — a test file that fails to import, a `conftest.py` that
+raises, a plugin that fails to load, or a `--strict=abort` violation. oxitest still writes the CTRF
+file, and each such error appears as its own `failed` entry:
+
+```json
+{
+  "results": {
+    "tool": { "name": "oxitest" },
+    "summary": { "tests": 1, "passed": 0, "failed": 1, "skipped": 0, "other": 0 },
+    "tests": [
+      {
+        "name": "tests/test_example.py",
+        "status": "failed",
+        "duration": 0.0,
+        "message": "collection error in tests/test_example.py:\n…ModuleNotFoundError: No module named 'requests'"
+      }
+    ]
+  }
+}
+```
+
+| Field | Value for an aborted run |
+|-------|--------------------------|
+| `tests[].name` | The failing file's path for a collection error, the node ID for a `--strict=abort` violation, or `<collection>` for an error that names no file. Never a node ID that could belong to a real test. |
+| `tests[].status` | Always `"failed"` |
+| `tests[].duration` | `0.0` — nothing ran |
+| `tests[].message` | The same text the console prints |
+| `results.summary.failed` | The number of errors, so a dashboard summing failures sees a red run rather than an empty one |
+
+These entries are counted in `summary.tests` and `summary.failed`. The pass rate for such a run is
+`0` of `N`, which is accurate: no test executed.
+
+`--junit-xml` does not yet do this — an aborted run produces an empty `<testsuites>`. Use `--json`
+if your CI needs the aborted-run signal.
