@@ -482,7 +482,7 @@ X = 42
         fs::write(root.join(".gitignore"), "build/\n").unwrap();
 
         let mr = ModuleRoot {
-            root: root.clone(),
+            root,
             use_gitignore: true,
         };
         let candidates = mr.source_root_candidates();
@@ -519,7 +519,7 @@ X = 42
         fs::write(root.join(".gitignore"), "build/\n").unwrap();
 
         let mr = ModuleRoot {
-            root: root.clone(),
+            root,
             use_gitignore: false,
         };
         let candidates = mr.source_root_candidates();

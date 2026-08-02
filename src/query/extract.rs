@@ -347,7 +347,7 @@ mod tests {
     fn combined_extraction_matches_separate() {
         let f = write_temp_py("import oxitest as oxi\n\n@oxi.mark.slow\ndef test_it(): pass\n");
         let path = temp_path(&f);
-        let files = vec![path.clone()];
+        let files = vec![path];
         let markers = vec!["integration".to_string()];
 
         let (combined_tests, combined_marks) = extract_test_and_mark_entries(&files, &markers);

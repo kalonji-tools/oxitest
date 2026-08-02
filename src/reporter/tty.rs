@@ -669,7 +669,7 @@ mod tests {
         let outcome = TestOutcome::Passed { tips: None };
         let mut group = ParametrizeBuffer::new(Arc::from("test_math"));
         group.push((*item).clone(), outcome.clone(), DurationMs::new(2.0));
-        group.push((*item).clone(), outcome.clone(), DurationMs::new(2.6));
+        group.push((*item).clone(), outcome, DurationMs::new(2.6));
         // flush_param_group consumes group and prints via pb — capture output by
         // checking the format directly via the inner logic instead.
         // Verify the format string produces duration-first output:

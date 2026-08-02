@@ -220,10 +220,7 @@ mod tests {
         });
         assert_eq!(
             *trail.current(),
-            Screen::NodeFocus {
-                node: node.clone(),
-                selected: 0
-            },
+            Screen::NodeFocus { node, selected: 0 },
             "after push, current should be the pushed screen"
         );
         assert_eq!(trail.depth(), 2, "depth should be 2 after one push");
