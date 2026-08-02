@@ -9,7 +9,7 @@ use crate::{bridge, parallel, reporter};
 
 impl Pipeline {
     // 11. execute: Ready -> Executed
-    pub(crate) fn execute(self, py: Python<'_>) -> Result<Pipeline, ExitCode> {
+    pub(crate) fn execute(self, py: Python<'_>) -> Result<Self, ExitCode> {
         let PipelinePhase::Ready {
             session,
             clean_items,
@@ -110,7 +110,7 @@ impl Pipeline {
             rep.as_mut(),
         );
 
-        Ok(Pipeline {
+        Ok(Self {
             shared,
             phase: PipelinePhase::Executed {
                 session,

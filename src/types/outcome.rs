@@ -117,10 +117,10 @@ impl TestOutcome {
     pub fn is_hard_failure(&self) -> bool {
         matches!(
             self,
-            TestOutcome::Failed(..)
-                | TestOutcome::Error(..)
-                | TestOutcome::Timeout { .. }
-                | TestOutcome::XPassed { strict: true }
+            Self::Failed(..)
+                | Self::Error(..)
+                | Self::Timeout { .. }
+                | Self::XPassed { strict: true }
         )
     }
 
@@ -166,7 +166,7 @@ impl TestOutcome {
 
     /// Synthesise an error for a test that could not execute.
     pub fn error_sentinel(message: String) -> Self {
-        TestOutcome::Error(Box::new(FailureDiagnostic::sentinel(message)))
+        Self::Error(Box::new(FailureDiagnostic::sentinel(message)))
     }
 
     /// Synthesise for an unresponsive worker subprocess.

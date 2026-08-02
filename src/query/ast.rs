@@ -105,9 +105,9 @@ pub(crate) enum Expr {
         matcher: Matcher,
     },
     /// Logical AND of two sub-expressions.
-    And(Box<Expr>, Box<Expr>),
+    And(Box<Self>, Box<Self>),
     /// Logical OR of two sub-expressions.
-    Or(Box<Expr>, Box<Expr>),
+    Or(Box<Self>, Box<Self>),
     /// Logical NOT of a sub-expression.
-    Not(Box<Expr>),
+    Not(Box<Self>),
 }

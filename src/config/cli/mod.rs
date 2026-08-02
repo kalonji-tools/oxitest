@@ -133,7 +133,7 @@ impl OxitestCli {
     /// without an explicit `run`), falls back to parsing all args as `RunArgs`.
     pub fn resolve(args: &[String]) -> Result<(Command, bool), clap::Error> {
         // First, try normal parsing with subcommands.
-        match OxitestCli::try_parse_from(args) {
+        match Self::try_parse_from(args) {
             Ok(cli) => {
                 let use_gitignore = !cli.no_use_gitignore;
                 if let Some(mut cmd) = cli.command {
@@ -143,7 +143,7 @@ impl OxitestCli {
                 // No subcommand given (bare `oxitest`) — treat as `run` with no args.
                 let run_args: Vec<&str> = vec![&args[0], "run"];
                 // (no extra args to forward)
-                let cli = OxitestCli::try_parse_from(&run_args)?;
+                let cli = Self::try_parse_from(&run_args)?;
                 let mut cmd = cli.command.unwrap();
                 partition_command(&mut cmd);
                 Ok((cmd, use_gitignore))
@@ -182,7 +182,7 @@ impl OxitestCli {
                             run_args.push(arg);
                         }
                     }
-                    match OxitestCli::try_parse_from(&run_args) {
+                    match Self::try_parse_from(&run_args) {
                         Ok(cli) => {
                             let mut cmd = cli.command.unwrap();
                             partition_command(&mut cmd);

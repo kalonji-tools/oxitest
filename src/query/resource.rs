@@ -25,20 +25,20 @@ impl ResourceKind {
     /// Return the predicate names that are valid for this resource kind.
     pub(crate) fn valid_predicates(&self) -> &'static [&'static str] {
         match self {
-            ResourceKind::Tests => &["name", "source", "mark", "async", "uses"],
-            ResourceKind::Fixtures => &["name", "source", "shared", "autouse", "async", "uses"],
-            ResourceKind::Marks => &["name", "used_in"],
-            ResourceKind::Plugins => &["name", "protocol"],
+            Self::Tests => &["name", "source", "mark", "async", "uses"],
+            Self::Fixtures => &["name", "source", "shared", "autouse", "async", "uses"],
+            Self::Marks => &["name", "used_in"],
+            Self::Plugins => &["name", "protocol"],
         }
     }
 
     /// Return the lowercase string name used in error messages.
     pub(crate) fn as_str(&self) -> &'static str {
         match self {
-            ResourceKind::Tests => "tests",
-            ResourceKind::Fixtures => "fixtures",
-            ResourceKind::Marks => "marks",
-            ResourceKind::Plugins => "plugins",
+            Self::Tests => "tests",
+            Self::Fixtures => "fixtures",
+            Self::Marks => "marks",
+            Self::Plugins => "plugins",
         }
     }
 }

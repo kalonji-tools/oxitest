@@ -15,8 +15,8 @@ impl DebugMode {
     /// Convert to the string representation sent across the Python bridge.
     pub fn as_str(&self) -> &'static str {
         match self {
-            DebugMode::PostMortem => "post-mortem",
-            DebugMode::Always => "always",
+            Self::PostMortem => "post-mortem",
+            Self::Always => "always",
         }
     }
 }
@@ -31,7 +31,7 @@ pub enum ExecutionMode {
 
 impl Default for ExecutionMode {
     fn default() -> Self {
-        ExecutionMode::Parallel {
+        Self::Parallel {
             workers: WorkerCount::Auto,
         }
     }
@@ -75,7 +75,7 @@ impl WorkerCount {
         if n == 0 {
             Err("worker count must be at least 1".into())
         } else {
-            Ok(WorkerCount::Fixed(n))
+            Ok(Self::Fixed(n))
         }
     }
 }
@@ -85,7 +85,7 @@ impl std::str::FromStr for WorkerCount {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.eq_ignore_ascii_case("auto") {
-            return Ok(WorkerCount::Auto);
+            return Ok(Self::Auto);
         }
         let n: usize = s
             .parse()
@@ -186,9 +186,9 @@ impl KeepTmpMode {
     /// Convert to the string representation sent across the Python bridge.
     pub fn as_str(&self) -> &'static str {
         match self {
-            KeepTmpMode::Cleanup => "cleanup",
-            KeepTmpMode::Failed => "failed",
-            KeepTmpMode::Always => "always",
+            Self::Cleanup => "cleanup",
+            Self::Failed => "failed",
+            Self::Always => "always",
         }
     }
 }
@@ -200,12 +200,12 @@ impl ColorMode {
     /// `Never` disables color. `Auto` defers to TTY detection and the `console` crate.
     pub fn resolve(self, is_tty: bool) -> bool {
         match self {
-            ColorMode::Always => {
+            Self::Always => {
                 console::set_colors_enabled(true);
                 true
             }
-            ColorMode::Never => false,
-            ColorMode::Auto => is_tty && console::colors_enabled(),
+            Self::Never => false,
+            Self::Auto => is_tty && console::colors_enabled(),
         }
     }
 }
@@ -476,7 +476,7 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Config {
+        Self {
             rootdir: Utf8PathBuf::from("."),
             paths: PathConfig::default(),
             exec: ExecConfig::default(),
@@ -562,13 +562,13 @@ pub(crate) fn cpu_count() -> usize {
 impl Config {
     pub fn load(rootdir: &Utf8Path) -> Self {
         let pyproject_path = rootdir.join("pyproject.toml");
-        let config = Config {
+        let config = Self {
             paths: PathConfig {
                 testpaths: vec![rootdir.to_owned()],
                 ..PathConfig::default()
             },
             rootdir: rootdir.to_owned(),
-            ..Config::default()
+            ..Self::default()
         };
 
         let content = match std::fs::read_to_string(&pyproject_path) {
@@ -664,7 +664,7 @@ impl Config {
             .unwrap_or_else(|e| panic!("legacy key rejected by Config::from_str: {e}"));
         let pyproject: PyprojectToml = toml::from_str(s)?;
         let tc = pyproject.tool.and_then(|t| t.oxitest).unwrap_or_default();
-        Ok(Config::default().merge_toml(tc, None))
+        Ok(Self::default().merge_toml(tc, None))
     }
 }
 

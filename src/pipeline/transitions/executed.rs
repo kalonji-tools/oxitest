@@ -10,7 +10,7 @@ use crate::types::ExitCode;
 
 impl Pipeline {
     // 12. retry: Executed -> Executed
-    pub(crate) fn retry(mut self, py: Python<'_>) -> Result<Pipeline, ExitCode> {
+    pub(crate) fn retry(mut self, py: Python<'_>) -> Result<Self, ExitCode> {
         // Extract config values before borrowing self.phase mutably.
         let max_retries = self.cfg.exec.retries;
         let delay_secs = self.cfg.exec.retries_delay_secs;

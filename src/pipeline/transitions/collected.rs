@@ -10,7 +10,7 @@ use crate::{bridge, config, filter, types};
 
 impl Pipeline {
     // 9. validate: Collected -> Collected
-    pub(crate) fn validate(self, py: Python<'_>) -> Result<Pipeline, ExitCode> {
+    pub(crate) fn validate(self, py: Python<'_>) -> Result<Self, ExitCode> {
         let PipelinePhase::Collected {
             ref session,
             ref items,
@@ -36,7 +36,7 @@ impl Pipeline {
     }
 
     // 10. strict_or_skip: Collected -> Ready
-    pub(crate) fn strict_or_skip(self, _py: Python<'_>) -> Result<Pipeline, ExitCode> {
+    pub(crate) fn strict_or_skip(self, _py: Python<'_>) -> Result<Self, ExitCode> {
         let PipelinePhase::Collected {
             session,
             items,
@@ -101,7 +101,7 @@ impl Pipeline {
             None => items,
         };
 
-        Ok(Pipeline {
+        Ok(Self {
             shared,
             phase: PipelinePhase::Ready {
                 session,
