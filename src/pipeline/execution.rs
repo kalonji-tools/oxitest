@@ -308,11 +308,13 @@ impl<'a> ExecutionDispatch<'a> {
                         session.end_package(*py, package),
                     );
                 }
-                // Adjacent only for now: #1777 hoists end_process out of
-                // execute_groups to a single post-phase call, which is what
-                // makes the process tier genuinely once-per-process.
+                // Task tier only. `execute_groups` runs once per *phase*, and
+                // the coordinator has several — inprocess, each arranged
+                // bucket, then the serial or parallel remainder. Draining the
+                // process tier here would fire it once per phase, which is the
+                // coordinator's version of the per-task-group bug (#1777).
+                // `execute` owns that call, exactly once, after every phase.
                 end_scope(rep, "end_task".to_string(), session.end_task(*py));
-                end_scope(rep, "end_process".to_string(), session.end_process(*py));
 
                 parallel::PhaseResult {
                     interrupted,
@@ -507,6 +509,34 @@ fn emit_shared_fixture_warning(
 /// `cache.invalidate()` and `cache.estimated_duration()` are called here
 /// because they feed directly into the parallel-dispatch decision.
 pub(super) fn execute(
+    py: Python<'_>,
+    clean_items: &[Arc<types::TestItem>],
+    violated_items: Vec<Arc<types::TestItem>>,
+    all_violations: Vec<strict::StrictViolation>,
+    ctx: &ExecutionContext<'_>,
+    rep: &mut dyn reporter::Reporter,
+) -> parallel::PhaseResult {
+    let result = execute_phases(py, clean_items, violated_items, all_violations, ctx, rep);
+
+    // The coordinator is a process too, which is why the contract is `<= 1 + N`
+    // instances and not `N` (#1777). Its process tier drains here — once, after
+    // every phase — rather than inside `execute_groups`, which runs per phase
+    // and has several early returns of its own.
+    if let Err(e) = ctx.session.end_process(py) {
+        tracing::warn!(%e, context = "end_process", "teardown error");
+        rep.record_teardown_warning("end_process", &e.to_string());
+    }
+    drain_diagnostics(py, ctx.session, rep);
+
+    result
+}
+
+/// Every execution phase, from planning through the last dispatch.
+///
+/// Split out of [`execute`] so the process-tier drain has a single choke point:
+/// this function returns from eight places, and a drain repeated at each of
+/// them would rebuild a `lifetime="session"` fixture once per phase.
+fn execute_phases(
     py: Python<'_>,
     clean_items: &[Arc<types::TestItem>],
     violated_items: Vec<Arc<types::TestItem>>,
