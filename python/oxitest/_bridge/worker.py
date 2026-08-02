@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     from typing import Protocol
 
     from oxitest._bridge._fixture_registry import FixtureRegistry
+    from oxitest._bridge.result import Diagnostic
 
     class _TeardownTarget(Protocol):
         """Just the lifecycle drains, so teardown can be tested with a stub."""
@@ -183,6 +184,18 @@ def _check_task_protocol(task: Mapping[str, object]) -> None:
         ).to_wire()
     )
     raise SystemExit(message)
+
+
+class _StreamingDiagnosticSink:
+    """Write each diagnostic to the LDJSON pipe the moment it is emitted.
+
+    Satisfies ``DiagnosticSink``. The serial path accumulates into a list that
+    Rust drains after each PyO3 call; a worker has no such drain, so anything
+    accumulated here would die with the process (#1840).
+    """
+
+    def append(self, diagnostic: Diagnostic, /) -> None:
+        _emit(diagnostic.to_wire())
 
 
 def _register_fixture_modules(
@@ -353,6 +366,15 @@ def main() -> None:
     # Rust watchdog — it expects one result line per test.
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(line_buffering=True)
+    # Install before the first task, not per task. Every collector downstream
+    # defers to an already-active one: conftest_loader only installs a temporary
+    # list when none exists, FixtureSession.__init__ only claims the var when
+    # none is active, and end_session only clears it when that session was the
+    # one that set it. So this single set survives every task — which is right,
+    # because a worker's pipe lives exactly as long as the process (#1840).
+    from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
+
+    _diagnostic_collector_var.set(_StreamingDiagnosticSink())
     for raw in sys.stdin:
         line = raw.strip()
         if line:

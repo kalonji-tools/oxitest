@@ -7,13 +7,28 @@ diagnostics without threading the session through.
 
 from __future__ import annotations
 
-__all__ = ["_diagnostic_collector_var", "emit_diagnostic"]
+__all__ = ["DiagnosticSink", "_diagnostic_collector_var", "emit_diagnostic"]
 
 from contextvars import ContextVar
+from typing import Protocol
 
 from oxitest._bridge.result import Diagnostic, DiagnosticSeverity
 
-_diagnostic_collector_var: ContextVar[list[Diagnostic] | None] = ContextVar(
+
+class DiagnosticSink(Protocol):
+    """Anything a diagnostic can be handed to.
+
+    ``list[Diagnostic]`` satisfies this structurally, so the serial path and
+    every existing caller are unchanged. Worker subprocesses install a sink
+    that writes straight to the LDJSON pipe instead of accumulating, because a
+    worker has no Rust-side drain and an accumulated list is one nobody reads
+    (#1840).
+    """
+
+    def append(self, diagnostic: Diagnostic, /) -> None: ...
+
+
+_diagnostic_collector_var: ContextVar[DiagnosticSink | None] = ContextVar(
     "_diagnostic_collector_var", default=None
 )
 
