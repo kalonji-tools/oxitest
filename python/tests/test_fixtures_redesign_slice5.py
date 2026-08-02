@@ -227,3 +227,54 @@ def test_inline_fixtures_survive_a_warm_module_cache(tmp: TempDir) -> None:
         f"the test must actually run on the warm pass — a collection error "
         f"reports no test at all; got:\n{warm_out}"
     )
+
+
+def test_an_aliased_inline_fixture_survives_a_warm_cache_too(tmp: TempDir) -> None:
+    """#1850, second spelling: `import oxitest as alias`.
+
+    Registration is by marker attribute at import time, so this declares a real
+    fixture. The static declaration scan recognizes only `oxi.`, `oxitest.` and
+    bare `fixture`, so it sees nothing here — which made the first cut of the
+    fix keep this file cache-eligible and leave the defect live under an
+    aliased import. The cache signal is deliberately wider than the declaration
+    scan for exactly this case.
+    """
+    # Arrange
+    project = Path(tmp)
+    (project / "pyproject.toml").write_text(
+        '[tool.oxitest]\ntestpaths = ["proj"]\npython_files = ["test_*.py"]\n'
+    )
+    package = project / "proj"
+    package.mkdir()
+    (package / "test_aliased_client.py").write_text(
+        "from __future__ import annotations\n\n"
+        "import oxitest as ox\n"
+        "from oxitest import Fixture\n\n\n"
+        '@ox.fixture(lifetime="function")\n'
+        "def client() -> str:\n"
+        '    return "connected"\n\n\n'
+        "def test_uses_the_aliased_fixture(client: Fixture[str]) -> None:\n"
+        '    assert client == "connected", (\n'
+        '        "the import alias must not change whether the fixture resolves"\n'
+        "    )\n"
+    )
+
+    # Act
+    cold_out, cold_err, cold_rc = helpers.run_oxitest(project)
+    warm_out, warm_err, warm_rc = helpers.run_oxitest(project)
+
+    # Assert
+    assert cold_rc == 0, (
+        f"the cold run must pass — an aliased decorator still registers by "
+        f"marker attribute at import; rc={cold_rc}\n"
+        f"stdout:\n{cold_out}\nstderr:\n{cold_err}"
+    )
+    assert warm_rc == 0, (
+        f"the warm-cache run regressed (#1850) for the aliased spelling: the "
+        f"cache-eligibility signal must be wider than the declaration scan, or "
+        f"an aliased import silently loses its fixture; rc={warm_rc}\n"
+        f"stdout:\n{warm_out}\nstderr:\n{warm_err}"
+    )
+    assert "1 passed" in warm_out, (
+        f"the test must actually run on the warm pass; got:\n{warm_out}"
+    )
