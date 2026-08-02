@@ -20,7 +20,11 @@ manually. Then copy `.env.example` → `.env` and edit as needed:
 - **`VIRTUAL_ENV`** — path to your Python venv. `just build` needs this so `uv`
   can find the venv's `python` symlink (otherwise it follows the symlink into
   the immutable Nix store and fails).
-- **`RUST_LOG`** — tracing verbosity (e.g. `RUST_LOG=oxitest=debug`). Optional.
+- **`RUST_LOG`** — tracing verbosity (e.g. `RUST_LOG=_oxitest=debug`). Optional.
+  The target is `_oxitest`, the `[lib]` name in `Cargo.toml` — not the
+  `oxitest` package name. The underscore is load-bearing: a target that matches
+  nothing is not an error, it silently suppresses all output. `RUST_LOG=trace`
+  shows everything without naming a target.
 
 Inside devenv, `.env` is not needed — Nix and `direnv` handle everything.
 

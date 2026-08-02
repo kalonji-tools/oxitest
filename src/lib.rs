@@ -72,7 +72,10 @@ fn trace(level: &str, module: &str, message: &str) {
 fn _oxitest(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register a stderr tracing subscriber. try_init() is a no-op if a global
     // subscriber is already set (first cdylib imported in this process wins).
-    // Users control verbosity via RUST_LOG (e.g. RUST_LOG=oxitest=debug).
+    // Users control verbosity via RUST_LOG (e.g. RUST_LOG=_oxitest=debug).
+    // The target is the crate name (this fn), not the `oxitest` package name.
+    // A target that matches nothing still parses, so the "warn" fallback below
+    // never applies and nothing is logged at all.
     let _ = tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
