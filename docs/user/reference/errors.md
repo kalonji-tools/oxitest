@@ -296,7 +296,7 @@ AttributeError: 'conn' is an async fixture — await it before use:
 `value = await fx....conn`, then `value.execute`
 ```
 
-See [async fixtures declared with `@oxi.fixture`](../how-to/use-async-tests.md#async-fixtures-declared-with-oxifixture).
+See [async fixtures](../how-to/use-async-tests.md#async-fixtures).
 
 ---
 

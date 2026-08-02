@@ -24,12 +24,6 @@ configuration. Each test gets a fresh event loop via `asyncio.run()`.
 If your tests are already async and everything works, you do not need to read
 any further.
 
-<!-- Compatibility anchor: this section was `### Async fixtures declared with
-     @oxi.fixture` until #1869 promoted it, and `reference/errors.md:299` links
-     to that slug. Removable once that link is retargeted at `#async-fixtures`
-     — errors.md was out of #1869's scope. -->
-<a id="async-fixtures-declared-with-oxifixture"></a>
-
 ## Async fixtures
 
 Declare a fixture as `async def` in a `__fixtures__.py` beside the tests that
