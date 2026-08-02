@@ -104,6 +104,14 @@ class FixtureValidator:
                     continue
                 if name in builtin_qualifiers:
                     continue
+                # Load-bearing beyond typo detection (#1768): this check is
+                # name-based, so a Fixture[T] parameter whose *name* matches
+                # nothing is refused here however well its *type* matches. That
+                # is the only reason resolve_param's type-first lookup — which
+                # reads the unfiltered _by_type index — never gets the final
+                # say. Making this type-aware opens a B1 bypass; filter
+                # _by_type through the visibility predicate first.
+                # Pinned by test_the_collection_validator_stays_name_based.
                 if self._registry.get(name) is not None:
                     continue
                 # Check if the name resolves to a plugin-provided fixture by

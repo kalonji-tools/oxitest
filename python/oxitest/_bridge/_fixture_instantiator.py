@@ -325,7 +325,16 @@ class FixtureInstantiator:
                 raise FixtureNotFoundError(param_name)
             return True, self.resolve_by_source(defn, ctx)
 
-        # Unified type-based resolution — try type first
+        # Unified type-based resolution — try type first.
+        #
+        # `resolve` reads the registry's `_by_type` index, which applies no B1
+        # visibility filtering (#1768). It is harmless only because collection
+        # already refused every parameter whose *name* is unregistered — see
+        # `FixtureValidator.validate_fixture_names` — so for a user-source
+        # fixture the name branch below always wins and the type hit is
+        # discarded. Anything that makes a non-matching parameter name resolve
+        # by type alone turns this into a real bypass: a test could inject a
+        # fixture anchored in a package it cannot see, purely by naming its type.
         try:
             defn = self._registry.resolve(inner, qualifier=param_name)
         except FixtureNotFoundError:
