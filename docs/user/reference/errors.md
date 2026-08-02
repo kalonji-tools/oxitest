@@ -492,15 +492,32 @@ assigned because setup failed.
 ---
 
 ```text
-[notice] fixture registration — fixture '<name>' in <child_conftest> shadows definition in <parent_conftest>
+[notice] fixture registration — fixture '<name>' in <shadower> shadows definition in <shadowed>
+[notice] fixture registration — fixture '<name>' in <shadower> shadows definition in <shadowed> within <anchor>
 ```
 
-**Cause:** A `conftest.py` file defines a fixture with the same name as one
-already registered by a parent `conftest.py`. The child definition silently
-overrides the parent within its directory tree.
+**Cause:** Two declarations of the same fixture name are both reachable from at
+least one test, so the nearer one wins there. The first form is emitted when the
+winner is ambient — a `conftest.py`, plugin or built-in fixture, which resolves
+run-wide. The second is emitted when the winner is anchored, and `<anchor>` is
+the subtree where it takes over: outside that subtree the other declaration
+still resolves.
 
-**Fix:** Rename the fixture in either the child or parent conftest to avoid
-ambiguity. If the shadowing is intentional, the notice is informational only.
+Declarations that no single test can reach at the same time do **not** produce
+this notice. `tests/api/v1/__fixtures__.py` and `tests/admin/v1/__fixtures__.py`
+may both declare `conn` — neither subtree contains the other, so neither
+overrides anything. The same holds for two test modules that each declare an
+inline fixture of the same name.
+
+**Fix:** Rename one of the two, or move the nearer declaration if the override
+was not intended. If it was intended, the notice is informational only.
+
+!!! note "Two senses of *shadow*"
+    This notice is about one **fixture name** overriding another on the
+    `Fixture[T]` route. It is unrelated to the naming-clash rule, where a
+    package **segment** wins over a same-named fixture in shortcut form —
+    `fx.api` returns the sub-proxy, and the fixture stays reachable at its
+    qualified path.
 
 ---
 

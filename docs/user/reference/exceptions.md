@@ -31,18 +31,22 @@ node ID where the failure occurred.
 **Severity**: notice
 **Context**: `fixture registration`
 
-Emitted when a fixture defined in a child conftest shadows a fixture of the
-same name from a parent conftest. oxitest uses locality-wins semantics — the
-most-local definition takes effect — but it notifies you when shadowing
-occurs so the override is never silent.
+Emitted when two declarations of one fixture name are both reachable from some
+test, so the nearer one takes effect there. oxitest resolves to the nearest
+visible declaration and notifies you so the override is never silent.
 
 ```
 tests/
-  conftest.py          # defines fixture 'db'
-  integration/
-    conftest.py        # also defines fixture 'db' → shadow diagnostic
-    test_queries.py
+  conftest.py                  # defines fixture 'db'
+  api/
+    __fixtures__.py            # also defines 'db' → notice naming tests/api
+    test_queries.py            #   resolves the api declaration
+  admin/
+    test_reports.py            #   still resolves the conftest declaration
 ```
+
+No notice is emitted for declarations that no single test can reach together —
+two sibling packages, or two test modules each declaring the name inline.
 
 ---
 
