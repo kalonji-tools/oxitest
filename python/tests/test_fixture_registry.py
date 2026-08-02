@@ -700,3 +700,33 @@ def test_autouse_full_catalog_mode_uses_last_registered() -> None:
         "the run — filtering the catalog query would let a fixture used only "
         "inside its own boundary be flagged as unused"
     )
+
+
+def test_autouse_suppression_by_an_anchored_def_is_boundary_local() -> None:
+    """An anchored def suppresses an ambient autouse only inside its boundary."""
+    # Arrange — ambient autouse FIRST, anchored non-autouse LAST, so a defs[-1]
+    # implementation sees a non-autouse def and suppresses the name run-wide.
+    registry = FixtureRegistry()
+    ambient = helpers.make_fixture_def(
+        "setup", autouse=True, conftest_path="/t/conftest.py"
+    )
+    registry.register(ambient)
+    registry.register(_module_def("setup", "api", "/t/api"))
+
+    # Act
+    inside = list(registry.get_autouse("/t/api/test_a.py"))
+    outside = list(registry.get_autouse("/t/test_b.py"))
+
+    # Assert
+    assert inside == [], (
+        "the anchored non-autouse def is the deepest visible def inside /t/api, "
+        "so it overrides the ambient autouse there — losing this half lets a "
+        "package that deliberately opts out of an ambient autouse silently get "
+        "it back"
+    )
+    assert outside == [ambient], (
+        "outside /t/api the anchored def is invisible, so the ambient autouse "
+        "is the deepest visible candidate and still fires — losing this half is "
+        "the defs[-1] regression (#1774): one anchored def anywhere in the tree "
+        "disables an ambient autouse for tests that cannot even see it"
+    )
