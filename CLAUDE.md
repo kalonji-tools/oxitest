@@ -51,7 +51,26 @@ just
 
 ## Workflow
 
-### New ideas → Grill → Issues → Spec → Plan → Implement → Merge
+### Two rules that govern this section
+
+**Arity — exactly one file defines each fact.** `CLAUDE.md` is that file *unless another consumer already owns it*. Where another consumer does own a fact, point at the live source instead of restating it: label values come from `gh label list`, gate definitions from the `justfile`, skill names from `docs/agents/required-skills.txt`. A restatement is a copy, and copies drift — three of this file's recorded defects were restatements that went stale while the thing they described moved.
+
+**Enforcement tiers — every obligation below declares one.** Prose an agent may silently skip is a legitimate choice, but it must be a *chosen* one, so that a step nobody performs can be told apart from a step nobody thought about.
+
+| Tier | Mechanism | Use for |
+|---|---|---|
+| `gate` | `just` / CI / prek fails | machine-checkable facts |
+| `artifact` | produces visible output — a PR checklist tick, a required citation | claims a reviewer must be able to audit |
+| `fold-in` | the step ceases to exist as a separate action | always prefer this where it is available |
+| prose | honor system, by design | everything else |
+
+### Track A — the change pipeline (one change, linear)
+
+```
+Grill → Issue → Triage → Spec → Draft PR → Plan → Implement → Review → Preflight → Rebase → Merge
+                           ▲
+                           └─ a re-scoped or re-grilled issue re-enters here (Track B)
+```
 
 **1. Grill new ideas.** Any new feature, concept, or design direction MUST go through `grill-with-docs` before anything else. This ensures ideas are stress-tested against the existing domain model and documented decisions before committing to them.
 
@@ -84,22 +103,6 @@ just
 - Run `just preflight` before pushing.
 
 **10. Post-merge debrief.** After a PR is merged, if the implementation diverged from the plan, add a debrief comment to the closed PR explaining how, where, and why it diverged. Apply the `diverged-from-plan` label to the PR. This label is only applied to closed/merged PRs.
-
-### Quick reference
-
-| Stage | Required? | Skill | Labels |
-|-------|-----------|-------|--------|
-| Grill new ideas | Always | `grill-with-docs` | — |
-| Create issues | Always | — | category (`bug`/`enhancement`) + component (`rust`/`python`) |
-| Triage issues | Always | `triage` | See `docs/agents/triage-labels.md` |
-| Design spec | Before PR | `superpowers:brainstorming` | — |
-| Draft PR | Before coding | — | — |
-| Implementation plan | Before coding | `superpowers:writing-plans` | — |
-| Execute plan | During coding | `superpowers:subagent-driven-development` | — |
-| Ponytail review | After push | `ponytail:ponytail-review` | — |
-| Improve audit | After push | `/improve branch` | — |
-| Code review | Before merge | `superpowers:requesting-code-review` | — |
-| Post-merge debrief | If diverged | — | `diverged-from-plan` (closed PRs only) |
 
 ## Tools
 
