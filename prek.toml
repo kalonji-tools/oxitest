@@ -61,6 +61,17 @@ files = "\\.rs$"
 stages = ["pre-push"]
 
 [[repos.hooks]]
+id = "cargo-doc"
+name = "cargo doc"
+language = "system"
+# No `-D` flag: `[lints.rust] warnings = "deny"` in Cargo.toml already implies
+# `-D rustdoc::broken-intra-doc-links`, so a stale link is an error here.
+entry = "cargo doc --no-deps --document-private-items"
+pass_filenames = false
+files = "\\.rs$"
+stages = ["pre-push"]
+
+[[repos.hooks]]
 id = "cargo-check"
 name = "cargo check"
 language = "system"
