@@ -36,6 +36,27 @@ struct CtrfSummary {
 
 #[derive(Serialize)]
 struct CtrfTest {
+    /// CTRF `tests[].name`. Three routes populate it, and they do **not**
+    /// produce disjoint values — a name is not a unique key:
+    ///
+    /// - [`Reporter::test_completed`] — the node ID of the test being reported.
+    ///   The only route whose entry is a real test; note it covers skipped and
+    ///   xfailed tests too, which never ran.
+    ///
+    /// The other two synthesise an entry for a run that aborted, and both reach
+    /// the field through [`JsonReporter::record_run_failure`]:
+    ///
+    /// - [`Reporter::finish`], naming it via [`collect_error_name`] — the path
+    ///   of the file that failed to import, or the literal `<collection>`.
+    ///   Never a node ID: a collection error belongs to no single test, so
+    ///   there is none to use.
+    /// - `write_strict_abort_report` (in `pipeline::helpers`) — the node ID of
+    ///   the test the strict violation belongs to, or the literal `<strict>`
+    ///   for a suite-level violation.
+    ///
+    /// The last route reuses a real test's node ID deliberately: the violation
+    /// *is* about that test, so naming the entry after it is what lets a
+    /// consumer line the two up (#1682).
     name: String,
     status: &'static str,
     duration: f64,
@@ -45,9 +66,10 @@ struct CtrfTest {
 
 /// The `tests[].name` to report a collection error under.
 ///
-/// A file path, never a node ID, so a synthesised entry can never be mistaken
-/// for — or collide with — a real test. Errors that carry no path fall back to
-/// a literal `<collection>`.
+/// The name *this route* produces is always a file path, or the literal
+/// `<collection>` for an error carrying no path — never a node ID, because a
+/// collection error belongs to no single test. That is this function's
+/// property, not the field's: see [`CtrfTest::name`] for the full value set.
 fn collect_error_name(error: &CollectError) -> String {
     match error {
         CollectError::ImportError { path, .. } => path.to_string(),
@@ -80,8 +102,8 @@ impl JsonReporter {
     /// makes every CTRF consumer render an aborted run as green — a quieter
     /// version of the missing-artifact bug this replaces (#1682).
     ///
-    /// `name` is a file path or a node ID; `duration` is `0.0` because nothing
-    /// ran.
+    /// `name` is whatever the caller supplies — see [`CtrfTest::name`] for the
+    /// values it may take. `duration` is `0.0` because nothing ran.
     pub(crate) fn record_run_failure(&mut self, name: String, message: String) {
         self.tests.push(CtrfTest {
             name,
