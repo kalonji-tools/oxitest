@@ -56,7 +56,13 @@ def test_build_pipeline_no_middlewares() -> None:
 
     execute = build_pipeline([], plan, base)
     result = execute()
-    helpers.assert_result(result, WarnedResult, message="ok")
+    helpers.assert_result(
+        result,
+        WarnedResult,
+        why="with nothing installed the pipeline must not produce a result of its own"
+        " -- every suite without middleware would otherwise read a fabricated outcome",
+        message="ok",
+    )
 
 
 def test_build_pipeline_single_middleware() -> None:
@@ -75,7 +81,13 @@ def test_build_pipeline_single_middleware() -> None:
 
     execute = build_pipeline([_UppercaseMiddleware()], plan, base)
     result = execute()
-    helpers.assert_result(result, WarnedResult, message="HELLO")
+    helpers.assert_result(
+        result,
+        WarnedResult,
+        why="the middleware rebuilds via dataclasses.replace, so this pins both halves:"
+        " the transform reaches the caller, and the rebuild preserves the variant",
+        message="HELLO",
+    )
 
 
 def test_build_pipeline_ordering() -> None:
@@ -95,7 +107,13 @@ def test_build_pipeline_ordering() -> None:
     mws = [_SkipMiddleware(), _UppercaseMiddleware()]
     execute = build_pipeline(mws, plan, base)
     result = execute()
-    helpers.assert_result(result, WarnedResult, message="BASE")
+    helpers.assert_result(
+        result,
+        WarnedResult,
+        why="the casing is the entire ordering claim, not a string check -- the"
+        " uppercase middleware only sees the base result if it was wrapped outermost",
+        message="BASE",
+    )
 
 
 def test_build_pipeline_skip_middleware_is_noop() -> None:
@@ -114,4 +132,10 @@ def test_build_pipeline_skip_middleware_is_noop() -> None:
 
     execute = build_pipeline([_SkipMiddleware()], plan, base)
     result = execute()
-    helpers.assert_result(result, WarnedResult, message="unchanged")
+    helpers.assert_result(
+        result,
+        WarnedResult,
+        why="returning next_fn itself rather than a closure must still compose -- a"
+        " non-empty list is the case the empty-list identity test cannot reach",
+        message="unchanged",
+    )

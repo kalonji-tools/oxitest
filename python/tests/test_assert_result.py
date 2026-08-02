@@ -22,10 +22,15 @@ def test_assert_result_returns_the_narrowed_variant() -> None:
     )
 
 
-def test_assert_result_omits_the_separator_when_why_is_absent() -> None:
-    """Without a why, the message must not trail a dangling separator."""
-    with raises(AssertionError, match=r"got PassedResult\Z"):
-        helpers.assert_result(PassedResult(), FailedResult)
+def test_assert_result_rejects_an_empty_why() -> None:
+    """An empty why is the omission the required parameter exists to prevent.
+
+    Requiring the parameter only forces callers to *pass* it. ``why=""`` type-checks,
+    passes ruff, and produces the same dangling separator the old default did, so the
+    signature change closes the hole only if the empty string is closed with it.
+    """
+    with raises(AssertionError, match="needs a why"):
+        helpers.assert_result(PassedResult(), PassedResult, why="")
 
 
 def test_assert_result_reports_the_actual_variant_on_mismatch() -> None:

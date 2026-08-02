@@ -92,7 +92,13 @@ def test_skipped_exception_returns_skipped() -> None:
 
     exc = Skipped("skip reason")
     result = _handle_runtime_exception(exc)
-    helpers.assert_result(result, SkippedResult, message="skip reason")
+    helpers.assert_result(
+        result,
+        SkippedResult,
+        why="classification is by class *name*, so a third party's 'Skipped' -- which"
+        " oxitest cannot import to isinstance against -- must still skip, with reason",
+        message="skip reason",
+    )
 
 
 def test_skip_test_returns_skipped() -> None:
@@ -117,8 +123,13 @@ def test_regular_exception_returns_error() -> None:
     """An ordinary Exception (not skip/assert) produces ErrorResult with type name."""
     exc = helpers.make_exc(ValueError, "something broke")
     result = _handle_runtime_exception(exc)
-    r = helpers.assert_result(result, ErrorResult)
-    assert "ValueError" in r.message, (
+    error = helpers.assert_result(
+        result,
+        ErrorResult,
+        why="the fallback arm decides what every exception the name-matching missed"
+        " becomes -- a ValueError must error, not be swept into skipped or failed",
+    )
+    assert "ValueError" in error.message, (
         "the exception type name must appear in the message so developers can identify"
         " the error class without a traceback"
     )
@@ -262,12 +273,17 @@ def test_frames_captured_on_runtime_exception() -> None:
     except Exception as exc:  # noqa: BLE001 — test intentionally catches to verify error handling
         result = _handle_runtime_exception(exc)
 
-    r = helpers.assert_result(result, ErrorResult)
-    assert len(r.frames) >= 2, (
+    error = helpers.assert_result(
+        result,
+        ErrorResult,
+        why="a variant without frames would mean the traceback was discarded on the"
+        " way out, leaving the crash site unreportable",
+    )
+    assert len(error.frames) >= 2, (
         "runtime errors need the same frame depth as assertion errors -- incomplete"
         " traces leave developers guessing at the crash site"
     )
-    assert r.frames[-1].name == "blow_up", (
+    assert error.frames[-1].name == "blow_up", (
         "the innermost frame must name the raise site so error reports pinpoint the"
         " exact function that crashed"
     )
@@ -278,7 +294,13 @@ def test_frames_empty_when_no_traceback() -> None:
     exc = ValueError("no tb")
     exc.__traceback__ = None
     result = _handle_runtime_exception(exc)
-    helpers.assert_result(result, ErrorResult, frames=())
+    helpers.assert_result(
+        result,
+        ErrorResult,
+        why="an exception with no __traceback__ must still classify as an error -- the"
+        " frame walker degrades rather than taking the reporter down with it",
+        frames=(),
+    )
 
 
 def test_bad_module_path_returns_error(tmp: TempDir) -> None:

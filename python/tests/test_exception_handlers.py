@@ -81,7 +81,14 @@ def test_dispatch_assertion_error() -> None:
 
     result = _dispatch_exception(exc)
 
-    helpers.assert_result(result, FailedResult, exc_type="AssertionError")
+    helpers.assert_result(
+        result,
+        FailedResult,
+        why="this pins _dispatch_exception's *routing*, not the classification"
+        " (test_executor_internals covers that) -- the variant is the only observable"
+        " proof that an AssertionError reached the assertion arm",
+        exc_type="AssertionError",
+    )
 
 
 def test_dispatch_runtime_exception() -> None:
@@ -90,8 +97,13 @@ def test_dispatch_runtime_exception() -> None:
 
     result = _dispatch_exception(exc)
 
-    r = helpers.assert_result(result, ErrorResult)
-    assert "ValueError" in r.message, "expected ValueError in message"
+    error = helpers.assert_result(
+        result,
+        ErrorResult,
+        why="the routing claim again, for the fallback arm -- a non-AssertionError"
+        " must reach the runtime handler, and the variant is the only proof it did",
+    )
+    assert "ValueError" in error.message, "expected ValueError in message"
 
 
 def test_dispatch_skip_exception() -> None:

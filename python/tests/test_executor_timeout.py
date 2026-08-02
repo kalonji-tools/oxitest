@@ -11,7 +11,7 @@ from oxitest._bridge._timeout import (
     _UnixTimeoutContext,
     _WindowsTimeoutContext,
 )
-from oxitest._bridge.result import TimeoutResult
+from oxitest._bridge.result import PassedResult, TimeoutResult
 from tests import helpers
 
 
@@ -45,9 +45,11 @@ def test_run_test_timeout_passes_fast_test(tmp: TempDir) -> None:
         "    pass\n",
         "test_fast",
     )
-    assert result.status == "passed", (
-        f"fast test under timeout limit should produce status='passed', got "
-        f"{result.status!r}"
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="the deadline exists to catch overruns -- a mark that also penalised"
+        " tests finishing inside it would make declaring one unsafe",
     )
 
 
@@ -59,16 +61,22 @@ def test_run_test_default_timeout_fires(tmp: TempDir) -> None:
         "test_slow",
         default_timeout=1,
     )
-    assert result.status == "timeout", (
-        f"default_timeout=1 should fire on a slow test, got status={result.status!r}"
+    helpers.assert_result(
+        result,
+        TimeoutResult,
+        why="default_timeout is the only deadline an unmarked test ever gets -- if it"
+        " does not fire here, a hung suite has nothing to stop it",
     )
 
 
 def test_run_test_no_timeout_by_default(tmp: TempDir) -> None:
     """Tests run without timeout when no timeout mark or default_timeout is given."""
     result = helpers.exec_inline(tmp, "def test_ok():\n    pass\n", "test_ok")
-    assert result.status == "passed", (
-        f"test without timeout mark should pass normally, got {result.status!r}"
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="with neither a mark nor default_timeout there is no deadline -- inventing"
+        " one would silently cap every legitimately long test in the suite",
     )
 
 
@@ -120,8 +128,11 @@ def test_async_test_timeout_passes_fast_test(tmp: TempDir) -> None:
         "    pass\n",
         "test_fast",
     )
-    assert result.status == "passed", (
-        f"fast async test under timeout should pass, got {result.status!r}"
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="the async path measures the deadline against a separate clock, so the"
+        " same mark must not mean two things depending on how a test is written",
     )
 
 
@@ -144,8 +155,11 @@ def test_async_yield_fixture_teardown_runs_on_timeout(tmp: TempDir) -> None:
         "test_slow",
         session=session,
     )
-    assert result.status == "timeout", (
-        f"test should timeout, got status={result.status!r}"
+    helpers.assert_result(
+        result,
+        TimeoutResult,
+        why="the timeout must actually fire, or the teardown assertion below passes"
+        " for the trivial reason that nothing was ever interrupted",
     )
     assert torn_down == [True], (
         f"async yield fixture teardown should run on timeout, got {torn_down!r}"

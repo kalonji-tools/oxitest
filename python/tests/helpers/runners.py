@@ -40,7 +40,7 @@ def assert_result(
     result: TestResult | None,
     expected_type: type[_R],
     *,
-    why: str = "",
+    why: str,
     **fields: object,
 ) -> _R:
     """Narrow a TestResult to a specific variant and assert field values.
@@ -57,11 +57,14 @@ def assert_result(
             ``__name__`` -- ``isinstance`` would accept one, so without this the
             call would pass forever and then ``AttributeError`` the day it
             failed. ty rejects a union here, so this is defence, not support.
-        why: Explains why this variant is the contract under test. Appended to
-            every failure message on its own line -- CLAUDE.md requires each
-            assert to say why. The separator is a newline rather than " -- "
-            because the prose itself conventionally uses " -- " to divide claim
-            from consequence, and nesting the two read as a run-on.
+        why: Explains why this variant is the contract under test. Required, and
+            asserted non-empty (#1793) -- requiring the parameter only forces it
+            to be *passed*, and ``why=""`` reproduces the omission verbatim,
+            down to the dangling separator. Appended to every failure message on
+            its own line -- CLAUDE.md requires each assert to say why. The
+            separator is a newline rather than " -- " because the prose itself
+            conventionally uses " -- " to divide claim from consequence, and
+            nesting the two read as a run-on.
             A result variant field named "why" would bind this parameter instead
             and its assertion would silently not run; no variant has one. This is
             asymmetric with *result*/*expected_type*, which are positional-or-
@@ -69,7 +72,11 @@ def assert_result(
         **fields: Field values asserted on the narrowed result.
 
     """
-    suffix = f"\n{why}" if why else ""
+    assert why, (
+        "assert_result needs a why -- an empty one is the omission the required"
+        " parameter exists to prevent, and it still appends a bare separator"
+    )
+    suffix = f"\n{why}"
     expected_name = getattr(expected_type, "__name__", str(expected_type))
     assert result is not None, f"expected {expected_name}, got None{suffix}"
     assert isinstance(result, expected_type), (
