@@ -41,6 +41,38 @@ test completes, even if the test fails.
 An async fixture can only be injected into an async test. Injecting an async
 fixture into a sync test is an error (see [Common errors](#common-errors)).
 
+!!! warning "Known limitation: one async fixture, two access routes"
+    Reaching the same `function`-lifetime **async** fixture through both a
+    `Fixture[T]` parameter and `await fx.<name>` in one test builds it
+    **twice**. The parameter route hands an un-awaited coroutine to the
+    execution middleware, which cannot share the per-test cache the `fx.`
+    proxy uses.
+
+    Use one route per test until this converges:
+
+    ```python
+    from oxitest import Fixture, Fixtures
+
+    from myapp import Channel  # whatever the fixture returns
+
+
+    # Two instances — avoid.
+    async def test_mixed(channel: Fixture[Channel], fx: Fixtures) -> None:
+        proxied = await fx.channel  # not the same object as `channel`
+
+
+    # One instance — prefer either route on its own.
+    async def test_param(channel: Fixture[Channel]) -> None: ...
+
+
+    async def test_proxy(fx: Fixtures) -> None:
+        channel = await fx.channel
+    ```
+
+    Sync fixtures are unaffected — every route converges on one instance
+    there. Tracked in
+    [#1805](https://github.com/kalonji-tools/oxitest/issues/1805).
+
 ### `@arrange` with async fixtures
 
 `@oxi.arrange` declares side-effect fixtures that should run around a test
