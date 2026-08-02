@@ -619,13 +619,11 @@ doctest_modules = true
         .unwrap_err();
         assert!(
             err.to_string().contains("doctest_modules"),
-            "error should mention the legacy key by name for a helpful message: got {}",
-            err
+            "error should mention the legacy key by name for a helpful message: got {err}"
         );
         assert!(
             err.to_string().contains("[tool.oxitest.doctest]"),
-            "error should point users at the new sub-table: got {}",
-            err
+            "error should point users at the new sub-table: got {err}"
         );
     }
 
@@ -640,8 +638,7 @@ doctest_modules = false
         .unwrap_err();
         assert!(
             err.to_string().contains("doctest_modules"),
-            "value-agnostic rejection: false should hard-error too, got: {}",
-            err
+            "value-agnostic rejection: false should hard-error too, got: {err}"
         );
     }
 
@@ -706,8 +703,7 @@ scope = "public"
         .unwrap_err();
         assert!(
             err.to_string().contains("doctest_modules"),
-            "legacy key + new sub-table ⇒ still errors on legacy key: got {}",
-            err
+            "legacy key + new sub-table ⇒ still errors on legacy key: got {err}"
         );
     }
 
@@ -727,8 +723,7 @@ doctest = { scope = "invalid" }
         let msg = err.to_string().to_lowercase();
         assert!(
             msg.contains("scope") || msg.contains("invalid"),
-            "TOML parse error should surface the bad enum: got {}",
-            err
+            "TOML parse error should surface the bad enum: got {err}"
         );
     }
 
@@ -742,8 +737,7 @@ doctest = { scope = "public", bogus_key = "x" }
         .unwrap_err();
         assert!(
             err.to_string().contains("bogus_key"),
-            "deny_unknown_fields should name the offender: got {}",
-            err
+            "deny_unknown_fields should name the offender: got {err}"
         );
     }
 

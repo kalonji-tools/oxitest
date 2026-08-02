@@ -31,7 +31,7 @@ fn truncate_name(name: &str, max_width: usize) -> Cow<'_, str> {
 }
 
 fn fmt_quiet_line(symbol: &str, body: &str) -> String {
-    format!(" {}  {}", symbol, body)
+    format!(" {symbol}  {body}")
 }
 
 fn outcome_label(outcome: &TestOutcome, use_color: bool) -> String {
@@ -87,7 +87,7 @@ impl TtyReporter {
 
     /// Assemble a single reporter line: ` LABEL  <name padded to name_width>  trailing`
     fn fmt_line(&self, label: &str, name: &str, trailing: &str) -> String {
-        format!(" {}  {} {}", label, name, trailing)
+        format!(" {label}  {name} {trailing}")
     }
 
     fn format_test_line(
@@ -97,7 +97,7 @@ impl TtyReporter {
         duration_ms: DurationMs,
     ) -> String {
         let raw_ms = duration_ms.as_f64();
-        let ms = color_dim(&format!("{:.1}ms", raw_ms), self.opts.use_color);
+        let ms = color_dim(&format!("{raw_ms:.1}ms"), self.opts.use_color);
         let c = self.opts.use_color;
         let param_suffix = match &item.param_id {
             Some(pid) => format!("[ {} ]", color_bold_white(pid, c)),
@@ -108,23 +108,17 @@ impl TtyReporter {
         match outcome {
             TestOutcome::Passed { tips: None } => fmt_quiet_line(
                 &color_dim_green("\u{2713}    ", c),
-                &color_dim(
-                    &format!("{:<width$} {:.1}ms", name_part, raw_ms, width = w),
-                    c,
-                ),
+                &color_dim(&format!("{name_part:<w$} {raw_ms:.1}ms"), c),
             ),
             TestOutcome::Passed { .. } => fmt_quiet_line(
                 &color_dim("\u{00B7}    ", c),
-                &color_dim(
-                    &format!("{:<width$} {:.1}ms", name_part, raw_ms, width = w),
-                    c,
-                ),
+                &color_dim(&format!("{name_part:<w$} {raw_ms:.1}ms"), c),
             ),
             TestOutcome::Skipped { reason } | TestOutcome::XFailed { reason } => {
                 let label = outcome_label(outcome, c);
                 self.fmt_line(
                     &label,
-                    &pad_to(&format!("{}{}", name_part, param_suffix), w),
+                    &pad_to(&format!("{name_part}{param_suffix}"), w),
                     &color_dim(reason, c),
                 )
             }
@@ -143,8 +137,8 @@ impl TtyReporter {
                 let label = outcome_label(outcome, c);
                 self.fmt_line(
                     &label,
-                    &pad_to(&format!("{}{}", name_part, param_suffix), w),
-                    &format!("{}{}", ms, types_str),
+                    &pad_to(&format!("{name_part}{param_suffix}"), w),
+                    &format!("{ms}{types_str}"),
                 )
             }
             _ => {
@@ -196,7 +190,7 @@ impl TtyReporter {
         let total_ms_raw = total_ms.as_f64();
 
         if group.any_failed() {
-            let ms = color_dim(&format!("{:.1}ms", total_ms_raw), c);
+            let ms = color_dim(&format!("{total_ms_raw:.1}ms"), c);
             let passed = group.passed_count();
             let failed = group.results.len() - passed;
             let label = color_fail("FAIL ", c);
@@ -206,7 +200,7 @@ impl TtyReporter {
                     &truncate_name(&group.fn_name, self.opts.name_width),
                     self.opts.name_width,
                 ),
-                &format!("{} passed  {} failed   {}", passed, failed, ms),
+                &format!("{passed} passed  {failed} failed   {ms}"),
             );
             self.pb.println(line);
 

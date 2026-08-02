@@ -449,7 +449,7 @@ __all__ = ["foo", 42, "bar"]
                 assert_eq!(source_module, "a.b");
                 assert_eq!(source_name, "Foo");
             }
-            other => panic!("expected AliasImport, got {:?}", other),
+            other => panic!("expected AliasImport, got {other:?}"),
         }
     }
 
@@ -468,7 +468,7 @@ __all__ = ["foo", 42, "bar"]
                     "source_name is the imported name, not the local alias"
                 );
             }
-            other => panic!("expected AliasImport, got {:?}", other),
+            other => panic!("expected AliasImport, got {other:?}"),
         }
     }
 
@@ -489,7 +489,7 @@ __all__ = ["foo", 42, "bar"]
                     "source_name is the original in the source module, regardless of local rename"
                 );
             }
-            other => panic!("expected AliasImport, got {:?}", other),
+            other => panic!("expected AliasImport, got {other:?}"),
         }
     }
 
@@ -528,7 +528,7 @@ __all__ = ["foo", 42, "bar"]
                     "same-module alias — Task 9's walker resolves within this module"
                 );
             }
-            other => panic!("expected LocalAlias, got {:?}", other),
+            other => panic!("expected LocalAlias, got {other:?}"),
         }
     }
 

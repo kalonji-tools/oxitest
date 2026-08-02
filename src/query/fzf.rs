@@ -57,10 +57,7 @@ pub(crate) fn run_fzf(
 
     // 3. Build fzf command with preview and keybindings
     let resource_str = args.resource.as_str();
-    let preview_cmd = format!(
-        "oxitest query {} --detail {{1}} --color always",
-        resource_str
-    );
+    let preview_cmd = format!("oxitest query {resource_str} --detail {{1}} --color always");
 
     let mut fzf = Command::new("fzf")
         .stdin(Stdio::piped())

@@ -384,7 +384,7 @@ mod tests {
                 assert_eq!(node.index, 0, "test_bar is at index 0 in the test vector");
                 assert_eq!(*selected, 0, "NodeFocus selected cursor starts at 0");
             }
-            other => panic!("expected NodeFocus for single-match jump, got {:?}", other),
+            other => panic!("expected NodeFocus for single-match jump, got {other:?}"),
         }
     }
 
@@ -411,10 +411,7 @@ mod tests {
                 assert_eq!(matches.len(), 2, "both test nodes should match 'test_'");
                 assert_eq!(*selected, 0, "disambiguation cursor should start at 0");
             }
-            other => panic!(
-                "expected Disambiguation for multi-match jump, got {:?}",
-                other
-            ),
+            other => panic!("expected Disambiguation for multi-match jump, got {other:?}"),
         }
     }
 
@@ -435,10 +432,7 @@ mod tests {
                     "SLOW should match the 'slow' mark node"
                 );
             }
-            other => panic!(
-                "expected NodeFocus for case-insensitive match, got {:?}",
-                other
-            ),
+            other => panic!("expected NodeFocus for case-insensitive match, got {other:?}"),
         }
     }
 }

@@ -1394,7 +1394,7 @@ def conn():
                         "sync def must not be flagged is_async"
                     );
                 }
-                other => panic!("expected HasFixtures, got {:?}", other),
+                other => panic!("expected HasFixtures, got {other:?}"),
             }
         }
 
@@ -1419,7 +1419,7 @@ def conn():
                         "fixture function name must be 'conn'"
                     );
                 }
-                other => panic!("expected HasFixtures, got {:?}", other),
+                other => panic!("expected HasFixtures, got {other:?}"),
             }
         }
 

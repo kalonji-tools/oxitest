@@ -39,7 +39,7 @@ pub(crate) fn format_columnar(entries: &[QueryEntry], columns: &[&str]) -> Strin
             if i < last {
                 // pad to width + 2-space gap
                 let pad = widths[i] + 2;
-                out.push_str(&format!("{:<width$}", val, width = pad));
+                out.push_str(&format!("{val:<pad$}"));
             } else {
                 out.push_str(val);
             }

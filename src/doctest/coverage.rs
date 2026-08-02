@@ -875,8 +875,7 @@ mod tests {
                 ..
             } => {}
             other => panic!(
-                "docstring without `Examples:` header should classify as MissingHeader, got {:?}",
-                other
+                "docstring without `Examples:` header should classify as MissingHeader, got {other:?}"
             ),
         }
     }
@@ -902,8 +901,7 @@ mod tests {
                 ..
             } => {}
             other => panic!(
-                "docstring with `Examples:` header but no `>>>` block should classify as HeaderNoExamples, got {:?}",
-                other
+                "docstring with `Examples:` header but no `>>>` block should classify as HeaderNoExamples, got {other:?}"
             ),
         }
     }
@@ -929,8 +927,7 @@ mod tests {
                 ..
             } => {}
             other => panic!(
-                "no docstring at all is the strongest form of MissingHeader — the header can't exist without a docstring, got {:?}",
-                other
+                "no docstring at all is the strongest form of MissingHeader — the header can't exist without a docstring, got {other:?}"
             ),
         }
     }
@@ -1031,8 +1028,7 @@ def foo():
         );
         assert!(
             diags.is_empty(),
-            "fully covered subject ⇒ no diagnostics, got: {:?}",
-            diags
+            "fully covered subject ⇒ no diagnostics, got: {diags:?}"
         );
     }
 
@@ -1074,8 +1070,7 @@ def uncovered():
         );
         assert!(
             diags.is_empty(),
-            "underscore-prefixed module path ⇒ subjects not scanned (Layer 1 filter), got: {:?}",
-            diags
+            "underscore-prefixed module path ⇒ subjects not scanned (Layer 1 filter), got: {diags:?}"
         );
     }
 

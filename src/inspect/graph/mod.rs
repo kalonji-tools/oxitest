@@ -367,9 +367,7 @@ mod tests {
             assert_eq!(
                 graph.node_sigil(&r),
                 *expected,
-                "sigil for {:?} should be '{}'",
-                kind,
-                expected
+                "sigil for {kind:?} should be '{expected}'"
             );
         }
     }

@@ -529,7 +529,7 @@ mod outcome_tests {
             path: Utf8PathBuf::from("tests/bad.py"),
             message: "Traceback (most recent call last):\n  File \"tests/bad.py\", line 1\nModuleNotFoundError: No module named 'foo'".to_string(),
         };
-        let s = format!("{}", err);
+        let s = format!("{err}");
         assert!(s.contains("tests/bad.py"), "path must appear in output");
         assert!(s.contains("Traceback"), "traceback must appear in output");
         assert!(s.contains("ModuleNotFoundError"), "error type must appear");
@@ -544,7 +544,7 @@ mod outcome_tests {
     #[test]
     fn test_collect_error_pyerror_display_shows_message_directly() {
         let err = CollectError::PyError("Failed to load conftest: SyntaxError".to_string());
-        let s = format!("{}", err);
+        let s = format!("{err}");
         assert_eq!(s, "Failed to load conftest: SyntaxError");
         assert!(!s.starts_with("PyError:"), "PyError prefix must be gone");
     }

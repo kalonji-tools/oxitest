@@ -151,8 +151,7 @@ fn validate_prefix_uniqueness(extensions: &config::PluginCliExtensions) -> Resul
     for (module, (prefix, _)) in &extensions.plugins {
         if let Some(existing) = seen.get(prefix.as_str()) {
             return Err(format!(
-                "plugin CLI prefix conflict: plugins '{}' and '{}' both use prefix '{}'",
-                existing, module, prefix
+                "plugin CLI prefix conflict: plugins '{existing}' and '{module}' both use prefix '{prefix}'"
             ));
         }
         seen.insert(prefix.as_str(), module.as_str());
@@ -861,11 +860,10 @@ pub(crate) fn format_fixture_errors(
         let suggestion =
             crate::edit_distance::closest_match(bad_name, registered.iter().map(|s| s.as_str()), 2);
         let msg = match suggestion {
-            Some(s) => format!(
-                "  {} - fixture '{}' not found (did you mean '{}'?)",
-                node_id, bad_name, s
-            ),
-            None => format!("  {} - fixture '{}' not found", node_id, bad_name),
+            Some(s) => {
+                format!("  {node_id} - fixture '{bad_name}' not found (did you mean '{s}'?)")
+            }
+            None => format!("  {node_id} - fixture '{bad_name}' not found"),
         };
         messages.push(msg);
     }

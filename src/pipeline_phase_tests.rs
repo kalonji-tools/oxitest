@@ -660,7 +660,7 @@ mod state_construction_tests {
     #[test]
     fn pipeline_debug_formats_with_rootdir() {
         let p = make_pipeline(PipelinePhase::Empty);
-        let debug_str = format!("{:?}", p);
+        let debug_str = format!("{p:?}");
         assert!(
             debug_str.contains("Pipeline"),
             "debug output should contain 'Pipeline'"

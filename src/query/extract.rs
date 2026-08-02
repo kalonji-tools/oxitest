@@ -61,8 +61,8 @@ fn make_test_entry(
 ) -> QueryEntry {
     let mut fields = HashMap::new();
     let name = match class_name {
-        Some(cls) => format!("{}::{}::{}", file, cls, fn_name),
-        None => format!("{}::{}", file, fn_name),
+        Some(cls) => format!("{file}::{cls}::{fn_name}"),
+        None => format!("{file}::{fn_name}"),
     };
     fields.insert("name".to_string(), name);
     fields.insert("source".to_string(), file.to_string());

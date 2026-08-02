@@ -78,7 +78,7 @@ impl CiReporter {
                 _ => color_error_token(&format!("ERROR   {}", item.node_id), c),
             }
         };
-        let mut entry = format!("{}\n{}", header, diag);
+        let mut entry = format!("{header}\n{diag}");
         if let Some(ctx) = parallel_ctx {
             entry.push('\n');
             entry.push_str(&ctx.fmt_line(self.opts.use_color));
@@ -100,9 +100,9 @@ impl StandardReporter for CiReporter {
                     self.opts.use_color
                 )
             );
-            println!("\n{}", hdr);
+            println!("\n{hdr}");
             for d in &self.deferred_diags {
-                println!("{}", d);
+                println!("{d}");
             }
         }
         super::print_strict_suite_section(&self.opts);

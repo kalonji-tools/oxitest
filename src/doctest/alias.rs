@@ -266,8 +266,7 @@ mod tests {
         assert_eq!(
             resolved,
             Some(root.join("python/oxitest/_bridge/_errors.py")),
-            "resolve must try source-root candidates (dirs without __init__.py) as prefixes; got {:?}",
-            resolved
+            "resolve must try source-root candidates (dirs without __init__.py) as prefixes; got {resolved:?}"
         );
     }
 
@@ -492,13 +491,11 @@ X = 42
             .collect();
         assert!(
             candidate_names.contains(&"python".to_owned()),
-            "non-gitignored directory must be a source-root candidate; got: {:?}",
-            candidate_names
+            "non-gitignored directory must be a source-root candidate; got: {candidate_names:?}"
         );
         assert!(
             !candidate_names.contains(&"build".to_owned()),
-            "gitignored directory must NOT be a source-root candidate; got: {:?}",
-            candidate_names
+            "gitignored directory must NOT be a source-root candidate; got: {candidate_names:?}"
         );
     }
 
@@ -529,8 +526,7 @@ X = 42
             .collect();
         assert!(
             candidate_names.contains(&"build".to_owned()),
-            "with gitignore disabled, gitignored dirs still qualify (user opted out of the filter); got: {:?}",
-            candidate_names
+            "with gitignore disabled, gitignored dirs still qualify (user opted out of the filter); got: {candidate_names:?}"
         );
     }
 
