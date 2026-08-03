@@ -966,8 +966,8 @@ class FixtureSession:
                         resolve_user_fixture=lambda n: self.get_fixture_by_name(
                             n, meta.module_path, fn_teardowns
                         ),
-                        # Test level: a builtin here keeps its own scope.
-                        owner_scope=None,
+                        # owner_scope defaults to None — test level, so a
+                        # builtin resolved here keeps its own scope (#1777).
                     ),
                 )
                 if resolved:

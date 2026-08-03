@@ -1,0 +1,9 @@
+[tool.oxitest]
+testpaths = ["process_tier_negatives"]
+python_files = ["test_*.py"]
+strict = "abort"
+# Four modules, no arrangement: at -n 2 some worker drains two task groups,
+# which is the only place a per-task tier can be told apart from a per-process
+# one.
+auto_arrange = false
+min_parallel_tests = 1
