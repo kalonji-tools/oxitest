@@ -302,8 +302,15 @@ def test_uses_tmp(t: Fixture[TempDir]) -> None:
     integ.assert_failed(out, rc)
     # The TempDir prefix is the test function name; find any preserved artifact.
     # tempfile.gettempdir() gives the system temp dir without hardcoding /tmp.
+    #
+    # glob, not rglob. A TempDir is created directly in the system temp dir, so
+    # one level is enough — and rglob *descends into every sibling directory
+    # there*, including temp dirs other tests are creating and deleting
+    # concurrently. On CPython 3.11 that raises FileNotFoundError the moment one
+    # of them vanishes mid-scan, which is a failure in an unrelated test's
+    # cleanup rather than anything this test is asserting.
     tmp_root = Path(tempfile.gettempdir())
-    preserved = list(tmp_root.rglob("test_uses_tmp_*/artifact.txt"))
+    preserved = list(tmp_root.glob("test_uses_tmp_*/artifact.txt"))
     assert preserved, (
         "--keep-tmp should preserve the TempDir on failure; "
         f"no artifact.txt found under {tmp_root}/test_uses_tmp_*"
