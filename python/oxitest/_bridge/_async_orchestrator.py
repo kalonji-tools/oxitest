@@ -40,7 +40,7 @@ from oxitest._bridge._fixture_context import _warn_teardown
 #: key is the boundary's own identity — a module path, today. Not a valid
 #: module path itself, so it cannot collide with one.
 SESSION_BOUNDARY = "<session>"
-#: Teardowns that live as long as the *process* — ``lifetime="session"``
+#: Teardowns that live as long as the *process* — ``lifetime="process"``
 #: fixtures, once #1777 made that tier genuinely per-process. Distinct from
 #: :data:`SESSION_BOUNDARY`, which now holds only the task-lifetime wide
 #: teardowns (``shared=True``): the two drain at different boundaries, and

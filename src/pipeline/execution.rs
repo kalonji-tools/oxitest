@@ -535,7 +535,7 @@ pub(super) fn execute(
 ///
 /// Split out of [`execute`] so the process-tier drain has a single choke point:
 /// this function returns from eight places, and a drain repeated at each of
-/// them would rebuild a `lifetime="session"` fixture once per phase.
+/// them would rebuild a `lifetime="process"` fixture once per phase.
 fn execute_phases(
     py: Python<'_>,
     clean_items: &[Arc<types::TestItem>],

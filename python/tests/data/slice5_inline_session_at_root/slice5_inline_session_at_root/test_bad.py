@@ -1,4 +1,4 @@
-"""An inline fixture declaring lifetime="session" AT the rootdir package.
+"""An inline fixture declaring lifetime="process" AT the rootdir package.
 
 This is the case only the home-kind cap catches. The location rule from #1711
 permits `session` when the anchor IS the rootdir package, and this file sits
@@ -11,7 +11,7 @@ from __future__ import annotations
 import oxitest as oxi
 
 
-@oxi.fixture(lifetime="session")
+@oxi.fixture(lifetime="process")
 def cluster() -> str:
     return "unreachable — collection must fail before this runs"
 

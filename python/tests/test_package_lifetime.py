@@ -46,7 +46,7 @@ def test_session_maps_to_a_different_scope_than_package() -> None:
     """
     # Act
     package_scope = LIFETIME_SCOPES.get(Lifetime.PACKAGE)
-    session_scope = LIFETIME_SCOPES.get(Lifetime.SESSION)
+    session_scope = LIFETIME_SCOPES.get(Lifetime.PROCESS)
 
     # Assert
     assert session_scope is FixtureScope.PROCESS, (

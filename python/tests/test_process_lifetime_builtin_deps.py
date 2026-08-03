@@ -1,6 +1,6 @@
 """A process-lifetime fixture may depend on a session-scoped builtin (#1777).
 
-``lifetime="session"`` fixtures cache in ``_process_scope`` and drain at
+``lifetime="process"`` fixtures cache in ``_process_scope`` and drain at
 ``end_process``; the builtins (``_TempDirFactoryFixture``) cache in
 ``_session_scope`` and drain at ``end_task``. Splitting those buckets inverted
 a teardown ordering that used to hold *by construction*: both tiers shared one
@@ -43,7 +43,7 @@ def _record(event: str) -> None:
         fh.write(event + "\\n")
 
 
-@oxi.fixture(lifetime="session")
+@oxi.fixture(lifetime="process")
 def workspace(factory: Fixture[TempDirFactory]) -> Iterator[Path]:
     d = factory.mktemp("ws").path
     # How many dirs this factory has handed out, counted the moment after our

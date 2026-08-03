@@ -111,7 +111,7 @@ pub(crate) const LIFETIME_PACKAGE: &str = "package";
 ///
 /// Compared as a string for the same reason as [`LIFETIME_PACKAGE`]: prescan
 /// reads the decorator off the AST, before any Python runs.
-pub(crate) const LIFETIME_SESSION: &str = "session";
+pub(crate) const LIFETIME_PROCESS: &str = "process";
 
 /// Per-fixture-module payload (mirrors PrescanPayload).
 ///

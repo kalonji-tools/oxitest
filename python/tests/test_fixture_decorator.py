@@ -62,7 +62,7 @@ def test_module_lifetime_is_accepted() -> None:
 
 
 def test_session_lifetime_is_accepted() -> None:
-    """lifetime="session" produces a working decorator with a SESSION marker.
+    """lifetime="process" produces a working decorator with a SESSION marker.
 
     This was a rejection test until slice 4 (#1711) settled the semantics —
     ``session`` is once per **task group**, not once per run and not once per
@@ -71,12 +71,12 @@ def test_session_lifetime_is_accepted() -> None:
     ``Lifetime`` and no tier is gated any more.
     """
 
-    @fixture(lifetime="session")
+    @fixture(lifetime="process")
     def engine() -> str:
         return "engine"
 
     marker = getattr(engine, MARKER_ATTR)
-    assert marker.lifetime is Lifetime.SESSION, (
+    assert marker.lifetime is Lifetime.PROCESS, (
         "marker must record SESSION so the registrar maps it to "
         "FixtureScope.PROCESS — any other marker routes the fixture to "
         "function scope and rebuilds it per test"

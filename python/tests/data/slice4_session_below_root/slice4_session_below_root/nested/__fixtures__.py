@@ -12,6 +12,6 @@ from __future__ import annotations
 import oxitest as oxi
 
 
-@oxi.fixture(lifetime="session")
+@oxi.fixture(lifetime="process")
 def engine() -> str:
     return "unreachable — collection must fail before this runs"

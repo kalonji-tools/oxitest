@@ -81,7 +81,7 @@ LIFETIME_SCOPES: Final = MappingProxyType(
         Lifetime.FUNCTION: FixtureScope.EACH,
         Lifetime.MODULE: FixtureScope.MODULE,
         Lifetime.PACKAGE: FixtureScope.PACKAGE,
-        Lifetime.SESSION: FixtureScope.PROCESS,
+        Lifetime.PROCESS: FixtureScope.PROCESS,
     }
 )
 

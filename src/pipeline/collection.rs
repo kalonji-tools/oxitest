@@ -156,7 +156,7 @@ pub(super) struct CollectionOutput {
 /// collected rather than from `testpaths`, because a positional path argument
 /// overrides `testpaths` (`config/merge.rs`): `oxitest tests/` and a bare
 /// `oxitest` run from inside `tests/` would otherwise disagree about which
-/// directory is the root, making the same `lifetime="session"` declaration
+/// directory is the root, making the same `lifetime="process"` declaration
 /// legal or illegal depending on the caller's shell.
 ///
 /// Returns `None` when nothing was collected, in which case there is no tree
@@ -200,7 +200,7 @@ fn reject_inline_lifetime_over_cap(
         .iter()
         .filter(|decl| {
             decl.lifetime == crate::prescan::LIFETIME_PACKAGE
-                || decl.lifetime == crate::prescan::LIFETIME_SESSION
+                || decl.lifetime == crate::prescan::LIFETIME_PROCESS
         })
         .map(|decl| {
             types::CollectError::PyError(format!(
@@ -231,7 +231,7 @@ struct DeclarationHome<'a> {
     /// Whether the filename is one oxitest owns. Gates the mistyped-alias hint.
     reserved: bool,
     /// Top of the collected test tree. Equal to `anchor` exactly when this home
-    /// is a *rootdir package*, the only place `lifetime="session"` may be
+    /// is a *rootdir package*, the only place `lifetime="process"` may be
     /// declared (ADR-0009 Rule 4).
     tree_root: Option<&'a camino::Utf8Path>,
 }
@@ -300,12 +300,12 @@ fn register_declaration_home(
                     payload
                         .declarations
                         .iter()
-                        .filter(|decl| decl.lifetime == crate::prescan::LIFETIME_SESSION)
+                        .filter(|decl| decl.lifetime == crate::prescan::LIFETIME_PROCESS)
                         .map(|decl| {
                             types::CollectError::PyError(format!(
-                                "{} in {path} declares lifetime=\"session\", but \
+                                "{} in {path} declares lifetime=\"process\", but \
                                  {anchor} is not a rootdir package.\n\
-                                 session is the tier that does not constrain the \
+                                 process is the tier that does not constrain the \
                                  scheduler, so anchoring it below the root attaches \
                                  it to no boundary at all.\n\
                                  Hint: move the declaration to {root_hint}, or drop \
@@ -987,7 +987,7 @@ mod tests {
             root,
             Some(Utf8PathBuf::from("tests")),
             "a flat suite's root is the directory holding it — that is where a \
-             lifetime=\"session\" declaration is legal"
+             lifetime=\"process\" declaration is legal"
         );
     }
 
