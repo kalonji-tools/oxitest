@@ -12,3 +12,6 @@ superpowers:subagent-driven-development
 superpowers:executing-plans
 superpowers:requesting-code-review
 superpowers:verification-before-completion
+
+# Invoked by CLAUDE.md stage 1 when no user-driven grilling took place
+domain-modeling
