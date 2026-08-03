@@ -632,6 +632,22 @@ class FixtureRegistry:
             )
         )
 
+    def process_lifetime_names(self) -> tuple[str, ...]:
+        """Return sorted names of fixtures declared ``lifetime="process"``.
+
+        Run-constant: the registry is fully populated before any test runs, so
+        the coordinator reads this once and reuses it. Used to name what a
+        killed worker never got to tear down (#1777) — that worker's process
+        teardowns are the only ones no other process will ever run.
+        """
+        return tuple(
+            sorted(
+                name
+                for name, defs in self._by_name.items()
+                if defs and defs[-1].scope is FixtureScope.PROCESS
+            )
+        )
+
     def resolve(
         self, fixture_type: type, qualifier: str | None = None
     ) -> FixtureDef[Any]:

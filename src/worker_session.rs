@@ -202,6 +202,9 @@ pub(crate) struct WorkerParams {
     pub show_locals: bool,
     /// Whether to include oxitest-internal frames in tracebacks.
     pub show_internals: bool,
+    /// Names of `lifetime="process"` fixtures, computed once for the run.
+    /// Empty for every suite that does not use the tier (#1777).
+    pub process_fixtures: std::sync::Arc<[String]>,
     /// Channel for sending results back to the coordinator.
     pub tx: crossbeam_channel::Sender<crate::parallel::WorkerMessage>,
     /// Set of node IDs currently executing across all workers.
@@ -284,6 +287,7 @@ fn run_worker_loop(
         show_internals,
         tx,
         in_flight,
+        process_fixtures,
     } = params;
 
     // Per-result watchdog: how long to wait for one test result line before
@@ -359,6 +363,7 @@ fn run_worker_loop(
                 module_path: group.label(),
                 tx: &tx,
                 worker_id,
+                process_fixtures: &process_fixtures,
             },
         );
     }
