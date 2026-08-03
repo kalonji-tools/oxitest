@@ -8,7 +8,7 @@ unnoticed there.
 The coordinator runs several phases per run — the inprocess one, then each
 arranged bucket, then the serial or parallel remainder. ``execute_groups`` is
 called once per phase, so draining the process tier inside it fires once per
-phase. Two coordinator phases that both resolve a ``lifetime="session"``
+phase. Two coordinator phases that both resolve a ``lifetime="process"``
 fixture then get two instances, which is the coordinator's version of the
 per-task-group defect the worker half fixes.
 

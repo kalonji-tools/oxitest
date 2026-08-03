@@ -81,7 +81,7 @@ def test_inline_session_at_the_rootdir_package_is_rejected() -> None:
 
     # Assert
     assert rc != 0, (
-        f'an inline lifetime="session" must fail even at the rootdir package, '
+        f'an inline lifetime="process" must fail even at the rootdir package, '
         f"where the location rule alone would allow it; rc={rc}\n"
         f"stdout:\n{stdout}\nstderr:\n{stderr}"
     )

@@ -296,7 +296,7 @@ def test_end_task_session_calls_every_teardown_in_order() -> None:
     narrower one that may still depend on it.
 
     ``end_process`` is absent on purpose. The session outlives this task, so
-    draining its process tier here would rebuild every ``lifetime="session"``
+    draining its process tier here would rebuild every ``lifetime="process"``
     fixture once per task group — the defect #1777 removes. ``main()`` owns it.
     """
     session = _StubSession()

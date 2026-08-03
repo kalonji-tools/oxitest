@@ -284,7 +284,7 @@ def run(task: WorkerTask, session: Any) -> None:
     The caller owns the session and has already validated the task protocol;
     ``run`` disposes only what this task's own tiers own, through
     ``_end_task_session``. Anything wider survives for the next task, which is
-    what makes ``lifetime="session"`` per process rather than per task group.
+    what makes ``lifetime="process"`` per process rather than per task group.
     """
     # Imports are kept lazy — top-level loading adds ~35ms to worker subprocess startup.
     # PLC0415 is suppressed for this file in ruff per-file-ignores.
@@ -354,7 +354,7 @@ def _end_task_session(session: _TeardownTarget, module_paths: list[str]) -> None
 
     ``end_process`` is deliberately absent. The session outlives this task, and
     draining its process tier here is exactly the bug #1777 fixes — it is what
-    made ``lifetime="session"`` rebuild once per task group. ``main()`` owns
+    made ``lifetime="process"`` rebuild once per task group. ``main()`` owns
     that call.
 
     Each drain gets its own ``try`` so a failing ``end_module`` cannot skip the

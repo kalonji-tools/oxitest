@@ -24,7 +24,7 @@ def _record(event: str) -> None:
         fh.write(f"{event}\n")
 
 
-@oxi.fixture(lifetime="session")
+@oxi.fixture(lifetime="process")
 async def aengine() -> AsyncIterator[str]:
     """One instance per process, torn down once, after that process's last test."""
     instance_id = f"{os.getpid()}-{next(_COUNTER)}"

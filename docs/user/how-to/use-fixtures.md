@@ -171,7 +171,7 @@ a per-process resource such as a connection pool:
 
 ```python
 # tests/__fixtures__.py — illustrative
-@oxi.fixture(lifetime="session")
+@oxi.fixture(lifetime="process")
 def engine() -> Iterator[Engine]:
     engine = Engine()
     yield engine

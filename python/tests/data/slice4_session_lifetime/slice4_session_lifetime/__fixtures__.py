@@ -33,7 +33,7 @@ def _record(event: str) -> None:
         fh.write(f"{event}\n")
 
 
-@oxi.fixture(lifetime="session")
+@oxi.fixture(lifetime="process")
 def engine() -> Iterator[str]:
     """One instance per task group."""
     instance_id = f"{os.getpid()}-{next(_COUNTER)}"

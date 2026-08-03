@@ -1,4 +1,4 @@
-"""Slice-4 acceptance: lifetime="session" end-to-end (#1711).
+"""Slice-4 acceptance: lifetime="process" end-to-end (#1711).
 
 Runs oxitest as a subprocess and asserts on a log the fixture writes itself,
 rather than on reporter output — the question is what the fixture actually did.

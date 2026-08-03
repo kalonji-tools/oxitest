@@ -40,7 +40,7 @@ async def per_package() -> Pkg:
     return Pkg()
 
 
-@oxi.fixture(lifetime="session")
+@oxi.fixture(lifetime="process")
 async def per_session() -> Sess:
     await asyncio.sleep(0)
     return Sess()

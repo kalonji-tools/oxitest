@@ -293,7 +293,7 @@ class FixtureSession:
     - **session scope** (`_session_scope`) — for built-in session-lifetime
       fixtures such as `TempDirFactory`; drained at `end_task`.
     - **process scope** (`_process_scope`) — for fixtures declared
-      ``@oxi.fixture(lifetime="session")``, the tier #1777 makes genuinely
+      ``@oxi.fixture(lifetime="process")``, the tier #1777 makes genuinely
       per-process; drained at `end_process`. Separate from the builtins' bucket
       on purpose: hoisting `TempDirFactory` here would retain every temp dir a
       worker ever made until the process exits.
@@ -318,7 +318,7 @@ class FixtureSession:
         self._plugin_registry = plugin_registry or PluginRegistry()
         self._async_mgr = SharedAsyncManager(async_backend or AsyncioBackend())
         self._session_scope = _Scope()
-        # lifetime="session" user fixtures (#1777). Distinct from
+        # lifetime="process" user fixtures (#1777). Distinct from
         # _session_scope, which stays the builtins' bucket, because the two
         # drain at different boundaries: this one at end_process, that one at
         # end_task.
@@ -515,7 +515,7 @@ class FixtureSession:
             #
             # Two buckets share this branch but are NOT interchangeable: they
             # drain at different boundaries (#1777). PROCESS drains at
-            # end_process and is where a *user-declared* lifetime="session"
+            # end_process and is where a *user-declared* lifetime="process"
             # fixture lands. SESSION drains at end_task and is the builtins'
             # bucket (`_TempDirFactoryFixture`), kept on the narrower rung so a
             # worker's temp dirs are released at its task boundary instead of

@@ -391,7 +391,7 @@ def test_wider_tiers_keep_their_build_counts(tmp: TempDir) -> None:
         "def pkg_res() -> PkgRes:\n"
         "    _record('PACKAGE-SETUP')\n"
         "    return PkgRes()\n\n\n"
-        '@oxi.fixture(lifetime="session")\n'
+        '@oxi.fixture(lifetime="process")\n'
         "def sess_res() -> SessRes:\n"
         "    _record('SESSION-SETUP')\n"
         "    return SessRes()\n"
