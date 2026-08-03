@@ -28,53 +28,9 @@ _REJECT_PROJECT = _DATA_ROOT / "slice4_session_below_root"
 _TOTAL_TESTS = 8
 
 
-@dataclass(frozen=True)
-class _Run:
-    """One acceptance run: the process output plus the fixture's own log."""
-
-    stdout: str
-    stderr: str
-    rc: int
-    events: tuple[str, ...]
-
-    @property
-    def setups(self) -> tuple[str, ...]:
-        return tuple(e for e in self.events if e.startswith("SETUP "))
-
-    @property
-    def teardowns(self) -> tuple[str, ...]:
-        return tuple(e for e in self.events if e.startswith("TEARDOWN "))
-
-    @property
-    def uses(self) -> tuple[str, ...]:
-        return tuple(e for e in self.events if e.startswith("USE "))
-
-    @property
-    def setup_pids(self) -> list[str]:
-        """The PID of every SETUP, duplicates kept — that is the bug shape."""
-        return [e.split()[1].split("-")[0] for e in self.setups]
-
-    @property
-    def running_pids(self) -> set[str]:
-        """Every PID that actually ran a test. ``USE <label> <pid> <id>``."""
-        return {e.split()[2] for e in self.uses}
-
-    @property
-    def setup_ids(self) -> set[str]:
-        return {e.split()[1] for e in self.setups}
-
-    @property
-    def teardown_ids(self) -> set[str]:
-        return {e.split()[1] for e in self.teardowns}
-
-
-def _run_project(tmp: TempDir, *extra_args: str) -> _Run:
+def _run_project(tmp: TempDir, *extra_args: str) -> helpers.EventLogRun:
     """Run the slice-4 data-project with a fresh log file."""
-    log = Path(tmp) / "events.log"
-    env = {**os.environ, "SLICE4_LOG": str(log)}
-    stdout, stderr, rc = helpers.run_oxitest(_PROJECT, *extra_args, env=env)
-    events = tuple(log.read_text().splitlines()) if log.exists() else ()
-    return _Run(stdout=stdout, stderr=stderr, rc=rc, events=events)
+    return helpers.run_with_event_log(_PROJECT, tmp, "SLICE4_LOG", *extra_args)
 
 
 def test_session_fixture_is_built_once_in_a_serial_run(tmp: TempDir) -> None:

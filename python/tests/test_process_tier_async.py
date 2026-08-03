@@ -29,9 +29,7 @@ That is a use-after-teardown followed by a leak, and nothing reported either.
 
 from __future__ import annotations
 
-import os
 from collections import Counter
-from dataclasses import dataclass
 from pathlib import Path
 
 from oxitest import TempDir
@@ -41,54 +39,26 @@ _PROJECT = Path(__file__).parent / "data" / "process_tier_async"
 _TOTAL_TESTS = 4
 
 
-@dataclass(frozen=True)
-class _Run:
-    """One run of the async data project, with the event log it wrote."""
+def _uses_after_teardown(run: helpers.EventLogRun) -> list[str]:
+    """USE lines for an instance whose TEARDOWN already appeared.
 
-    stdout: str
-    stderr: str
-    rc: int
-    events: tuple[str, ...]
-
-    def _ids(self, prefix: str) -> list[str]:
-        return [e.split()[1] for e in self.events if e.startswith(prefix)]
-
-    @property
-    def setup_ids(self) -> list[str]:
-        return self._ids("SETUP ")
-
-    @property
-    def teardown_ids(self) -> list[str]:
-        return self._ids("TEARDOWN ")
-
-    @property
-    def uses(self) -> tuple[str, ...]:
-        return tuple(e for e in self.events if e.startswith("USE "))
-
-    @property
-    def running_pids(self) -> set[str]:
-        """Every PID that actually ran a test. ``USE <label> <pid> <id>``."""
-        return {e.split()[2] for e in self.uses}
-
-    def uses_after_teardown(self) -> list[str]:
-        """USE lines for an instance whose TEARDOWN already appeared."""
-        seen: set[str] = set()
-        offenders: list[str] = []
-        for event in self.events:
-            if event.startswith("TEARDOWN "):
-                seen.add(event.split()[1])
-            elif event.startswith("USE ") and event.split()[3] in seen:
-                offenders.append(event)
-        return offenders
+    The ordering check, and the reason this file cannot assert on counts alone:
+    before the fix the fixture was still built exactly once per process. It was
+    *disposed* early and handed out again.
+    """
+    seen: set[str] = set()
+    offenders: list[str] = []
+    for event in run.events:
+        if event.startswith("TEARDOWN "):
+            seen.add(event.split()[1])
+        elif event.startswith("USE ") and event.split()[3] in seen:
+            offenders.append(event)
+    return offenders
 
 
-def _run_project(tmp: TempDir) -> _Run:
+def _run_project(tmp: TempDir) -> helpers.EventLogRun:
     """Run the async data project at ``-n 2`` with a fresh log file."""
-    log = Path(tmp) / "events.log"
-    env = {**os.environ, "PROC_ASYNC_LOG": str(log)}
-    stdout, stderr, rc = helpers.run_oxitest(_PROJECT, "-n", "2", env=env)
-    events = tuple(log.read_text().splitlines()) if log.exists() else ()
-    return _Run(stdout=stdout, stderr=stderr, rc=rc, events=events)
+    return helpers.run_with_event_log(_PROJECT, tmp, "PROC_ASYNC_LOG", "-n", "2")
 
 
 def test_an_async_process_fixture_is_built_once_per_process(tmp: TempDir) -> None:
@@ -134,7 +104,7 @@ def test_an_async_process_fixture_is_never_used_after_teardown(
     assert run.rc == 0, (
         f"the run must pass; rc={run.rc}\nstdout:\n{run.stdout}\nstderr:\n{run.stderr}"
     )
-    offenders = run.uses_after_teardown()
+    offenders = _uses_after_teardown(run)
     assert not offenders, (
         f"these tests received an async fixture instance that had already been "
         f"torn down: {offenders}. Its teardown fired at the task boundary "

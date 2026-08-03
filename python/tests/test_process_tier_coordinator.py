@@ -24,8 +24,6 @@ and the fix builds it **once**.
 
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass
 from pathlib import Path
 
 from oxitest import TempDir
@@ -35,41 +33,9 @@ _PROJECT = Path(__file__).parent / "data" / "process_tier_coordinator"
 _TOTAL_TESTS = 3
 
 
-@dataclass(frozen=True)
-class _Run:
-    """One run of the data project, with the event log it wrote."""
-
-    stdout: str
-    stderr: str
-    rc: int
-    events: tuple[str, ...]
-
-    @property
-    def setups(self) -> tuple[str, ...]:
-        return tuple(e for e in self.events if e.startswith("SETUP "))
-
-    @property
-    def setup_pids(self) -> list[str]:
-        """The PID of every SETUP, duplicates kept — that is the bug shape."""
-        return [e.split()[1].split("-")[0] for e in self.setups]
-
-    @property
-    def uses(self) -> tuple[str, ...]:
-        return tuple(e for e in self.events if e.startswith("USE "))
-
-    @property
-    def running_pids(self) -> set[str]:
-        """Every PID that actually ran a test. ``USE <label> <pid> <id>``."""
-        return {e.split()[2] for e in self.uses}
-
-
-def _run_project(tmp: TempDir) -> _Run:
-    """Run the coordinator data project with a fresh log file."""
-    log = Path(tmp) / "events.log"
-    env = {**os.environ, "PROC_COORD_LOG": str(log)}
-    stdout, stderr, rc = helpers.run_oxitest(_PROJECT, "-n", "2", env=env)
-    events = tuple(log.read_text().splitlines()) if log.exists() else ()
-    return _Run(stdout=stdout, stderr=stderr, rc=rc, events=events)
+def _run_project(tmp: TempDir) -> helpers.EventLogRun:
+    """Run the coordinator data project at ``-n 2`` with a fresh log file."""
+    return helpers.run_with_event_log(_PROJECT, tmp, "PROC_COORD_LOG", "-n", "2")
 
 
 def test_the_coordinator_builds_the_fixture_at_most_once(tmp: TempDir) -> None:
@@ -129,4 +95,46 @@ def test_the_coordinator_actually_ran_two_phases(tmp: TempDir) -> None:
         f"({coordinator_uses}). It needs a second phase — an arranged bucket — "
         f"or there are no two coordinator phases to drain between, and the "
         f"sibling assertion cannot distinguish the fix from the defect"
+    )
+
+
+def test_a_task_scoped_fixture_is_not_reused_across_coordinator_phases(
+    tmp: TempDir,
+) -> None:
+    """Every `shared=True` build on the coordinator is paired with a teardown.
+
+    Not a #1777 requirement — a latent defect this branch happened to fix, kept
+    here so it cannot come back.
+
+    ``_Scope.drain()`` used to clear only the teardown stack. The coordinator
+    drains ``_shared_scope`` once per *phase*, so before this branch phase 2
+    took a cache hit on a value whose teardown had already run in phase 1: one
+    SETUP, one TEARDOWN, and a live use in between them. Clearing the cache
+    alongside the stack turned that into two properly paired build/teardown
+    cycles.
+
+    That does mean the coordinator's ``shared=True`` instance count changed
+    from 1 to 2 for a two-phase run. The old number was not a contract worth
+    keeping — it was a use-after-teardown.
+    """
+    # Act
+    run = _run_project(tmp)
+
+    # Assert
+    assert run.rc == 0, (
+        f"the run must pass; rc={run.rc}\nstdout:\n{run.stdout}\nstderr:\n{run.stderr}"
+    )
+    setups = run.lines("SHARED_SETUP ")
+    teardowns = run.lines("SHARED_TEARDOWN ")
+    assert len(setups) > 1, (
+        f"the coordinator must have built the shared fixture more than once "
+        f"({setups}) — it drains at end_task and this project gives it two "
+        f"phases, so a single build means the value survived a drain and this "
+        f"assertion cannot distinguish a paired cycle from a reused corpse"
+    )
+    assert len(setups) == len(teardowns), (
+        f"built the shared fixture {len(setups)} times but tore it down "
+        f"{len(teardowns)}. An unpaired build is a value that outlived its own "
+        f"teardown: the cache survived the drain, so the next phase was handed "
+        f"an already-disposed instance"
     )

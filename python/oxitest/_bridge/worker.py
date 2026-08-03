@@ -281,10 +281,17 @@ def build_session(task: WorkerTask) -> Any:
 def run(task: WorkerTask, session: Any) -> None:
     """Run one task's tests against the process-lifetime *session*.
 
-    The caller owns the session and has already validated the task protocol;
-    ``run`` disposes only what this task's own tiers own, through
-    ``_end_task_session``. Anything wider survives for the next task, which is
-    what makes ``lifetime="process"`` per process rather than per task group.
+    The caller owns the session; ``run`` disposes only what this task's own
+    tiers own, through ``_end_task_session``. Anything wider survives for the
+    next task, which is what makes ``lifetime="process"`` per process rather
+    than per task group.
+
+    **The caller must call :func:`_check_task_protocol` first.** That check
+    moved out to ``main()`` when the session became per-process: the session is
+    built *from* a task, so the task has to be known readable before there is
+    anything to run it against. A caller that skips it gets a ``KeyError`` from
+    deep inside this function with no result line emitted — the exact failure
+    the check exists to prevent.
     """
     # Imports are kept lazy — top-level loading adds ~35ms to worker subprocess startup.
     # PLC0415 is suppressed for this file in ruff per-file-ignores.

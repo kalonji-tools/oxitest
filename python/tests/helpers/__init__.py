@@ -12,6 +12,7 @@ lives in.
 from __future__ import annotations
 
 __all__ = [
+    "EventLogRun",
     "RecordingDebugger",
     "assert_result",
     "exec_inline",
@@ -26,10 +27,12 @@ __all__ = [
     "run_oxitest",
     "run_oxitest_subcmd",
     "run_test",
+    "run_with_event_log",
     "write_test_file",
     "write_test_module",
 ]
 
+from tests.helpers.event_logs import EventLogRun, run_with_event_log
 from tests.helpers.factories import (
     make_exc,
     make_fixture_def,
