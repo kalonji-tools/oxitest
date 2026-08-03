@@ -762,6 +762,10 @@ class FixtureSession:
         """Return connected components of shared fixture dependencies."""
         return self._registry.shared_fixture_groups()
 
+    def process_lifetime_fixture_names(self) -> tuple[str, ...]:
+        """Return sorted names of fixtures declared ``lifetime="process"``."""
+        return self._registry.process_lifetime_names()
+
     def registered_fixture_names(self) -> tuple[str, ...]:
         """Return all fixture names known to the registry."""
         return tuple(self._registry)

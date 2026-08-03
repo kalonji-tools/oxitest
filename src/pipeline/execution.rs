@@ -692,12 +692,17 @@ fn execute_phases(
                 return result;
             }
 
+            // Read once, before any worker spawns: the registry is fully
+            // populated by now, and a killed worker's warning must not pay for
+            // a PyO3 call on the kill path (#1777).
+            let process_fixture_names = ctx.session.process_lifetime_fixture_names(py);
             let mut parallel = ExecutionDispatch::Parallel {
                 cfg: ctx.cfg,
                 workers: worker_count,
                 session_inputs: parallel::SessionInputs {
                     conftest_paths: ctx.conftest_files,
                     fixture_modules: ctx.fixture_modules,
+                    process_fixture_names: &process_fixture_names,
                 },
                 python_bin: ctx.python_bin,
                 pool: Some(pool_guard.take()),

@@ -56,6 +56,9 @@ pub(crate) struct PhaseResult {
 pub(crate) struct SessionInputs<'a> {
     pub conftest_paths: &'a [camino::Utf8PathBuf],
     pub fixture_modules: &'a [types::FixtureModule],
+    /// Names of `lifetime="process"` fixtures. Not sent to workers — used by
+    /// the coordinator to name what a killed worker never tore down (#1777).
+    pub process_fixture_names: &'a [String],
 }
 
 /// Pre-serialize the fixture-module list, once for the whole run.
@@ -85,6 +88,7 @@ pub(crate) fn run_phase_parallel(
     let SessionInputs {
         conftest_paths,
         fixture_modules,
+        process_fixture_names: session_process_fixtures,
     } = session_inputs;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -116,6 +120,10 @@ pub(crate) fn run_phase_parallel(
     let show_locals = cfg.output.show_locals;
     let show_internals = cfg.output.show_internals;
     let python_bin: Arc<str> = Arc::from(python_bin);
+    // Run-constant, read once: the registry is fully populated before any test
+    // runs, and this only decorates a warning about an already-dead worker
+    // (#1777). Empty for every suite that does not declare the tier.
+    let process_fixtures: Arc<[String]> = Arc::from(session_process_fixtures);
 
     let (tx, rx) = crossbeam_channel::unbounded::<WorkerMessage>();
 
@@ -136,6 +144,7 @@ pub(crate) fn run_phase_parallel(
                 show_internals,
                 tx: tx.clone(),
                 in_flight: std::sync::Arc::clone(&in_flight),
+                process_fixtures: Arc::clone(&process_fixtures),
             };
             if let Some(pw) = prewarmed.pop() {
                 spawn_worker_with_process(pw, worker_params)

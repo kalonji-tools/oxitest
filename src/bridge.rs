@@ -162,6 +162,23 @@ impl FixtureSession {
             .unwrap_or_default()
     }
 
+    /// Returns sorted names of fixtures declared `lifetime="process"`.
+    ///
+    /// Run-constant, so the caller reads it once and reuses it — the same
+    /// idiom as [`Self::shared_fixture_names`], and for the same reason:
+    /// the registry is fully populated before any test runs.
+    ///
+    /// Errors are absorbed into an empty Vec. This only decorates a warning
+    /// about a worker that was already killed; failing the run over it would
+    /// be worse than saying nothing (#1777).
+    pub fn process_lifetime_fixture_names(&self, py: Python<'_>) -> Vec<String> {
+        self.0
+            .bind(py)
+            .call_method0("process_lifetime_fixture_names")
+            .and_then(|v| v.extract::<Vec<String>>())
+            .unwrap_or_default()
+    }
+
     /// Returns connected components of shared fixture dependencies.
     /// Each inner Vec is a sorted group of fixture names that must co-locate.
     /// Returns an empty Vec on any Python error (advisory-only).

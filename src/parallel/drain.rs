@@ -287,6 +287,65 @@ pub(crate) struct DrainContext<'a> {
     pub module_path: &'a camino::Utf8Path,
     pub tx: &'a crossbeam_channel::Sender<WorkerMessage>,
     pub worker_id: usize,
+    /// Names of `lifetime="process"` fixtures, run-constant and empty for every
+    /// suite that does not use the tier (#1777). Used only to say what a killed
+    /// worker never tore down.
+    pub process_fixtures: &'a [String],
+}
+
+/// Warn that a worker died holding process-lifetime fixtures.
+///
+/// A worker owns its process tier alone: no other process will ever run those
+/// teardowns, so killing it drops them permanently. That is accepted — decision
+/// 3 rejected a graceful SIGTERM as unsound, since a C-level block never
+/// reaches the bytecode boundary where the signal becomes a Python exception —
+/// but it is not allowed to be silent.
+///
+/// Emits nothing when the suite declares no such fixtures, which is the common
+/// case, and adds no wait to the kill path: it reads a list the coordinator
+/// computed before the run began.
+///
+/// The names are the ones *declared*, not the ones that worker actually built.
+/// Only the worker knows which it resolved, and it is dead — asking would mean
+/// a round-trip the kill path is not allowed to pay for. The message says so
+/// rather than asserting a set it cannot verify.
+fn warn_skipped_process_teardowns(ctx: &DrainContext<'_>, cause: &str) {
+    let Some(message) = skipped_teardown_message(ctx.worker_id, cause, ctx.process_fixtures) else {
+        return;
+    };
+    let _ = ctx.tx.send(WorkerMessage::Diagnostic(
+        crate::reporter::stats::DiagnosticEntry::from_wire(
+            "warning",
+            "process-lifetime teardown",
+            message,
+            String::new(),
+            0,
+        ),
+    ));
+}
+
+/// The warning text, or `None` when the suite declares no process-lifetime tier.
+///
+/// Split out of [`warn_skipped_process_teardowns`] so both the decision and the
+/// wording are reachable from `cargo test`. The caller needs a live
+/// `DrainContext`, which borrows a `std::process::Child` and exists only inside
+/// a real worker thread — the same reason `build_task` was lifted out of
+/// `run_worker_loop`.
+///
+/// Returning `None` rather than an empty string keeps "say nothing" a decision
+/// this function owns, instead of one the caller has to remember to make.
+fn skipped_teardown_message(worker_id: usize, cause: &str, names: &[String]) -> Option<String> {
+    if names.is_empty() {
+        return None;
+    }
+    let names = names.join(", ");
+    Some(format!(
+        "worker {worker_id} was {cause}, so any process-lifetime fixture it \
+         had built was never torn down. No other process runs those teardowns. \
+         Declared in this suite: {names} — this worker may have built only some \
+         of them. Anything they release outside the process, such as a temp \
+         directory, a database or a lock, is still held."
+    ))
 }
 
 /// Handles the result of draining worker output for one group.
@@ -305,6 +364,7 @@ pub(crate) fn handle_drain_outcome(
                 "worker subprocess unresponsive; killing"
             );
             let _ = ctx.child.kill();
+            warn_skipped_process_teardowns(ctx, "killed as unresponsive");
             for item in ctx.items.iter().skip(received) {
                 let (outcome, duration_ms) = types::TestOutcome::timed_out_sentinel(ctx.watchdog);
                 send_result(
@@ -322,6 +382,7 @@ pub(crate) fn handle_drain_outcome(
             false
         }
         DrainOutcome::Disconnected => {
+            warn_skipped_process_teardowns(ctx, "lost before it finished");
             for item in ctx.items.iter().skip(received) {
                 send_result(
                     ctx.tx,
@@ -398,6 +459,69 @@ pub(super) fn drain_remaining_into_crashed(
             };
             handle_worker_result(resolved, item_lookup, rep, timings, None);
         }
+    }
+}
+
+#[cfg(test)]
+mod skipped_teardown_message_tests {
+    use super::skipped_teardown_message;
+
+    fn names(entries: &[&str]) -> Vec<String> {
+        entries.iter().map(|s| (*s).to_owned()).collect()
+    }
+
+    #[test]
+    fn a_suite_without_the_tier_says_nothing() {
+        let message = skipped_teardown_message(0, "killed as unresponsive", &[]);
+
+        assert!(
+            message.is_none(),
+            "a suite declaring no process-lifetime fixtures must produce no \
+             warning at all — an unconditional message would tell every run \
+             that ever loses a worker about a tier it does not use, got {message:?}"
+        );
+    }
+
+    #[test]
+    fn the_message_names_the_worker_and_every_declared_fixture() {
+        let message = skipped_teardown_message(
+            3,
+            "lost before it finished",
+            &names(&["cachedir", "dbpool"]),
+        )
+        .expect("a suite declaring the tier must produce a warning");
+
+        assert!(
+            message.contains("worker 3"),
+            "the warning must identify which worker died, or a run with eight \
+             of them gives the user nowhere to look: {message}"
+        );
+        for fixture in ["cachedir", "dbpool"] {
+            assert!(
+                message.contains(fixture),
+                "the warning must name {fixture}, since 'some fixtures leaked' \
+                 is not something a user can act on: {message}"
+            );
+        }
+        assert!(
+            message.contains("lost before it finished"),
+            "the cause distinguishes a watchdog kill from a crash, and the two \
+             call for different investigations: {message}"
+        );
+    }
+
+    #[test]
+    fn the_message_does_not_claim_the_worker_built_them_all() {
+        let message = skipped_teardown_message(1, "killed as unresponsive", &names(&["pool"]))
+            .expect("a suite declaring the tier must produce a warning");
+
+        assert!(
+            message.contains("may have built only some of them"),
+            "the list is what the suite *declares*; only the worker knows what \
+             it resolved and it is dead, so asking would cost the round-trip \
+             the kill path may not pay for. A message asserting the worker \
+             built all of them states something nothing verified: {message}"
+        );
     }
 }
 
