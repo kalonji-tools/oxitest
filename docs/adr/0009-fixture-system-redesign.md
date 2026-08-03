@@ -52,16 +52,16 @@ A fixture accidentally placed in `helpers.py` or `utils.py` is invisible to the 
 
 ### Rule 2 — Lifetime tiers and boundaries
 
-**Status:** shipped (#1710, #1711, #1745); amended by Amendment 1, and its `session` row corrected by Amendment 4.
+**Status:** shipped (#1710, #1711, #1745); amended by Amendment 1, its `session` row corrected by Amendment 4, and that tier replaced by `process` in Amendment 6.
 
-`Lifetime` is a `StrEnum` with four values, ordered by the **breadth of the code-structural unit** they name — not by the strength of the guarantee they offer. Under parallel execution the ladder is deliberately non-monotonic in guarantee strength; see *Lifetimes under parallel execution* below. Each tier has exactly one boundary — the code-structural unit whose exit triggers teardown.
+`Lifetime` is a `StrEnum` with four values. The first three are ordered by the **breadth of the code-structural unit** they name — not by the strength of the guarantee they offer. `process` is the exception and the reason the ordering has to be stated rather than assumed: it names the **runtime** unit, not a code-structural one, and it is the only tier whose instance count the user sets directly, with `-n`. Under parallel execution the ladder is deliberately non-monotonic in guarantee strength; see *Lifetimes under parallel execution* below. Each tier has exactly one boundary whose exit triggers teardown.
 
 | Lifetime | Boundary | Disposal trigger | Under parallel execution |
 |----------|----------|------------------|--------------------------|
 | `function` | The individual test | After the test completes | No effect |
 | `module` | The Python module (test file) | After all tests in the module complete | No effect |
 | `package` | The directory subtree containing the declaration | After all tests in the subtree complete | **Exactly once per run** — collapses the subtree onto one worker |
-| `session` | The worker task group | At task-group teardown | **Once per task group** — no scheduling constraint of its own; the grouping is whatever `package` declarations produce |
+| `process` | The process — a worker, or the coordinator | At process exit | **At most once per process**: `≤ 1 + N` for N workers, the `1` being the coordinator when an inprocess or arranged test resolves it |
 
 **A package is any directory.** `__init__.py` is not required and its absence does not make a directory ineligible. What the framework needs from a package is a subtree to bound disposal, to filter the B1 catalog, and to derive a namespace segment — a directory supplies all three. PEP 420 namespace packages are the norm in modern Python, so requiring the marker file would make oxitest stricter than the language itself, and would contradict this ADR's own principle that visibility is Python's job. `__init__.py` remains a legal and recommended *declaration home* for package-lifetime fixtures (Rule 1); it is not what *defines* the boundary. The two roles were originally conflated.
 
@@ -74,9 +74,11 @@ oxitest distributes work across worker subprocesses by default (`min_parallel_te
 `function` and `module` are unaffected — the scheduler never splits a module across workers, so both tiers are exact for free. The two wide tiers each take one side of a trade the framework cannot avoid:
 
 - **`package` guarantees exactly one instance per run**, and pays for it by co-locating the declaring directory's entire subtree onto a single worker. The guarantee is *structural*, not a caching hint: the scheduler is constrained so that the situation in which a second instance could exist never arises.
-- **`session` guarantees one instance per worker *task group***, and constrains the scheduler not at all. Because it constrains nothing it also earns nothing of its own: a worker pops task groups in a loop (`src/worker_session.rs:271`–`272`) and every task builds a fresh fixture session (`python/oxitest/_bridge/worker.py:265`), while only `package` declarations merge modules into a group (`src/filter.rs:270`–`292`). Absent one, a task group is a single module and `session` is `module` under a wider name. It is the tier for a resource that is safe to rebuild and unsafe to share across processes — a connection pool, a compiled-artifact cache — never a global singleton.
+- **`process` guarantees at most one instance per process**, and constrains the scheduler not at all. A worker builds its fixture session once and reuses it for every task group it drains; the coordinator drains its own after all execution phases. The count is therefore `≤ 1 + N` — bounded by how many processes exist, which is the user's `-n`, not by anyone's directory layout. It is the tier for a resource that is safe to rebuild and unsafe to share across processes — a connection pool, a compiled-artifact cache — never a global singleton.
 
-The ladder is non-monotonic on purpose. `package` buys exactness and charges parallelism; `session` buys parallelism and charges exactness. Neither dominates the other, so the choice stays with the user. `session`'s side of that trade is weaker than it looks, though, and this is the one asymmetry worth stating plainly: it is the only tier whose instance count is set by *another* tier's declarations rather than by its own boundary. Playwright's `scope: 'worker'` and Vitest's `scope: 'worker'` do name the process, and this ADR originally borrowed that precedent for `session` — it should not, because oxitest's `session` is not per-process (Amendment 4). Whether it *should* be given real per-process semantics, which would require the scheduler to carry fixture state across task groups, is left open rather than settled here.
+The ladder is non-monotonic on purpose. `package` buys exactness and charges parallelism; `process` buys parallelism and charges exactness. Neither dominates the other, so the choice stays with the user. The asymmetry worth stating plainly is that `process` is the only tier whose count the user controls directly: change `-n` and the number of instances changes, with no edit to any declaration. Playwright's `scope: 'worker'` and Vitest's `scope: 'worker'` name the process, and this ADR borrowed that precedent for `session` before the tier delivered it. Amendment 4 recorded that the borrowing was unearned; Amendment 6 earns it and renames the tier accordingly.
+
+**A fixture value never crosses a process boundary.** `package` prevents the crossing structurally, by co-locating the subtree; `process` accepts one instance per process. That axiom is what makes the two tiers a complete pair rather than two points on a spectrum, and it is why cross-process transfer is permanently out of scope: the #1710 survey found no framework attempting it.
 
 **A module belongs to its outermost declaring ancestor.** Where declarations nest, the shallowest wins: a fixture declared higher up already spans the whole subtree, so anchoring on a deeper declaration would still let the scheduler split the outer package across workers and rebuild its value.
 
@@ -108,7 +110,7 @@ The amendment is not a weakening of the loud-rejection principle, because a coll
 
 ### Rule 4 — Lifetime cap
 
-**Status:** shipped (#1711); amended by Amendment 1, whose retraction of the `package`/`session` equivalence is itself re-grounded by Amendment 4.
+**Status:** shipped (#1711); amended by Amendment 1, whose retraction of the `package`/`session` equivalence is itself re-grounded by Amendment 4, and the tier renamed to `process` by Amendment 6. **The rootdir restriction survives every one of those** — see below, where the rename strengthens its argument rather than weakening it.
 
 Declared `lifetime` cannot exceed the declaration site's boundary.
 
@@ -117,21 +119,21 @@ Declared `lifetime` cannot exceed the declaration site's boundary.
 | Inline in `test_*.py` | `module` |
 | `__fixtures__.py` at package X | `package` (anchored at X) |
 | `__init__.py` at package X | `package` (anchored at X) |
-| Any of the above at the rootdir package (`tests/`) | `package` (exactly once per run) or `session` (once per task group) |
+| Any of the above at the rootdir package (`tests/`) | `package` (exactly once per run) or `process` (at most once per process) |
 
 Anything else is a **declaration error at prescan time** with three legal-exit hints (move to `__fixtures__.py` at package level; drop to `module` lifetime; restructure as a rootdir fixture).
 
-**`session` is available only at rootdir, and is not a synonym for rootdir `package`.** This ADR originally argued the opposite:
+**`process` is available only at rootdir, and is not a synonym for rootdir `package`.** (Spelled `session` until Amendment 6; the quotations below keep the original name, since that is what they said.) This ADR originally argued the opposite:
 
 > `session` is available only at rootdir because below root, `package(root)` and `session` collapse to the same runtime behavior (the fixture's visibility subtree is smaller than the run — either it's never referenced outside the anchor package under B1 and equals `package`, or it would leak). At rootdir the two ARE the same thing; the framework accepts `session` as the idiomatic name for the run-lifetime tier.
 
 That equivalence is **retracted** — though not for the reason Amendment 1 gave. Amendment 1 replaced it with "`session` is one instance per worker process", which is itself wrong; Amendment 4 retracts the replacement.
 
-The two tiers differ because their guarantees have different *sources*. Rootdir `package` is exactly-once **structurally**: it collapses the whole suite onto one worker and pays for the guarantee in parallelism. `session` constrains the scheduler not at all and takes whatever grouping it happens to find, so in a suite with no `package` declaration a rootdir `session` fixture is built once per module. In a suite that does declare one at rootdir the two coincide — but only because `package` did the work. Offering both is still more expressive than declaring them synonyms; what a reader must not do is read `session` as a guarantee.
+The two tiers differ because their guarantees have different *sources*. Rootdir `package` is exactly-once **structurally**: it collapses the whole suite onto one worker and pays for the guarantee in parallelism. `process` constrains the scheduler not at all and gets one instance per process — `≤ 1 + N`, a number the user sets with `-n`. The two coincide only at `-n 1`. Offering both is more expressive than declaring them synonyms; what a reader must not do is read `process` as a run-wide guarantee.
 
-The *restriction* of `session` to rootdir survives, for the half of the original argument the retraction does not touch: declared below root, a `session` fixture would outlive the subtree that is allowed to see it, which is exactly what Rule 4 exists to prevent.
+The *restriction* to rootdir survives, and the rename **strengthens** its argument rather than weakening it. Under the old `session` reading the restriction rested on visibility: declared below root, the fixture would outlive the subtree allowed to see it. That still holds. But a genuinely per-process tier makes the point sharper — its boundary is not a directory at all, so anchoring it below the root attaches it to no code-structural boundary whatsoever. There is no subtree whose exit could dispose it. The rootdir package is the only anchor whose extent matches the process's.
 
-**A `session` fixture cannot be a true singleton.** Anything that must happen exactly once per run — a database migration, a schema create, a shared artifact build — belongs at rootdir `package` and pays the parallelism cost. Frameworks that do offer a cross-process once-per-run hook restrict it to serialised handles rather than live objects; Jest is explicit that "any global variables that are defined through `globalSetup` can only be read in `globalTeardown`. You cannot retrieve globals defined here in your test suites."
+**A `process` fixture cannot be a true singleton.** Anything that must happen exactly once per run — a database migration, a schema create, a shared artifact build — belongs at rootdir `package` and pays the parallelism cost. Frameworks that do offer a cross-process once-per-run hook restrict it to serialised handles rather than live objects; Jest is explicit that "any global variables that are defined through `globalSetup` can only be read in `globalTeardown`. You cannot retrieve globals defined here in your test suites."
 
 ### Rule 5 — Access via the `fx` proxy
 
@@ -234,7 +236,7 @@ Plugins that need to generate fixtures at runtime (5% case — e.g., one fixture
 | `function` | Once per test in the fixture's B1 scope |
 | `module` | Once per module boundary in scope |
 | `package` | Once per package boundary in scope — exactly once per run (Rule 2) |
-| `session` | Once per task group — one module unless a `package` declaration merges the subtree (Rule 2). For autouse work that must happen exactly once per run, declare at rootdir with `lifetime="package"` |
+| `process` | Once per process that resolves it — `≤ 1 + N` for N workers plus the coordinator (Rule 2). For autouse work that must happen exactly once per run, declare at rootdir with `lifetime="package"` |
 
 Autouse fixtures remain accessible by explicit request (`Fixture[T]` or `fx.<name>`); autouse is additive, not exclusive. The invisibility concern historically raised against autouse is solved by tooling, not by removing the feature: `oxitest inspect` shows autouse-firing per test as a first-class view (a follow-on impl item — see Consequences).
 
@@ -686,3 +688,46 @@ The one structural lesson worth carrying: the helper column entered this ADR by 
 > 5. **Consequences carries no breaking-change consequence, and should.** `docs/user/reference/stability.md:11` lists `Fixtures` under "Stable (semver-protected)", defined at `:7` as surface that "will not change in backward-incompatible ways without a major version bump", and `:16` extends the same promise to "`Plugin` dataclass and protocol interfaces". Rule 8 therefore retires surface the project has undertaken not to remove outside a major version, and `oxi-nixinfra` implements `FixtureProvider` against an unpinned `oxitest` flake input. Rule 8's own marker records the scope for #1720; what is missing *here* is the release consequence of the redesign as a whole. Amendment 4 should add a Consequences bullet stating that completing this ADR requires a major version. A second and separate gap on the same page, for [#1721](https://github.com/kalonji-tools/oxitest/issues/1721)'s sizing: **the replacement surface carries no stability promise at all.** `oxitest.fixture` — the new decorator — appears on none of `stability.md`'s three tiers (Stable `:5`, Experimental `:31`, Internal `:39`, the last an enumerated list of `_bridge` internals rather than a catch-all), while the legacy `Fixtures` registrar it replaces is semver-protected at `:11`. The docs rewrite should tier the new surface, not only untier the old one.
 >
 > 6. **"Green-field users see only the new surface" is Drifted — both surfaces are live, and the legacy one is still what a newcomer meets first.** `docs/user/how-to/use-fixtures.md:364` tells users the legacy route "still works and is not deprecated" (under the heading at `:361`, "## Legacy: `Fixtures()` in `conftest.py`"); the `oxitest.helper` sentinel actively instructs a new user into the retired API — *"Helpers in oxitest are declared via a Helpers() registry… Define your Helpers() instance in conftest.py"* (`python/oxitest/__init__.py:227`–`:238`); and the package's own module docstring leads its "Public API" section with the legacy registrar — `:3`–`:5`, "Public API / ---------- / `Fixtures` — Instance-based fixture registry. Create one per conftest.py" — while `@oxi.fixture`, `__fixtures__.py` and `lifetime` appear **nowhere in that file at all**, docstring (`:1`–`:101`) or code. Coexistence is deliberate and correct for an incrementally-shipped redesign; what Drifts is the present-tense claim that it is already over, and it ends at [#1720](https://github.com/kalonji-tools/oxitest/issues/1720), not before. Amendment 4 should restate the bullet as conditional on #1720; the sentinel text and the module docstring belong in [#1721](https://github.com/kalonji-tools/oxitest/issues/1721)'s scope. **Note for the Rule 8 tense sweep:** this is the same present-tense-for-future-state defect Rule 8 carries, pointing the *other* way — Rule 8 says the old surface is already gone, this bullet says the new one already stands alone, and both are false for one reason. A sweep scoped to Rule 8 will not reach this one.
+
+### Amendment 6 — `session` becomes `process`, and finally means it (2026-08-03)
+
+**Issue:** [#1777](https://github.com/kalonji-tools/oxitest/issues/1777). Amends Rule 2, Rule 4 and Rule 7's autouse table.
+
+Amendment 1 claimed the wide tier was "once per worker process". Amendment 4 retracted that and recorded the measured truth: once per **task group**, which absent any `package` declaration is once per *module*. So the ADR has twice described this tier and been wrong both times, in opposite directions. This amendment does not add a third description — it changes the implementation to match the first claim, and renames the tier so the name carries the guarantee.
+
+`lifetime="session"` is now `lifetime="process"`. `Lifetime.SESSION` is `Lifetime.PROCESS`; the wire value a user writes is `"process"`.
+
+#### What changed, and why the old behaviour was not a naming problem
+
+Two symmetric hoists, one per side of the run:
+
+- A worker built a fresh `FixtureSession` for every task group it popped. It now builds one per process and reuses it, draining the process tier in a `try/finally` around its stdin loop. The `finally` is load-bearing: the worker installs no `atexit` hook and no signal handler, so it is the only thing that survives the `KeyboardInterrupt` a Ctrl-C delivers mid-task.
+- The coordinator ran the process drain inside `execute_groups`, which fires once per *phase* — the inprocess one, each arranged bucket, then the remainder. It now drains once, after every phase.
+
+Measured on a four-module project, before and after:
+
+| | before | after |
+|---|---|---|
+| `-n 1` | 1 build / 1 PID | 1 / 1 |
+| `-n 2` | **4 builds / 2 PIDs** | 2 / 2 |
+| `-n 4` | 4 / 4 | 4 / 4 |
+
+`-n 4` is identical on both sides, and that is the methodological point worth keeping: with four modules over four workers, per-task-group and per-process are indistinguishable. The slice-4 acceptance test pinned only `-n 4`, which is how the gap survived it. The test is now parameterised over worker counts.
+
+#### The contract is `≤ 1 + N`, not `N`
+
+The coordinator is a process too. It resolves the tier whenever an `@oxi.mark.inprocess` test or an arranged bucket runs there, so a run with N workers has at most `1 + N` instances. Suites where the coordinator never resolves it see `N`.
+
+#### Splitting the tier off the builtins had a consequence
+
+`Lifetime.SESSION` used to map onto `FixtureScope.SESSION` — the bucket the builtins cache in. Giving the user tier its own `FixtureScope.PROCESS` was necessary (the two now drain at different boundaries) and broke an invariant that had been holding **by construction rather than by rule**: sharing one `_Scope` meant sharing one teardown list, and its reverse-order drain always ran a dependent before the builtin it was built on. Two lists drain in call order, which is the opposite.
+
+The concrete case: a `process` fixture that obtains a directory from `TempDirFactory` and writes to it during teardown. The builtin drains at `end_task`, the fixture at `end_process`, so the directory is gone — and `TempDirFactory.close()` uses `shutil.rmtree(..., ignore_errors=True)`, so nothing is reported.
+
+This is the wider-depends-on-narrower class [#1762](https://github.com/kalonji-tools/oxitest/issues/1762) rejects, and **#1762 does not cover it**: that issue's acceptance criteria exempt builtins outright, on the correct observation that they were safe at every tier. This amendment is what makes that observation false. Resolved here rather than deferred, because a documented silent use-after-teardown is still a silent use-after-teardown: a session-scoped builtin resolved *for* a process-lifetime fixture now caches in the process scope, so the pair shares a stack again and LIFO protects it. Ordinary tests keep the per-task instance, so no suite accumulates temp directories without declaring the tier.
+
+#### What this does not fix
+
+- **[#1740](https://github.com/kalonji-tools/oxitest/issues/1740) is untouched.** Moving `SharedAsyncManager` to the process side widens the loop those tasks run on; it does not make setup, body and teardown share an asyncio Task, and must not be read as having done so.
+- **A killed worker still loses its process teardowns.** No other process runs them, and a graceful SIGTERM was rejected as *unsound* rather than expensive — a C-level block never reaches the bytecode boundary where the signal becomes a Python exception. The loss is now announced: the coordinator emits a WARNING naming the worker and the fixtures the suite declares. It names the declared set, not what that worker built, because only the worker knew and it is gone.
+- **Cross-process transfer stays permanently out of scope**, per the axiom in Rule 2.

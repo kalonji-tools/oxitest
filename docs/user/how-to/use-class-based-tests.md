@@ -57,7 +57,7 @@ Apply marks to the class (affects all methods) or to individual methods:
 ## Limitations
 
 - **No class-scoped fixtures.** Fixtures are scoped to `each` (per-test),
-  `shared` (per-session), or `session` (per-process) — there is no `class` scope.
+  `shared` (per-task-group), or `process` (per-process) — there is no `class` scope.
   Each test method gets its own `each`-scoped fixture instances.
 - **No `setup_method` / `teardown_method`.** Use fixtures with yield teardown
   instead.

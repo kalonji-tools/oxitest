@@ -51,7 +51,7 @@ and register callbacks with `ctx.addfinalizer()`.
 | `"class"` | *no equivalent tier* | oxitest has no class-level boundary. Use `"function"`, or `"module"` when the class is the whole file. |
 | `"module"` | `lifetime="module"` | Direct equivalent. Disposed after the module's last test. |
 | `"package"` | `lifetime="package"` | Exactly once per run — and it collapses the declaring directory's subtree onto a single worker, so it costs parallelism. |
-| `"session"` | `lifetime="package"` in the rootdir package | This is the tier that is genuinely once per run. Do **not** reach for `lifetime="process"`, which is once per worker task group and is not a singleton. |
+| `"session"` | `lifetime="package"` in the rootdir package | This is the tier that is genuinely once per run. Do **not** reach for `lifetime="process"`, which is once per *process* — as many instances as you have workers — and is not a singleton. |
 
 The lifetime you may declare is also capped by where you declare it — a fixture
 written inline in a `test_*.py` cannot exceed `"module"`. See the

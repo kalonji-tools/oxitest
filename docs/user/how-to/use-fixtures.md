@@ -165,8 +165,8 @@ emits a warning naming the fixture, the declaring file, and the module count,
 so the cost never has to be diagnosed by bisecting CI times. A declaring
 package that holds a single module costs no parallelism and stays silent.
 
-`session` is legal only in a rootdir package, and it is **not** a
-run-wide singleton — each worker subprocess builds its own. It is the tier for
+`process` is legal only in a rootdir package, and it is **not** a
+run-wide singleton — each process builds its own. It is the tier for
 a per-process resource such as a connection pool:
 
 ```python
@@ -179,11 +179,11 @@ def engine() -> Iterator[Engine]:
 ```
 
 !!! note "Wide lifetimes in parallel mode"
-    A worker builds a fresh fixture session for **every task group** it picks
-    up, not one per worker, so a `session` fixture runs once per task group.
-    A task group is a single module unless a `package` declaration merges its
-    subtree — which means that in a suite with no `package` declaration,
-    `session` behaves exactly like `module`. Anything that must happen exactly
+    A worker builds **one** fixture session and reuses it for every task group
+    it picks up, so a `process` fixture is built at most once per process. The
+    count is bounded by how many processes exist — your `-n`, plus the
+    coordinator when an inprocess or arranged test resolves it — rather than by
+    your directory layout. Anything that must happen exactly
     once per run — a schema migration, a shared artifact build — belongs at
     rootdir `package` and pays the parallelism cost. See
     [Run in parallel](run-in-parallel.md#understand-session-scoped-fixture-behaviour-in-parallel-runs)
