@@ -44,22 +44,24 @@ whose exit disposes the value.
 | `"function"` | The individual test | After that test |
 | `"module"` | The test module | After the module's last test |
 | `"package"` | The declaring directory's subtree | After the subtree's last test |
-| `"session"` | The worker task group | At task-group teardown |
+| `"process"` | The process — a worker, or the coordinator | At process exit |
 
 The ladder is **not** ordered by strength of guarantee. `"package"` is exactly
-once per run and pays for it in parallelism; `"session"` constrains the
-scheduler not at all and therefore guarantees correspondingly little — a task
-group is a single module unless some `"package"` declaration merges a subtree,
-so in a suite with no `"package"` declaration `"session"` behaves exactly like
-`"module"`. It is the only tier whose instance count is set by another tier's
-declarations. Work that must happen exactly once per run belongs at
-`"package"` in the rootdir package.
+once per run and pays for it in parallelism; `"process"` constrains the
+scheduler not at all and guarantees one instance per process instead — at most
+`1 + N` for `-n N`, the `1` being the coordinator when an inprocess or arranged
+test resolves it. It is the only tier whose instance count you set directly:
+change `-n` and the number changes, with no edit to any declaration. Work that
+must happen exactly once per run belongs at `"package"` in the rootdir package.
 
-!!! note "`session` is being reworked"
-    [#1777](https://github.com/kalonji-tools/oxitest/issues/1777) has decided to
-    rename this tier to `lifetime="process"` and give it genuine per-process
-    semantics. That has not shipped — `"session"` is the spelling `@oxi.fixture`
-    accepts today, with the semantics described above.
+!!! note "Renamed from `session` in 3.1"
+    [#1777](https://github.com/kalonji-tools/oxitest/issues/1777) renamed this
+    tier from `lifetime="session"` and gave it genuine per-process semantics.
+    It previously meant once per *task group* — a single module unless some
+    `"package"` declaration merged a subtree — so the old name promised a
+    boundary the implementation did not have. `"session"` is no longer accepted;
+    `@oxi.fixture(lifetime="session")` raises
+    `ValueError: 'session' is not a valid Lifetime`.
 
 For guidance on choosing between them, see
 [Use fixtures](../../how-to/use-fixtures.md#choose-a-lifetime).
