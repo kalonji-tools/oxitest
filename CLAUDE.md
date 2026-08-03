@@ -75,7 +75,9 @@ Grill → Issue → Triage → Spec → Draft PR → Plan → Implement → Revi
 
 The numbers are the stages below. Rebase, preflight and waiting for CI are *inside* stage 9 — see its merge sequence.
 
-**1. Grill new ideas.** Any new feature, concept, or design direction MUST go through `grill-with-docs` before anything else. This ensures ideas are stress-tested against the existing domain model and documented decisions before committing to them.
+**1. Grill new ideas.** Any new feature, concept, or design direction MUST be stress-tested against the existing domain model and documented decisions before anything is committed to.
+
+The **user** invokes `grill-with-docs` — it is marked `disable-model-invocation`, so an agent cannot call it and this stage will otherwise read as skipped rather than as impossible. An agent that reaches this stage unaided runs `grilling` plus `domain-modeling` (which is what `grill-with-docs` does) and records in the issue that it did so, and that no user-driven grilling took place.
 
 **2. Create issues.** Once an idea survives grilling and is deemed worth implementing, create GitHub issues. Every issue MUST state the "why" — why is this change needed? What problem does it solve? Organize into milestones if the work spans multiple issues.
 
@@ -83,7 +85,9 @@ At creation, apply exactly one **category** label, **one or more** `area:` label
 
 **3. Triage issues.** Every issue gets a **state label** reflecting its triage status. See `docs/agents/triage-labels.md` for the state vocabulary. Triage is also where `priority:` and `size:` are applied — they are judgements, not facts known at filing time, and a guessed `size: M` is worse than no label at all.
 
-**4. Spec every issue.** By the time a PR is created, every issue in that PR MUST have a design spec. If no issue exists yet for the work being specced, create one first — every spec needs a home issue. Specs can be written when the issue is picked up or ahead of time — but never skipped. Use the `superpowers:brainstorming` skill for spec design. Post each issue's spec section as a comment on that issue. When issues share a grouped spec, post only the section relevant to each issue — not the entire spec on every issue.
+**4. Spec every issue.** A spec is consumed as fact by every stage after it, so its claims are bound by *Evidence for analysis outputs* below — including the ones that merely characterise current behaviour. The most thoroughly-grilled spec in this repo's history carried three false claims, and every one was caught by measurement rather than by a stage.
+
+By the time a PR is created, every issue in that PR MUST have a design spec. If no issue exists yet for the work being specced, create one first — every spec needs a home issue. Specs can be written when the issue is picked up or ahead of time — but never skipped. Use the `superpowers:brainstorming` skill for spec design. Post each issue's spec section as a comment on that issue. When issues share a grouped spec, post only the section relevant to each issue — not the entire spec on every issue.
 
 **5. Create a draft PR.** Open the draft PR *before* any implementation, so the approach can be reviewed early. GitHub requires at least one commit, so scaffold with an empty one and fold it away later:
 
@@ -105,28 +109,55 @@ Assignment is **folded into `gh pr create`** (`fold-in`) — there is no separat
 
 **7. Implement via subagents or inline.** Use `superpowers:subagent-driven-development` or `superpowers:executing-plans`.
 
+When you dispatch, `docs/agents/dispatch-protocol.md` defines what a dispatched agent owes the rest of this pipeline — stage obligations, workspace isolation, citation scope, which gates it must not run, and its standing permission to refuse you. Every clause there was measured on a real wave. A dispatched agent inherits none of this pipeline's stages unless the prompt names them: in the run that measured it, stage 10 compliance was **0/4** (`artifact` — the prompt must name the stages it delegates).
+
 **8. Post-implementation review.** After all plan tasks are implemented and pushed, run these passes before marking the PR ready:
+
+- **Scope the diff against the merge-base, three-dot** — `git diff main...HEAD`, after a fetch. Two-dot compares *tips*, so anything merged to `main` since the branch point renders as a deletion by your branch; one review opened on a `main..HEAD` diff reporting **902 phantom deletions** across files the branch had never opened. The fetch matters for the second half of this rule: re-run any gate added to `main` since the branch point — a strict-docs gate once never ran on a branch until review caught it.
 - **`ponytail:ponytail-review`** on the branch diff — hunt over-engineering, dead code, and unnecessary complexity. May be skipped on a single-commit PR touching no public surface, **provided the skip and its reason are recorded in the PR checklist** (`artifact`). No size threshold is set: the yield data is currently too thin to justify removing a gate, and the recorded skips are how that data gets collected.
 - **`/improve branch`** — audit the branch changes for correctness, security, test coverage gaps, and tech debt.
+- **Cross-reference the two passes before acting — for ordering, not just for overlap.** Findings that look unrelated can be sequenced: one pass once flagged four duplicated test harnesses while the other flagged a missing test, and the missing test would have been a *fifth* copy of the harness, so the deduplication had to land first. Neither pass can see that from inside itself.
 - **Explore findings before acting.** Present findings to the user. For each finding, explore the cited code to verify it's real and determine if the fix is safe. Only fix after exploration confirms the finding is actionable. Never blindly apply review suggestions.
 - **Docs evaluation.** Check whether the changes affect user-facing documentation. Scan `docs/user/`, `docs/internals/`, `CONTEXT.md`, and error references for stale content. If docs need updating, fix them in the same PR — don't let stale docs ship.
 
 **9. Merge rules.**
+
+Three different operations in this stage get called "rebase" in ordinary speech. They are named separately here and used consistently throughout: **regroup** (rewriting your branch's own commits into coherent units), **rebase onto `main`** (merge-sequence step 1), and **`--rebase` merge** (the GitHub merge strategy).
+
 - **Never push directly to main.** All changes go through pull requests.
 - **Never merge without approval.** Wait for either a GitHub review approval or an explicit user command (e.g., "merge", "merge rebase delete branch"). Do not auto-merge after CI passes.
 - Only `--rebase` merge is allowed. Never squash merge, never merge commits.
 - Every commit message title MUST include its related issue number: `feat: add Foo (#42)`
 - Multiple issues per commit are fine: `feat: add Bar and Baz (#43, #44)`
 - **PR closing keywords**: GitHub requires the keyword before EACH issue number. Write `Closes #1, Closes #2, Closes #3` — NOT `Closes #1, #2, #3` (only the first gets closed).
-- **Pre-merge commit hygiene**: When a merge is triggered (e.g., "merge", "merge rebase delete branch"), evaluate the commit history first. If commits are too granular or disorganized, logically rebase them into coherent commits before merging. Each commit should represent a logical unit of work.
 - Run `just preflight` before pushing.
+
+**Pre-merge commit regroup (`artifact`).** When a merge is triggered, regroup the branch into coherent commits — or record in the PR why the existing grouping is already coherent. Either way it leaves a mark, because this step has now been skipped silently, reported as done when it was not, and argued against with a false claim that the tooling made it impossible. A tick that says "already coherent" is a legitimate outcome; a tick that is absent is not.
+
+The tooling is available, contrary to that claim:
+
+```bash
+git branch -f backup/<slug> HEAD          # 1. safety net, before touching anything
+
+git reset --soft HEAD~N && git commit     # collapse the last N into one
+git rebase --onto <base> <old-parent> <branch>   # move a middle commit
+GIT_SEQUENCE_EDITOR=true git rebase --autosquash -i <base>   # fold fixup! commits
+
+git diff --quiet backup/<slug> HEAD       # 2. empty ⇒ nothing lost or gained
+```
+
+`git rebase -i` works here **provided `GIT_SEQUENCE_EDITOR` is set** — it is only the interactive editor that is unavailable, not the command, so `--autosquash` is usable too. The two bracketing commands are the point: tree equality proves the regroup preserved content whatever the commits became, which means every gate result from before the regroup still applies afterwards.
 
 **Merge sequence** — this order, every time:
 
 1. rebase onto latest `main`;
-2. re-run `just preflight` **after** the rebase — even if CI was green before it;
+2. re-run `just preflight` **after** rebasing onto `main` — even if CI was green before it;
 3. push; wait for CI green;
 4. `gh pr merge --rebase`.
+
+**"CI green" means the required contexts, not every check.** The required set is defined by branch protection — query it (`gh api repos/{owner}/{repo}/branches/main/protection`) rather than trusting a remembered list, because a copy here would drift. A red **non-required** check is not a merge blocker; say so in the debrief and move on. Do not make a coverage check green by measuring less — widening an `ignore:` list over untested code is the recorded anti-pattern, not a fix.
+
+**A cross-cutting change must be re-verified against a freshly-rebased branch.** CI builds the *merge commit*, so a rename or a vocabulary change is broken by construction by anything that lands on `main` meanwhile — and every local gate stays green throughout, because locally the two halves never meet. This is a trigger for merge-sequence step 2, not a new step: for any rename, vocabulary change, or branch left open more than a day, rebase onto latest `main` and re-run the gate *before* requesting merge rather than discovering it in CI.
 
 `.config/wt.toml` sets `pre-merge = "just preflight"`, so step 2 happens automatically for `wt merge` and is **bypassed by `gh pr merge`**. That asymmetry is why the sequence is written here rather than assumed.
 
@@ -136,8 +167,10 @@ Assignment is **folded into `gh pr create`** (`fold-in`) — there is no separat
 gh pr merge --rebase
 git push origin --delete <branch>
 git -C <primary-worktree> pull --ff-only
-wt remove <branch> -D --foreground
+wt remove <branch> -D --foreground --yes
 ```
+
+`--yes` is not optional here: `wt` prompts for approval, and without it the command fails outright in a non-interactive session — in the very block offered as the workaround for a known trap. The same applies to `wt switch --create`.
 
 **10. Post-merge debrief.** After a PR is merged, if the implementation diverged from the plan, add a debrief comment to the closed PR explaining how, where, and why it diverged. Apply the `diverged-from-plan` label to the PR. This label is only applied to closed/merged PRs.
 
@@ -173,6 +206,8 @@ The pipeline gates code. This gates *conclusions*.
 | Wrong ⇒ someone investigates and finds nothing. Self-correcting. | Wrong ⇒ information is destroyed and nothing looks again. Silent and permanent. |
 | **no citation needed** | **citation required** |
 
+**Direction is the common case, not the rule.** The rule is *consequence*, and a claim that becomes an input to a decision is load-bearing whichever column it falls in. Three kinds slip through the table above: a claim that **specifies the verification itself** (which mutant, which command, which assert fails) — get it wrong and the test it prescribes is vacuous while reading as coverage; a claim that merely **characterises current behaviour** and then becomes spec input; and a claim **inherited** from an issue or spec written days earlier. Re-verify an inherited claim **when you act on it**, not when it was written — this repo ships fast enough that claims go stale between filing and dispatch, and a `confirmed` label is exactly what suppresses the re-check.
+
 A subtracting claim MUST carry:
 
 1. the **exact command** re-run, and its output;
@@ -180,6 +215,17 @@ A subtracting claim MUST carry:
 3. evidence the run **executed** rather than replaying a cache — a cached `cargo clippy` once returned 0 where a forced rebuild found 11. "Green" and "ran" are different claims.
 
 This is `artifact` tier: it binds when someone reads the comment. Its value is that the omission becomes visible — a missing quote is the tell — where today there is nothing to look for.
+
+### Believing a verdict (`artifact`)
+
+**"Printed something friendly" ≠ "did the thing".** A command can report success without having executed, and ten distinct mechanisms for it have been observed in this repo — so this is stated as an invariant rather than as a list of traps to memorise, because the list has been outgrown ten times.
+
+Before believing any verdict:
+
+1. **Capture the exit status directly**, never through a pipe. `cmd | tail -30` reports *tail's* status, which is how a `command not found` once read as a passing gate.
+2. **Pin an asynchronously-fetched verdict to its subject** before reading it. Resolve the head SHA first (`gh pr view "$PR" --json headRefOid`) and refuse any answer that is not about that SHA: an **empty** CI rollup reads as "nothing pending", and after a force-push a **complete green tally belonging to the previous head** reads as success.
+3. **Treat an implausible duration as "did not run".** `just preflight` costs 150–300 s here; four branches once reported a failing preflight in 0–4 s because a `sed` had rewritten the recipe name. Wall-clock caught what the exit code did not.
+4. **State the run count.** N clean runs is not evidence of absence. Say how many times you ran it and capture the output — a flake and a fix are indistinguishable from a single green.
 
 ### Gate coverage (`artifact`)
 
@@ -318,7 +364,9 @@ Parameters annotated with `Fixture[T]` are injected; unannotated parameters are 
 - **Python integration tests** (`just test-python`): Run real commands. Tests use oxitest itself as the runner (`strict = "abort"`).
 - **CI**: GitHub Actions. Two parallel jobs: `check` (static analysis via `just check`) and `test` (`just test-rust`, `just build`, `just test-python`). Uses `dtolnay/rust-toolchain`, `astral-sh/setup-uv`, `Swatinem/rust-cache` — no devenv in CI.
 - **Every `assert` MUST have a message.** oxitest runs with `strict = "abort"` — bare asserts are violations. The message explains *why* the assertion matters — oxitest already shows the where, when, and what (expected vs actual). The message gives the developer the *why* so they can debug the *how*. Bad: `"expected 4 methods, got 3"` (oxitest already shows that). Good: `"FixtureProvider protocol added a method — HostProvider needs to implement it to avoid runtime TypeError"`.
-- **Mutation checks need a clean baseline.** A test proves nothing until a mutation makes it fail — but applying a mutant to a file that also holds uncommitted work, then reverting with `git checkout -- <file>`, destroys that work along with the mutant. Commit or stash **before** applying any mutant, and after reverting confirm `git status` shows only the mutant gone. This has bitten twice, in `src/types/outcome.rs` and `src/parallel/pool.rs`, caught both times only by reading `git status` before amending.
+- **Mutation checks need a clean baseline.** A test proves nothing until a mutation makes it fail — but applying a mutant to a file that also holds uncommitted work, then reverting with `git checkout -- <file>`, destroys that work along with the mutant. **`git status --porcelain` must print nothing before you apply a mutant**, and again show only the mutant gone after you revert. Run it; do not intend to. This has now bitten three times, and the run that lost the most had **quoted this rule in its own plan** while violating it — which is why the obligation is a command rather than a sentence.
+- **A mutant that passes is a finding until explained.** If the test does not fail, one of two things is true: the test is weaker than it looks, or the mutation is not the inverse of the behaviour you think you changed. Both are worth knowing and neither is "write a better mutant and move on". The worst bug found in this repo's fixture work — a scope cache that was never cleared, leaking a temp directory after every worker's first task group — surfaced because a mutant *passed* and the pass was investigated.
+- **Re-run the mutation set after any later change to the same code.** A mutant that *stops* failing is an unintended semantic change, and a review pass late in a branch is exactly when that happens.
 
 ### Testing guidelines
 
@@ -351,3 +399,7 @@ Default label vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-h
 ### Domain docs
 
 Single-context layout — `CONTEXT.md` + `docs/adr/` at root. See `docs/agents/domain.md`.
+
+### Dispatch protocol
+
+What a dispatched agent owes this pipeline. See `docs/agents/dispatch-protocol.md`, referenced from stage 7.
