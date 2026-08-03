@@ -85,7 +85,16 @@ def test_inline_session_at_the_rootdir_package_is_rejected() -> None:
         f"where the location rule alone would allow it; rc={rc}\n"
         f"stdout:\n{stdout}\nstderr:\n{stderr}"
     )
-    for expected in ("cluster", "test_bad.py", "session", "module"):
+    # Full `lifetime="..."` literals rather than bare words: the project
+    # directory is `slice5_inline_session_at_root`, so a bare "session" check
+    # matched the printed path and would have survived the #1777 rename without
+    # ever looking at the diagnostic.
+    for expected in (
+        "cluster",
+        "test_bad.py",
+        'lifetime="process"',
+        'lifetime="module"',
+    ):
         assert expected in output, (
             f"the diagnostic must name {expected!r}; got:\n{output}"
         )

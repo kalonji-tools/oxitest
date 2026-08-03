@@ -254,7 +254,12 @@ def test_session_below_the_rootdir_package_is_rejected(tmp: TempDir) -> None:
         f"a session declaration below the rootdir package must fail the run; "
         f"rc={rc}\nstdout:\n{stdout}\nstderr:\n{stderr}"
     )
-    for expected in ("engine", "__fixtures__.py", "session", "Hint"):
+    # The tier is matched as the full `lifetime="process"` literal, not as the
+    # bare word. Every path the diagnostic prints contains
+    # `slice4_session_below_root`, so a bare-word check matched the directory
+    # name rather than the message and stayed green through the #1777 rename
+    # while asserting nothing about the text.
+    for expected in ("engine", "__fixtures__.py", 'lifetime="process"', "Hint"):
         assert expected in output, (
             f"the diagnostic must name {expected!r} so the user can act on it "
             f"without reading oxitest's source; got:\n{output}"
