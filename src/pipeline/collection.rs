@@ -234,6 +234,113 @@ struct DeclarationHome<'a> {
     tree_root: Option<&'a camino::Utf8Path>,
 }
 
+/// Prescan's view of a home's declarations, in the shape the registry returns.
+///
+/// Used only when registration failed, so the registry has no answer to give.
+/// It is a strictly worse answer — it sees only the three recognized decorator
+/// spellings — which is exactly why it is the fallback and not the source.
+fn ast_declarations(payload: &crate::prescan::PrescanFixturePayload) -> Vec<(String, String, u32)> {
+    payload
+        .declarations
+        .iter()
+        .map(|d| (d.fn_name.clone(), d.lifetime.clone(), *d.lineno as u32))
+        .collect()
+}
+
+/// Import a declaration home, then record what it actually declared.
+///
+/// The declaration list comes from the registry when registration succeeded and
+/// from `ast_fallback` when it did not (#1859). That ordering is the whole point:
+/// registration is by marker attribute, so the registry sees every import
+/// spelling — including the dynamic ones no static scan can reach — while the
+/// AST sees only three. Falling back only on failure preserves the invariant the
+/// previous AST-only code was written to protect: the scheduler decision must
+/// hold even when registration failed.
+fn register_and_record(
+    py: pyo3::Python<'_>,
+    session: &bridge::FixtureSession,
+    home: &DeclarationHome<'_>,
+    ast_fallback: &[(String, String, u32)],
+    errors: &mut Vec<types::CollectError>,
+    fixture_modules: &mut Vec<types::FixtureModule>,
+) {
+    let DeclarationHome {
+        path,
+        anchor,
+        tree_root,
+    } = *home;
+
+    let session_obj = session.as_py_object(py);
+    let registration = bridge::register_fixture_module_for_path(py, session_obj, path, anchor);
+    let registration_failed = registration.is_err();
+    if let Err(e) = registration {
+        errors.push(e);
+    }
+
+    let declarations: Vec<(String, String, u32)> = if registration_failed {
+        ast_fallback.to_vec()
+    } else {
+        session
+            .module_source_declarations(py, anchor)
+            .unwrap_or_else(|e| {
+                errors.push(e);
+                ast_fallback.to_vec()
+            })
+    };
+
+    let package_declarations = declarations
+        .iter()
+        .filter(|(_, lifetime, _)| lifetime == crate::prescan::LIFETIME_PACKAGE)
+        .map(|(fn_name, _, lineno)| types::PackageDeclaration {
+            fn_name: fn_name.clone(),
+            lineno: crate::types::LineNo::from_u32(*lineno),
+        })
+        .collect();
+
+    // ADR-0009 Rule 4: `process` is legal only in a rootdir package. It is the
+    // tier that does not constrain the scheduler, so anchoring it below the root
+    // attaches it to no boundary at all. Per declaration rather than per file,
+    // so two offending declarations produce two diagnostics.
+    let is_rootdir_package = tree_root == Some(anchor);
+    if !is_rootdir_package {
+        // Name the directory that *is* the root. "Move it to a rootdir package"
+        // is unactionable on its own: the root is derived from the collected
+        // tree, so the user cannot read it off their config. Absent only when
+        // nothing was collected, in which case this loop cannot produce a
+        // diagnostic anyway.
+        let root_hint = tree_root.map_or_else(
+            || "the root of your test tree".to_owned(),
+            |root| root.to_string(),
+        );
+        errors.extend(
+            declarations
+                .iter()
+                .filter(|(_, lifetime, _)| lifetime == crate::prescan::LIFETIME_PROCESS)
+                .map(|(fn_name, _, _)| {
+                    types::CollectError::PyError(format!(
+                        "{fn_name} in {path} declares lifetime=\"process\", but \
+                         {anchor} is not a rootdir package.\n\
+                         process is the tier that does not constrain the \
+                         scheduler, so anchoring it below the root attaches \
+                         it to no boundary at all.\n\
+                         Hint: move the declaration to {root_hint}, or drop \
+                         to lifetime=\"package\" to scope it to {anchor}, or \
+                         lifetime=\"module\" for per-file.",
+                    ))
+                }),
+        );
+    }
+
+    // Recorded even when registration failed above: the serial session and a
+    // worker session are independent, so a failure here says nothing about
+    // whether the worker will succeed. It reports its own diagnostic.
+    fixture_modules.push(types::FixtureModule {
+        module: path.to_owned(),
+        anchor: anchor.to_owned(),
+        package_declarations,
+    });
+}
+
 /// Prescan one declaration-home file and register whatever it declares.
 ///
 /// Prescan is an optimization here, not an authority. It answers "does this file
@@ -249,78 +356,17 @@ fn register_declaration_home(
     errors: &mut Vec<types::CollectError>,
     fixture_modules: &mut Vec<types::FixtureModule>,
 ) {
-    let DeclarationHome {
-        path,
-        anchor,
-        tree_root,
-    } = *home;
+    let path = home.path;
     match crate::prescan::prescan_fixture_module(path) {
         crate::prescan::PrescanFixtureResult::HasFixtures(payload) => {
-            let session_obj = session.as_py_object(py);
-            if let Err(e) = bridge::register_fixture_module_for_path(py, session_obj, path, anchor)
-            {
-                errors.push(e);
-            }
-            // Read off the AST rather than from the registered session: the
-            // scheduler decision must hold even when registration above failed,
-            // and it has to be available before any Python runs.
-            let package_declarations = payload
-                .declarations
-                .iter()
-                .filter(|d| d.lifetime == crate::prescan::LIFETIME_PACKAGE)
-                .map(|d| types::PackageDeclaration {
-                    fn_name: d.fn_name.clone(),
-                    lineno: d.lineno,
-                })
-                .collect();
-            // ADR-0009 Rule 4: `session` is legal only in a rootdir package. It
-            // is the tier that does not constrain the scheduler, so anchoring it
-            // below the root attaches it to no boundary at all.
-            //
-            // Read off the AST for the same reason the scheduler decision above
-            // is: it must hold even when registration failed, and be available
-            // before any Python runs. Per declaration rather than per file, so
-            // two offending declarations produce two diagnostics.
-            let is_rootdir_package = tree_root == Some(anchor);
-            if !is_rootdir_package {
-                // Name the directory that *is* the root. "Move it to a rootdir
-                // package" is unactionable on its own: the root is derived from
-                // the collected tree, so the user cannot read it off their
-                // config. Absent only when nothing was collected, in which case
-                // this loop cannot produce a diagnostic anyway.
-                let root_hint = tree_root.map_or_else(
-                    || "the root of your test tree".to_owned(),
-                    |root| root.to_string(),
-                );
-                errors.extend(
-                    payload
-                        .declarations
-                        .iter()
-                        .filter(|decl| decl.lifetime == crate::prescan::LIFETIME_PROCESS)
-                        .map(|decl| {
-                            types::CollectError::PyError(format!(
-                                "{} in {path} declares lifetime=\"process\", but \
-                                 {anchor} is not a rootdir package.\n\
-                                 process is the tier that does not constrain the \
-                                 scheduler, so anchoring it below the root attaches \
-                                 it to no boundary at all.\n\
-                                 Hint: move the declaration to {root_hint}, or drop \
-                                 to lifetime=\"package\" to scope it to {anchor}, or \
-                                 lifetime=\"module\" for per-file.",
-                                decl.fn_name,
-                            ))
-                        }),
-                );
-            }
-            // Recorded even when registration failed above: the serial session
-            // and a worker session are independent, so a failure here says
-            // nothing about whether the worker will succeed. It reports its own
-            // diagnostic.
-            fixture_modules.push(types::FixtureModule {
-                module: path.to_owned(),
-                anchor: anchor.to_owned(),
-                package_declarations,
-            });
+            register_and_record(
+                py,
+                session,
+                home,
+                &ast_declarations(&payload),
+                errors,
+                fixture_modules,
+            );
         }
         crate::prescan::PrescanFixtureResult::Unavailable => {
             // The file exists but could not be parsed (syntax error, I/O error).
@@ -340,17 +386,12 @@ fn register_declaration_home(
             // refused a spelling the runtime accepts and fired on files holding
             // no fixtures at all — it never inspected the decorator.
             if payload.has_decorated_functions {
-                let session_obj = session.as_py_object(py);
-                if let Err(e) =
-                    bridge::register_fixture_module_for_path(py, session_obj, path, anchor)
-                {
-                    errors.push(e);
-                }
-                fixture_modules.push(types::FixtureModule {
-                    module: path.to_owned(),
-                    anchor: anchor.to_owned(),
-                    package_declarations: vec![],
-                });
+                // The AST fallback is empty by construction on this arm —
+                // prescan named no declaration, which is why we are importing at
+                // all. If registration fails here there is genuinely nothing to
+                // fall back to, and that is the honest answer rather than a
+                // guess.
+                register_and_record(py, session, home, &[], errors, fixture_modules);
             }
         }
     }
@@ -971,6 +1012,35 @@ pub(super) fn split_coverage_diagnostics(
 mod tests {
     use super::*;
     use assert_fs::prelude::*;
+
+    // ── ast_declarations: the registration-failure fallback (#1859) ──────────
+
+    #[test]
+    fn ast_declarations_preserves_the_scheduler_answer_when_registration_fails() {
+        // Arrange — what prescan saw, in the shape the registry would return.
+        let payload = crate::prescan::PrescanFixturePayload {
+            declarations: vec![crate::prescan::PrescanDeclaration {
+                fn_name: "engine".to_owned(),
+                lineno: crate::types::LineNo::new(4),
+                lifetime: crate::prescan::LIFETIME_PACKAGE.to_owned(),
+                is_async: false,
+            }],
+        };
+
+        // Act
+        let sourced = ast_declarations(&payload);
+
+        // Assert
+        assert_eq!(
+            sourced,
+            vec![("engine".to_owned(), "package".to_owned(), 4_u32)],
+            "when registration fails the registry has no answer, so the AST is \
+             the only source left. Dropping to an empty list instead would \
+             silently disable co-location for the whole subtree — the exactly-\
+             once guarantee failing quietly, which is the defect #1859 exists \
+             to remove rather than relocate"
+        );
+    }
 
     // ── test_tree_root (#1711) ───────────────────────────────────────────────
 

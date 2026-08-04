@@ -960,3 +960,109 @@ def test_autouse_suppression_by_an_anchored_def_is_boundary_local() -> None:
         "the defs[-1] regression (#1774): one anchored def anywhere in the tree "
         "disables an ambient autouse for tests that cannot even see it"
     )
+
+
+# ── module_source_declarations: the ADR-0009 enforcement source (#1859) ───────
+
+
+def _declared_at_module_level() -> str:
+    """A real def, so `co_firstlineno` has a stable line to report."""
+    return "v"
+
+
+def _module_source_def(
+    name: str, anchor: str, lifetime: Lifetime, namespace: str
+) -> FixtureDef[Any]:
+    """A ModuleSource def anchored at *anchor*, declaring *lifetime*."""
+    return FixtureDef(
+        name=name,
+        fixture_type=str,
+        scope=FixtureScope.PACKAGE,
+        source=ModuleSource(
+            func=_declared_at_module_level,
+            defining_module_path=f"{anchor}/__fixtures__.py",
+            anchor_package_path=anchor,
+            lifetime=lifetime,
+        ),
+        namespace=namespace,
+    )
+
+
+def test_module_source_declarations_reports_name_lifetime_and_lineno() -> None:
+    """The scheduler and ADR-0009 Rule 4 read this instead of the prescan AST."""
+    # Arrange
+    registry = helpers.make_registry()
+    registry.register(_module_source_def("conn", "/proj/pkg", Lifetime.PACKAGE, "pkg"))
+
+    # Act
+    declarations = registry.module_source_declarations("/proj/pkg")
+
+    # Assert
+    expected_line = _declared_at_module_level.__code__.co_firstlineno
+    assert declarations == (("conn", "package", expected_line),), (
+        f"this tuple is the only thing standing between an aliased declaration "
+        f"and the scheduler: the lifetime string drives package co-location and "
+        f"the Rule 4 rootdir check, and the lineno reaches the user in the "
+        f"co-location warning; got {declarations!r}"
+    )
+
+
+def test_module_source_declarations_excludes_other_anchors() -> None:
+    """Each declaration home asks only about its own anchor."""
+    # Arrange
+    registry = helpers.make_registry()
+    registry.register(_module_source_def("mine", "/proj/pkg", Lifetime.PACKAGE, "pkg"))
+    registry.register(
+        _module_source_def("theirs", "/proj/other", Lifetime.PACKAGE, "other")
+    )
+
+    # Act
+    declarations = registry.module_source_declarations("/proj/pkg")
+
+    # Assert
+    assert [name for name, _, _ in declarations] == ["mine"], (
+        f"a home that claimed another anchor's declarations would co-locate a "
+        f"subtree that declared nothing, disabling parallelism for directories "
+        f"the user never annotated; got {declarations!r}"
+    )
+
+
+def test_module_source_declarations_excludes_non_module_sources() -> None:
+    """Conftest and plugin fixtures are not ADR-0009 declarations."""
+    # Arrange
+    registry = helpers.make_registry(
+        helpers.make_fixture_def("db", conftest_path="/c.py")
+    )
+
+    # Act
+    declarations = registry.module_source_declarations("/c.py")
+
+    # Assert
+    assert declarations == (), (
+        f"only ModuleSource carries an anchor and a declared lifetime; counting "
+        f"a ConftestSource here would apply a home-kind rule to a source that "
+        f"has no home; got {declarations!r}"
+    )
+
+
+def test_module_source_declarations_sees_a_shadowed_declaration() -> None:
+    """An inventory question, not a resolution one — every def counts."""
+    # Arrange — the same name declared at a package and at a nested package.
+    # `_by_name["conn"]` is [outer, inner], so `defs[-1]` is the inner one.
+    registry = helpers.make_registry()
+    registry.register(_module_source_def("conn", "/proj/pkg", Lifetime.PACKAGE, "pkg"))
+    registry.register(
+        _module_source_def("conn", "/proj/pkg/sub", Lifetime.PACKAGE, "sub")
+    )
+
+    # Act
+    declarations = registry.module_source_declarations("/proj/pkg")
+
+    # Assert
+    assert [name for name, _, _ in declarations] == ["conn"], (
+        f"the outer declaration still exists even though a deeper package "
+        f"shadows the name for resolution. Reading only the most-local def "
+        f"would drop it, and the outer package would stop co-locating its "
+        f"subtree — the exactly-once guarantee failing silently for any suite "
+        f"that reuses a fixture name in a nested package; got {declarations!r}"
+    )

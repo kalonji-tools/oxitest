@@ -648,6 +648,46 @@ class FixtureRegistry:
             )
         )
 
+    def module_source_declarations(
+        self, anchor_package_path: str
+    ) -> tuple[tuple[str, str, int], ...]:
+        """Return ``(name, lifetime, lineno)`` for ModuleSource defs at *anchor*.
+
+        The authority for ADR-0009's scheduler co-location and Rule 4 checks
+        (#1859). Read from the registry rather than from prescan's AST because
+        registration is marker-attribute based: an unrecognized import spelling
+        registers normally and no static scan can see it.
+
+        Every def is scanned, not just the most-local one per name, unlike
+        :meth:`process_lifetime_names`. That method answers a *resolution*
+        question — which fixture wins — so ``defs[-1]`` is right there. This one
+        answers an *inventory* question: what does this home declare? A name
+        shadowed by a deeper package would drop out of ``defs[-1]`` while its
+        declaration at this anchor still exists, and losing it would silently
+        un-enforce the rules this method exists to feed.
+
+        ``lineno`` comes from the function's code object because ``FixtureDef``
+        carries none. It is the ``def`` line, matching what prescan reported
+        before the source moved.
+        """
+        out: list[tuple[str, str, int]] = []
+        for defs in self._by_name.values():
+            for defn in defs:
+                source = defn.source
+                if not isinstance(source, ModuleSource):
+                    continue
+                if source.anchor_package_path != anchor_package_path:
+                    continue
+                # Two guarded lookups rather than `func.__code__`: the declared
+                # type is a callable, and only *functions* carry `__code__`. A
+                # callable object registered as a fixture has no source line, and
+                # 0 is the honest answer — the value is diagnostic decoration, so
+                # losing it must not cost the caller the declaration itself.
+                code = getattr(source.func, "__code__", None)
+                lineno: int = getattr(code, "co_firstlineno", 0)
+                out.append((defn.name, str(source.lifetime), lineno))
+        return tuple(sorted(out))
+
     def resolve(
         self, fixture_type: type, qualifier: str | None = None
     ) -> FixtureDef[Any]:
