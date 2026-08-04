@@ -90,4 +90,6 @@ The last row is the branch this file was written on. On a multi-issue branch, po
 
 The third is not a sloppiness failure and is the reason this clause exists separately: the author wrote a correct-looking check against the file as they were reading it, and their own change made it unsatisfiable.
 
-**Where it is enforced.** `CLAUDE.md` stage 7, which points here. The rule binds the implementer consuming the plan, not the author writing it.
+**A second override on the same axis: the repo dictates what a plan opens with.** `writing-plans` owns plan structure, and `CLAUDE.md` stage 6 requires every plan to begin with a **premise ledger** — the claims the work rests on, the ones that narrowed its scope, and the steps needing a buildable predecessor. That is `fold-in` tier: the plan format begins with it, so there is no separate step to skip.
+
+**Where it is enforced.** `CLAUDE.md` stage 7 for plan authority, stage 6 for the ledger. Both point here. The authority rule binds the implementer consuming the plan; the ledger binds the author writing it.
