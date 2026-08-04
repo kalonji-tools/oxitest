@@ -33,11 +33,11 @@ def fixture(*, lifetime: str) -> Callable[[_F], _F]:
             after that module's last test; ``"package"`` builds exactly one per
             run for the declaring directory's subtree, which co-locates that
             subtree onto a single worker and so costs the run parallelism;
-            ``"session"`` builds one per **worker task group** — which is a
-            single module unless a ``"package"`` declaration merges the subtree,
-            so it is not a true singleton and is not even reliably wider than
-            ``"module"``. It is legal only in a rootdir package. Work that must
-            happen exactly once per run belongs at rootdir ``"package"``.
+            ``"process"`` builds one per **worker process**, so its instance
+            count is whatever ``-n`` is — the only tier the user sets with a
+            flag rather than with directory layout, and therefore not a
+            run-wide singleton. It is legal only in a rootdir package. Work that
+            must happen exactly once per run belongs at rootdir ``"package"``.
 
     Returns:
         A decorator that attaches the fixture marker to the decorated

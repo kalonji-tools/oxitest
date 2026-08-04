@@ -138,7 +138,7 @@ are four tiers:
 | `"function"` | Once per test that requests it | After that test | No effect |
 | `"module"` | Once per test module | After the module's last test | No effect |
 | `"package"` | Once per anchor package | After the subtree's last test | **Exactly once per run** — the subtree is collapsed onto a single worker |
-| `"session"` | Once per worker *task group* — the unit of work a worker picks up, which is a single module unless a `"package"` declaration merges a subtree | At task-group teardown | **Once per task group**, not once per run and not once per worker |
+| `"process"` | Once per worker *process* | At process teardown | **Once per worker**, so as many instances as `-n` — not once per run |
 
 `module` lifetime with a `yield` is the common shape for an expensive resource
 shared by one test file:
