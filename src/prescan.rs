@@ -124,13 +124,17 @@ pub(crate) struct PrescanFixturePayload {
     pub(crate) declarations: Vec<PrescanDeclaration>,
 }
 
-/// Payload for the `NoFixtures` variant — carries DX hints.
+/// Payload for the `NoFixtures` variant — carries the registration hint.
 #[derive(Debug, Default)]
 pub(crate) struct NoFixturesPayload {
-    /// True when the file has @-decorated top-level functions but none matched
-    /// the recognized `@oxi.fixture` / `@oxitest.fixture` / `@fixture` forms.
-    /// Indicates a probable unrecognized import alias (MED-3).
-    pub(crate) has_unrecognized_decorated_functions: bool,
+    /// Whether any top-level function carries a decorator, of any kind.
+    ///
+    /// Not a claim about oxitest: the decorator is never inspected. It means
+    /// "this file might declare something prescan cannot name", which is the
+    /// signal to import it and let the runtime answer (#1859). Registration is
+    /// by marker attribute, so `import oxitest as ox` declares a real fixture
+    /// that no static scan can see.
+    pub(crate) has_decorated_functions: bool,
 }
 
 /// Result of pre-scanning a __fixtures__.py file.
@@ -851,10 +855,12 @@ pub(crate) fn prescan_fixture_module_from_source(
     let declarations = collect_declarations(&stmts, &line_index);
 
     if declarations.is_empty() {
-        // MED-3: detect decorated top-level functions whose decorator was not
-        // recognized as an @oxi.fixture form. This hints at a probable
-        // unrecognized import alias (e.g. `import oxitest as ox`).
-        let has_unrecognized_decorated_functions = stmts.iter().any(|stmt| {
+        // A decorated top-level function means this file may declare something
+        // prescan cannot name — registration is by marker attribute, so any
+        // import spelling works at runtime. The flag tells collection to import
+        // the file and ask the runtime rather than guess from decorator shape
+        // (#1859).
+        let has_decorated_functions = stmts.iter().any(|stmt| {
             let decorators: &[ast::Expr] = match stmt {
                 ast::Stmt::FunctionDef(f) => &f.decorator_list,
                 ast::Stmt::AsyncFunctionDef(f) => &f.decorator_list,
@@ -863,7 +869,7 @@ pub(crate) fn prescan_fixture_module_from_source(
             !decorators.is_empty()
         });
         return PrescanFixtureResult::NoFixtures(NoFixturesPayload {
-            has_unrecognized_decorated_functions,
+            has_decorated_functions,
         });
     }
 
@@ -1620,10 +1626,10 @@ def not_a_fixture():
                 match prescan(&src) {
                     PrescanFixtureResult::NoFixtures(payload) => {
                         assert!(
-                            payload.has_unrecognized_decorated_functions,
+                            payload.has_decorated_functions,
                             "`{decorator}` ({why}) is rejected but the function is still \
-                             decorated — has_unrecognized_decorated_functions must be true \
-                             so the MED-3 diagnostic fires"
+                             decorated — has_decorated_functions must be true so collection \
+                             imports the file and lets the runtime decide (#1859)"
                         );
                     }
                     other => panic!("`{decorator}` must be rejected ({why}), got {other:?}"),
@@ -1670,10 +1676,10 @@ async def conn():
             match prescan(src) {
                 PrescanFixtureResult::NoFixtures(payload) => {
                     assert!(
-                        payload.has_unrecognized_decorated_functions,
-                        "a decorated `async def` must count toward the MED-3 hint \
-                         exactly as a decorated `def` does — otherwise an unknown \
-                         alias on an async fixture fails silently"
+                        payload.has_decorated_functions,
+                        "a decorated `async def` must trigger the import exactly as a \
+                         decorated `def` does — otherwise an unknown alias on an async \
+                         fixture fails silently (#1859)"
                     );
                 }
                 other => panic!("expected NoFixtures for an unrecognized alias, got {other:?}"),

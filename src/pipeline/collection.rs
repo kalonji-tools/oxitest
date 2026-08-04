@@ -220,16 +220,14 @@ fn reject_inline_lifetime_over_cap(
 
 /// One declaration-home file and where it sits in the collected test tree.
 ///
-/// Grouped rather than passed loose: the four travel together and mean nothing
-/// apart, and naming them at the call site is what keeps two `Utf8Path`s and a
-/// bare `bool` from being swappable by accident.
+/// Grouped rather than passed loose: the three travel together and mean nothing
+/// apart, and naming them at the call site is what keeps two `Utf8Path`s from
+/// being swappable by accident.
 struct DeclarationHome<'a> {
     /// The declaration file itself — `__fixtures__.py` or `__init__.py`.
     path: &'a camino::Utf8Path,
     /// The directory that owns it; the anchor of everything declared inside.
     anchor: &'a camino::Utf8Path,
-    /// Whether the filename is one oxitest owns. Gates the mistyped-alias hint.
-    reserved: bool,
     /// Top of the collected test tree. Equal to `anchor` exactly when this home
     /// is a *rootdir package*, the only place `lifetime="process"` may be
     /// declared (ADR-0009 Rule 4).
@@ -238,13 +236,12 @@ struct DeclarationHome<'a> {
 
 /// Prescan one declaration-home file and register whatever it declares.
 ///
-/// `home.reserved` says whether the filename is one oxitest owns. It gates a
-/// single diagnostic: in a reserved file (`__fixtures__.py`) a decorated
-/// top-level function that is *not* a recognized `@oxi.fixture` almost
-/// certainly means a mistyped import alias, and saying so saves a confusing
-/// fixture-not-found at test time. In `__init__.py` the same shape is ordinary
-/// Python — decorators belong there for reasons that have nothing to do with
-/// oxitest — so the hint would fire on well-formed packages and is suppressed.
+/// Prescan is an optimization here, not an authority. It answers "does this file
+/// certainly declare fixtures?" — and when it cannot say, the file is imported
+/// anyway and the runtime decides (#1859). Registration is by marker attribute,
+/// so `import oxitest as ox` declares a real fixture that no static scan can
+/// see; erring wide costs one import, erring narrow silently drops the fixture,
+/// which is #1850.
 fn register_declaration_home(
     py: pyo3::Python<'_>,
     session: &bridge::FixtureSession,
@@ -255,7 +252,6 @@ fn register_declaration_home(
     let DeclarationHome {
         path,
         anchor,
-        reserved,
         tree_root,
     } = *home;
     match crate::prescan::prescan_fixture_module(path) {
@@ -337,18 +333,24 @@ fn register_declaration_home(
             )));
         }
         crate::prescan::PrescanFixtureResult::NoFixtures(payload) => {
-            if reserved && payload.has_unrecognized_decorated_functions {
-                tracing::warn!(
-                    path = path.as_str(),
-                    "prescan: reserved file has @-decorated functions but no \
-                     recognized @oxi.fixture calls — check import alias"
-                );
-                errors.push(types::CollectError::PyError(format!(
-                    "{path} has @-decorated functions but no recognized \
-                     @oxi.fixture declarations. Only `import oxitest as oxi`, \
-                     `import oxitest`, or `from oxitest import fixture` are \
-                     recognized as import aliases for oxitest.",
-                )));
+            // Prescan found no declaration it can name, but a decorated function
+            // means it may not be able to name one that exists. Import and let
+            // the runtime answer rather than guessing from decorator shape
+            // (#1859). The previous guard rejected the file instead, which both
+            // refused a spelling the runtime accepts and fired on files holding
+            // no fixtures at all — it never inspected the decorator.
+            if payload.has_decorated_functions {
+                let session_obj = session.as_py_object(py);
+                if let Err(e) =
+                    bridge::register_fixture_module_for_path(py, session_obj, path, anchor)
+                {
+                    errors.push(e);
+                }
+                fixture_modules.push(types::FixtureModule {
+                    module: path.to_owned(),
+                    anchor: anchor.to_owned(),
+                    package_declarations: vec![],
+                });
             }
         }
     }
@@ -437,7 +439,7 @@ pub(super) fn collect_items(
             // file-convention table. `__fixtures__.py` is reserved and holds any
             // lifetime; `__init__.py` is an ordinary package-init file that may
             // also host declarations (package lifetime is the recommended use).
-            for (name, reserved) in [("__fixtures__.py", true), ("__init__.py", false)] {
+            for name in ["__fixtures__.py", "__init__.py"] {
                 let path = parent_dir.join(name);
                 if path.exists() {
                     register_declaration_home(
@@ -446,7 +448,6 @@ pub(super) fn collect_items(
                         &DeclarationHome {
                             path: &path,
                             anchor: parent_dir,
-                            reserved,
                             tree_root: tree_root.as_deref(),
                         },
                         &mut errors,

@@ -1,0 +1,4 @@
+[tool.oxitest]
+testpaths = ["alias_decorated_non_fixture"]
+python_files = ["test_*.py"]
+strict = "abort"
