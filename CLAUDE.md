@@ -101,6 +101,8 @@ git commit --amend
 git push --force-with-lease
 ```
 
+**Branch names are `<type>/<issue>-<slug>`** — `refactor/1777-process-lifetime-tier`, `fix/1863-1864-exitcode-ord-ctrf-name-docs`. This is not only style: `superpowers:brainstorming` reads the issue number out of the branch name to post its spec to the right issue, and a branch without one fails silently — no spec reaches the issue, and stage 4 still looks satisfied because a spec was written. See `docs/agents/skill-contracts.md`, cause D.
+
 `--force-with-lease` rather than `--force`: it refuses if the remote moved since your last fetch, so a force-push can never silently discard someone else's work.
 
 Assignment is **folded into `gh pr create`** (`fold-in`) — there is no separate `gh pr edit --add-assignee` step left to forget. The previous separate step was skipped on 4/4 PRs in one session with nothing surfacing it.
@@ -108,6 +110,8 @@ Assignment is **folded into `gh pr create`** (`fold-in`) — there is no separat
 **6. Plan before implementing.** Use the `superpowers:writing-plans` skill. Multiple issues can be grouped into one plan if they are tightly coupled or logically sequential. The plan MUST be posted as a comment on the PR — never on individual issues.
 
 **7. Implement via subagents or inline.** Use `superpowers:subagent-driven-development` or `superpowers:executing-plans`.
+
+The plan is a **lead, not a specification** — its file lists, line anchors and counts have been wrong often enough that sweeping beyond them is the default, and where the plan and the code disagree the code wins. See `docs/agents/skill-contracts.md`, cause E.
 
 When you dispatch, `docs/agents/dispatch-protocol.md` defines what a dispatched agent owes the rest of this pipeline — stage obligations, workspace isolation, citation scope, which gates it must not run, and its standing permission to refuse you. Every clause there was measured on a real wave. A dispatched agent inherits none of this pipeline's stages unless the prompt names them: in the run that measured it, stage 10 compliance was **0/4** (`artifact` — the prompt must name the stages it delegates).
 
@@ -403,3 +407,7 @@ Single-context layout — `CONTEXT.md` + `docs/adr/` at root. See `docs/agents/d
 ### Dispatch protocol
 
 What a dispatched agent owes this pipeline. See `docs/agents/dispatch-protocol.md`, referenced from stage 7.
+
+### Skill contracts
+
+Where this repo overrides a mandated skill, and why. See `docs/agents/skill-contracts.md`. Skills say WHAT; this repo says WHERE; state the deviation in the turn you make it.
