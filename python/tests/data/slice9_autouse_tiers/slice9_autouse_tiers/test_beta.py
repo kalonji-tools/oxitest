@@ -1,0 +1,24 @@
+"""Tests that request nothing — every fixture they exercise is autouse.
+
+The log helper is duplicated per module rather than imported: oxitest is
+invoked with this project as a positional path, so the package is not
+importable by name from the caller's sys.path.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+
+def _record(event: str) -> None:
+    with Path(os.environ["SLICE9_LOG"]).open("a") as fh:
+        fh.write(f"{event}\n")
+
+
+def test_beta_one() -> None:
+    _record(f"TEST beta_one {os.getpid()}")
+
+
+def test_beta_two() -> None:
+    _record(f"TEST beta_two {os.getpid()}")
