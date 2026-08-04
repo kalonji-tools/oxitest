@@ -1,0 +1,24 @@
+# The one place the rustup-based consumers name the Rust toolchain (#1792).
+# devenv reads it through `languages.rust.toolchainFile`; CI through a bare
+# `rustup toolchain install`, which is the no-argument form because rustup
+# >= 1.28 no longer auto-installs the toolchain a toolchain file names.
+# `profile` is explicit because the default profile is machine state —
+# `rustup set profile` changes it.
+#
+# Not every consumer is rustup-based: flake.nix and nix/package.nix build via
+# nixpkgs `rustPlatform`, whose cargo and rustc are plain binaries that ignore
+# this file. That path still tracks its own nixpkgs, deliberately — it is what
+# gets upstreamed. And pyproject.toml excludes this file from the sdist, so a
+# source install is not forced onto the development toolchain.
+#
+# `rust-src` is here for RUST_SRC_PATH: without it devenv falls back to
+# nixpkgs' rustLibSrc, and rust-analyzer would index a standard library from a
+# different release than the rustc beside it.
+#
+# Bumping `channel` is the whole upgrade, and it is why this path sits in the
+# `code` paths-filter of test.yml and quality.yml and the `doc-tests` filter of
+# docs.yml: a bump must run everything that compiles Rust.
+[toolchain]
+channel = "1.97.1"
+profile = "minimal"
+components = ["clippy", "rustfmt", "rust-analyzer", "rust-src"]

@@ -1,11 +1,21 @@
-{ pkgs, ... }:
+{ config, pkgs, ... }:
 
 let
   python = pkgs.python312;
   pythonEnv = python.withPackages (ps: [ ps.pip ]);
 in
 {
-  languages.rust.enable = true;
+  languages.rust = {
+    enable = true;
+    toolchainFile = ./rust-toolchain.toml;
+
+    # devenv derives RUST_SRC_PATH from `toolchain.rust-src` and falls back to
+    # nixpkgs' rustLibSrc when it is unset — and `toolchainFile` never sets it,
+    # so rust-analyzer would index a standard library from a different release
+    # than the rustc beside it. That is the drift #1792 exists to remove, so
+    # point it back at the pinned toolchain, which carries its own `rust-src`.
+    toolchain.rust-src = config.languages.rust.toolchainPackage;
+  };
 
   languages.python = {
     enable = true;
@@ -45,6 +55,7 @@ in
 
   env = {
     RUST_BACKTRACE = "1";
+
     # Tell PyO3 which Python to link against
     PYO3_PYTHON = "${pythonEnv}/bin/python3";
   };

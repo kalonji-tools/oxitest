@@ -30,6 +30,7 @@ jobs:
               - 'src/**'
               - 'python/**'
               - 'Cargo.*'
+              - 'rust-toolchain.toml'
               - 'pyproject.toml'
               - 'prek.toml'
               - '.github/**'
@@ -43,9 +44,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+      # Toolchain comes from rust-toolchain.toml — see that file (#1792).
+      - run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
 
