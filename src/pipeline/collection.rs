@@ -173,51 +173,6 @@ fn test_tree_root(test_files: &[camino::Utf8PathBuf]) -> Option<camino::Utf8Path
     }))
 }
 
-/// Reject inline declarations whose lifetime exceeds `module` (ADR-0009 Rule 4).
-///
-/// This is the second, independent cap axis. The rule enforced in
-/// [`register_declaration_home`] is about **location** — `session` needs the
-/// rootdir package — and it never sees a test file. This one is about the
-/// **kind** of declaration home: inline caps at `module` wherever the file sits,
-/// including at the rootdir package, where the location rule alone would permit
-/// `session`.
-///
-/// Naming the sibling `__fixtures__.py` matters. A hint that only says "move it
-/// elsewhere" is unusable, because the user cannot derive the target — the
-/// lesson from #1711's review.
-fn reject_inline_lifetime_over_cap(
-    test_file: &camino::Utf8Path,
-    declarations: &[crate::prescan::PrescanDeclaration],
-) -> Vec<types::CollectError> {
-    // Hoisted: the target file depends on the test file, not on the declaration,
-    // so recomputing it per offender would be wasted work in the one case that
-    // has more than one.
-    let home: String = test_file.parent().map_or_else(
-        || "__fixtures__.py".to_owned(),
-        |dir| dir.join("__fixtures__.py").to_string(),
-    );
-    declarations
-        .iter()
-        .filter(|decl| {
-            decl.lifetime == crate::prescan::LIFETIME_PACKAGE
-                || decl.lifetime == crate::prescan::LIFETIME_PROCESS
-        })
-        .map(|decl| {
-            types::CollectError::PyError(format!(
-                "{} in {test_file} declares lifetime=\"{}\", but a fixture \
-                 declared inline in a test file is capped at \
-                 lifetime=\"module\".\n\
-                 An inline fixture is anchored to its own module, so a lifetime \
-                 wider than the module would outlive the only scope that can see \
-                 it.\n\
-                 Hint: drop to lifetime=\"module\", or move the declaration to \
-                 {home} to keep lifetime=\"{}\".",
-                decl.fn_name, decl.lifetime, decl.lifetime,
-            ))
-        })
-        .collect()
-}
-
 /// One declaration-home file and where it sits in the collected test tree.
 ///
 /// Grouped rather than passed loose: the three travel together and mean nothing
@@ -453,7 +408,11 @@ pub(super) fn collect_items(
             // out, and "we could not tell" must not silently drop registration.
             crate::prescan::PrescanResult::Unavailable => (true, None),
             crate::prescan::PrescanResult::HasTests(p) => {
-                errors.extend(reject_inline_lifetime_over_cap(file, &p.declarations));
+                // ADR-0009 Rule 2's home-kind cap used to be enforced here from
+                // `p.declarations`. It moved to `register_module_source_fixtures`
+                // in #1859: registration is by marker attribute, so this scan saw
+                // only three decorator spellings and the cap silently did not
+                // apply to any other.
                 let ast = if collect_violations && !p.source.is_empty() {
                     Some((p.source, p.stmts))
                 } else {

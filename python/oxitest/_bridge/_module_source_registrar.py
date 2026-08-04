@@ -24,7 +24,7 @@ __all__ = ["register_module_source_fixtures"]
 import inspect
 from pathlib import Path
 from types import ModuleType
-from typing import Any, get_type_hints
+from typing import Any, Final, get_type_hints
 
 from oxitest._bridge._errors import UsageError
 from oxitest._bridge._fixture_decorator import MARKER_ATTR, _FixtureMarker
@@ -34,6 +34,7 @@ from oxitest._bridge._fixture_registry import (
     FixtureRegistry,
     ModuleSource,
 )
+from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge._visibility import anchors_overlap
 
 
@@ -65,6 +66,15 @@ def register_module_source_fixtures(
     namespace = anchor.stem if anchor.suffix == ".py" else anchor.name
     module_path = _canonical_module_path(fixture_module.__file__)
 
+    # The same test that derives the namespace also decides the home kind: an
+    # inline declaration anchors to its own module, so a `.py` suffix *is* the
+    # inline case. ADR-0009 Rule 2's home-kind cap is enforced here rather than
+    # from the prescan AST because registration is marker-attribute based — any
+    # import spelling declares a real fixture, and a static scan sees only three
+    # of them (#1859).
+    is_inline = anchor.suffix == ".py"
+    cap_violations: list[str] = []
+
     for attr_name, obj in vars(fixture_module).items():
         # isinstance, not a truthiness or None check. `getattr` is a probe, and
         # any object defining __getattr__ answers every name: `_Mark`
@@ -78,6 +88,15 @@ def register_module_source_fixtures(
         # the contract, and protects against the next __getattr__-happy object too.
         marker = getattr(obj, MARKER_ATTR, None)
         if not isinstance(marker, _FixtureMarker):
+            continue
+
+        if is_inline and marker.lifetime in _OVER_INLINE_CAP:
+            # Accumulated, not raised here. Someone whose aliased declarations
+            # were silently ignored until now likely has several, and a
+            # run-fix cycle each is a poor trade for failing one line earlier.
+            cap_violations.append(
+                _inline_cap_message(attr_name, module_path, marker.lifetime)
+            )
             continue
 
         existing = _clashing_declaration(
@@ -108,6 +127,38 @@ def register_module_source_fixtures(
                 is_async=_is_async(obj),
             )
         )
+
+    if cap_violations:
+        raise UsageError("\n\n".join(cap_violations))
+
+
+#: Lifetimes an inline declaration may not use — everything above ``module``.
+#:
+#: ``Lifetime`` has exactly four members since #1777 renamed ``SESSION`` to
+#: ``PROCESS``, so these two are the complete set above the cap. Derived rather
+#: than written out, so a fifth tier cannot be added without landing here.
+_OVER_INLINE_CAP: Final = frozenset(
+    {Lifetime.PACKAGE, Lifetime.PROCESS},
+)
+
+
+def _inline_cap_message(fn_name: str, module_path: str, lifetime: Lifetime) -> str:
+    """Why an inline declaration cannot hold *lifetime*, and where to move it.
+
+    Naming the sibling ``__fixtures__.py`` is load-bearing, not decoration: a
+    hint that only says "move it elsewhere" is unusable because the user cannot
+    derive the destination (#1711's review).
+    """
+    home = Path(module_path).parent / "__fixtures__.py"
+    return (
+        f'{fn_name} in {module_path} declares lifetime="{lifetime}", but a '
+        f"fixture declared inline in a test file is capped at "
+        f'lifetime="module".\n'
+        f"An inline fixture is anchored to its own module, so a lifetime wider "
+        f"than the module would outlive the only scope that can see it.\n"
+        f'Hint: drop to lifetime="module", or move the declaration to {home} '
+        f'to keep lifetime="{lifetime}".'
+    )
 
 
 def _canonical_module_path(module_file: str | None) -> str:
