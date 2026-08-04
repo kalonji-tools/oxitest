@@ -1,0 +1,4 @@
+[tool.oxitest]
+testpaths = ["alias_package_colocates"]
+python_files = ["test_*.py"]
+strict = "abort"

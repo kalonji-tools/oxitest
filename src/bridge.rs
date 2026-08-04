@@ -179,6 +179,36 @@ impl FixtureSession {
             .unwrap_or_default()
     }
 
+    /// Returns `(name, lifetime, lineno)` for ModuleSource fixtures at *anchor*.
+    ///
+    /// The source of truth for ADR-0009's scheduler co-location and Rule 4
+    /// checks (#1859). Registration is by marker attribute, so an unrecognized
+    /// import spelling registers a real fixture that prescan's AST cannot see;
+    /// asking the registry makes the two agree by construction.
+    ///
+    /// Unlike [`Self::process_lifetime_fixture_names`], errors are **not**
+    /// absorbed into an empty Vec. That idiom suits a decoration on a warning;
+    /// here an empty result silently disables enforcement, which is the exact
+    /// failure mode this change exists to remove. The caller falls back to the
+    /// prescan AST explicitly, and only when registration failed.
+    pub(crate) fn module_source_declarations(
+        &self,
+        py: Python<'_>,
+        anchor_package_path: &Utf8Path,
+    ) -> Result<Vec<(String, String, u32)>, CollectError> {
+        self.0
+            .bind(py)
+            .getattr("registry")
+            .and_then(|registry| {
+                registry.call_method1(
+                    "module_source_declarations",
+                    (anchor_package_path.as_str(),),
+                )
+            })
+            .and_then(|v| v.extract::<Vec<(String, String, u32)>>())
+            .map_err(py_collect_err)
+    }
+
     /// Returns connected components of shared fixture dependencies.
     /// Each inner Vec is a sorted group of fixture names that must co-locate.
     /// Returns an empty Vec on any Python error (advisory-only).

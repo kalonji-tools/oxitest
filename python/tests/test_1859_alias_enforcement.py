@@ -20,6 +20,8 @@ _DATA_ROOT = Path(__file__).parent / "data"
 _ALIAS_FIXTURES_HOME = _DATA_ROOT / "alias_fixtures_home"
 _ALIAS_INIT_HOME = _DATA_ROOT / "alias_init_home"
 _ALIAS_DECORATED_NON_FIXTURE = _DATA_ROOT / "alias_decorated_non_fixture"
+_ALIAS_PROCESS_OUTSIDE_ROOT = _DATA_ROOT / "alias_process_outside_root"
+_ALIAS_PACKAGE_COLOCATES = _DATA_ROOT / "alias_package_colocates"
 
 
 def test_aliased_fixture_in_fixtures_home_resolves() -> None:
@@ -72,4 +74,39 @@ def test_decorator_only_fixtures_home_is_not_an_error() -> None:
     assert "import alias" not in output, (
         f"the mistyped-alias hint must be gone — it accused a file that never "
         f"mentioned oxitest\n{output}"
+    )
+
+
+def test_aliased_process_outside_rootdir_is_rejected() -> None:
+    """ADR-0009 Rule 4 must apply to spellings prescan cannot name."""
+    # Act
+    stdout, stderr, rc = helpers.run_oxitest(_ALIAS_PROCESS_OUTSIDE_ROOT, "--warnings")
+    output = stdout + stderr
+
+    # Assert
+    assert rc != 0, (
+        f'an aliased lifetime="process" below the rootdir package must be '
+        f"rejected; before #1859 the AST-based check could not see this "
+        f"spelling and the rule silently did not apply\n"
+        f"stdout:\n{stdout}\nstderr:\n{stderr}"
+    )
+    for expected in ("engine", "process", "rootdir package"):
+        assert expected in output, (
+            f"the diagnostic must name the fixture, the tier, and the rule, or "
+            f"the user cannot act on it; {expected!r} missing from:\n{output}"
+        )
+
+
+def test_aliased_package_declaration_reaches_the_scheduler() -> None:
+    """The co-location warning is the scheduler consumer's observable effect."""
+    # Act
+    stdout, stderr, rc = helpers.run_oxitest(_ALIAS_PACKAGE_COLOCATES, "--warnings")
+    output = stdout + stderr
+
+    # Assert
+    assert rc == 0, f"the project must pass\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    assert "co-locates" in output and "engine" in output, (
+        f'an aliased lifetime="package" must still co-locate its subtree; '
+        f"before #1859 the AST could not see it, so the exactly-once guarantee "
+        f"quietly did not hold and no warning was emitted\n{output}"
     )

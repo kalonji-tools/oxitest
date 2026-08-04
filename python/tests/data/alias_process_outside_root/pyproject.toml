@@ -1,0 +1,4 @@
+[tool.oxitest]
+testpaths = ["alias_process_outside_root"]
+python_files = ["test_*.py"]
+strict = "abort"
