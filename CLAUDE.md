@@ -99,7 +99,7 @@ git commit --amend
 git push --force-with-lease
 ```
 
-**Concurrent sessions are detected, not prevented.** `.config/wt.toml`'s `pre-start` hook warns at `wt switch --create` when another branch or open PR already touches this branch's issue numbers. It is advisory and never blocks. **It cannot see triage-stage collisions** — those happen before a worktree exists, and two of the four recorded incidents were exactly that. Assume it covers implementation and merge, nothing earlier.
+**Concurrent sessions are detected, not prevented.** `.config/wt.toml`'s `post-create` hook warns at `wt switch --create` when another branch or open PR already touches this branch's issue numbers. It is advisory and never blocks. **It cannot see triage-stage collisions** — those happen before a worktree exists, and two of the four recorded incidents were exactly that. Assume it covers implementation and merge, nothing earlier. Test it without creating a worktree: `wt hook post-create concurrency`.
 
 **Branch names are `<type>/<issue>-<slug>`** — `refactor/1777-process-lifetime-tier`, `fix/1863-1864-exitcode-ord-ctrf-name-docs`. This is not only style: `superpowers:brainstorming` reads the issue number out of the branch name to post its spec to the right issue, and a branch without one fails silently — no spec reaches the issue, and stage 4 still looks satisfied because a spec was written. See `docs/agents/skill-contracts.md`, cause D.
 
