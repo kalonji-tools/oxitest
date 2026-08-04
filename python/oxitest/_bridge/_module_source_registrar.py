@@ -73,7 +73,7 @@ def register_module_source_fixtures(
     # import spelling declares a real fixture, and a static scan sees only three
     # of them (#1859).
     is_inline = anchor.suffix == ".py"
-    cap_violations: list[str] = []
+    violations: list[str] = []
 
     for attr_name, obj in vars(fixture_module).items():
         # isinstance, not a truthiness or None check. `getattr` is a probe, and
@@ -96,9 +96,24 @@ def register_module_source_fixtures(
             # Accumulated, not raised here. Someone whose aliased declarations
             # were silently ignored until now likely has several, and a
             # run-fix cycle each is a poor trade for failing one line earlier.
-            cap_violations.append(
+            violations.append(
                 _inline_cap_message(attr_name, module_path, marker.lifetime)
             )
+            continue
+
+        # An autouse function-lifetime async fixture fires for every test in
+        # its B1 boundary, sync ones included, so it manufactures the ADR-0006
+        # illegal cell for tests that never asked for it. One error at the
+        # declaration beats one on every sync test in scope (#1716).
+        #
+        # Enforced here rather than in the prescan AST for the same reason the
+        # cap above is: registration is marker-attribute based and sees every
+        # import spelling, while a static scan sees three (#1859). The wider
+        # tiers stay legal — the survey on #1739 found no framework restricting
+        # autouse for being async, and a per-module transaction is the
+        # canonical use.
+        if marker.autouse and marker.lifetime is Lifetime.FUNCTION and _is_async(obj):
+            violations.append(_async_autouse_message(attr_name, module_path))
             continue
 
         existing = _clashing_declaration(
@@ -125,13 +140,14 @@ def register_module_source_fixtures(
                     anchor_package_path=anchor_package_path,
                     lifetime=marker.lifetime,
                 ),
+                autouse=marker.autouse,
                 namespace=namespace,
                 is_async=_is_async(obj),
             )
         )
 
-    if cap_violations:
-        raise UsageError("\n\n".join(cap_violations))
+    if violations:
+        raise UsageError("\n\n".join(violations))
 
 
 def _inline_cap_message(fn_name: str, module_path: str, lifetime: Lifetime) -> str:
@@ -150,6 +166,25 @@ def _inline_cap_message(fn_name: str, module_path: str, lifetime: Lifetime) -> s
         f"than the module would outlive the only scope that can see it.\n"
         f'Hint: drop to lifetime="module", or move the declaration to {home} '
         f'to keep lifetime="{lifetime}".'
+    )
+
+
+def _async_autouse_message(fn_name: str, module_path: str) -> str:
+    """Why an async fixture cannot be function-lifetime autouse, and what to do.
+
+    Two exits rather than one, because they are genuinely different fixes: which
+    is right depends on whether the fixture is wanted on *some* tests or on
+    *every* test in the boundary. Offering only the widen path would push users
+    into a lifetime they did not want to get a fixture they did.
+    """
+    return (
+        f"{fn_name} in {module_path} is an async fixture declared "
+        f'autouse=True with lifetime="function".\n'
+        f"An autouse function-lifetime fixture fires for every test in its "
+        f"boundary, and the sync tests among them cannot await it.\n"
+        f'Hint: drop autouse=True and use @oxi.arrange("{fn_name}") on the '
+        f'tests that need it, or widen to lifetime="module" or wider, which '
+        f"applies to sync and async tests alike."
     )
 
 

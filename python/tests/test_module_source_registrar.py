@@ -415,3 +415,152 @@ def test_inline_cap_message_names_the_sibling_fixtures_home() -> None:
         f"elsewhere' — the user cannot derive the target otherwise; got:\n"
         f"{message}"
     )
+
+
+# ── autouse: marker → FixtureDef, and the one illegal cell (#1716) ────────────
+
+
+def _module_with_autouse(
+    path: str, name: str, lifetime: str, *, is_async: bool = False
+) -> types.ModuleType:
+    """A synthetic module declaring one ``autouse=True`` fixture.
+
+    Separate from ``_module_declaring`` rather than a flag on it: that helper
+    keys its fixtures by ``**lifetimes``, so it has nowhere to put a per-fixture
+    ``autouse`` or an async factory, and widening it would complicate every
+    existing cap test to serve two callers.
+    """
+    mod = types.ModuleType("synthetic_autouse")
+    mod.__file__ = path
+
+    async def async_factory() -> str:
+        return "value"
+
+    def sync_factory() -> str:
+        return "value"
+
+    declare = fixture(lifetime=lifetime, autouse=True)
+    setattr(mod, name, declare(async_factory) if is_async else declare(sync_factory))
+    return mod
+
+
+def test_autouse_marker_reaches_the_fixture_def() -> None:
+    """The registrar is the only path from marker to FixtureDef (#1716)."""
+    # Arrange
+    registry = FixtureRegistry()
+    module = _module_with_autouse("/t/pkg/__fixtures__.py", "migrations", "module")
+
+    # Act
+    register_module_source_fixtures(registry, module, anchor_package_path="/t/pkg")
+
+    # Assert
+    defn = registry.get("migrations")
+    assert defn is not None, (
+        "the declaration must register at all before autouse can be asserted"
+    )
+    assert defn.autouse is True, (
+        "autouse lives on the marker and is read only here; dropping it makes "
+        "the fixture register as an ordinary one and never fire, with no error "
+        "anywhere — the setup simply does not happen"
+    )
+
+
+def test_async_function_autouse_is_refused() -> None:
+    """A function-lifetime async autouse fires on sync tests too (#1716).
+
+    It would manufacture the ADR-0006 illegal cell for tests that never asked
+    for it. One error at the declaration beats one on every sync test in scope,
+    reported at the wrong place.
+    """
+    # Arrange
+    registry = FixtureRegistry()
+    path = "/t/pkg/__fixtures__.py"
+    module = _module_with_autouse(path, "txn", "function", is_async=True)
+
+    # Act
+    with raises(UsageError) as caught:
+        register_module_source_fixtures(registry, module, anchor_package_path="/t/pkg")
+
+    # Assert
+    message = str(caught.value)
+    assert "txn" in message and path in message, (
+        "the user has to find the declaration; a message naming neither the "
+        f"fixture nor its file leaves them grepping a whole tree: {message!r}"
+    )
+
+
+def test_async_autouse_is_permitted_above_function_lifetime() -> None:
+    """module/package/process async autouse are legal (#1716).
+
+    The ten-framework survey on #1739 found zero frameworks restricting autouse
+    for being async, and a per-module transaction is the canonical use. A
+    blanket async rejection would be far easier to write and would break it.
+    """
+    # Arrange
+    registry = FixtureRegistry()
+    module = _module_with_autouse(
+        "/t/pkg/__fixtures__.py", "txn", "module", is_async=True
+    )
+
+    # Act
+    register_module_source_fixtures(registry, module, anchor_package_path="/t/pkg")
+
+    # Assert
+    defn = registry.get("txn")
+    assert defn is not None and defn.autouse is True, (
+        "refusing the wider tiers would break the per-module transaction "
+        "pattern the survey found is mainstream across ten frameworks"
+    )
+
+
+def test_sync_function_autouse_is_untouched_by_the_guard() -> None:
+    """The guard is conditional on async, not on autouse (#1716).
+
+    Without this, a guard that dropped its ``_is_async`` condition would reject
+    every function-lifetime autouse fixture — the most ordinary declaration in
+    the feature — and the two tests above would both still pass.
+    """
+    # Arrange
+    registry = FixtureRegistry()
+    module = _module_with_autouse("/t/pkg/__fixtures__.py", "seed", "function")
+
+    # Act
+    register_module_source_fixtures(registry, module, anchor_package_path="/t/pkg")
+
+    # Assert
+    defn = registry.get("seed")
+    assert defn is not None and defn.autouse is True, (
+        "a sync function-lifetime autouse fixture is the feature's headline "
+        "case; rejecting it would make the guard reject nearly everything"
+    )
+
+
+def test_async_autouse_and_cap_violations_report_together() -> None:
+    """Both violation kinds ride one raise (#1716).
+
+    The registrar accumulates because someone whose aliased declarations were
+    silently ignored likely has several. A second violation list, or a
+    fail-fast async check, would reintroduce the run-fix cycle per offender.
+    """
+    # Arrange
+    registry = FixtureRegistry()
+    path = "/t/pkg/test_inline.py"
+    module = _module_with_autouse(path, "bad_async", "function", is_async=True)
+
+    @fixture(lifetime="package")
+    def bad_cap() -> str:
+        return "value"
+
+    setattr(module, "bad_cap", bad_cap)  # noqa: B010 — dynamic module attr
+
+    # Act
+    with raises(UsageError) as caught:
+        register_module_source_fixtures(registry, module, anchor_package_path=path)
+
+    # Assert
+    message = str(caught.value)
+    for name in ("bad_async", "bad_cap"):
+        assert name in message, (
+            f"one run must name every offender regardless of violation kind; "
+            f"{name!r} missing from:\n{message}"
+        )

@@ -20,9 +20,10 @@ class _FixtureMarker:
     """Attribute payload written by @oxi.fixture at import time."""
 
     lifetime: Lifetime
+    autouse: bool = False
 
 
-def fixture(*, lifetime: str) -> Callable[[_F], _F]:
+def fixture(*, lifetime: str, autouse: bool = False) -> Callable[[_F], _F]:
     """Declare a fixture (ADR-0009 Rule 2).
 
     All four lifetime tiers are accepted.
@@ -38,6 +39,26 @@ def fixture(*, lifetime: str) -> Callable[[_F], _F]:
             flag rather than with directory layout, and therefore not a
             run-wide singleton. It is legal only in a rootdir package. Work that
             must happen exactly once per run belongs at rootdir ``"package"``.
+        autouse: When ``True``, the fixture runs for every test in its B1
+            boundary without being requested, for its side effects — the value
+            is discarded unless the test also requests it, in which case both
+            routes share one instance rather than building twice.
+
+            How often it runs follows *lifetime*, and that is a **rate rather
+            than a boundary event**: the build happens inside the first test
+            that reaches the boundary, so a setup failure is reported against
+            that test and a boundary whose tests are all skipped never fires at
+            all. Where several autouse fixtures apply to one test they run
+            widest-lifetime-first.
+
+            To opt a subtree out, declare a fixture of the same name without
+            ``autouse`` at a deeper anchor; the suppression is boundary-local
+            and the registration notice reports it.
+
+            ``autouse=True`` with ``lifetime="function"`` on an ``async``
+            factory is refused at registration: it would fire for the sync
+            tests in its boundary too, manufacturing the ADR-0006 illegal cell
+            for tests that never asked for it.
 
     Returns:
         A decorator that attaches the fixture marker to the decorated
@@ -67,6 +88,15 @@ def fixture(*, lifetime: str) -> Callable[[_F], _F]:
         >>> db_pool()
         'pool'
 
+        An autouse fixture runs without any test naming it. The decorator stays
+        a pure marker, so the function itself is unchanged:
+
+        >>> @fixture(lifetime="module", autouse=True)
+        ... def migrations() -> str:
+        ...     return "applied"
+        >>> migrations()
+        'applied'
+
     """
     tier = Lifetime(lifetime)  # ValueError on unknown value — desired
     if tier not in LIFETIME_SCOPES:
@@ -82,7 +112,7 @@ def fixture(*, lifetime: str) -> Callable[[_F], _F]:
         )
         raise UsageError(msg)
 
-    marker = _FixtureMarker(lifetime=tier)
+    marker = _FixtureMarker(lifetime=tier, autouse=autouse)
 
     def _apply(fn: _F) -> _F:
         setattr(fn, MARKER_ATTR, marker)
