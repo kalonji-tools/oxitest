@@ -186,7 +186,11 @@ $RECYCLE.BIN/
 .devenv.flake.nix
 # direnv's per-directory cache of the exported environment (.envrc is tracked)
 .direnv/
-.config/
+# `.config/*` not `.config/` — git will not descend into an excluded
+# directory, so a `!` negation on a child of it never fires. wt.toml has been
+# tracked since 38b65b33, the same commit that added the rule, so the negation
+# below has never done anything; untracked, the file would not come back.
+.config/*
 !.config/wt.toml
 result
 
