@@ -69,15 +69,16 @@ For guidance on choosing between them, see
 ## The lifetime cap
 
 A declaration may not claim a lifetime wider than its own site's boundary
-(ADR-0009 Rule 4). Exceeding the cap is a declaration error at prescan time.
+(ADR-0009 Rule 4). Exceeding the cap is a declaration error, raised while the
+declaring module is registered.
 
 | Declaration site | Widest legal lifetime |
 |---|---|
 | Inline in a `test_*.py` | `"module"` |
 | `__fixtures__.py` or `__init__.py` at package X | `"package"`, anchored at X |
-| Either file in the rootdir package | `"package"`, or `"session"` |
+| Either file in the rootdir package | `"package"`, or `"process"` |
 
-`"session"` is legal **only** in the rootdir package. Declared lower down it
+`"process"` is legal **only** in the rootdir package. Declared lower down it
 would outlive the subtree permitted to see it, which is the condition the cap
 exists to prevent.
 
