@@ -915,6 +915,25 @@ mod tests {
     }
 
     #[test]
+    fn declaration_lineno_points_at_the_def_not_the_decorator() {
+        // Arrange — `@oxi.fixture` is line 3 and `def conn` is line 4, so the
+        // two candidate answers are distinguishable.
+        let declarations = inline_declarations(
+            "import oxitest as oxi\n\n@oxi.fixture(lifetime=\"module\")\ndef conn(): return 1\n\ndef test_uses_it(): pass\n",
+        );
+
+        assert_eq!(
+            declarations[0].lineno,
+            crate::types::LineNo::new(4),
+            "this line reaches the user through the co-location warning \
+             (execution.rs), so which of the two lines it names is observable. \
+             #1859 moves the source of this number to the registry, where it \
+             comes from `func.__code__.co_firstlineno` — the `def` line. Pinned \
+             here so that move cannot shift a user-visible number unnoticed."
+        );
+    }
+
+    #[test]
     fn a_test_file_without_fixtures_collects_no_declarations() {
         let declarations = inline_declarations("def test_alone(): pass\n");
 
