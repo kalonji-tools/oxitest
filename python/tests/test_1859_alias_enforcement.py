@@ -23,6 +23,7 @@ _ALIAS_DECORATED_NON_FIXTURE = _DATA_ROOT / "alias_decorated_non_fixture"
 _ALIAS_PROCESS_OUTSIDE_ROOT = _DATA_ROOT / "alias_process_outside_root"
 _ALIAS_PACKAGE_COLOCATES = _DATA_ROOT / "alias_package_colocates"
 _ALIAS_INLINE_OVER_CAP = _DATA_ROOT / "alias_inline_over_cap"
+_ALIAS_TWO_HOMES_ONE_ANCHOR = _DATA_ROOT / "alias_two_homes_one_anchor"
 
 
 def test_aliased_fixture_in_fixtures_home_resolves() -> None:
@@ -136,4 +137,35 @@ def test_aliased_inline_over_cap_reports_every_offender() -> None:
         f"the hint must name the sibling __fixtures__.py as the migration "
         f"target (#1711's review lesson): 'move it elsewhere' is unactionable "
         f"because the user cannot derive the destination\n{output}"
+    )
+
+
+def test_two_homes_in_one_directory_do_not_share_declarations() -> None:
+    """A declaration belongs to its file, not to the anchor its file shares.
+
+    `__fixtures__.py` and `__init__.py` in one directory register under the same
+    anchor. Keying the registry query on that anchor gave each of them the
+    other's declarations, so the illegal `process` tier — declared in exactly one
+    file — was reported against both, one of the two naming a file that does not
+    contain it.
+    """
+    # Act
+    stdout, stderr, rc = helpers.run_oxitest(_ALIAS_TWO_HOMES_ONE_ANCHOR, "--warnings")
+    output = stdout + stderr
+
+    # Assert
+    assert rc != 0, (
+        f"the illegal process declaration must still be rejected\n"
+        f"stdout:\n{stdout}\nstderr:\n{stderr}"
+    )
+    offenders = [line for line in output.splitlines() if "declares lifetime=" in line]
+    assert len(offenders) == 1, (
+        f"exactly one declaration is illegal, so exactly one diagnostic is "
+        f"correct; more than one means a home was handed its sibling's "
+        f"declarations, and the user is sent to a file that does not contain "
+        f"the problem. Got {len(offenders)}:\n" + "\n".join(offenders)
+    )
+    assert "__fixtures__.py" in offenders[0], (
+        f"the diagnostic must name the file that actually declares it, not its "
+        f"sibling in the same directory; got:\n{offenders[0]}"
     )
