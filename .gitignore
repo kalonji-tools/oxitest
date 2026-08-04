@@ -213,9 +213,16 @@ junit.xml
 # Bacon
 .bacon-locations
 
-# Superpowers (AI tooling)
+# Agent tooling artifacts.
+#
+# These are NOT ignored merely as noise. Several mandated skills instruct the
+# agent to save an artifact here AND commit it; this repo keeps the durable
+# copy as a PR or issue comment instead (#1741). Ignoring the paths lets the
+# skills' save step succeed while making their commit step impossible, which
+# is the whole override. See docs/agents/skill-contracts.md, cause A.
 .superpowers/
 docs/superpowers/
+plans/
 
 # Graphify (generated dependency graph output)
 graphify-out/
