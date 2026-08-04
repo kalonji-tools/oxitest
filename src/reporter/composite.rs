@@ -60,7 +60,7 @@ impl Reporter for CompositeReporter {
                 ExitVote::Code(c) => Some(c),
                 ExitVote::Abstain => None,
             })
-            .max()
+            .max_by_key(|c| c.as_i32())
             .map_or(ExitVote::Code(ExitCode::Success), ExitVote::Code)
     }
 

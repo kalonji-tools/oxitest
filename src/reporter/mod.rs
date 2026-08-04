@@ -316,7 +316,21 @@ mod tests {
                 .finish(&[], false, &ReporterSession::new(0))
                 .code(),
             ExitCode::Failure,
-            "CompositeReporter::finish should return the max exit code across all reporters"
+            "one reporter voting Failure among abstainers has to carry the whole run — returning Success here exits 0 on a suite that had a hard failure, and CI goes green on red"
+        );
+
+        let mut severe = CompositeReporter::new(
+            vec![
+                Box::new(StubReporter(ExitVote::Code(ExitCode::CollectError))),
+                Box::new(StubReporter(ExitVote::Code(ExitCode::UsageError))),
+                Box::new(StubReporter(ExitVote::Abstain)),
+            ],
+            0,
+        );
+        assert_eq!(
+            severe.finish(&[], false, &ReporterSession::new(0)).code(),
+            ExitCode::UsageError,
+            "an unwritable --json file (UsageError, 4) must outrank a collection error (3) — before #1863 this pair rested on variant declaration order in ExitCode and no test touched it, so reordering the enum could have flipped it undetected"
         );
     }
 

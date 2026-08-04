@@ -164,10 +164,15 @@ fn write_strict_abort_report(
     // A failed write votes `UsageError` (4), which outranks `CollectError` (3) —
     // matching the documented "`--json` output file cannot be written" rule.
     // A successful write abstains, which `code()` reads as `Success` (0).
-    json_reporter
-        .finish(&[], false, &reporter::ReporterSession::new(0))
-        .code()
-        .max(ExitCode::CollectError)
+    // Compared on `as_i32()`, never on `Ord`: `ExitCode` deliberately does not
+    // derive it, so the enum's declaration order cannot reach this (#1863).
+    std::cmp::max_by_key(
+        json_reporter
+            .finish(&[], false, &reporter::ReporterSession::new(0))
+            .code(),
+        ExitCode::CollectError,
+        |code| code.as_i32(),
+    )
 }
 
 /// Evaluate strict-mode violations and partition items accordingly.
@@ -231,4 +236,69 @@ pub(super) fn apply_strict_mode(
         all_violations,
         suite_lines,
     })
+}
+
+#[cfg(test)]
+mod strict_abort_report_tests {
+    use super::*;
+    use crate::pipeline::{Pipeline, PipelinePhase};
+    use crate::reporter::test_helpers::make_pipeline;
+
+    /// A pipeline whose `--json` flag points at `json`, or omits `--json` for `None`.
+    fn pipeline_with_json(json: Option<camino::Utf8PathBuf>) -> Pipeline {
+        let mut pipeline = make_pipeline(PipelinePhase::Empty);
+        let mut args = config::RunArgs::default_for_test();
+        args.json = json;
+        pipeline.shared.command = config::Command::Run(args);
+        pipeline
+    }
+
+    #[test]
+    fn test_writable_json_path_votes_collect_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = camino::Utf8PathBuf::from_path_buf(dir.path().join("ctrf.json")).unwrap();
+        let pipeline = pipeline_with_json(Some(path.clone()));
+
+        let code = write_strict_abort_report(&pipeline.shared, &[]);
+
+        assert_eq!(
+            code,
+            ExitCode::CollectError,
+            "a strict-abort run that did manage to write its CTRF report must still exit on the strict violation itself, not on the report — letting the write's own Success win here would exit 0 and green a run that aborted"
+        );
+        assert!(
+            path.exists(),
+            "--json promises the file exists once the process is gone, whatever the exit code (#1682); a CollectError vote with no file on disk is indistinguishable from a job that never started"
+        );
+    }
+
+    #[test]
+    fn test_unwritable_json_path_votes_usage_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path =
+            camino::Utf8PathBuf::from_path_buf(dir.path().join("no-such-dir").join("ctrf.json"))
+                .unwrap();
+        let pipeline = pipeline_with_json(Some(path));
+
+        let code = write_strict_abort_report(&pipeline.shared, &[]);
+
+        assert_eq!(
+            code,
+            ExitCode::UsageError,
+            "an unwritable --json path is a usage error and must outrank the CollectError baseline; exiting 3 instead would tell CI the run merely failed to collect, sending the operator to hunt a broken test module rather than a bad --json argument"
+        );
+    }
+
+    #[test]
+    fn test_no_json_flag_votes_collect_error() {
+        let pipeline = pipeline_with_json(None);
+
+        let code = write_strict_abort_report(&pipeline.shared, &[]);
+
+        assert_eq!(
+            code,
+            ExitCode::CollectError,
+            "with no --json there is no report to fail at, so the strict violation alone decides the exit code — this early return is what keeps a plain strict-abort run from being reported as a usage error"
+        );
+    }
 }

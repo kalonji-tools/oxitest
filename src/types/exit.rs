@@ -9,7 +9,15 @@ use super::{DurationMs, NodeId, OutcomeKind, TestOutcome};
 /// - `Interrupted` (2) — the run was interrupted (e.g. Ctrl-C).
 /// - `CollectError` (3) — one or more collection errors.
 /// - `UsageError` (4) — invalid CLI arguments or conflicting flags.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+///
+/// **Severity is defined by [`as_i32`](ExitCode::as_i32), and the variant
+/// declaration order below means nothing.** `PartialOrd`/`Ord` are deliberately
+/// not derived: a derived `Ord` on a fieldless enum compares by declaration
+/// *position*, so reordering these five lines would silently invert exit-code
+/// precedence for the two call sites that take a maximum — `CompositeReporter`
+/// (`src/reporter/composite.rs`) and `write_strict_abort_report`
+/// (`src/pipeline/helpers.rs`). Both compare `as_i32()` explicitly (#1863).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExitCode {
     Success,
     Failure,
@@ -125,5 +133,35 @@ mod failure_accumulator_tests {
         assert!(!acc.record(&pass));
         assert!(!acc.record(&fail));
         assert!(acc.record(&fail)); // 2nd failure = stop
+    }
+}
+
+#[cfg(test)]
+mod exit_code_tests {
+    use super::*;
+
+    #[test]
+    fn test_documented_exit_code_numbers() {
+        for (code, expected) in [
+            (ExitCode::Success, 0),
+            (ExitCode::Failure, 1),
+            (ExitCode::Interrupted, 2),
+            (ExitCode::CollectError, 3),
+            (ExitCode::UsageError, 4),
+        ] {
+            assert_eq!(
+                code.as_i32(),
+                expected,
+                "exit codes are a published contract that CI configs branch on, and since #1863 as_i32() is also the only thing ordering exit-code precedence — editing a number here silently rewrites both at once"
+            );
+        }
+    }
+
+    #[test]
+    fn test_usage_error_outranks_collect_error() {
+        assert!(
+            ExitCode::UsageError.as_i32() > ExitCode::CollectError.as_i32(),
+            "write_strict_abort_report reports an unwritable --json file as UsageError over its CollectError baseline; invert this and a strict-abort run whose report never reached disk exits 3, which CI reads as an ordinary collection error while the missing artifact goes unexplained"
+        );
     }
 }
