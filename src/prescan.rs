@@ -762,8 +762,9 @@ fn collect_declarations(stmts: &[ast::Stmt], line_index: &[u32]) -> Vec<PrescanD
 /// Recognize `@oxi.fixture(...)` / `@oxitest.fixture(...)` / `@fixture(...)`.
 ///
 /// Returns `Some(lifetime_string)` if the decorator is a static call with a
-/// single `lifetime="..."` kwarg and no positional args. Returns `None`
-/// otherwise (unrecognized shape → skipped, does NOT set has_dynamic flag).
+/// `lifetime="..."` kwarg and no positional args; any other kwarg is ignored.
+/// Returns `None` otherwise (unrecognized shape → skipped, does NOT set
+/// has_dynamic flag).
 fn extract_fixture_decorator_lifetime(dec: &ast::Expr) -> Option<String> {
     let call = match dec {
         ast::Expr::Call(c) => c,
@@ -775,14 +776,20 @@ fn extract_fixture_decorator_lifetime(dec: &ast::Expr) -> Option<String> {
     if !call.args.is_empty() {
         return None; // slice 1 forbids positional args
     }
-    if call.keywords.len() != 1 {
-        return None;
-    }
-    let kw = &call.keywords[0];
-    let key = kw.arg.as_ref()?.as_str();
-    if key != "lifetime" {
-        return None;
-    }
+    // Found by name rather than by arity (#1716). The previous rule required
+    // exactly one keyword, so `autouse=True` made the whole declaration
+    // invisible here — costing the AST fallback its package co-location answer
+    // whenever registration fails.
+    //
+    // Unknown keywords are ignored rather than allow-listed: the Python
+    // decorator is the authority on which keywords are legal, and a list on
+    // this side would be a second copy to keep in lockstep with every future
+    // one. Prescan's only question is whether it can name a lifetime.
+    let kw = call.keywords.iter().find(|kw| {
+        kw.arg
+            .as_ref()
+            .is_some_and(|arg| arg.as_str() == "lifetime")
+    })?;
     match &kw.value {
         ast::Expr::Constant(c) => match &c.value {
             ast::Constant::Str(s) => Some(s.clone()),
@@ -1623,10 +1630,6 @@ def not_a_fixture():
                 ),
                 ("@oxi.fixture()", "no keyword arguments"),
                 (
-                    "@oxi.fixture(lifetime=\"function\", autouse=True)",
-                    "more than one keyword",
-                ),
-                (
                     "@oxi.fixture(scope=\"function\")",
                     "keyword is not `lifetime`",
                 ),
@@ -1655,6 +1658,51 @@ def not_a_fixture():
                         );
                     }
                     other => panic!("`{decorator}` must be rejected ({why}), got {other:?}"),
+                }
+            }
+        }
+
+        /// A declaration may carry keywords beyond `lifetime` (#1716).
+        ///
+        /// `autouse=True` used to land in the rejection table above under the
+        /// reason "more than one keyword" — an arity rule, never an
+        /// autouse-specific ban. Unknown keywords are ignored rather than
+        /// allow-listed: the Python decorator is the authority on which are
+        /// legal, and a list here is a second copy that has to track every
+        /// future keyword.
+        #[test]
+        fn recognizes_declaration_with_extra_keywords() {
+            let cases: &[(&str, &str)] = &[
+                ("@oxi.fixture(lifetime=\"module\", autouse=True)", "module"),
+                ("@oxi.fixture(autouse=True, lifetime=\"module\")", "module"),
+                (
+                    "@oxi.fixture(lifetime=\"package\", autouse=False)",
+                    "package",
+                ),
+            ];
+
+            for (decorator, expected) in cases {
+                let src = format!(
+                    "import oxitest as oxi\n\n{decorator}\ndef conn():\n    return object()\n"
+                );
+                match prescan(&src) {
+                    PrescanFixtureResult::HasFixtures(payload) => {
+                        assert_eq!(
+                            payload.declarations.len(),
+                            1,
+                            "`{decorator}` declares one fixture; failing to name it \
+                             costs the AST fallback its package co-location answer \
+                             on the registration-failure path"
+                        );
+                        assert_eq!(
+                            payload.declarations[0].lifetime, *expected,
+                            "`{decorator}` lifetime must be found by keyword name, \
+                             not by position — the second case puts autouse first"
+                        );
+                    }
+                    other => {
+                        panic!("`{decorator}` must be recognized, got {other:?}")
+                    }
                 }
             }
         }
