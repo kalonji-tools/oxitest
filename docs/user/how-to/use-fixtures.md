@@ -342,10 +342,10 @@ effects but its return value is not needed in the test body:
 The fixture runs (including any teardown) exactly as it would if requested via a
 `Fixture[T]` parameter — the only difference is that the value is discarded.
 
-**How it differs from `autouse=True`:** `autouse=True` on a fixture declaration
-makes it run for *every* test in the session. `@oxi.arrange` is per-test —
-it opts a single test (or a class of tests) into the fixture without affecting
-anything else.
+**How it differs from `autouse=True`:** [`autouse=True`](#run-fixtures-automatically-with-autouse)
+on a fixture declaration makes it run for every test in the declaration's B1
+boundary. `@oxi.arrange` is per-test — it opts a single test (or a class of
+tests) into the fixture without affecting anything else.
 
 **How it differs from `Fixture[T]` injection:** a `Fixture[T]` parameter gives
 the test access to the fixture's value. `@oxi.arrange` is the right choice
@@ -356,6 +356,96 @@ Multiple fixture names can be passed in a single decorator:
 ```python
 --8<-- "python/tests/docs/how-to/fixtures/test_fixtures.py:arrange-multiple"
 ```
+
+## Run fixtures automatically with autouse
+
+`autouse=True` makes a declaration run for every test in its
+[B1 boundary](#understand-fixture-visibility-the-b1-boundary) without any test
+requesting it:
+
+```python
+@oxi.fixture(lifetime="module", autouse=True)
+def migrations() -> Yields[None]:
+    apply_migrations()
+    yield
+    roll_back()
+```
+
+The value is discarded. If a test *also* requests the fixture — by
+`Fixture[T]` or `fx.<name>` — it gets the same instance the autouse pass built,
+not a second one.
+
+### How often it runs
+
+The lifetime tier sets the rate:
+
+| `lifetime` | Runs |
+|---|---|
+| `"function"` | Once per test in the boundary |
+| `"module"` | Once per module in the boundary |
+| `"package"` | Once per package boundary — at the rootdir, exactly once per run |
+| `"process"` | Once per process that reaches it, so `-n 4` means up to five |
+
+!!! warning "A rate, not a boundary event"
+    The build happens **inside the first test** that reaches the boundary, not
+    before it. Three consequences worth knowing: a failure in the fixture's
+    setup is reported against that test rather than against the boundary; the
+    setup's cost lands in that test's measured time; and a boundary whose tests
+    are all skipped or deselected never fires its autouse fixture at all.
+
+Where several autouse fixtures apply to one test, they run
+**widest-lifetime-first** — `"process"`, then `"package"`, then `"module"`,
+then `"function"` — so a narrower one can rely on a wider one having already
+run. Within one tier they run in declaration order.
+
+### Opt a subtree out
+
+Declare a fixture of the same name **without** `autouse` at a deeper anchor:
+
+```
+tests/__fixtures__.py          @oxi.fixture(lifetime="module", autouse=True)
+                               def seed_db(): ...        ← fires across tests/
+
+tests/contract/__fixtures__.py @oxi.fixture(lifetime="module")
+                               def seed_db(): ...        ← fires nowhere unless asked
+```
+
+Inside `tests/contract` the deeper declaration is what resolution returns, and
+it is not autouse — so nothing fires. Outside it, the deeper declaration is
+invisible and `seed_db` keeps firing as before. The suppression is local to the
+subtree that declared it.
+
+oxitest reports this at registration:
+
+```text
+[notice] fixture registration — fixture 'seed_db' in tests/contract/__fixtures__.py
+shadows definition in tests/__fixtures__.py within tests/contract; the shadowed
+fixture is autouse, so it no longer fires there
+```
+
+That notice is deliberate. Opting out this way is supported, so the message
+confirms it worked — and it is the only warning you get when two unrelated
+fixtures happen to share a name and one silently disables the other.
+
+### Async autouse
+
+An `async` factory may be autouse at `"module"`, `"package"` and `"process"`
+lifetimes. At `"function"` it is refused:
+
+```text
+UsageError: txn in tests/__fixtures__.py is an async fixture declared
+autouse=True with lifetime="function".
+An autouse function-lifetime fixture fires for every test in its boundary, and
+the sync tests among them cannot await it.
+Hint: drop autouse=True and use @oxi.arrange("txn") on the tests that need it,
+or widen to lifetime="module" or wider, which applies to sync and async tests
+alike.
+```
+
+A function-lifetime autouse fires for *every* test in the boundary, sync ones
+included, so an async factory there would be unusable for tests that never
+asked for it. The error names the declaration rather than failing once per sync
+test in scope.
 
 ## Legacy: `Fixtures()` in `conftest.py`
 
@@ -426,23 +516,27 @@ fixture is rebuilt once **per task group** — not once per run, and not once pe
 worker. See
 [Run in parallel](run-in-parallel.md#understand-session-scoped-fixture-behaviour-in-parallel-runs).
 
-### Run fixtures automatically with autouse
+### Run legacy fixtures automatically with autouse
 
-A fixture with `autouse=True` runs for every test without being explicitly
-requested:
+A `Fixtures()` fixture with `autouse=True` runs for every test without being
+explicitly requested:
 
 ```python
 --8<-- "python/tests/docs/how-to/fixtures/autouse/conftest.py:autouse-fixture"
 ```
 
-`@oxi.fixture` has no `autouse` keyword yet — autouse on the new declaration
-route is
-[#1716](https://github.com/kalonji-tools/oxitest/issues/1716).
+This is the **legacy** route's autouse, and it differs from
+[the new one](#run-fixtures-automatically-with-autouse) in more than syntax: a
+`conftest.py` fixture is registered run-wide and is exempt from the B1
+boundary, so `autouse=True` here really does mean every test in the run. A
+`@oxi.fixture` declaration fires only within its own anchor's subtree.
 
 ### Async autouse — legal combinations
 
 Not every `autouse` × `async` combination has legal semantics. The table
-below shows what registers and what is refused at decorator time.
+below shows what registers and what is refused at decorator time. It describes
+the **legacy** `Fixtures()` route, whose tiers are `shared=True`/`False`; the
+new route's equivalent is [Async autouse](#async-autouse) above.
 
 | autouse × scope × async factory | Registers? |
 | --- | --- |

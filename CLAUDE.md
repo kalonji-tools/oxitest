@@ -30,8 +30,11 @@ just test-python python/tests/test_fixture_registry.py
 # Run Rust unit tests
 just test-rust
 
-# Run a single Rust test
-just test-rust <test_name>
+# Run a single Rust test — NOT via `just test-rust`, whatever the argument
+# shape. That recipe passes --unreferenced=reject, and any filtered run leaves
+# the snapshots of the tests it skipped looking unreferenced, so it aborts
+# after the tests you asked for have already passed.
+cargo test --lib <test_name>
 
 # Run all static checks (format, lint, clippy, spelling)
 just check
