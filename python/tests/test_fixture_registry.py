@@ -481,13 +481,18 @@ def test_registry_override_precedence() -> None:
 
 
 def _module_def(
-    name: str, namespace: str, anchor: str, *, autouse: bool = False
+    name: str,
+    namespace: str,
+    anchor: str,
+    *,
+    autouse: bool = False,
+    scope: FixtureScope = FixtureScope.EACH,
 ) -> FixtureDef[Any]:
     """A package-anchored FixtureDef, the only source B1 constrains."""
     return FixtureDef(
         name=name,
         fixture_type=object,
-        scope=FixtureScope.EACH,
+        scope=scope,
         source=ModuleSource(
             func=lambda: None,
             defining_module_path=f"{anchor}/__fixtures__.py",
@@ -959,6 +964,171 @@ def test_autouse_suppression_by_an_anchored_def_is_boundary_local() -> None:
         "is the deepest visible candidate and still fires — losing this half is "
         "the defs[-1] regression (#1774): one anchored def anywhere in the tree "
         "disables an ambient autouse for tests that cannot even see it"
+    )
+
+
+def test_autouse_fires_widest_lifetime_first() -> None:
+    """Firing order follows the tier, not the order fixtures registered (#1716).
+
+    Registration order here is deliberately narrow-then-wide: that is the
+    configuration a dict-iteration implementation gets wrong.
+    """
+    # Arrange
+    registry = FixtureRegistry()
+    registry.register(
+        _module_def("narrow", "pkg", "/t/pkg", autouse=True, scope=FixtureScope.EACH)
+    )
+    registry.register(
+        _module_def("wide", "pkg", "/t/pkg", autouse=True, scope=FixtureScope.PACKAGE)
+    )
+
+    # Act
+    names = [defn.name for defn in registry.get_autouse("/t/pkg/test_a.py")]
+
+    # Assert
+    assert names == ["wide", "narrow"], (
+        "a package-lifetime autouse fixture must fire before a function-lifetime "
+        "one, so setup nests the same way teardown already does on the scope "
+        f"stacks; got {names}"
+    )
+
+
+def test_autouse_order_is_stable_within_a_tier() -> None:
+    """Same-tier autouse fixtures keep registration order (#1716).
+
+    The sort key is the tier alone, and Python's sort is stable — which is what
+    lets FixtureDef stay frozen with no registration-index field.
+    """
+    # Arrange
+    registry = FixtureRegistry()
+    registry.register(
+        _module_def("first", "pkg", "/t/pkg", autouse=True, scope=FixtureScope.EACH)
+    )
+    registry.register(
+        _module_def("second", "pkg", "/t/pkg", autouse=True, scope=FixtureScope.EACH)
+    )
+
+    # Act
+    names = [defn.name for defn in registry.get_autouse("/t/pkg/test_a.py")]
+
+    # Assert
+    assert names == ["first", "second"], (
+        "an unstable sort would make autouse order depend on the sort "
+        f"implementation rather than on the user's declarations; got {names}"
+    )
+
+
+def test_autouse_ranks_the_session_scope_between_process_and_package() -> None:
+    """The ``session`` rung is reachable and ranked, not dead weight (#1716).
+
+    No ``Lifetime`` maps to ``FixtureScope.SESSION`` — it holds the builtins,
+    which are never autouse — so nothing in this repo's own declarations can
+    reach that rank. A **plugin** can: ``_register_plugin_fixtures`` builds its
+    ``FixtureDef`` with ``scope=FixtureScope(provider_scope)`` from an arbitrary
+    provider string *and* ``autouse=provider_autouse``, in the same call.
+
+    Without this test the entry is an untested branch in a rank map, which is
+    exactly the shape a later cleanup reads as speculative and deletes — and
+    ``_SCOPE_RANK`` must stay total, because a missing member is a ``KeyError``
+    on the autouse path rather than a merely wrong order.
+    """
+    # Arrange — mirrors _register_plugin_fixtures: a plugin-sourced def is
+    # unanchored, so it is ambient and visible everywhere.
+    registry = FixtureRegistry()
+
+    def _plugin_def(name: str, scope: FixtureScope) -> FixtureDef[Any]:
+        return FixtureDef(
+            name=name,
+            fixture_type=object,
+            scope=scope,
+            source=PluginSource(provider=object(), plugin_module="acme.plugin"),
+            autouse=True,
+        )
+
+    registry.register(_plugin_def("pkg_wide", FixtureScope.PACKAGE))
+    registry.register(_plugin_def("task_wide", FixtureScope.SESSION))
+    registry.register(_plugin_def("proc_wide", FixtureScope.PROCESS))
+
+    # Act
+    names = [defn.name for defn in registry.get_autouse("/t/test_a.py")]
+
+    # Assert
+    assert names == ["proc_wide", "task_wide", "pkg_wide"], (
+        "session ranks between process and package because that is where its "
+        "boundary sits — it drains at end_task, inside end_process and outside "
+        f"a package's subtree; got {names}"
+    )
+
+
+def test_autouse_index_ignores_names_with_no_autouse_def() -> None:
+    """The candidate index holds only autouse-capable names (#1716).
+
+    get_autouse runs once per test, so iterating every registered fixture makes
+    the loop scale with the suite rather than with the feature.
+    """
+    # Arrange
+    registry = FixtureRegistry()
+    registry.register(_module_def("plain", "pkg", "/t/pkg"))
+    registry.register(_module_def("auto", "pkg", "/t/pkg", autouse=True))
+
+    # Act
+    indexed = list(registry._autouse_names)  # noqa: SLF001 — the index is a perf invariant with no public reader
+
+    # Assert
+    assert indexed == ["auto"], (
+        "a name with no autouse def must never enter the index — it would be "
+        f"resolved once per test for a result that is always discarded; got {indexed}"
+    )
+
+
+def test_notice_says_autouse_was_suppressed(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """Shadowing an autouse fixture stops it firing — say so (#1716).
+
+    Inert before slice 9, because no anchored def could be autouse. The moment
+    one can, a name collision between two unrelated fixtures silently disables
+    an ancestor's autouse for a whole subtree.
+    """
+    # Arrange
+    registry = FixtureRegistry()
+
+    # Act
+    registry.register(_module_def("setup", "t", "/t", autouse=True))
+    registry.register(_module_def("setup", "api", "/t/api"))
+
+    # Assert
+    notices = _registration_notices(diag_collector)
+    assert len(notices) == 1, (
+        f"the two anchors overlap, so exactly one real clash exists; got {notices}"
+    )
+    assert "no longer fires" in notices[0], (
+        "the notice must name the consequence, not just the fact of shadowing "
+        "— 'shadows definition in X' reads as a naming nit when what actually "
+        f"happened is that a fixture stopped running: {notices[0]!r}"
+    )
+
+
+def test_notice_stays_quiet_when_no_autouse_is_lost(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """Autouse-shadows-autouse loses no firing, so no suppression clause (#1716)."""
+    # Arrange
+    registry = FixtureRegistry()
+
+    # Act
+    registry.register(_module_def("setup", "t", "/t", autouse=True))
+    registry.register(_module_def("setup", "api", "/t/api", autouse=True))
+
+    # Assert
+    notices = _registration_notices(diag_collector)
+    assert len(notices) == 1, (
+        f"the two anchors overlap, so exactly one real clash exists; got {notices}"
+    )
+    assert "no longer fires" not in notices[0], (
+        "the deeper declaration is autouse too, so firing continues — claiming "
+        "suppression here sends the user hunting for a fixture that still runs: "
+        f"{notices[0]!r}"
     )
 
 

@@ -522,6 +522,7 @@ assigned because setup failed.
 ```text
 [notice] fixture registration — fixture '<name>' in <shadower> shadows definition in <shadowed>
 [notice] fixture registration — fixture '<name>' in <shadower> shadows definition in <shadowed> within <anchor>
+[notice] fixture registration — fixture '<name>' in <shadower> shadows definition in <shadowed> within <anchor>; the shadowed fixture is autouse, so it no longer fires there
 ```
 
 **Cause:** Two declarations of the same fixture name are both reachable from at
@@ -530,6 +531,13 @@ winner is ambient — a `conftest.py`, plugin or built-in fixture, which resolve
 run-wide. The second is emitted when the winner is anchored, and `<anchor>` is
 the subtree where it takes over: outside that subtree the other declaration
 still resolves.
+
+The third form adds the consequence when the declaration being shadowed is
+[autouse](../how-to/use-fixtures.md) and the one shadowing it is not: the
+shadowed fixture stops running inside `<anchor>`, and keeps running outside it.
+That is the supported way to opt a subtree out of an autouse fixture, so this
+notice is confirmation when it was deliberate — and the only signal you get when
+two unrelated fixtures happened to pick the same name.
 
 Declarations that no single test can reach at the same time do **not** produce
 this notice. `tests/api/v1/__fixtures__.py` and `tests/admin/v1/__fixtures__.py`
