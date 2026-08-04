@@ -15,7 +15,7 @@
 # which re-trigger the approval prompt that this hook only clears at creation.
 # The hook is the portable half: it travels with the repo to machines whose
 # direnv config has never heard of this checkout.
-post-create = "command -v direnv >/dev/null && direnv allow || true"
+# (moved to the [post-create] table below — see `direnv`.)
 
 # Reload direnv when switching worktrees (devenv environment)
 post-switch = "direnv reload"
@@ -23,22 +23,29 @@ post-switch = "direnv reload"
 # Run full pre-push gate before merging
 pre-merge = "just preflight"
 
+[post-create]
+# Approve this worktree's .envrc — see the note above.
+direnv = "command -v direnv >/dev/null && direnv allow || true"
+
 # Warn when another branch or open PR already touches this branch's issue
-# numbers. Advisory only — it always exits 0, because pre-start is a blocking
-# hook and a false positive must never abort worktree creation.
+# numbers. Advisory only — it always exits 0, because post-create is a
+# blocking hook and a false positive must never abort worktree creation.
 #
-# pre-start rather than post-create: it is the documented hook for "runs once
-# when a new worktree is created, blocking", and the warning has to be visible
-# before work starts. (post-create, used above, is honoured by wt but appears
-# nowhere in its hook reference.)
+# post-create, not pre-start. `wt hook --help` is authoritative for hook names,
+# NOT the worktrunk skill reference: that reference documents a
+# `pre-start`/`post-start` pair, wt 0.29.0 implements `post-create`, and a
+# `pre-start` key is silently dropped as "unknown field (will be ignored)".
+# It shipped inert once that way (#1891). Check the binary, not the docs.
 #
 # Every issue number is extracted, not the first — a multi-issue branch like
 # fix/1863-1864-foo must check both. The `head -1` shortcut is the documented
 # defect in docs/agents/skill-contracts.md, cause D; it is not repeated here.
 #
-# Covers the implement and merge collisions. It cannot see triage-stage
+# Covers implementation and merge collisions. It cannot see triage-stage
 # collisions, which happen before any worktree exists.
-pre-start = """
+#
+# Test without creating a worktree: `wt hook post-create concurrency`.
+concurrency = """
 issues=$(printf '%s' '{{ branch }}' | grep -oE '[0-9]{2,}' | sort -u); \
 [ -z "$issues" ] && exit 0; \
 others=$(git branch -r --format='%(refname:short)' 2>/dev/null | sed 's|^origin/||' | grep -vxF '{{ branch }}'); \
