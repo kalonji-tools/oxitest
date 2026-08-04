@@ -198,41 +198,11 @@ def test_decorated_fixture_raising_surfaces_error(tmp: TempDir) -> None:
     )
 
 
-def test_unrecognized_import_alias_diagnoses(tmp: TempDir) -> None:
-    """MED-3: decorated functions but no recognized @oxi.fixture must diagnose.
-
-    The Rust prescan only recognizes `oxi` and `oxitest` as namespaces for
-    the fixture decorator. An alias outside that set parses fine and yields
-    zero declarations — indistinguishable from a __fixtures__.py that simply
-    has no fixtures. Without the diagnostic the user gets fixture-not-found
-    at test time and no hint that the alias is the cause.
-    """
-    inner = tmp / "aliased_pkg"
-    inner.mkdir()
-    (inner / "__init__.py").write_text("")
-    (inner / "__fixtures__.py").write_text(
-        "import oxitest as testing\n\n"  # only `oxi`/`oxitest` are recognized
-        '@testing.fixture(lifetime="function")\n'
-        "def conn() -> str:\n"
-        "    return 'conn'\n"
-    )
-    (inner / "test_x.py").write_text(
-        "def test_something():\n    assert True, 'sanity'\n"
-    )
-    (tmp / "pyproject.toml").write_text(
-        '[tool.oxitest]\ntestpaths = ["aliased_pkg"]\npython_files = ["test_*.py"]\n'
-    )
-
-    out, err, _rc = helpers.run_oxitest(tmp)
-    combined = out + err
-    assert "__fixtures__.py" in combined, (
-        "the diagnostic must name __fixtures__.py — the user cannot act on a "
-        "message that does not say which file has the unrecognized alias:\n"
-        f"stdout:\n{out}\nstderr:\n{err}"
-    )
-    assert "alias" in combined, (
-        "the diagnostic must point at the import alias as the probable cause; "
-        "a generic 'no fixtures found' sends the user hunting in the wrong "
-        "place because the decorator looks correct at a glance:\n"
-        f"stdout:\n{out}\nstderr:\n{err}"
-    )
+# `test_unrecognized_import_alias_diagnoses` lived here until #1859. It asserted
+# that an unrecognized import alias in a __fixtures__.py produced a diagnostic
+# telling the user to change their import. Its premise — "the user gets
+# fixture-not-found at test time" — no longer holds: the file is imported and
+# the alias resolves, so there is nothing to diagnose. The replacement coverage
+# is `test_aliased_fixture_in_fixtures_home_resolves` in
+# test_1859_alias_enforcement.py, which asserts the fixture works rather than
+# that oxitest complains about it.
