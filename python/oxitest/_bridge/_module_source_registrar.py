@@ -24,7 +24,7 @@ __all__ = ["register_module_source_fixtures"]
 import inspect
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Final, get_type_hints
+from typing import Any, get_type_hints
 
 from oxitest._bridge._errors import UsageError
 from oxitest._bridge._fixture_decorator import MARKER_ATTR, _FixtureMarker
@@ -90,7 +90,9 @@ def register_module_source_fixtures(
         if not isinstance(marker, _FixtureMarker):
             continue
 
-        if is_inline and marker.lifetime in _OVER_INLINE_CAP:
+        # PACKAGE and PROCESS are the complete set above the cap: `Lifetime` has
+        # exactly four members since #1777 renamed SESSION to PROCESS.
+        if is_inline and marker.lifetime in (Lifetime.PACKAGE, Lifetime.PROCESS):
             # Accumulated, not raised here. Someone whose aliased declarations
             # were silently ignored until now likely has several, and a
             # run-fix cycle each is a poor trade for failing one line earlier.
@@ -130,16 +132,6 @@ def register_module_source_fixtures(
 
     if cap_violations:
         raise UsageError("\n\n".join(cap_violations))
-
-
-#: Lifetimes an inline declaration may not use — everything above ``module``.
-#:
-#: ``Lifetime`` has exactly four members since #1777 renamed ``SESSION`` to
-#: ``PROCESS``, so these two are the complete set above the cap. Derived rather
-#: than written out, so a fifth tier cannot be added without landing here.
-_OVER_INLINE_CAP: Final = frozenset(
-    {Lifetime.PACKAGE, Lifetime.PROCESS},
-)
 
 
 def _inline_cap_message(fn_name: str, module_path: str, lifetime: Lifetime) -> str:

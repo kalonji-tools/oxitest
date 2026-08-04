@@ -226,22 +226,25 @@ fn register_and_record(
     } = *home;
 
     let session_obj = session.as_py_object(py);
-    let registration = bridge::register_fixture_module_for_path(py, session_obj, path, anchor);
-    let registration_failed = registration.is_err();
-    if let Err(e) = registration {
-        errors.push(e);
-    }
-
-    let declarations: Vec<(String, String, u32)> = if registration_failed {
-        ast_fallback.to_vec()
-    } else {
-        session
-            .module_source_declarations(py, anchor)
-            .unwrap_or_else(|e| {
+    // Keyed on `path`, not `anchor`: a directory may hold both a
+    // `__fixtures__.py` and an `__init__.py`, which register under the same
+    // anchor. Asking by anchor gives each of them the other's declarations —
+    // which reported a Rule 4 violation against a file that did not contain the
+    // declaration, and double-counted every package declaration in such a
+    // directory.
+    let declarations: Vec<(String, String, u32)> =
+        match bridge::register_fixture_module_for_path(py, session_obj, path, anchor) {
+            Err(e) => {
                 errors.push(e);
                 ast_fallback.to_vec()
-            })
-    };
+            }
+            Ok(()) => session
+                .module_source_declarations(py, path)
+                .unwrap_or_else(|e| {
+                    errors.push(e);
+                    ast_fallback.to_vec()
+                }),
+        };
 
     let package_declarations = declarations
         .iter()

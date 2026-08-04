@@ -995,7 +995,7 @@ def test_module_source_declarations_reports_name_lifetime_and_lineno() -> None:
     registry.register(_module_source_def("conn", "/proj/pkg", Lifetime.PACKAGE, "pkg"))
 
     # Act
-    declarations = registry.module_source_declarations("/proj/pkg")
+    declarations = registry.module_source_declarations("/proj/pkg/__fixtures__.py")
 
     # Assert
     expected_line = _declared_at_module_level.__code__.co_firstlineno
@@ -1007,8 +1007,8 @@ def test_module_source_declarations_reports_name_lifetime_and_lineno() -> None:
     )
 
 
-def test_module_source_declarations_excludes_other_anchors() -> None:
-    """Each declaration home asks only about its own anchor."""
+def test_module_source_declarations_excludes_other_files() -> None:
+    """Each declaration home asks only about its own file."""
     # Arrange
     registry = helpers.make_registry()
     registry.register(_module_source_def("mine", "/proj/pkg", Lifetime.PACKAGE, "pkg"))
@@ -1017,7 +1017,7 @@ def test_module_source_declarations_excludes_other_anchors() -> None:
     )
 
     # Act
-    declarations = registry.module_source_declarations("/proj/pkg")
+    declarations = registry.module_source_declarations("/proj/pkg/__fixtures__.py")
 
     # Assert
     assert [name for name, _, _ in declarations] == ["mine"], (
@@ -1056,7 +1056,7 @@ def test_module_source_declarations_sees_a_shadowed_declaration() -> None:
     )
 
     # Act
-    declarations = registry.module_source_declarations("/proj/pkg")
+    declarations = registry.module_source_declarations("/proj/pkg/__fixtures__.py")
 
     # Assert
     assert [name for name, _, _ in declarations] == ["conn"], (

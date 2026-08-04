@@ -649,14 +649,21 @@ class FixtureRegistry:
         )
 
     def module_source_declarations(
-        self, anchor_package_path: str
+        self, defining_module_path: str
     ) -> tuple[tuple[str, str, int], ...]:
-        """Return ``(name, lifetime, lineno)`` for ModuleSource defs at *anchor*.
+        """Return ``(name, lifetime, lineno)`` for defs declared *in that file*.
 
         The authority for ADR-0009's scheduler co-location and Rule 4 checks
         (#1859). Read from the registry rather than from prescan's AST because
         registration is marker-attribute based: an unrecognized import spelling
         registers normally and no static scan can see it.
+
+        Keyed on the **defining module**, not the anchor. A directory may hold
+        both a ``__fixtures__.py`` and an ``__init__.py``, and both register
+        under the same anchor — so an anchor-keyed query hands each of them the
+        other's declarations. That produced a Rule 4 error naming a file that
+        did not contain the offending declaration, and a duplicate co-location
+        entry for every declaration in such a directory.
 
         Every def is scanned, not just the most-local one per name, unlike
         :meth:`process_lifetime_names`. That method answers a *resolution*
@@ -676,7 +683,7 @@ class FixtureRegistry:
                 source = defn.source
                 if not isinstance(source, ModuleSource):
                     continue
-                if source.anchor_package_path != anchor_package_path:
+                if source.defining_module_path != defining_module_path:
                     continue
                 # Two guarded lookups rather than `func.__code__`: the declared
                 # type is a callable, and only *functions* carry `__code__`. A

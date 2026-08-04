@@ -179,12 +179,16 @@ impl FixtureSession {
             .unwrap_or_default()
     }
 
-    /// Returns `(name, lifetime, lineno)` for ModuleSource fixtures at *anchor*.
+    /// Returns `(name, lifetime, lineno)` for fixtures declared in *that file*.
     ///
     /// The source of truth for ADR-0009's scheduler co-location and Rule 4
     /// checks (#1859). Registration is by marker attribute, so an unrecognized
     /// import spelling registers a real fixture that prescan's AST cannot see;
     /// asking the registry makes the two agree by construction.
+    ///
+    /// Keyed on the declaring file rather than its anchor: a directory may hold
+    /// both a `__fixtures__.py` and an `__init__.py`, which share an anchor, and
+    /// an anchor-keyed query gives each of them the other's declarations.
     ///
     /// Unlike [`Self::process_lifetime_fixture_names`], errors are **not**
     /// absorbed into an empty Vec. That idiom suits a decoration on a warning;
@@ -194,7 +198,7 @@ impl FixtureSession {
     pub(crate) fn module_source_declarations(
         &self,
         py: Python<'_>,
-        anchor_package_path: &Utf8Path,
+        defining_module_path: &Utf8Path,
     ) -> Result<Vec<(String, String, u32)>, CollectError> {
         self.0
             .bind(py)
@@ -202,7 +206,7 @@ impl FixtureSession {
             .and_then(|registry| {
                 registry.call_method1(
                     "module_source_declarations",
-                    (anchor_package_path.as_str(),),
+                    (defining_module_path.as_str(),),
                 )
             })
             .and_then(|v| v.extract::<Vec<(String, String, u32)>>())
