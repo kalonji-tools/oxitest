@@ -99,6 +99,8 @@ git commit --amend
 git push --force-with-lease
 ```
 
+**Concurrent sessions are detected, not prevented.** `.config/wt.toml`'s `pre-start` hook warns at `wt switch --create` when another branch or open PR already touches this branch's issue numbers. It is advisory and never blocks. **It cannot see triage-stage collisions** — those happen before a worktree exists, and two of the four recorded incidents were exactly that. Assume it covers implementation and merge, nothing earlier.
+
 **Branch names are `<type>/<issue>-<slug>`** — `refactor/1777-process-lifetime-tier`, `fix/1863-1864-exitcode-ord-ctrf-name-docs`. This is not only style: `superpowers:brainstorming` reads the issue number out of the branch name to post its spec to the right issue, and a branch without one fails silently — no spec reaches the issue, and stage 4 still looks satisfied because a spec was written. See `docs/agents/skill-contracts.md`, cause D.
 
 `--force-with-lease` rather than `--force`: it refuses if the remote moved since your last fetch, so a force-push can never silently discard someone else's work.
@@ -184,6 +186,10 @@ git diff --quiet backup/<slug> HEAD       # 2. empty ⇒ nothing lost or gained
 4. `gh pr merge --rebase`.
 
 **"CI green" means the required contexts, not every check.** The required set is defined by branch protection — query it (`gh api repos/{owner}/{repo}/branches/main/protection`) rather than trusting a remembered list, because a copy here would drift. A red **non-required** check is not a merge blocker; say so in the debrief and move on. Do not make a coverage check green by measuring less — widening an `ignore:` list over untested code is the recorded anti-pattern, not a fix.
+
+**An instruction that arrives mid-gate wins — and you report what the gate had reached.** Do what you are asked, and in the same reply state exactly what had and had not been verified when you stopped: which checks completed, which never ran. The failure this prevents is not disobedience, it is silently converting an instruction into a claim that the gate passed.
+
+If the instruction is a **waiver** — *"skip preflight, there's no logical change"* — its reason is a premise. Amend the plan comment's ledger with a row for it — the evidence that made it true — and re-check that evidence before relying on it: one branch acquired a logical change *after* the waiver was granted, so the waiver was correct when given and false when used.
 
 **A cross-cutting change must be re-verified against a freshly-rebased branch.** CI builds the *merge commit*, so a rename or a vocabulary change is broken by construction by anything that lands on `main` meanwhile — and every local gate stays green throughout, because locally the two halves never meet. This is a trigger for merge-sequence step 2, not a new step: for any rename, vocabulary change, or branch left open more than a day, rebase onto latest `main` and re-run the gate *before* requesting merge rather than discovering it in CI.
 
