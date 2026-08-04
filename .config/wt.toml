@@ -22,3 +22,36 @@ post-switch = "direnv reload"
 
 # Run full pre-push gate before merging
 pre-merge = "just preflight"
+
+# Warn when another branch or open PR already touches this branch's issue
+# numbers. Advisory only — it always exits 0, because pre-start is a blocking
+# hook and a false positive must never abort worktree creation.
+#
+# pre-start rather than post-create: it is the documented hook for "runs once
+# when a new worktree is created, blocking", and the warning has to be visible
+# before work starts. (post-create, used above, is honoured by wt but appears
+# nowhere in its hook reference.)
+#
+# Every issue number is extracted, not the first — a multi-issue branch like
+# fix/1863-1864-foo must check both. The `head -1` shortcut is the documented
+# defect in docs/agents/skill-contracts.md, cause D; it is not repeated here.
+#
+# Covers the implement and merge collisions. It cannot see triage-stage
+# collisions, which happen before any worktree exists.
+pre-start = """
+issues=$(printf '%s' '{{ branch }}' | grep -oE '[0-9]{2,}' | sort -u); \
+[ -z "$issues" ] && exit 0; \
+others=$(git branch -r --format='%(refname:short)' 2>/dev/null | sed 's|^origin/||' | grep -vxF '{{ branch }}'); \
+prs=$(gh pr list --state open --json number,headRefName,body --jq '.[] | "\\(.number)\\t\\(.headRefName)\\t\\(.body|gsub("\\n";" "))"' 2>/dev/null); \
+for n in $issues; do \
+  b=$(printf '%s\\n' "$others" | grep -E "(^|[^0-9])$n([^0-9]|$)" || true); \
+  p=$(printf '%s\\n' "$prs" | grep -vE "^[0-9]+\\s+{{ branch }}\\s" | grep -E "#$n([^0-9]|$)" | cut -f1,2 || true); \
+  if [ -n "$b" ] || [ -n "$p" ]; then \
+    printf '  concurrent work on #%s:\\n' "$n"; \
+    [ -n "$b" ] && printf '    branch %s\\n' $b; \
+    [ -n "$p" ] && printf '    PR #%s (%s)\\n' $p; \
+    printf '    another session may be on this — check before starting.\\n'; \
+  fi; \
+done; \
+exit 0
+"""
