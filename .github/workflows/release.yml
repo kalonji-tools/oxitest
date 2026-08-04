@@ -25,6 +25,11 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
 
+      # Toolchain comes from rust-toolchain.toml — see that file (#1792).
+      # Required even though this job only refreshes Cargo.lock: once the file
+      # is in the tree, the runner's preinstalled toolchain no longer applies.
+      - run: rustup toolchain install
+
       - name: Install git-cliff
         uses: taiki-e/install-action@v2.85.6
         with:

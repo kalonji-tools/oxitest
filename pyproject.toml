@@ -16,6 +16,12 @@ oxitest = "oxitest:main"
 module-name = "oxitest._oxitest"
 python-source = "python"
 features = ["pyo3/extension-module"]
+# rust-toolchain.toml pins the *development* toolchain (#1792). Cargo puts it in
+# the package file list, so the sdist would carry it and every source install —
+# musl, PyPy, `--no-binary`, anything without a wheel — would demand that exact
+# release, which rustup >= 1.28 refuses to install on its own. Source builds use
+# whatever toolchain the user already has, as they did before the pin existed.
+exclude = [{ path = "rust-toolchain.toml", format = "sdist" }]
 
 [tool.ruff]
 target-version = "py311"

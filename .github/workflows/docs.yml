@@ -36,6 +36,8 @@ jobs:
               - '.github/workflows/docs.yml'
             doc-tests:
               - 'python/tests/docs/**'
+              # this job compiles the extension via `maturin develop`
+              - 'rust-toolchain.toml'
 
   build:
     name: Build docs
@@ -118,7 +120,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Toolchain comes from rust-toolchain.toml — see that file (#1792).
+      - run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
         with:
