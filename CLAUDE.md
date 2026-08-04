@@ -85,9 +85,7 @@ At creation, apply exactly one **category** label, **one or more** `area:` label
 
 **3. Triage issues.** Every issue gets a **state label** reflecting its triage status. See `docs/agents/triage-labels.md` for the state vocabulary. Triage is also where `priority:` and `size:` are applied — they are judgements, not facts known at filing time, and a guessed `size: M` is worse than no label at all.
 
-**4. Spec every issue.** A spec is consumed as fact by every stage after it, so its claims are bound by *Evidence for analysis outputs* below — including the ones that merely characterise current behaviour. The most thoroughly-grilled spec in this repo's history carried three false claims, and every one was caught by measurement rather than by a stage.
-
-By the time a PR is created, every issue in that PR MUST have a design spec. If no issue exists yet for the work being specced, create one first — every spec needs a home issue. Specs can be written when the issue is picked up or ahead of time — but never skipped. Use the `superpowers:brainstorming` skill for spec design. Post each issue's spec section as a comment on that issue. When issues share a grouped spec, post only the section relevant to each issue — not the entire spec on every issue.
+**4. Spec every issue.** By the time a PR is created, every issue in that PR MUST have a design spec. If no issue exists yet for the work being specced, create one first — every spec needs a home issue. Specs can be written when the issue is picked up or ahead of time — but never skipped. Use the `superpowers:brainstorming` skill for spec design. Post each issue's spec section as a comment on that issue. When issues share a grouped spec, post only the section relevant to each issue — not the entire spec on every issue.
 
 **5. Create a draft PR.** Open the draft PR *before* any implementation, so the approach can be reviewed early. GitHub requires at least one commit, so scaffold with an empty one and fold it away later:
 
@@ -108,6 +106,28 @@ git push --force-with-lease
 Assignment is **folded into `gh pr create`** (`fold-in`) — there is no separate `gh pr edit --add-assignee` step left to forget. The previous separate step was skipped on 4/4 PRs in one session with nothing surfacing it.
 
 **6. Plan before implementing.** Use the `superpowers:writing-plans` skill. Multiple issues can be grouped into one plan if they are tightly coupled or logically sequential. The plan MUST be posted as a comment on the PR — never on individual issues.
+
+**The plan opens with a premise ledger** (`fold-in` — the plan format begins with it, so there is no separate step to skip). Three sections:
+
+| Section | Contains |
+|---|---|
+| **Rests on** | premises the acceptance criteria depend on |
+| **Narrowed by** | premises that removed an acceptance criterion, a gate, or a task |
+| **Sequenced on** | steps whose predecessor must leave a buildable tree — empty is a legitimate answer, and asserts that every step stands alone |
+
+`Narrowed by` exists because a premise that *deletes* an acceptance criterion is invisible to a ledger scoped by acceptance criteria, and that is the shape of the worst defect in the series.
+
+**Every row carries evidence of the same kind as its claim.** Never a bare verdict — `Verified ✅` is free to write, `0/6` is not.
+
+| Claim is about | Admissible | Not admissible |
+|---|---|---|
+| runtime behaviour | a command and its real output | a source quote, however exact — reading code is not running it |
+| what a document says | the **whole quoted span** as it appears in your artifact | a prefix, a paraphrase, or a fragment proving only that the source discusses the topic |
+| a measured quantity | the measurement, with the command that produced it | a remembered or inherited figure |
+
+The whole-span clause is not pedantry: a prefix-verified quote once passed its own ledger row and shipped fabricated, because the start of a quote is the part you remember correctly and the tail is where invention happens.
+
+**A false premise blocks.** If an acceptance criterion changes, the issue is re-scoped and re-enters at stage 4 — the same re-entry point the diagram marks, reached from inside Track A rather than from a backlog sweep. Otherwise amend the plan and record the correction in its row. Never a silent default.
 
 **7. Implement via subagents or inline.** Use `superpowers:subagent-driven-development` or `superpowers:executing-plans`.
 
@@ -136,7 +156,11 @@ Three different operations in this stage get called "rebase" in ordinary speech.
 - **PR closing keywords**: GitHub requires the keyword before EACH issue number. Write `Closes #1, Closes #2, Closes #3` — NOT `Closes #1, #2, #3` (only the first gets closed).
 - Run `just preflight` before pushing.
 
-**Pre-merge commit regroup (`artifact`).** When a merge is triggered, regroup the branch into coherent commits — or record in the PR why the existing grouping is already coherent. Either way it leaves a mark, because this step has now been skipped silently, reported as done when it was not, and argued against with a false claim that the tooling made it impossible. A tick that says "already coherent" is a legitimate outcome; a tick that is absent is not.
+**Commit regroup (`artifact`).** At the **first push of a multi-commit branch**, regroup into coherent commits — or record in the PR why the existing grouping is already coherent. Either way it leaves a mark: a tick saying "already coherent" is a legitimate outcome, an absent tick is not.
+
+*Not* at merge trigger, which is too late — by then the throwaway history is pushed and CI has run on it, and one branch paid a full squash → preflight → push → wait-for-CI → merge cycle to undo that. The step leaves a mark because it has been skipped silently, reported as done when it was not, and argued against with a false claim that the tooling made it impossible.
+
+"Coherent" is a judgement, so it carries one checkable clause: **no commit that a `Sequenced on` row declared non-buildable may survive into merged history.**
 
 The tooling is available, contrary to that claim:
 
@@ -190,11 +214,13 @@ Sweep → Verdict → Disposition ─→ re-scoped issue re-enters Track A at Sp
 
 | Rot mode | What is stale | Disposition | Evidence required |
 |---|---|---|---|
-| (a) the defect is fixed | the issue itself | **close** | the citation in "Evidence for analysis outputs" below (`artifact`) |
+| (a) the defect is fixed | the issue itself | **close** | the citation in "Evidence for analysis outputs" below, **plus the premises the verdict rests on** (`artifact`) |
 | (b) the defect stands, its *characterisation* is stale | the description | **re-scope** | comment recording what changed and why this is not a close (`artifact`) |
 | (c) the defect stands, its *vocabulary* names deleted concepts | the wording | **re-word** | comment mapping old term → current term (`artifact`) |
 
 The default disposition for a stale-*looking* issue is correct it, not close it. In the audit that produced this section, ~30 issues were reviewed: **0 were closeable and 8+ needed correction.** A "close what looks stale" pass would have destroyed information in eight places.
+
+Only `close` lists its premises. `re-scope` and `re-word` are recoverable — `close` is the one this file already calls *silent and permanent*, and the one whose verdict has been reached on evidence that measured a different thing.
 
 Re-labelling and re-prioritising need no evidence (prose).
 
@@ -210,7 +236,9 @@ The pipeline gates code. This gates *conclusions*.
 | Wrong ⇒ someone investigates and finds nothing. Self-correcting. | Wrong ⇒ information is destroyed and nothing looks again. Silent and permanent. |
 | **no citation needed** | **citation required** |
 
-**Direction is the common case, not the rule.** The rule is *consequence*, and a claim that becomes an input to a decision is load-bearing whichever column it falls in. Three kinds slip through the table above: a claim that **specifies the verification itself** (which mutant, which command, which assert fails) — get it wrong and the test it prescribes is vacuous while reading as coverage; a claim that merely **characterises current behaviour** and then becomes spec input; and a claim **inherited** from an issue or spec written days earlier. Re-verify an inherited claim **when you act on it**, not when it was written — this repo ships fast enough that claims go stale between filing and dispatch, and a `confirmed` label is exactly what suppresses the re-check.
+**Direction is the common case, not the rule.** The rule is *consequence*, and a claim that becomes an input to a decision is load-bearing whichever column it falls in. Three kinds slip through the table above: a claim that **specifies the verification itself** (which mutant, which command, which assert fails) — get it wrong and the test it prescribes is vacuous while reading as coverage; a claim that merely **characterises current behaviour** and then becomes spec input; and a claim **inherited** from an issue or spec written days earlier.
+
+**A premise is any claim a later stage will rest on.** Whatever produced it — triage brief, spec, plan, review finding, debrief — its premises are bound by this rule. Deliberately not a list of stages: an earlier version of this section named stage 4 and missed stage 3, where the worst defect in the series was authored. Premises are checked where the work is: at stage 6 in the plan's ledger for Track A, and at the disposition comment for a Track B `close`.
 
 A subtracting claim MUST carry:
 
