@@ -1,0 +1,4 @@
+[tool.oxitest]
+testpaths = ["alias_inline_over_cap"]
+python_files = ["test_*.py"]
+strict = "abort"

@@ -282,3 +282,136 @@ def test_a_conftest_declaration_still_clashes_with_any_anchor() -> None:
             _fixtures_module("/t/api/v1/__fixtures__.py"),
             anchor_package_path="/t/api/v1",
         )
+
+
+# ── ADR-0009 Rule 2: the home-kind cap (#1859) ────────────────────────────────
+#
+# The cap moved here from the Rust prescan, which recognized three decorator
+# spellings and so silently did not apply to any other. These exercise the
+# registrar directly; the end-to-end path is covered by
+# test_1859_alias_enforcement.py, which runs oxitest as a subprocess and
+# therefore cannot see this code from a coverage run.
+
+
+def _module_declaring(path: str, **lifetimes: str) -> types.ModuleType:
+    """A synthetic module declaring one fixture per name → lifetime pair.
+
+    The home *kind* is decided by what the caller passes as
+    ``anchor_package_path``, not here: passing *path* itself makes the module an
+    inline declaration home, while passing its parent directory makes it a
+    package home. Both shapes are needed, because the cap applies to one and
+    must not apply to the other.
+    """
+    mod = types.ModuleType("synthetic_inline")
+    mod.__file__ = path
+    for name, lifetime in lifetimes.items():
+
+        @fixture(lifetime=lifetime)
+        def declared() -> str:
+            return "value"
+
+        setattr(mod, name, declared)
+    return mod
+
+
+def test_inline_declaration_may_not_declare_package_lifetime() -> None:
+    """An inline fixture outlives the only scope that can see it."""
+    # Arrange
+    registry = FixtureRegistry()
+    path = "/t/pkg/test_inline.py"
+
+    # Act / Assert
+    with raises(UsageError, match="capped at"):
+        register_module_source_fixtures(
+            registry,
+            _module_declaring(path, engine="package"),
+            anchor_package_path=path,
+        )
+
+
+def test_inline_declaration_may_not_declare_process_lifetime() -> None:
+    """`process` is the second tier above the cap, and the set is complete."""
+    # Arrange
+    registry = FixtureRegistry()
+    path = "/t/pkg/test_inline.py"
+
+    # Act / Assert
+    with raises(UsageError, match="capped at"):
+        register_module_source_fixtures(
+            registry,
+            _module_declaring(path, engine="process"),
+            anchor_package_path=path,
+        )
+
+
+def test_a_package_home_may_still_declare_package_lifetime() -> None:
+    """The cap is conditional on home *kind* — it is not a blanket rejection.
+
+    The declared tier must be one the cap actually rejects inline, or this
+    proves nothing: an earlier version of this test registered a
+    ``function``-lifetime fixture, which the cap never inspects, and a mutant
+    that dropped the ``is_inline`` condition — applying the cap to every home
+    kind — passed it. A negative control has to sit on the boundary it guards.
+    """
+    # Arrange — a *directory* anchor, so this home is not inline.
+    registry = FixtureRegistry()
+
+    # Act
+    register_module_source_fixtures(
+        registry,
+        _module_declaring("/t/pkg/__fixtures__.py", engine="package"),
+        anchor_package_path="/t/pkg",
+    )
+
+    # Assert
+    defn = registry.get_in_namespace("engine", "pkg")
+    assert defn is not None, (
+        "a declaration home anchored to a directory is not inline, so the "
+        "home-kind cap must not apply to it — rejecting here would break every "
+        "legitimate package-lifetime declaration in the suite"
+    )
+
+
+def test_inline_cap_violations_accumulate_into_one_error() -> None:
+    """Every offender in a module is named by a single run."""
+    # Arrange
+    registry = FixtureRegistry()
+    path = "/t/pkg/test_inline.py"
+    module = _module_declaring(path, first_bad="package", second_bad="process")
+
+    # Act
+    with raises(UsageError) as caught:
+        register_module_source_fixtures(registry, module, anchor_package_path=path)
+
+    # Assert
+    message = str(caught.value)
+    for name in ("first_bad", "second_bad"):
+        assert name in message, (
+            f"violations accumulate so one run names them all; a fail-fast "
+            f"check would report only the first, and someone whose aliased "
+            f"declarations were silently ignored likely has several. {name!r} "
+            f"missing from:\n{message}"
+        )
+
+
+def test_inline_cap_message_names_the_sibling_fixtures_home() -> None:
+    """#1711's review lesson: an unactionable hint is not a hint."""
+    # Arrange
+    registry = FixtureRegistry()
+    path = "/t/pkg/test_inline.py"
+
+    # Act
+    with raises(UsageError) as caught:
+        register_module_source_fixtures(
+            registry,
+            _module_declaring(path, engine="package"),
+            anchor_package_path=path,
+        )
+
+    # Assert
+    message = str(caught.value)
+    assert str(Path("/t/pkg") / "__fixtures__.py") in message, (
+        f"the hint must name the destination file, not merely say 'move it "
+        f"elsewhere' — the user cannot derive the target otherwise; got:\n"
+        f"{message}"
+    )

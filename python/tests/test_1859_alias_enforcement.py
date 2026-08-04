@@ -22,6 +22,7 @@ _ALIAS_INIT_HOME = _DATA_ROOT / "alias_init_home"
 _ALIAS_DECORATED_NON_FIXTURE = _DATA_ROOT / "alias_decorated_non_fixture"
 _ALIAS_PROCESS_OUTSIDE_ROOT = _DATA_ROOT / "alias_process_outside_root"
 _ALIAS_PACKAGE_COLOCATES = _DATA_ROOT / "alias_package_colocates"
+_ALIAS_INLINE_OVER_CAP = _DATA_ROOT / "alias_inline_over_cap"
 
 
 def test_aliased_fixture_in_fixtures_home_resolves() -> None:
@@ -109,4 +110,30 @@ def test_aliased_package_declaration_reaches_the_scheduler() -> None:
         f'an aliased lifetime="package" must still co-locate its subtree; '
         f"before #1859 the AST could not see it, so the exactly-once guarantee "
         f"quietly did not hold and no warning was emitted\n{output}"
+    )
+
+
+def test_aliased_inline_over_cap_reports_every_offender() -> None:
+    """The home-kind cap applies to any spelling, and one run names all of them."""
+    # Act
+    stdout, stderr, rc = helpers.run_oxitest(_ALIAS_INLINE_OVER_CAP, "--warnings")
+    output = stdout + stderr
+
+    # Assert
+    assert rc != 0, (
+        f"an inline lifetime wider than module must fail whatever the import "
+        f"spelling; before #1859 the AST-based cap could not see `ox` and both "
+        f"declarations were accepted\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    )
+    for expected in ("first_bad", "second_bad"):
+        assert expected in output, (
+            f"violations accumulate per module — a fail-fast check would name "
+            f"only the first, and someone whose aliased declarations were "
+            f"silently ignored likely has several; {expected!r} missing "
+            f"from:\n{output}"
+        )
+    assert "__fixtures__.py" in output, (
+        f"the hint must name the sibling __fixtures__.py as the migration "
+        f"target (#1711's review lesson): 'move it elsewhere' is unactionable "
+        f"because the user cannot derive the destination\n{output}"
     )

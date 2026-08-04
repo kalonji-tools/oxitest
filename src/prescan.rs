@@ -57,23 +57,21 @@ pub(crate) struct PrescanPayload {
     pub(crate) items: Vec<PrescanItem>,
     pub(crate) has_dynamic_collection: bool,
     pub(crate) module_markers: Vec<String>,
-    /// Inline `@oxi.fixture` declarations in this test file (#1712).
-    ///
-    /// Capped at `module` lifetime by home *kind*, independent of the location
-    /// rule that governs declaration homes (#1711): at the rootdir package that
-    /// rule permits `session`, and only the home-kind cap rejects it inline.
-    pub(crate) declarations: Vec<PrescanDeclaration>,
     /// Whether any top-level function carries a decorator *shaped* like a
     /// fixture declaration, under any import spelling (#1850).
     ///
-    /// A strict superset of `!declarations.is_empty()`, and the two answer
-    /// different questions. `declarations` is what oxitest will *act* on, so it
-    /// only counts the spellings the runtime is documented to recognize. This
-    /// flag decides whether the module-item cache may serve the file, where the
-    /// safe direction is the other one: registration happens by marker
-    /// attribute at import time, so `import oxitest as alias` declares a real
-    /// fixture that `declarations` cannot see. Missing one silently
-    /// reintroduces #1850 for that file; an extra one costs a cache miss.
+    /// This decides whether the module-item cache may serve the file, and it
+    /// errs wide on purpose: registration happens by marker attribute at import
+    /// time, so `import oxitest as alias` declares a real fixture that no
+    /// static scan can name. Missing one silently reintroduces #1850 for that
+    /// file; an extra one costs a cache miss.
+    ///
+    /// This file's inline declarations are deliberately *not* recorded. They
+    /// were, until #1859: the inline lifetime cap read them, and because the
+    /// list only held the three recognized decorator spellings the cap silently
+    /// did not apply to any other. The cap now lives in the Python registrar,
+    /// which sees whatever actually registered, so nothing on this side needs
+    /// to name a declaration — only to notice that one might exist.
     pub(crate) has_fixture_shaped_decorator: bool,
 }
 
@@ -677,11 +675,9 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
 
     let has_dynamic_collection = detect_dynamic_collection(&parsed.1);
     let module_markers = extract_module_marks(&parsed.1);
-    // Separate walk from `walk_test_defs` above, which visits only `test_*`
-    // functions and so cannot see a fixture-decorated helper. A function that is
-    // both stays in both lists: the two walks answer independent questions, and
-    // collapsing them here would hide a user error a later slice should report.
-    let declarations = collect_declarations(&parsed.1, &line_index);
+    // Only the "might one exist?" question is asked of a test file now. Naming
+    // the declarations was the inline cap's job, and #1859 moved that to the
+    // Python registrar, which sees every import spelling rather than three.
     let fixture_shaped = has_fixture_shaped_decorator(&parsed.1);
 
     if keep_ast {
@@ -691,7 +687,6 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
             items,
             has_dynamic_collection,
             module_markers,
-            declarations,
             has_fixture_shaped_decorator: fixture_shaped,
         })
     } else {
@@ -700,10 +695,7 @@ pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult
             stmts: Vec::new(),
             items,
             has_dynamic_collection,
-            // Carried in both arms: the inline cap check does not depend on
-            // `keep_ast`, which is driven by strict-mode violation collection.
             module_markers,
-            declarations,
             has_fixture_shaped_decorator: fixture_shaped,
         })
     }
@@ -881,13 +873,22 @@ mod tests {
     use super::*;
     use crate::python_ast::tests::{temp_path, write_temp_py};
 
-    // ── inline fixture declarations in test files (#1712) ──────────────────
+    // ── declaration extraction (#1712, retargeted by #1859) ────────────────
 
+    /// Every `@oxi.fixture` declaration `collect_declarations` finds in *src*.
+    ///
+    /// Routed through the declaration-home entry point rather than the test-file
+    /// one. #1859 removed the last reader of the test-file payload's
+    /// `declarations` — the inline lifetime cap, now enforced in the Python
+    /// registrar — so that field is gone. `collect_declarations` itself is
+    /// unchanged and still feeds the registration gate and the AST fallback,
+    /// which is what these tests exercise.
     fn inline_declarations(src: &str) -> Vec<PrescanDeclaration> {
         let file = write_temp_py(src);
-        match prescan_with_ast(&temp_path(&file), false) {
-            PrescanResult::HasTests(payload) => payload.declarations,
-            other => panic!("expected HasTests, got {other:?}"),
+        match prescan_fixture_module(&temp_path(&file)) {
+            PrescanFixtureResult::HasFixtures(payload) => payload.declarations,
+            PrescanFixtureResult::NoFixtures(_) => vec![],
+            other => panic!("expected HasFixtures or NoFixtures, got {other:?}"),
         }
     }
 
@@ -1019,7 +1020,7 @@ mod tests {
     }
 
     #[test]
-    fn a_function_that_is_both_test_and_fixture_appears_in_both_lists() {
+    fn a_function_that_is_both_test_and_fixture_is_an_item_and_a_declaration() {
         let file = write_temp_py(
             "import oxitest as oxi\n\n@oxi.fixture(lifetime=\"function\")\ndef test_both(): return 1\n",
         );
@@ -1031,13 +1032,15 @@ mod tests {
                     1,
                     "the test_ name still makes it a test item"
                 );
-                assert_eq!(
-                    payload.declarations.len(),
-                    1,
-                    "and the decorator still makes it a declaration. The two walks \
-                     answer independent questions; resolving the conflict here \
-                     would hide a user error that belongs in a diagnostic (#1713 \
-                     or #1716), not in silent precedence"
+                assert!(
+                    payload.has_fixture_shaped_decorator,
+                    "and the decorator still marks it as declaring something. The \
+                     two walks answer independent questions; resolving the conflict \
+                     here would hide a user error that belongs in a diagnostic \
+                     (#1713 or #1716), not in silent precedence. Since #1859 this \
+                     side only reports *that* a declaration may exist — naming it \
+                     is the registrar's job, because only the registrar sees every \
+                     import spelling"
                 );
             }
             other => panic!("expected HasTests, got {other:?}"),
