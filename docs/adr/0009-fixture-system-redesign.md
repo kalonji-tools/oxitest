@@ -227,9 +227,9 @@ Plugins that need to generate fixtures at runtime (5% case — e.g., one fixture
 
 ### Rule 7 — Autouse
 
-**Status:** not yet built (#1716); the autouse table was amended by Amendment 1 and again by Amendment 4.
+**Status:** shipped (#1716, slice 9). The autouse table was amended by Amendment 1, again by Amendment 4, and again by Amendment 6; Amendment 7 restated it as a rate and added the ordering rule.
 
-`@oxi.fixture(autouse=True, lifetime="...")` fires for every test in the fixture's B1 boundary without being explicitly requested. Same shape as today; the lifetime cap from Rule 4 applies unchanged.
+`@oxi.fixture(autouse=True, lifetime="...")` fires for every test in the fixture's B1 boundary without being explicitly requested. The lifetime cap from Rule 4 applies unchanged — enforcement keys on the lifetime alone and is autouse-independent.
 
 | `autouse=True, lifetime=X` | Fires… |
 |----------------------------|--------|
@@ -238,99 +238,18 @@ Plugins that need to generate fixtures at runtime (5% case — e.g., one fixture
 | `package` | Once per package boundary in scope — exactly once per run (Rule 2) |
 | `process` | Once per process that resolves it — `≤ 1 + N` for N workers plus the coordinator (Rule 2). For autouse work that must happen exactly once per run, declare at rootdir with `lifetime="package"` |
 
-Autouse fixtures remain accessible by explicit request (`Fixture[T]` or `fx.<name>`); autouse is additive, not exclusive. The invisibility concern historically raised against autouse is solved by tooling, not by removing the feature: `oxitest inspect` shows autouse-firing per test as a first-class view (a follow-on impl item — see Consequences).
+**These counts are a rate, not a boundary event** (Amendment 7). There is no boundary hook: `get_autouse` is called once per test from `resolve_for_test`, and the scope cache is what collapses the count. So the build happens inside the *first test* that reaches the boundary — a setup failure is attributed to that test, its cost lands in that test's timing, and a boundary whose tests are all skipped or deselected never fires at all.
 
-> **Not yet built** — #1716. `@oxi.fixture` has no `autouse` kwarg
-> (`python/oxitest/_bridge/_fixture_decorator.py:25` is
-> `def fixture(*, lifetime: str)`), and `src/prescan.rs:1500` carries a test
-> asserting `@oxi.fixture(lifetime="function", autouse=True)` is *rejected*, so
-> the table above describes surface slice 9 will build;
-> `docs/user/how-to/use-fixtures.md:436` already tells users so. Four further
-> statements need Amendment 4, three of them **drifted**.
->
-> **(a) "Same shape as today" is retracted**, on three independent grounds.
-> Today's autouse is the `Fixtures()` registrar kwarg
-> (`_fixtures.py:256`–`262`) that Rule 8 retires. Its shape is **run-wide
-> ambient**, not B1-scoped: the only two source variants that can carry `autouse`
-> today have no anchor field — `ConftestSource` (`_fixture_registry.py:79`) and
-> `PluginSource` (`:85`, reached at `_fixture_session.py:407`, `:417`) — so
-> `is_visible_from` falls through to `case _: return True`
-> (`_fixture_registry.py:193`, "everything unanchored is ambient"), and
-> `docs/user/how-to/use-fixtures.md:429` promises users it "runs for every test".
-> And the candidate enumeration is not B1-filtered at all — see (b). Rule 7's
-> shape is strictly *narrower* than today's, not the same. What does carry over,
-> so this is not over-corrected: the fire-without-request **mechanic** is
-> unchanged (`_fixture_session.py:843`–`845`). Vehicle and scope are what fail.
->
-> **(b) Slice 9 must B1-filter the enumeration, not merely anchor autouse** — see
-> [#1774](https://github.com/kalonji-tools/oxitest/issues/1774).
-> `get_autouse()` (`_fixture_registry.py:405`) iterates `_by_name` and takes no
-> `module_path`, while resolution applies B1 and **raises** on a filtered-out
-> candidate (`_fixture_instantiator.py:374`–`376`). This is inert today only
-> because every autouse-capable source is anchorless. The moment `autouse=True`
-> reaches `ModuleSource`, every test outside the fixture's boundary errors with
-> `FixtureNotFoundError` naming a fixture it never requested and cannot see.
-> Read the direction carefully: this is the **inverse** of a boundary leak, a
-> spurious hard error rather than over-permissive access. B1 itself holds on both
-> resolution routes and needs no change.
->
-> **(c) The `session` row is drifted — `session` is once per _task group_, not
-> once per worker process.** A worker pops task groups in a loop until the shared
-> queue drains (`src/worker_session.rs:271`–`272`) and every task builds a fresh
-> session (`python/oxitest/_bridge/worker.py:265`, inside `run(task)` at `:238`,
-> called per stdin line at `:366`) with a fresh per-instance session scope
-> (`_fixture_session.py:298`); nothing caches across tasks. Measured on `main`:
-> eight single-test modules over two workers built a `lifetime="session"` fixture
-> **eight** times across two PIDs, and adding one `lifetime="package"`
-> declaration to co-locate the subtree into a single task group brought it to
-> **one**. Absent a `package` declaration a task group is one module
-> (`src/filter.rs:275`) and a `session` declaration does not trigger co-location
-> (`src/pipeline/collection.rs:274` filters on `package` only), so `session`
-> degrades to per-module — the failure Amendment 1's point 1 described as
-> pre-#1745. Amendment 4 should restate the count as "once per task group, which
-> is one module unless a `package` declaration merges the subtree". The row's
-> **advice holds and is load-bearing**: rootdir `lifetime="package"` is the only
-> construct that actually delivers exactly-once. The same "per worker process"
-> phrasing also appeared in Rule 2, Rule 4, Amendment 1, and in the shipped
-> `lifetime=` docstring — all corrected here, which is what opened this sweep's
-> scope from docs-only. The **legacy** `shared=True` surface repeats the claim in
-> its own vocabulary (`python/oxitest/plugin.py:135`,
-> `docs/user/how-to/run-in-parallel.md:92`,
-> `docs/user/how-to/use-fixtures.md:422`–`424`, and the Rust warning text);
-> that surface is on Rule 8's retirement list and is corrected under
-> [#1778](https://github.com/kalonji-tools/oxitest/issues/1778), not here — it
-> has an auto-arrange mechanism `lifetime=` does not
-> (`src/pipeline/arrange.rs:232`–`255`), so its numbers cannot be carried across
-> from this measurement.
->
-> **(d) "Autouse is additive, not exclusive" holds only for `Fixture[T]`.** The
-> autouse loop dedupes against annotation-derived names alone
-> (`_fixture_session.py:844`), and function lifetime has no scope cache to dedupe
-> through (`_scope_for` returns `None` for function scope,
-> `_fixture_session.py:468`–`469`; caching is gated on that at
-> `_fixture_instantiator.py:408` and stated at `:484`–`485`). So reaching an
-> autouse fixture through **either** proxy route builds it twice in one test —
-> measured on `main`, and once only when the fixture is `shared`. Additive, but
-> duplicative, and for autouse-with-side-effects the side effect happens twice.
-> Slice 9 inherits this; (b)'s enumeration filter does not fix it, because a
-> fixture inside its own boundary still double-builds.
->
-> **Confirmed as holding — do not re-open.** The Rule 4 lifetime cap genuinely is
-> autouse-independent: enforcement keys on `decl.lifetime` alone
-> (`src/pipeline/collection.rs:200`–`218`, `:288`–`312`) and
-> `PrescanDeclaration` (`src/prescan.rs:85`–`90`) has no autouse field. The
-> `package` row's "exactly once per run" holds structurally (`src/filter.rs:260`
-> merges the subtree into one task group). The tooling justification is
-> forward-looking **with a home** —
-> [#1722](https://github.com/kalonji-tools/oxitest/issues/1722), slice 15 — and
-> its per-*fixture* half already ships across the detail pane
-> (`src/inspect/detail/fixture.rs:22`), the `UnusedFixtures` signal
-> (`src/inspect/signals.rs:94`), the `autouse()` query predicate, and `--tree -v`
-> tags; only the per-*test* view is unbuilt, so fix the tense, not the argument.
-> Separately, Rule 7 does not mention the other autouse × lifetime constraint
-> `main` already enforces — `AutouseRegistrationError` refusing async non-shared
-> autouse (`_fixtures.py:255`, `docs/user/reference/errors.md:316`) — which slice
-> 9 owns.
+Where several autouse fixtures apply to one test they fire **widest lifetime first** — `process`, `package`, `module`, `function` — with declaration order as the tiebreak within a tier. Setup is therefore the mirror of a teardown order already tier-nested by the scope stacks, so a narrower autouse fixture may rely on a wider one having run.
+
+Autouse fixtures remain accessible by explicit request (`Fixture[T]` or `fx.<name>`); autouse is additive, not exclusive, and *additive means shared-instance*: one build, both references the same object, because `_cache_key` is keyed on the definition with no route discriminator (#1775).
+
+**To opt a subtree out**, declare a fixture of the same name without `autouse` at a deeper anchor. Inside that anchor it is the deepest visible declaration and nothing queues it, so the ancestor does not fire; outside, the deeper declaration is invisible and the ancestor fires as before. The suppression is boundary-local, and the registration notice says so when the shadowed declaration is autouse and the shadowing one is not.
+
+**One combination is refused:** `autouse=True` with `lifetime="function"` on an `async` factory, rejected at registration with a `UsageError` naming the file, the fixture and two ways forward. It would fire for the sync tests in its boundary too, manufacturing the ADR-0006 illegal cell for tests that never asked for it. The wider tiers stay legal — the ten-framework survey on [#1739](https://github.com/kalonji-tools/oxitest/issues/1739) found no framework restricting autouse for being async, and a per-module transaction is the canonical use.
+
+The invisibility concern historically raised against autouse is solved by tooling, not by removing the feature: `oxitest inspect` shows autouse-firing per test as a first-class view. That view is **not yet built** — slice 15, [#1722](https://github.com/kalonji-tools/oxitest/issues/1722) — so until it ships the registration notice above is the only signal a user gets, which is why slice 9 made it name the consequence rather than merely the fact of shadowing.
+
 
 ### Rule 8 — Retirements
 
@@ -731,3 +650,37 @@ This is the wider-depends-on-narrower class [#1762](https://github.com/kalonji-t
 - **[#1740](https://github.com/kalonji-tools/oxitest/issues/1740) is untouched.** Moving `SharedAsyncManager` to the process side widens the loop those tasks run on; it does not make setup, body and teardown share an asyncio Task, and must not be read as having done so.
 - **A killed worker still loses its process teardowns.** No other process runs them, and a graceful SIGTERM was rejected as *unsound* rather than expensive — a C-level block never reaches the bytecode boundary where the signal becomes a Python exception. The loss is now announced: the coordinator emits a WARNING naming the worker and the fixtures the suite declares. It names the declared set, not what that worker built, because only the worker knew and it is gone.
 - **Cross-process transfer stays permanently out of scope**, per the axiom in Rule 2.
+
+### Amendment 7 — autouse ships, and three of its decisions move (2026-08-04)
+
+**Issue:** [#1716](https://github.com/kalonji-tools/oxitest/issues/1716), slice 9. Amends Rule 7.
+
+Rule 7 was written before any of it existed, and building it changed three things it asserted. One of those retracts a decision recorded on #1716's own thread.
+
+#### 1. Firing is a rate, not a boundary event
+
+Rule 7's table reads as though each tier fires *at* its boundary. It does not. `get_autouse` is called once per test from `resolve_for_test`, and the scope cache is the only thing collapsing the count — so a `lifetime="module"` autouse fixture is *requested* by every test in the module and *built* by the first.
+
+The rate the table promises is correct. What it does not say is where the build happens, and that is user-visible in three ways: a setup failure is attributed to the first test rather than to the boundary, that test's timing carries the setup cost and feeds the scheduler's cache, and a boundary whose tests are all skipped or deselected never fires at all.
+
+The alternative was `begin_module`/`begin_package` firing hooks. Rejected: that seam is what [#1839](https://github.com/kalonji-tools/oxitest/issues/1839) is currently repairing — `end_package` is called with a module path while `_package_scopes` is keyed by an anchor directory, so the boundary drain never matches — and building autouse on a seam known to be broken would have coupled this slice to that fix.
+
+#### 2. Firing order is widest-lifetime-first, and is now promised
+
+Rule 7 said nothing about order. The implementation had one anyway: `get_autouse` iterated `_by_name`, so firing followed registration order, which follows the collection file walk. A `function`-lifetime autouse fixture could fire before a `package`-lifetime one because its directory was walked first.
+
+Order is now `process → package → module → function`, declaration order as the within-tier tiebreak, and it is documented rather than incidental. Two reasons for promising rather than leaving it unspecified: it makes setup the mirror of a teardown order already tier-nested by the scope stacks, so a narrower autouse fixture may rely on a wider one; and §6.7 of the ten-framework survey on [#1739](https://github.com/kalonji-tools/oxitest/issues/1739) found autouse × wider-scope is where bugs cluster in every framework that has both — anyio's canonical case needs autouse *and* a wider scope *and* a specific test order. Leaving order unspecified puts oxitest in that zone by construction.
+
+The sort key is `FixtureScope`, not `Lifetime`: legacy `ConftestSource` and `PluginSource` defs carry no lifetime and both regimes coexist until Rule 8's retirement. It cannot be applied at registration — the winner for a name is chosen per `module_path` by `_deepest_visible`, so its tier is unknown until the call. What *is* precomputed is the candidate set, which also stops the per-test loop scaling with the suite.
+
+#### 3. The `autouse × function × async` rejection moves to the registrar
+
+**This retracts a decision recorded on #1716 on 2026-07-29**, which placed the rejection in the Rust prescan and argued it "matches ADR-0009's loud-rejection-at-the-shallowest-catchable-frame discipline".
+
+That reasoning was written six days before [#1859](https://github.com/kalonji-tools/oxitest/issues/1859) — *"ADR-0009 enforcement rests on prescan's spelling coverage — move it to the runtime"* — which reversed exactly this call for the sibling rule, Rule 4's inline lifetime cap. Prescan recognises three decorator spellings; registration is by marker attribute and sees every one. A prescan-sited guard would silently not apply to `import oxitest as ox`, verified against a live declaration in that spelling.
+
+The shallowest-frame argument is satisfied either way: both abort collection before a single test executes, and the registrar's frame is shallow enough to name the file, the fixture and two ways forward. The guard accumulates into the same violation list as the lifetime cap, so a file with both reports both in one run.
+
+#### What did not change
+
+Rule 7's finding **(b)** — that slice 9 must B1-filter the autouse enumeration — was already discharged by [#1774](https://github.com/kalonji-tools/oxitest/issues/1774) and needed verifying, not building. Finding **(d)** — that autouse reached through the `fx.` proxy builds twice — was **stale**: [#1775](https://github.com/kalonji-tools/oxitest/issues/1775) keyed the per-test cache on the definition with no route discriminator, so additive means shared-instance. Both are removed from the rule body rather than carried forward.

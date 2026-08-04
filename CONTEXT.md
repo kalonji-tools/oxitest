@@ -54,9 +54,9 @@
 
 **Lifetime** — What a `@oxi.fixture` declaration writes: `"function"` (per test), `"module"` (per test module), `"package"` (per anchor package — exactly once per run, which collapses the subtree onto one worker), or `"process"` (per worker process, so as many instances as `-n`; legal only in a rootdir package). Renamed from `"session"` by #1777, which is no longer accepted. Required keyword; there is no default. Capped by the declaration site (ADR-0009 Rule 4): inline declarations may not exceed `module`, enforced during registration rather than by the static prescan (#1859).
 
-**Scope** — The caching vocabulary `Lifetime` translates into, via `LIFETIME_SCOPES`. Five members: `each`, `module`, `package`, `session`, plus `shared` — the legacy `Fixtures(shared=True)` tier, which no `Lifetime` maps to and which stays separate until #1720 retires the old API.
+**Scope** — The caching vocabulary `Lifetime` translates into, via `LIFETIME_SCOPES`. Six members: `each`, `module`, `package`, `process`, `session`, plus `shared`. `session` and `shared` are the tiers no `Lifetime` maps to — `session` holds the builtins and drains at the task boundary, `shared` is the legacy `Fixtures(shared=True)` tier — and both stay separate until #1720 retires the old API.
 
-**Autouse** — A fixture that is automatically injected into every test in its scope without explicit annotation.
+**Autouse** — A fixture that runs for every test in its B1 boundary without being requested, for its side effects; the value is discarded unless the test also requests it, in which case both routes share one instance. How often it runs follows its Lifetime, and where several apply they run widest-Lifetime-first. Legacy `conftest.py` autouse fixtures are ambient and run run-wide, exempt from B1 like the rest of that regime, until #1720 retires it.
 
 **Yield Fixture** — A fixture that uses `yield` to separate setup from teardown. Return type annotated `Yields[T]`.
 

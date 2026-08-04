@@ -82,6 +82,32 @@ declaring module is registered.
 would outlive the subtree permitted to see it, which is the condition the cap
 exists to prevent.
 
+## Autouse
+
+`autouse=True` makes a declaration run for every test in its
+[B1 boundary](#visibility) without being requested. The value is discarded
+unless the test also asks for it, in which case both routes share one instance
+rather than building twice.
+
+The lifetime tier sets **how often** it runs, and that is a rate rather than a
+boundary event: the build happens inside the first test that reaches the
+boundary. So a setup failure is reported against that test, its cost lands in
+that test's timing, and a boundary whose tests are all skipped never fires at
+all. Where several autouse fixtures apply to one test, they run
+widest-lifetime-first — `"process"`, then `"package"`, then `"module"`, then
+`"function"` — so a narrower one can rely on a wider one having run.
+
+One combination is refused: `autouse=True` with `lifetime="function"` on an
+`async` factory. It would fire for the sync tests in its boundary too, which
+cannot await it.
+
+To opt a subtree out, declare a fixture of the same name **without** `autouse`
+at a deeper anchor. The suppression is boundary-local — outside that subtree
+the original still fires — and the registration notice reports it.
+
+Worked examples are in
+[Use fixtures](../../how-to/use-fixtures.md#run-fixtures-automatically-with-autouse).
+
 ## Anchors and namespaces
 
 A fixture's **anchor** is the directory holding its declaration file — or, for
@@ -142,6 +168,7 @@ on what you call the parameter.
 |---|---|---|
 | `ValueError` | Decoration time | `lifetime` is not one of the four tier names |
 | `UsageError` | Decoration time | A recognised tier has no scope mapping — an oxitest bug, not a usage error in your code |
+| `UsageError` | Registration time | An `async` factory declared `autouse=True` with `lifetime="function"`, or a declaration exceeding [the lifetime cap](#the-lifetime-cap). Every offender in the file is named by one run |
 | `BoundaryError` | Access time, `fx` proxy | The fixture is outside the reading test's anchor chain |
 | `FixtureNotFoundError` | Access time, either route | Nothing reachable declares it — and also what the `Fixture[T]` route reports for an out-of-anchor fixture, since it has no namespace segment to attribute the failure to |
 
