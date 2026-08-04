@@ -85,6 +85,32 @@ LIFETIME_SCOPES: Final = MappingProxyType(
     }
 )
 
+#: Autouse firing order — widest lifetime first (#1716).
+#:
+#: Keyed on ``FixtureScope`` rather than ``Lifetime`` because legacy
+#: ``ConftestSource`` and ``PluginSource`` defs carry no lifetime, and both
+#: regimes coexist until #1720. ``SHARED`` sits between ``PACKAGE`` and
+#: ``MODULE``: a task group is one module unless a ``package`` declaration
+#: merges a subtree, so it is wider than a module and narrower than a package.
+#:
+#: Setup order is the mirror of a teardown order that is already tier-nested by
+#: the scope stacks, so a narrower autouse fixture can rely on a wider one
+#: having run — which registration order, the previous behaviour, did not give.
+#:
+#: Must stay total over ``FixtureScope``. A missing member is a ``KeyError`` on
+#: the autouse path rather than a merely wrong order, which is why this is a
+#: dict over the enum and not a ``list`` of the tiers someone remembered.
+_SCOPE_RANK: Final = MappingProxyType(
+    {
+        FixtureScope.PROCESS: 0,
+        FixtureScope.SESSION: 1,
+        FixtureScope.PACKAGE: 2,
+        FixtureScope.SHARED: 3,
+        FixtureScope.MODULE: 4,
+        FixtureScope.EACH: 5,
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ConftestSource:
@@ -431,20 +457,40 @@ class FixtureRegistry:
         # per-test visibility question into a scan of one namespace rather than
         # of every fixture in the run.
         self._namespace_defs: dict[str, list[FixtureDef[Any]]] = {}
+        # Names with at least one autouse def, in first-autouse-registration
+        # order. A dict used as an ordered set: get_autouse runs once per test
+        # (_fixture_session.py), so iterating every registered fixture would
+        # make that loop scale with the suite instead of with the feature.
+        self._autouse_names: dict[str, None] = {}
 
     def register(self, defn: FixtureDef[Any]) -> list[CollectedViolation]:
         for shadower, shadowed in _shadowing_pairs(
             self._by_name.get(defn.name, ()), defn
         ):
             scope = f" within {shadower.anchor}" if shadower.anchor is not None else ""
+            # Shadowing a plain fixture is a naming question; shadowing an
+            # autouse one stops it running for that whole subtree. Naming only
+            # the first reads as a style nit for a behaviour change (#1716).
+            #
+            # This doubles as the opt-out's receipt: declaring a same-named
+            # non-autouse fixture at a deeper anchor is the documented way to
+            # opt a subtree out, and the deliberate use and the accidental
+            # name collision are indistinguishable from the registry's side.
+            suppressed = (
+                "; the shadowed fixture is autouse, so it no longer fires there"
+                if shadowed.autouse and not shadower.autouse
+                else ""
+            )
             emit_diagnostic(
                 DiagnosticSeverity.NOTICE,
                 "fixture registration",
                 f"fixture '{defn.name}' in {shadower.conftest_path} "
-                f"shadows definition in {shadowed.conftest_path}{scope}",
+                f"shadows definition in {shadowed.conftest_path}{scope}{suppressed}",
             )
         self._by_name.setdefault(defn.name, []).append(defn)
         self._by_type.setdefault(defn.fixture_type, []).append(defn)
+        if defn.autouse:
+            self._autouse_names[defn.name] = None
         if defn.namespace:
             self._namespace_defs.setdefault(defn.namespace, []).append(defn)
 
@@ -508,15 +554,32 @@ class FixtureRegistry:
         - ``None`` — the full-catalog query: last-registered wins, no
           filtering. For introspection/validation (``find_unused_fixtures``),
           where an autouse fixture anywhere in the run counts as used.
+
+        Iteration is over ``_autouse_names`` rather than ``_by_name``: a name
+        enters that index when *any* of its defs is autouse, and the winner may
+        still be non-autouse — which is the documented opt-out, so the
+        ``effective.autouse`` test below is load-bearing rather than a
+        tautology.
+
+        Yield order is widest lifetime first (#1716). The sort cannot move to
+        registration time: the winner is chosen per *module_path*, so its tier
+        is not known until the call. Sorting is stable, so registration order
+        survives as the within-tier tiebreak and ``FixtureDef`` needs no
+        registration-index field.
         """
-        for defs in self._by_name.values():
-            if not defs:
-                continue
+        winners: list[FixtureDef[Any]] = []
+        for name in self._autouse_names:
+            # Indexed directly, not via .get: the two dicts are written two
+            # lines apart in `register`, which is the only writer of either,
+            # and neither is ever deleted from. A tolerant lookup here would
+            # imply a drift that cannot happen and hide one that could.
+            defs = self._by_name[name]
             effective = (
                 defs[-1] if module_path is None else _deepest_visible(defs, module_path)
             )
             if effective is not None and effective.autouse:
-                yield effective
+                winners.append(effective)
+        yield from sorted(winners, key=lambda defn: _SCOPE_RANK[defn.scope])
 
     def defs_in_namespace(
         self, name: str, namespace: str
