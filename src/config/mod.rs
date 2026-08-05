@@ -215,8 +215,29 @@ impl ColorMode {
 /// File discovery and path configuration.
 #[derive(Debug, Clone)]
 pub struct PathConfig {
-    /// Directories to search for test files.
+    /// Directories to search for test files — the **effective run set**.
+    ///
+    /// Overwritten by positional CLI path arguments, so this answers "what is
+    /// this invocation walking?" and not "what does this project declare?".
     pub testpaths: Vec<Utf8PathBuf>,
+    /// What the project declares as its test surface — the **declared test
+    /// tree**. Identical to [`Self::testpaths`] until a positional path
+    /// argument narrows the run.
+    ///
+    /// The two were one field until #1798. `merge_paths` overwrites
+    /// `testpaths` with argv, so any consumer wanting the project's own
+    /// declaration silently received the run set instead and answered
+    /// differently depending on how the run was started. ADR-0009 Rule 4's
+    /// rootdir package is the consumer that forced the split.
+    ///
+    /// INVARIANT: never written by an argv-derived merge. `merge_paths` is
+    /// deliberately absent from the writer list, and a new `merge_*` method
+    /// that assigns this field silently reinstates #1798.
+    ///
+    /// Stored unreduced. Collapsing a multi-entry declaration to a single
+    /// root here would foreclose #1755's decision about how a list of
+    /// declared roots reduces to one rootdir package.
+    pub declared_testpaths: Vec<Utf8PathBuf>,
     /// Glob patterns matching test file names (e.g. `test_*.py`).
     pub python_files: Vec<String>,
     /// Directory names to skip during recursive file discovery.
@@ -229,6 +250,7 @@ impl Default for PathConfig {
     fn default() -> Self {
         Self {
             testpaths: vec![Utf8PathBuf::from(".")],
+            declared_testpaths: vec![Utf8PathBuf::from(".")],
             python_files: vec!["test_*.py".to_string(), "*_test.py".to_string()],
             norecursedirs: vec![
                 ".git".to_string(),
@@ -568,6 +590,7 @@ impl Config {
         let config = Self {
             paths: PathConfig {
                 testpaths: vec![rootdir.to_owned()],
+                declared_testpaths: vec![rootdir.to_owned()],
                 ..PathConfig::default()
             },
             rootdir: rootdir.to_owned(),
