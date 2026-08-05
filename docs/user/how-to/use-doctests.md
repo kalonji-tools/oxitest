@@ -32,7 +32,9 @@ Coverage severity is controlled by the global `[tool.oxitest].strict` mode — t
 
 ### Curating scope
 
-The default `scope = "public"` scans every public subject under `testpaths`. For a targeted subset, pass a **list of entries** instead:
+The default `scope = "public"` scans every public subject under the `testpaths` your project **declares** — not under the paths a particular run happens to walk. `oxitest tests/` audits the same subjects as a bare `oxitest`, because coverage is a property of the project rather than of the invocation. Narrowing a run still narrows which doctests *execute*; it does not narrow what gets audited.
+
+For a targeted subset, pass a **list of entries** instead:
 
 ```toml
 [tool.oxitest.doctest]
