@@ -29,6 +29,12 @@ const BOX: BoxChars = BoxChars {
 /// cap keeps output readable on wide terminals.
 ///
 /// In test builds, always returns 80 for deterministic snapshot output.
+// `allow`, not `expect`: under `--all-targets` clippy lints the cfg(test) body —
+// the literal 80, so const-eligible — while the real cfg(not(test)) body calls
+// `OnceLock::get_or_init`, which is not const-callable (E0015). The lint therefore
+// fires for the test target and not for the lib target, and an `expect` that goes
+// unfulfilled in either configuration is itself a denied warning.
+#[allow(clippy::missing_const_for_fn)]
 pub(crate) fn sep_width() -> usize {
     #[cfg(test)]
     {
