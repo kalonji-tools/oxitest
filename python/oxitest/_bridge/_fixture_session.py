@@ -11,6 +11,7 @@ import inspect
 from collections import Counter, defaultdict
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass, field
+from pathlib import PurePath
 from typing import TYPE_CHECKING, Any, Protocol, Self
 
 from oxitest._bridge._async_backend import AsyncioBackend
@@ -650,19 +651,44 @@ class FixtureSession:
                 _current_teardown_node_id.reset(token)
         self._module_cache.evict(module_path)
 
+    def _anchors_ending_with(self, package_path: str) -> list[str]:
+        """Live package anchors disposed by *package_path*'s boundary, innermost first.
+
+        The subtree, not just the anchor itself. A package may contain a
+        *nested* declaring package, and the scheduler merges both into one task
+        group under the outermost anchor (``outermost_declaring_ancestor``), so
+        the boundary that ends the outer one ends every inner one with it — the
+        outer fixture spans the whole subtree, which is what made it indivisible
+        in the first place.
+
+        Innermost first, so a narrower value is disposed before the wider one it
+        is allowed to depend on (B1 lets a descendant resolve an ancestor's
+        fixture). Draining outermost-first would hand an inner teardown a value
+        that had already been torn down.
+
+        Containment is component-wise via :meth:`~pathlib.PurePath.is_relative_to`:
+        ``tests/api2`` starts with the string ``tests/api`` but is not inside it,
+        and string-prefix matching here would dispose an unrelated package early.
+        """
+        anchor_root = PurePath(package_path)
+        live = [
+            anchor
+            for anchor in self._package_scopes
+            if PurePath(anchor).is_relative_to(anchor_root)
+        ]
+        live.sort(key=lambda anchor: len(PurePath(anchor).parts), reverse=True)
+        return live
+
     def end_package(self, package_path: str) -> None:
-        """Dispose everything scoped to *package_path*.
+        """Dispose everything scoped to *package_path* and to packages beneath it.
 
         Peer to :meth:`end_module` one tier up. The seam exists because package
         disposal cannot ride on ``end_task``: a serial run uses one session
         for the whole run, so the session drain fires long after the package's
         last test.
 
-        *package_path* is the **declaring anchor directory** — the same value
-        the collector handed over as ``anchor_package_path`` and the only thing
-        ``_package_scopes`` is keyed by. Passing a module file path instead was
-        #1839: the pop could never match, so every boundary drain was inert and
-        the values survived to the end-of-task backstop.
+        *package_path* is the **declaring anchor directory** — the key
+        ``_package_scopes`` uses; a module path can never match (#1839).
 
         Fires once per package boundary, after every module in that package and
         its descendants has had :meth:`end_module`. The serial path drives this
@@ -671,10 +697,15 @@ class FixtureSession:
         onto one worker, whose whole session is that one task, so the worker
         leaves the drain to ``end_task``.
         """
+        for anchor in self._anchors_ending_with(package_path):
+            self._dispose_package(anchor)
+
+    def _dispose_package(self, anchor: str) -> None:
+        """Drain the one package scope held at *anchor*."""
         # Async generators first, for the same reason as end_module: their
         # post-yield half may touch the sync values below.
-        self._async_mgr.drain_boundary(package_path)
-        scope = self._package_scopes.pop(package_path, None)
+        self._async_mgr.drain_boundary(anchor)
+        scope = self._package_scopes.pop(anchor, None)
         if scope is None:
             # An anchored group whose package fixtures were never actually
             # requested built no scope. Nothing to drain is normal.
@@ -686,7 +717,7 @@ class FixtureSession:
         # No single test owns a package-scope teardown, so name the package
         # instead — otherwise a failure reports only the fixture name and the
         # user has to guess which boundary it came from.
-        token = _current_teardown_node_id.set(package_path)
+        token = _current_teardown_node_id.set(anchor)
         try:
             scope.drain()
         finally:
@@ -716,11 +747,8 @@ class FixtureSession:
         # never run under parallel execution.
         #
         # On the coordinator path it is a genuine backstop and normally finds
-        # nothing, because the serial loop pops each anchor at its boundary.
-        # That was false until #1839 — end_package was handed a module path, so
-        # nothing ever matched and this loop drained the entire run's worth of
-        # package fixtures, all at the end. A regression here looks like late
-        # teardown, not missing teardown.
+        # nothing, because the serial loop pops each anchor at its boundary. A
+        # regression there shows up here as late teardown, not missing (#1839).
         for package_path in list(self._package_scopes):
             self.end_package(package_path)
         # Drain shared (user fixtures) before session (builtins like TempDirFactory)
