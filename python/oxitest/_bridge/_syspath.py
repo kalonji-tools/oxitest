@@ -23,25 +23,26 @@ from pathlib import Path
 
 
 def ensure_rootdir_importable(rootdir: str) -> None:
-    """Append *rootdir* to ``sys.path`` unless an equivalent entry is present.
+    """Append *rootdir* to ``sys.path`` unless it is already present.
 
-    Idempotent: worker processes call this once per task and the serial path
-    once per session. Comparison is by resolved path so that ``/a/b``,
-    ``/a/b/`` and a symlinked spelling of one directory do not accumulate
-    duplicates.
+    Idempotent: the appended entry is this function's own canonical form, so
+    a repeat call finds it by string identity. Worker processes call this
+    once per task and the serial path once per session. ``/a/b`` and
+    ``/a/b/`` name one directory because the argument is resolved before the
+    comparison, and a symlinked *argument* is stored resolved.
 
-    Empty entries are skipped during comparison rather than treated as
-    equivalent to the current directory. ``''`` on ``sys.path`` is re-resolved
-    against the *live* working directory on every import, so a test that
-    changes directory would silently lose the rootdir; the absolute entry
-    appended here does not move.
+    Entries other code placed on ``sys.path`` are not examined. A foreign
+    spelling of the same directory — from ``PYTHONPATH`` or an installed
+    ``.pth`` file — therefore yields one duplicate, which is harmless and
+    does not accumulate.
+
+    No entry is resolved, so ``''`` on ``sys.path`` is inert here — it
+    cannot equal an absolute path — and needs no guard (#1786).
 
     A non-existent *rootdir* is appended anyway — Python ignores unusable
     ``sys.path`` entries, and refusing would mean inventing a diagnostic for a
     case ``find_rootdir`` makes near-unreachable.
     """
-    resolved = Path(rootdir).resolve()
-    for entry in sys.path:
-        if entry and Path(entry).resolve() == resolved:
-            return
-    sys.path.append(str(resolved))
+    resolved = str(Path(rootdir).resolve())
+    if resolved not in sys.path:
+        sys.path.append(resolved)
