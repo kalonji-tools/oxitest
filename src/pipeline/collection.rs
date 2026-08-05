@@ -183,10 +183,37 @@ struct DeclarationHome<'a> {
     path: &'a camino::Utf8Path,
     /// The directory that owns it; the anchor of everything declared inside.
     anchor: &'a camino::Utf8Path,
-    /// Top of the collected test tree. Equal to `anchor` exactly when this home
-    /// is a *rootdir package*, the only place `lifetime="process"` may be
-    /// declared (ADR-0009 Rule 4).
-    tree_root: Option<&'a camino::Utf8Path>,
+    /// Which regime this home belongs to. The two differ in three places and
+    /// share everything else, prescan included.
+    kind: HomeKind<'a>,
+}
+
+/// Whether a declaration home sits in the user's test tree or in a plugin.
+///
+/// A plugin home is *not* a user home with a synthesised tree root. Rule 4
+/// exists because a `process` fixture anchored below the root attaches to no
+/// boundary; a plugin's attaches to the process regardless, so the rule has
+/// nothing to say about it rather than being satisfied by coincidence (#1717).
+///
+/// `Copy` so `DeclarationHome` keeps destructuring through a shared reference,
+/// as it did when it held a bare `Option<&Utf8Path>`.
+#[derive(Clone, Copy)]
+enum HomeKind<'a> {
+    /// A directory in the collected test tree. Anchored, B1-enforced.
+    User {
+        /// Top of the collected test tree. Equal to `anchor` exactly when this
+        /// home is a *rootdir package*, the only place `lifetime="process"`
+        /// may be declared (ADR-0009 Rule 4).
+        tree_root: Option<&'a camino::Utf8Path>,
+    },
+    /// An activated plugin package. Ambient, B1-exempt, and outside every
+    /// `testpath`, so Rule 4 does not apply and there is no subtree for the
+    /// scheduler to co-locate — `package` lifetime is refused in the registrar.
+    Plugin {
+        plugin_module: &'a str,
+        namespace: &'a str,
+        autouse: &'a [String],
+    },
 }
 
 /// Prescan's view of a home's declarations, in the shape the registry returns.
@@ -219,13 +246,39 @@ fn register_and_record(
     errors: &mut Vec<types::CollectError>,
     fixture_modules: &mut Vec<types::FixtureModule>,
 ) {
-    let DeclarationHome {
-        path,
-        anchor,
-        tree_root,
-    } = *home;
+    let DeclarationHome { path, anchor, kind } = *home;
 
     let session_obj = session.as_py_object(py);
+
+    // A plugin home diverges here and at the two steps below; everything else,
+    // prescan included, is shared with the user path (#1717).
+    if let HomeKind::Plugin {
+        plugin_module,
+        namespace,
+        autouse,
+    } = kind
+    {
+        if let Err(e) = bridge::register_plugin_fixture_module(
+            py,
+            session_obj,
+            path,
+            plugin_module,
+            namespace,
+            autouse,
+        ) {
+            errors.push(e);
+        }
+        // No Rule 4 check: there is no tree root to compare against.
+        // No `fixture_modules` entry: `package` lifetime is refused for a
+        // plugin, so `package_declarations` would always be empty and the
+        // scheduler has no subtree to co-locate.
+        return;
+    }
+
+    let HomeKind::User { tree_root } = kind else {
+        unreachable!("the plugin arm returns above")
+    };
+
     // Keyed on `path`, not `anchor`: a directory may hold both a
     // `__fixtures__.py` and an `__init__.py`, which register under the same
     // anchor. Asking by anchor gives each of them the other's declarations —
@@ -297,6 +350,47 @@ fn register_and_record(
         anchor: anchor.to_owned(),
         package_declarations,
     });
+}
+
+/// Prescan and register one activated plugin's `__fixtures__.py` (#1717).
+///
+/// The plugin entry into [`register_declaration_home`]. `plugin_fixture_homes`
+/// has already established that the file exists, so a missing one here is a
+/// race, not the ordinary "this plugin ships no fixtures" case — and prescan
+/// reports it as a collection error either way.
+///
+/// Only `__fixtures__.py` is scanned, never `__init__.py`: that file is a
+/// declaration home for users because it is the natural place for
+/// package-lifetime declarations, and `package` is refused for a plugin. It is
+/// also where a plugin's own `oxitest_plugin()` entry point lives.
+pub(super) fn register_plugin_home(
+    py: pyo3::Python<'_>,
+    session: &bridge::FixtureSession,
+    home: &bridge::PluginFixtureHome,
+    errors: &mut Vec<types::CollectError>,
+) {
+    let path = home.anchor_dir.join("__fixtures__.py");
+    let mut fixture_modules = Vec::new();
+    register_declaration_home(
+        py,
+        session,
+        &DeclarationHome {
+            path: &path,
+            anchor: &home.anchor_dir,
+            kind: HomeKind::Plugin {
+                plugin_module: &home.plugin_module,
+                namespace: &home.namespace,
+                autouse: &home.autouse,
+            },
+        },
+        errors,
+        &mut fixture_modules,
+    );
+    debug_assert!(
+        fixture_modules.is_empty(),
+        "the plugin arm of register_and_record returns before recording a \
+         FixtureModule; a non-empty list here means that arm was bypassed"
+    );
 }
 
 /// Prescan one declaration-home file and register whatever it declares.
@@ -377,8 +471,18 @@ pub(super) fn collect_items(
 
     // Deduplicate fixture-module registrations: multiple test files in the
     // same directory all share the same __fixtures__.py. Register once per dir.
-    let mut registered_fixture_dirs: std::collections::HashSet<camino::Utf8PathBuf> =
-        std::collections::HashSet::new();
+    //
+    // Seeded with the activated plugins' anchors, so a plugin vendored under
+    // `testpaths` — or installed with `pip install -e .` from inside the repo —
+    // is not registered twice: once ambient as a plugin, and again anchored as
+    // a user package, under the same derived namespace and with two scope
+    // buckets for one fixture. The plugin reading wins, which is the declared
+    // intent: the user named that package in `plugins` (#1717).
+    let mut registered_fixture_dirs: std::collections::HashSet<camino::Utf8PathBuf> = session
+        .plugin_anchor_dirs(py)
+        .into_iter()
+        .map(camino::Utf8PathBuf::from)
+        .collect();
     // The same set, as (module, anchor) pairs, for the parallel path: workers
     // build their own sessions and must register exactly what the serial path
     // registered here. Deriving it independently over there would mean two
@@ -451,7 +555,9 @@ pub(super) fn collect_items(
                         &DeclarationHome {
                             path: &path,
                             anchor: parent_dir,
-                            tree_root: tree_root.as_deref(),
+                            kind: HomeKind::User {
+                                tree_root: tree_root.as_deref(),
+                            },
                         },
                         &mut errors,
                         &mut fixture_modules,
@@ -2417,6 +2523,59 @@ mod tests {
         assert!(
             msgs.iter().any(|m| m.contains("mypkg.y")),
             "the coverage-gap hard-fail must name the missing subject; got: {msgs:?}"
+        );
+    }
+
+    // ── HomeKind (#1717) ─────────────────────────────────────────────────────
+
+    #[test]
+    fn a_plugin_home_carries_no_tree_root() {
+        let anchor = Utf8PathBuf::from("/site-packages/oxi_pg");
+        let path = anchor.join("__fixtures__.py");
+        let autouse: Vec<String> = Vec::new();
+
+        let home = DeclarationHome {
+            path: &path,
+            anchor: &anchor,
+            kind: HomeKind::Plugin {
+                plugin_module: "oxi_pg",
+                namespace: "postgres",
+                autouse: &autouse,
+            },
+        };
+
+        assert!(
+            matches!(home.kind, HomeKind::Plugin { .. }),
+            "a plugin home must not be a User home: User carries tree_root, \
+             which drives ADR-0009 Rule 4's rootdir check, and a plugin \
+             package has no place in the user's test tree to compare against \
+             — every lifetime=\"process\" declaration in it would be refused"
+        );
+    }
+
+    #[test]
+    fn a_user_home_keeps_its_tree_root() {
+        let anchor = Utf8PathBuf::from("/proj/tests");
+        let path = anchor.join("__fixtures__.py");
+        let root = Utf8PathBuf::from("/proj/tests");
+
+        let home = DeclarationHome {
+            path: &path,
+            anchor: &anchor,
+            kind: HomeKind::User {
+                tree_root: Some(&root),
+            },
+        };
+
+        let HomeKind::User { tree_root } = home.kind else {
+            panic!("a user home must stay a User home")
+        };
+        assert_eq!(
+            tree_root,
+            Some(root.as_path()),
+            "Rule 4 compares tree_root against the anchor to decide whether a \
+             directory is the rootdir package; losing it here would refuse \
+             every process-lifetime declaration in the user's own tree"
         );
     }
 }

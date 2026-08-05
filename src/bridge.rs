@@ -162,6 +162,37 @@ impl FixtureSession {
             .unwrap_or_default()
     }
 
+    /// Anchor directories of the activated plugins registered into this session.
+    ///
+    /// Read once at the start of collection to seed the per-directory dedupe
+    /// set. Errors are absorbed into an empty Vec, matching the advisory
+    /// getters around it: failing to seed costs a duplicate registration the
+    /// shadow order already resolves, which is not worth aborting a run (#1717).
+    pub fn plugin_anchor_dirs(&self, py: Python<'_>) -> Vec<String> {
+        self.0
+            .bind(py)
+            .call_method0("plugin_anchor_dirs")
+            .and_then(|v| v.extract::<Vec<String>>())
+            .unwrap_or_default()
+    }
+
+    /// Record an activated plugin's anchor directory on the session.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `CollectError::PyError` if the call raises.
+    pub fn record_plugin_anchor(
+        &self,
+        py: Python<'_>,
+        anchor_dir: &Utf8Path,
+    ) -> Result<(), CollectError> {
+        self.0
+            .bind(py)
+            .call_method1("record_plugin_anchor", (anchor_dir.as_str(),))
+            .map(|_| ())
+            .map_err(py_collect_err)
+    }
+
     /// Returns sorted names of fixtures declared `lifetime="process"`.
     ///
     /// Run-constant, so the caller reads it once and reuses it — the same
@@ -509,6 +540,130 @@ pub(crate) fn register_fixture_module_for_path(
     importer
         .call_method(
             "register_module_source_fixtures_for_module",
+            (),
+            Some(&kwargs),
+        )
+        .map_err(|e| CollectError::PyError(e.to_string()))?;
+
+    Ok(())
+}
+
+/// One activated plugin package that declares fixtures.
+///
+/// Mirrors `plugin_loader.PluginFixtureHome`. Resolved once after plugin
+/// activation, when every plugin module is imported (#1717).
+pub(crate) struct PluginFixtureHome {
+    pub plugin_module: String,
+    pub anchor_dir: Utf8PathBuf,
+    pub namespace: String,
+    pub autouse: Vec<String>,
+}
+
+/// Ask the plugin loader which activated plugins declare fixtures.
+///
+/// # Errors
+///
+/// Returns a `CollectError::PyError` if a namespace is reserved, invalid, or
+/// claimed by two plugins — all three are refusals, not warnings.
+pub(crate) fn plugin_fixture_homes(
+    py: Python<'_>,
+    plugins: &[String],
+    plugin_settings: &HashMap<String, toml::Value>,
+) -> Result<Vec<PluginFixtureHome>, CollectError> {
+    let loader = py
+        .import("oxitest._bridge.plugin_loader")
+        .map_err(py_collect_err)?;
+
+    let settings_json = serde_json::to_string(plugin_settings).unwrap_or_else(|_| "{}".to_owned());
+    let json_mod = py.import("json").map_err(py_collect_err)?;
+    let settings = json_mod
+        .call_method1("loads", (&settings_json,))
+        .map_err(py_collect_err)?;
+
+    let kwargs = pyo3::types::PyDict::new(py);
+    kwargs
+        .set_item("activated_modules", plugins)
+        .map_err(py_collect_err)?;
+    kwargs
+        .set_item("plugin_settings", settings)
+        .map_err(py_collect_err)?;
+
+    let homes = loader
+        .call_method("plugin_fixture_homes", (), Some(&kwargs))
+        .map_err(|e| CollectError::PyError(e.to_string()))?;
+
+    let mut out = Vec::new();
+    for home in homes.try_iter().map_err(py_collect_err)? {
+        let home = home.map_err(py_collect_err)?;
+        out.push(PluginFixtureHome {
+            plugin_module: home
+                .getattr("plugin_module")
+                .and_then(|v| v.extract())
+                .map_err(py_collect_err)?,
+            anchor_dir: home
+                .getattr("anchor_dir")
+                .and_then(|v| v.extract::<String>())
+                .map(Utf8PathBuf::from)
+                .map_err(py_collect_err)?,
+            namespace: home
+                .getattr("namespace")
+                .and_then(|v| v.extract())
+                .map_err(py_collect_err)?,
+            autouse: home
+                .getattr("autouse")
+                .and_then(|v| v.extract())
+                .map_err(py_collect_err)?,
+        });
+    }
+    Ok(out)
+}
+
+/// Register an activated plugin's `__fixtures__.py` into the session registry.
+///
+/// The plugin counterpart of [`register_fixture_module_for_path`]. Differs only
+/// in which Python registrar receives the module: plugin declarations become
+/// ambient `PluginModuleSource` defs rather than anchored `ModuleSource` ones,
+/// and carry the namespace and the user's autouse opt-in list (#1717).
+///
+/// # Errors
+///
+/// Returns a `CollectError::PyError` if the import or registration raises —
+/// a syntax error in the plugin's `__fixtures__.py`, a `package` lifetime
+/// declaration, or a reserved namespace.
+pub(crate) fn register_plugin_fixture_module(
+    py: Python<'_>,
+    session_obj: Bound<'_, PyAny>,
+    fixture_module_path: &Utf8Path,
+    plugin_module: &str,
+    namespace: &str,
+    autouse_names: &[String],
+) -> Result<(), CollectError> {
+    let registry = session_obj.getattr("registry").map_err(py_collect_err)?;
+
+    let importer = py
+        .import("oxitest._bridge.importer")
+        .map_err(py_collect_err)?;
+
+    let kwargs = pyo3::types::PyDict::new(py);
+    kwargs
+        .set_item("registry", registry)
+        .map_err(py_collect_err)?;
+    kwargs
+        .set_item("fixture_module_path", fixture_module_path.as_str())
+        .map_err(py_collect_err)?;
+    kwargs
+        .set_item("plugin_module", plugin_module)
+        .map_err(py_collect_err)?;
+    kwargs
+        .set_item("namespace", namespace)
+        .map_err(py_collect_err)?;
+    kwargs
+        .set_item("autouse_names", autouse_names)
+        .map_err(py_collect_err)?;
+
+    importer
+        .call_method(
+            "register_plugin_source_fixtures_for_module",
             (),
             Some(&kwargs),
         )

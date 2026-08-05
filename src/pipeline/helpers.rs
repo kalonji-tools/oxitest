@@ -59,6 +59,42 @@ pub(in crate::pipeline) fn early_exit_with_error(
         .code()
 }
 
+/// Prescan and register each activated plugin's `__fixtures__.py` (#1717).
+///
+/// Drives the same prescan machinery as the collection walk, entered from the
+/// plugin list instead of from a test file's parent directory — plugin packages
+/// live outside every `testpath`, so nothing in that walk ever reaches them.
+///
+/// Errors are returned rather than absorbed: a reserved namespace, a duplicate
+/// namespace, or a `package`-lifetime declaration are all refusals, and running
+/// on with the plugin's fixtures silently missing would be worse.
+fn register_plugin_fixture_homes(
+    py: Python<'_>,
+    session: &crate::bridge::FixtureSession,
+    cfg: &crate::config::Config,
+) -> Result<(), Vec<crate::types::CollectError>> {
+    let homes = crate::bridge::plugin_fixture_homes(
+        py,
+        &cfg.features.plugins,
+        &cfg.features.plugin_settings,
+    )
+    .map_err(|e| vec![e])?;
+
+    let mut errors = Vec::new();
+    for home in &homes {
+        crate::pipeline::collection::register_plugin_home(py, session, home, &mut errors);
+        if let Err(e) = session.record_plugin_anchor(py, &home.anchor_dir) {
+            errors.push(e);
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
 /// Initialize a FixtureSession: load conftest fixtures, plugins, and async backend.
 pub(super) fn init_session(
     py: Python<'_>,
@@ -103,6 +139,14 @@ pub(super) fn init_session(
                 "Deferred plugin activation failed: {e}"
             ));
             return Err(early_exit_with_error(&[err], &make_reporter));
+        }
+
+        // Static plugin fixtures (#1717). Runs here, after activation, for two
+        // reasons: every plugin module is imported by this point, and plugin
+        // defs must be registered *before* collection so a colliding user
+        // declaration shadows them rather than the other way round.
+        if let Err(e) = register_plugin_fixture_homes(py, &session, cfg) {
+            return Err(early_exit_with_error(&e, &make_reporter));
         }
     }
 
