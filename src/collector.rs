@@ -58,22 +58,20 @@ pub fn collect_files(
     Ok((files, conftests))
 }
 
-/// The `*.py` glob used by doctest collection, compiled once.
-///
-/// The pattern is a literal, so nothing a user configures can make it fail to
-/// compile. ADR-0011 bans restating that in an `expect()` message; an empty
-/// `GlobSet` is the degradation, which costs doctest discovery rather than the
-/// whole run.
-static EVERY_PYTHON_FILE: std::sync::LazyLock<GlobSet> = std::sync::LazyLock::new(|| {
-    build_glob_set(&["*.py".to_string()]).unwrap_or_else(|_| GlobSet::empty())
-});
-
 /// Collect all `.py` files for doctest scanning.
 ///
 /// Unlike `collect_files` which uses `python_files` glob patterns (e.g. `test_*.py`),
 /// this collects every `.py` file in `testpaths` (and rootdir) since any source module
 /// can contain doctests.
-pub fn collect_doctest_files(config: &Config) -> Vec<Utf8PathBuf> {
+///
+/// Returns `Err` rather than an empty list if the glob fails to compile. The
+/// distinction matters: an empty `GlobSet` matches nothing, so swallowing the
+/// error would make the whole doctest suite silently disappear under a green
+/// gate — a test runner reporting success for tests it never found. Same shape
+/// as [`collect_files`] above, which has always returned a `Result` for this
+/// reason.
+pub fn collect_doctest_files(config: &Config) -> Result<Vec<Utf8PathBuf>, globset::Error> {
+    let glob_set = build_glob_set(&["*.py".to_string()])?;
     let mut files = Vec::new();
     let mut dummy_conftests = HashSet::new();
 
@@ -81,14 +79,14 @@ pub fn collect_doctest_files(config: &Config) -> Vec<Utf8PathBuf> {
         collect_from(
             testpath,
             config,
-            &EVERY_PYTHON_FILE,
+            &glob_set,
             &mut files,
             &mut dummy_conftests,
         );
     }
 
     files.sort();
-    files
+    Ok(files)
 }
 
 /// Return only conftests that are ancestors of any matched test module.

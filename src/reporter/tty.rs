@@ -16,23 +16,6 @@ use super::{Reporter, ReporterOpts, StandardReporter};
 
 use indicatif::{ProgressBar, ProgressStyle};
 
-/// The two progress-bar styles, compiled once.
-///
-/// Both templates are literals, so `with_template` cannot fail on anything a
-/// user supplies — but ADR-0011 bans stating that in an `expect()` message, and
-/// the honest degradation is obvious: a mistyped template must cost the run its
-/// progress bar, not its exit code.
-static SPINNER_STYLE: std::sync::LazyLock<ProgressStyle> = std::sync::LazyLock::new(|| {
-    ProgressStyle::with_template("  {pos}/{len}  {spinner:.cyan}  {msg}")
-        .unwrap_or_else(|_| ProgressStyle::default_spinner())
-        .tick_strings(&["⣾", "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽", ""])
-});
-
-static PLAIN_STYLE: std::sync::LazyLock<ProgressStyle> = std::sync::LazyLock::new(|| {
-    ProgressStyle::with_template("  {pos}/{len}  {msg}")
-        .unwrap_or_else(|_| ProgressStyle::default_bar())
-});
-
 fn truncate_name(name: &str, max_width: usize) -> Cow<'_, str> {
     if name.len() <= max_width {
         return Cow::Borrowed(name);
@@ -82,10 +65,27 @@ impl TtyReporter {
     pub fn new(opts: ReporterOpts) -> Self {
         super::print_collected(opts.total, opts.fn_count, opts.async_count);
         let pb = ProgressBar::new(opts.total as u64);
+        // Both templates are literals, so nothing a user supplies can make
+        // `with_template` fail. Degrading to indicatif's stock style costs the
+        // run its progress *decoration* and nothing else — no test result and
+        // no exit code depends on it — but it is logged rather than swallowed,
+        // because a degradation nobody can observe is the failure mode
+        // ADR-0011 warns about.
+        let fallback = |err: indicatif::style::TemplateError| {
+            tracing::warn!(error = %err, "progress bar template rejected — using the stock style");
+        };
         let style = if opts.use_color {
-            SPINNER_STYLE.clone()
+            ProgressStyle::with_template("  {pos}/{len}  {spinner:.cyan}  {msg}")
+                .unwrap_or_else(|err| {
+                    fallback(err);
+                    ProgressStyle::default_spinner()
+                })
+                .tick_strings(&["⣾", "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽", ""])
         } else {
-            PLAIN_STYLE.clone()
+            ProgressStyle::with_template("  {pos}/{len}  {msg}").unwrap_or_else(|err| {
+                fallback(err);
+                ProgressStyle::default_bar()
+            })
         };
         pb.set_style(style);
         pb.enable_steady_tick(std::time::Duration::from_millis(80));
@@ -325,9 +325,8 @@ impl Reporter for TtyReporter {
         // 3. Non-parametrized + non-verbose → defer hard failures only
         if is_parametrized && !is_verbose {
             // Flush pending group if fn_name changed. `take_if` asks and takes
-            // in one step — the previous `matches!` probe followed by
-            // `.take().unwrap()` restated the probe's answer as an invariant
-            // (ADR-0011).
+            // in one step; the `matches!` probe plus `.take().unwrap()` it
+            // replaced restated the probe's own answer as an invariant.
             if let Some(group) = self
                 .pending_group
                 .take_if(|pending| pending.fn_name != item.fn_name)

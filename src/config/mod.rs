@@ -607,8 +607,7 @@ impl Config {
         };
 
         // `pyproject_path` is `rootdir.join("pyproject.toml")`, so its parent is
-        // the `rootdir` parameter — reuse it instead of round-tripping through
-        // the path and asserting the trip succeeded (ADR-0011).
+        // the parameter itself — no round-trip to assert.
         config.merge_toml(tc, Some(rootdir))
     }
 

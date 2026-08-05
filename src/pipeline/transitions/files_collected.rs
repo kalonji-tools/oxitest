@@ -145,19 +145,16 @@ impl Pipeline {
     }
 
     // 7. query_without_session: FilesCollected -> terminal
-    pub(crate) fn query_without_session(self, py: Python<'_>) -> Result<ExitCode, ExitCode> {
+    /// `args` is a parameter for the same reason as [`Pipeline::query`]: the
+    /// caller matched `Command::Query` to reach this, so it passes what it
+    /// matched instead of leaving this function to re-assert it (ADR-0011).
+    pub(crate) fn query_without_session(
+        self,
+        py: Python<'_>,
+        args: &config::QueryArgs,
+    ) -> Result<ExitCode, ExitCode> {
         let PipelinePhase::FilesCollected = &self.phase else {
             unreachable!("query_without_session called outside FilesCollected phase")
-        };
-        // Not covered by E1: this asks about the *command*, not the pipeline
-        // phase, so it is an ordinary dispatch error and gets an exit code
-        // rather than an abort (ADR-0011 — the carve-out is typestate-only).
-        let config::Command::Query(ref args) = self.command else {
-            eprintln!(
-                "error: internal dispatch error — query_without_session runs only for \
-                 `oxitest query`"
-            );
-            return Ok(ExitCode::UsageError);
         };
 
         if args.fzf {

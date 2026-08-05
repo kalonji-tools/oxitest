@@ -1,7 +1,5 @@
 allow-panic-in-tests = true
-# ADR-0011's panic-route lint set is denied crate-wide in `Cargo.toml`. Test
-# code asserts by aborting, so these two are exempt there. Clippy has no
-# `allow-unreachable-in-tests` key — verified against its own key list, not
-# assumed — so `unreachable!()` stays denied in tests as well (#1832).
+# Test code asserts by aborting, so ADR-0011's first two lints are exempt there.
+# Clippy has no `allow-unreachable-in-tests` key (#1832).
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true

@@ -85,12 +85,41 @@ impl Pipeline {
             rep.record_diagnostics(pending);
         }
 
+        // Serialized here, once, because here is where a `Result` already
+        // flows. Everything downstream — `ExecutionContext`, `SessionInputs`,
+        // `run_phase_parallel` — then carries bytes and cannot fail at it
+        // (ADR-0011). Done before any worker is spawned, so a failure costs
+        // nothing to unwind.
+        let payloads = match parallel::WorkerPayloads::new(
+            &shared.conftest_files,
+            &shared.fixture_modules,
+            &shared.cfg.features.plugins,
+            &shared.cfg.features.plugin_settings,
+        ) {
+            Ok(payloads) => payloads,
+            Err(err) => {
+                rep.record_diagnostics(vec![reporter::stats::DiagnosticEntry {
+                    severity: reporter::stats::DiagnosticSeverity::Error,
+                    context: "worker payload".into(),
+                    message: format!(
+                        "could not serialize the fixture and plugin data every worker needs: \
+                         {err}"
+                    ),
+                    file: None,
+                    lineno: None,
+                }]);
+                return Err(rep
+                    .finish(&[], false, &reporter::ReporterSession::new(0))
+                    .code());
+            }
+        };
+
         let exec_ctx = ExecutionContext {
             cfg: &shared.cfg,
             cache: &shared.cache,
             session: &session,
-            conftest_files: &shared.conftest_files,
             fixture_modules: &shared.fixture_modules,
+            payloads: &payloads,
             python_bin: &shared.python_bin,
             ast_weight: shared.ast_weight,
         };

@@ -183,13 +183,7 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
     frame.render_widget(breadcrumb, breadcrumb_area);
 
     // ── Source view — full-screen, replaces the two-pane layout ─────────
-    // Both options are matched at once rather than the source view alone
-    // followed by `app.graph.as_ref().expect("source_view implies graph")`.
-    // `enter_source_view` returns early when `graph` is `None`, so the pair is
-    // always set together — and ADR-0011 wants that read off the match rather
-    // than restated in a message. If the pair ever came apart, the run falls
-    // through to the two-pane layout instead of aborting the TUI.
-    if let (Some(sv), Some(graph)) = (app.source_view.as_ref(), app.graph.as_ref()) {
+    if let Some(sv) = app.source_view.as_ref() {
         let title = format!(" {} ", sv.path);
         let source_block = Block::default().borders(Borders::ALL).title(title);
         let content = Paragraph::new(sv.lines.clone())
@@ -197,12 +191,10 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
             .scroll((sv.scroll_offset, 0));
         frame.render_widget(content, main_area);
 
-        // Source footer
-        let node_label = format!(
-            "{} {}",
-            sv.node_ref.kind.sigil(),
-            graph.node_name(&sv.node_ref)
-        );
+        // Source footer. The label was resolved when the overlay opened, where
+        // the graph was in hand — so this function never needs the graph, and
+        // there is no "source view without a graph" state left to guard.
+        let node_label = &sv.node_label;
         let footer_line = Line::from(vec![
             Span::styled(
                 " \u{2191}\u{2193} scroll  e open in $EDITOR  Esc close",

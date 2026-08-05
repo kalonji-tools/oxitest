@@ -207,8 +207,7 @@ pub(crate) fn fmt_field_diffs(
         .max()
         .unwrap_or(0);
 
-    // Discarded rather than unwrapped: `std::fmt::Write` on a `String` has no
-    // failing sink, so there is no error to handle (ADR-0011).
+    // Discarded, not unwrapped: `std::fmt::Write` on a `String` cannot fail.
     let _ = writeln!(out, "field diffs ({type_name}):");
     for diff in field_diffs {
         let left_colored = color_fail(&diff.left, use_color);

@@ -51,6 +51,25 @@ Option 4. The following lints are denied in `Cargo.toml`'s `[lints.clippy]` tabl
 
 **Tests are exempt for three of the seven**, via `clippy.toml`: `allow-panic-in-tests`, `allow-unwrap-in-tests`, `allow-expect-in-tests`. Clippy's full in-tests allowance list is `dbg`, `expect`, `indexing-slicing`, `large-stack-frames`, `panic`, `print`, `unwrap`, `useless-vec` — probed against clippy's own configuration keys, not assumed. **There is no `allow-unreachable-in-tests`**, so `unreachable!()` is denied in test code too. That is a real constraint on new tests, not an oversight: a test that reaches for `unreachable!()` is asserting something, and `assert!`/`panic!` say so with a message the runner can report.
 
+### Rule 0 — Relocating the prose is not compliance
+
+The lints check the *spelling*. This ADR is about the *form*. Deleting an `expect("cannot be empty")` and writing `// this cannot be empty` two lines above it satisfies every lint in the table and satisfies nothing else — a `//` comment is **strictly weaker** than the string it replaced, because it is not in the binary, it is not printed when the impossible happens, and it decays exactly as fast.
+
+Three specific non-compliant moves, all of which pass `cargo clippy`:
+
+| Move | Why it fails | Do instead |
+|---|---|---|
+| **Comment** — the invariant becomes prose next to the code | weaker than the `expect` string it replaced | restructure so no claim is needed |
+| **Silent default** — `unwrap_or_default()`, `.ok()`, an empty collection | trades a loud impossibility for a quiet wrong answer, which for a test runner means reporting success for tests it never ran | propagate the `Result`, or degrade *observably* (`tracing::warn!`) and only on a path where the cost is performance or decoration, never correctness |
+| **Invented branch** — a fresh `Result`, error message, and failure path for a case that cannot occur | adds a branch every reader must reason about forever, is untestable by construction, and drags patch coverage down for no behaviour | move the fallible step to where a `Result` already flows, or hold the already-converted value in the type |
+
+The test to apply at every site: **does the invariant now live in a type, or did it move into a comment, a silent default, or an invented branch?** Only the first counts.
+
+Two worked examples from the adoption sweep, both in this repo:
+
+- `Trail::current()` — `screens: Vec<Screen>` became `{ root: Screen, rest: Vec<Screen> }`. The accessor returns `&Screen` with no `Option` and no message. **Compliant**: nothing is claimed, so nothing can rot.
+- `run_phase_parallel`'s worker payloads — the first attempt gave the serializer a `Result`, an error message, and an interrupt path, then explained in a comment that it could never fire. **Non-compliant on two counts** at once. The fix was `WorkerPayloads`: the type holds the *already serialized* bytes, the fallible step happens once in `Pipeline::execute` where a `Result` already flows, and the parallel phase has nothing left to fail at.
+
 ### Rule 1 — No per-site carve-out
 
 No `#[expect(clippy::unwrap_used, ...)]`, `#[expect(clippy::expect_used, ...)]`, `#[expect(clippy::unreachable, ...)]`, or the `allow` spelling of any of them, on a function, statement, or expression. A single site that resists the lint gets restructured. If restructuring is genuinely out of reach, the unit of exception is the module, and it goes through Rule 3.
@@ -77,8 +96,10 @@ This is a **runtime-checked typestate**. The `unreachable!()` is not covering an
 | Site | Why it was not typestate | Route taken |
 |---|---|---|
 | `session_ready.rs` `session()` | Re-destructured a variant it had just matched, an artefact of `into_parts()` | Phase consumed once, before the session is built |
-| `session_ready.rs` `query()` | Asserts the **command** is `Query`, not the phase | `eprintln!` + `ExitCode::UsageError` |
-| `files_collected.rs` `query_without_session()` | Same command assert | `eprintln!` + `ExitCode::UsageError` |
+| `session_ready.rs` `query()` | Asserts the **command** is `Query`, not the phase | `&QueryArgs` became a parameter — the caller already matched `Command::Query`, so it passes what it matched and the arm disappears |
+| `files_collected.rs` `query_without_session()` | Same command assert | Same fix |
+
+The last two first became an `eprintln!` plus an `ExitCode::UsageError`. That passed the lints and failed Rule 0: it invented a branch for a case the caller had already ruled out. Taking the args as a parameter removes the question instead of answering it.
 
 The last two were not identified when this ADR was drafted; the module was assumed to be uniformly typestate. That is the reason the rule is written as a property of each *site* rather than as a count.
 
@@ -107,7 +128,8 @@ Not measured. Excluded for the same reasoning: an overflow panic in release-mode
 
 - **New code cannot reach for `unwrap`, `expect`, or `unreachable!` on the shipping path.** The alternatives are: make the case impossible with a type, return a `Result` and plumb it, or handle the branch. All three are more work at the keystroke and less work at the bug report.
 - **`unreachable!()` is denied in tests too.** Use `assert!`/`panic!` with a message. See the scope note above.
-- **`std::fmt::Write` into a `String` never fails.** The largest single cluster fixed under this ADR was `writeln!(&mut string, ...).unwrap()`. Formatting into a `String` returns `Ok` unconditionally; the correct route is `let _ = writeln!(...)` or `push_str`, **not** a new `Result` in the signature. Introducing error plumbing for an error that cannot occur is the failure mode this ADR is most likely to cause.
-- **Serialising a `#[derive(Serialize)]` struct with no maps keyed by non-strings also cannot fail** — but unlike `fmt`, the type system does not say so, so those sites return `Result` and plumb one level.
+- **`std::fmt::Write` into a `String` never fails.** The largest single cluster fixed under this ADR was `writeln!(&mut string, ...).unwrap()`. Formatting into a `String` returns `Ok` unconditionally; the correct route is `let _ = writeln!(...)` or `push_str`, **not** a new `Result` in the signature. Introducing error plumbing for an error that cannot occur is the failure mode this ADR is most likely to cause — see Rule 0's third row, which this ADR's own first implementation walked into.
+- **Serialising a `#[derive(Serialize)]` struct cannot fail either**, but the type system does not say so. The answer is *not* to plumb a `Result` through code that cannot use it: convert once, at a point where a `Result` already flows, and let everything downstream hold the converted value. `WorkerPayloads` is the worked example.
+- **`serde_json::json!` hides an `unwrap`.** The macro expands to `to_value(&$other).unwrap()`, and clippy does not lint `unwrap` inside a macro from another crate — so `json!` is a live panic route that this ADR's lint set does not catch. Build the `Map` and use `to_value(..)?` where the value is not a literal. Assume the same of any macro that takes a `Serialize` value.
 - **The exception list is the enforcement surface.** A reviewer checks whether a new `#![allow]` appears in this document. Anything not listed here is a policy violation regardless of how good the `reason` string is.
 - **No new tooling.** Enforcement is `cargo clippy --all-targets` in `just check`, which the preflight gate already runs. Note that a cached clippy run proves nothing — force a rebuild (`touch src/lib.rs`) before believing a green result.

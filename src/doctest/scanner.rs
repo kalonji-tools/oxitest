@@ -16,13 +16,9 @@ pub(crate) struct DoctestExample {
     pub lineno: usize,
 }
 
-/// The example currently being accumulated.
-///
-/// One `Option<PendingExample>` where the parser used to carry a `String` and a
-/// separate `Option<usize>` that had to be `Some` whenever the string was
-/// non-empty. That pairing was stated four times as `example_start.unwrap()`
-/// and checked zero times; making it one value is ADR-0011's principle applied
-/// to a loop variable.
+/// The example being accumulated — its source and the line it started on,
+/// which have to agree. The pairing used to be a `String` beside an
+/// `Option<usize>`, asserted four times as `example_start.unwrap()`.
 struct PendingExample {
     source: String,
     lineno: usize,

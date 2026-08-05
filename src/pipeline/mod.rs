@@ -819,15 +819,16 @@ fn debug_command(py: Python<'_>, pipeline: Pipeline) -> Result<ExitCode, ExitCod
 fn query_command(
     py: Python<'_>,
     pipeline: Pipeline,
+    args: &config::QueryArgs,
     needs_session: bool,
 ) -> Result<ExitCode, ExitCode> {
     let p = pipeline.collect_files()?;
     let p = p.affected()?;
     if needs_session {
         let p = p.session(py)?;
-        p.query(py)
+        p.query(py, args)
     } else {
-        p.query_without_session(py)
+        p.query_without_session(py, args)
     }
 }
 
@@ -850,12 +851,16 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         config::Command::Query(args) => {
             let needs_session =
                 query::needs_python(args.resource, args.expression.as_deref()) || args.tree;
-            query_command(py, pipeline, needs_session)
+            // Cloned so the args can outlive the borrow of `pipeline.command`
+            // that `pipeline` being moved ends. Once per run, and it buys the
+            // query transitions a parameter they can trust instead of a
+            // `Command::Query` assert against global pipeline state.
+            let args = args.clone();
+            query_command(py, pipeline, &args, needs_session)
         }
-        // Bound by the arm, not re-matched inside it: the previous inner
-        // `match pipeline.command { Fixtures(a) => …, _ => unreachable!() }`
-        // asked the same question twice and answered the second one with a
-        // macro (ADR-0011).
+        // Bound by the arm, not re-matched inside it — the inner
+        // `match pipeline.command { … _ => unreachable!() }` it replaced asked
+        // the same question twice.
         config::Command::Fixtures(fixtures_args) => {
             eprintln!(
                 "Warning: 'oxitest fixtures' is deprecated and will be removed in a future release. \
@@ -875,8 +880,8 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
                 paths: fixtures_args.paths.clone(),
             };
             let mut pipeline = pipeline;
-            pipeline.shared.command = config::Command::Query(query_args);
-            query_command(py, pipeline, true)
+            pipeline.shared.command = config::Command::Query(query_args.clone());
+            query_command(py, pipeline, &query_args, true)
         }
         command @ (config::Command::Inspect(_)
         | config::Command::Env

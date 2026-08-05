@@ -13,8 +13,13 @@ pub(super) struct ExecutionContext<'a> {
     pub(super) cfg: &'a config::Config,
     pub(super) cache: &'a cache::TestCache,
     pub(super) session: &'a bridge::FixtureSession,
-    pub(super) conftest_files: &'a [Utf8PathBuf],
     pub(super) fixture_modules: &'a [types::FixtureModule],
+    /// The worker payloads, already serialized by `Pipeline::execute`. Passing
+    /// bytes rather than the values means the parallel phase has no
+    /// serialization left to fail at (ADR-0011) — and it is why `conftest_files`
+    /// is no longer a field: the only thing this struct did with it was hand it
+    /// to `SessionInputs` for serialization.
+    pub(super) payloads: &'a parallel::WorkerPayloads,
     pub(super) python_bin: &'a str,
     /// Sum of AST-derived body weights from prescan; used as fallback for cold-cache estimation.
     pub(super) ast_weight: Option<crate::types::DurationMs>,
@@ -708,8 +713,7 @@ fn execute_phases(
                 cfg: ctx.cfg,
                 workers: worker_count,
                 session_inputs: parallel::SessionInputs {
-                    conftest_paths: ctx.conftest_files,
-                    fixture_modules: ctx.fixture_modules,
+                    payloads: ctx.payloads,
                     process_fixture_names: &process_fixture_names,
                 },
                 python_bin: ctx.python_bin,

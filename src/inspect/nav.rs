@@ -40,13 +40,10 @@ pub(crate) enum Screen {
 
 /// A navigation trail for `oxitest inspect` (ADR-0003).
 ///
-/// The root screen is a field, not `screens[0]`. Splitting the root out of the
-/// vector is what makes [`current`](Self::current) and
-/// [`current_mut`](Self::current_mut) total — the trail cannot be empty because
-/// there is no representation of an empty trail. Both accessors previously read
-/// `self.screens.last().expect("Trail screens must be non-empty")`, which was a
-/// true claim that nothing checked; ADR-0011 is the rule that replaced it with
-/// this shape.
+/// The root screen is a field, not `screens[0]`, so there is no representation
+/// of an empty trail and [`current`](Self::current) / [`current_mut`](Self::current_mut)
+/// are total. They previously read `screens.last().expect("must be non-empty")`
+/// — a true claim that nothing checked (ADR-0011).
 #[derive(Debug)]
 pub(crate) struct Trail {
     /// Always the Overview screen. `pop()` cannot remove it.
@@ -127,9 +124,8 @@ pub(crate) fn resolve_direct_jump(graph: &InspectGraph, name: &str) -> Trail {
 
     let mut trail = Trail::new();
 
-    // Ordered so the single-match arm can *take* its node instead of asserting
-    // `len == 1` and unwrapping the iterator (ADR-0011). Zero matches falls out
-    // of `pop()` returning `None` and leaves the trail on Overview.
+    // `> 1` first so the single-match arm can *take* its node rather than
+    // assert `len == 1`. Zero matches falls out of `pop()` returning `None`.
     if matches.len() > 1 {
         trail.push(Screen::Disambiguation {
             query: name.to_string(),

@@ -67,18 +67,11 @@ exit = "deny"
 # shipping sites today (#1830) — `allow-panic-in-tests` in `clippy.toml` exempts
 # the 190 legitimate ones in tests, so this is a ratchet, not a cleanup.
 panic = "deny"
-# Restriction, so `all` misses these three as well. They close the remaining
-# spellings of "abort here" — leaving any of them open would make the `panic`
-# deny above cosmetic, since a mechanical rewrite satisfies the gate and changes
-# nothing the user sees. The governing rule, the single module-scoped exception
-# (E1: `src/pipeline/transitions/**`), and the lints deliberately *not* adopted
-# are all in `docs/adr/0011-no-unhandled-panic-routes.md`. Read it before adding
-# an `#[allow]`: per-site carve-outs are banned, so a stubborn site is a signal
-# to restructure, not to annotate (#1832).
-#
-# `allow-unwrap-in-tests` / `allow-expect-in-tests` in `clippy.toml` exempt test
-# code from the first two. There is no `allow-unreachable-in-tests` key, so the
-# third binds tests too — use `assert!`/`panic!`, which carry a message.
+# Restriction, so `all` misses these three too. They close the remaining
+# spellings of "abort here"; leaving any open makes the `panic` deny above
+# cosmetic. Rule, exceptions and growth process:
+# `docs/adr/0011-no-unhandled-panic-routes.md`. Per-site `#[allow]` is banned
+# there — a stubborn site gets restructured (#1832).
 unwrap_used = "deny"
 expect_used = "deny"
 unreachable = "deny"

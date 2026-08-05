@@ -89,10 +89,8 @@ pub(super) fn format_collection_profile(profile: &CollectionProfile) -> String {
         0.0
     };
 
-    // `writeln!` into a `String` goes through `std::fmt::Write`, whose only
-    // error source is the sink — and a `String` sink never reports one. The
-    // discards below are the whole error handling this needs; per ADR-0011 a
-    // `Result` return here would be plumbing for an error that cannot occur.
+    // Discarded, not unwrapped: `std::fmt::Write` on a `String` has no failing
+    // sink, so a `Result` here would plumb an error that cannot occur.
     let file_count = profile.files.len();
     let _ = writeln!(
         out,
@@ -254,9 +252,9 @@ fn register_and_record(
     // A plugin home diverges here and at the two steps below; everything else,
     // prescan included, is shared with the user path (#1717).
     //
-    // One `match` rather than an early-returning `if let` followed by a second
-    // destructure of the same value: the second destructure could only restate
-    // "the plugin arm returned" as an `unreachable!()`, which ADR-0011 bans.
+    // One `match` rather than an early-returning `if let` plus a second
+    // destructure of the same value, which could only restate "the plugin arm
+    // returned" as an `unreachable!()`.
     let tree_root = match kind {
         HomeKind::Plugin {
             plugin_module,
