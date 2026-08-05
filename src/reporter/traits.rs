@@ -80,17 +80,28 @@ pub trait Reporter {
 
 // ─── StandardReporter ────────────────────────────────────────────────────────
 
+/// Reporters whose shutdown differs only in what they must drain first.
 pub(crate) trait StandardReporter {
+    /// Drain whatever this reporter has buffered, before the summary is printed.
+    ///
+    /// Called by [`standard_finish`] — **do not call it as well**. Implementations
+    /// are not idempotent: `CiReporter` prints `dot_buf` and its deferred
+    /// diagnostics without clearing either, so a second call reprints both.
     fn pre_finish(&mut self);
     fn run_opts(&self) -> &ReporterOpts;
 }
 
+/// Shared reporter shutdown: drain buffers, print collection errors, then the summary.
+///
+/// Owns the [`StandardReporter::pre_finish`] call so the ordering cannot be got
+/// wrong or forgotten by an implementer.
 pub(crate) fn standard_finish(
     r: &mut impl StandardReporter,
     session: &ReporterSession,
     collect_errors: &[CollectError],
     interrupted: bool,
 ) -> ExitVote {
+    r.pre_finish();
     print_collect_errors(collect_errors, r.run_opts().use_color);
     ExitVote::Code(print_summary_section(
         session.stats(),

@@ -379,7 +379,6 @@ impl Reporter for TtyReporter {
         interrupted: bool,
         session: &super::ReporterSession,
     ) -> super::ExitVote {
-        self.pre_finish();
         super::standard_finish(self, session, collect_errors, interrupted)
     }
 }
