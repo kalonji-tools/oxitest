@@ -308,7 +308,7 @@ Two functions collaborate:
 2. **`compute_optimal_workers()`** -- heuristic: given an estimated total runtime and `spawn_overhead_ms`, it caps the worker count so we do not spawn more workers than the estimated runtime warrants. Used after timing estimates are available (from cache).
 
 ```rust
-pub(crate) fn compute_optimal_workers(
+pub fn compute_optimal_workers(
     mode: &ExecutionMode,
     cpu_count: usize,
     estimated: Option<std::time::Duration>,
