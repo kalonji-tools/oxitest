@@ -221,6 +221,35 @@ mod tests {
         }
     }
 
+    /// Doctest collection takes every `.py` file, not just the ones matching
+    /// `python_files` — a docstring example can live in any module.
+    ///
+    /// The distinction is the whole reason this function exists separately from
+    /// `collect_files`, and nothing else asserts it: `collect_files` above uses
+    /// the same walk with the configured `test_*.py` globs, so a regression
+    /// that made doctest collection reuse them would leave every non-test
+    /// module's doctests silently uncollected while both functions still
+    /// returned files.
+    #[test]
+    fn doctest_collection_takes_every_py_file_not_just_test_files() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        dir.child("test_foo.py").touch().unwrap();
+        dir.child("helpers.py").touch().unwrap();
+        dir.child("notes.md").touch().unwrap();
+        let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
+
+        let files = collect_doctest_files(&config).expect("`*.py` is a literal glob");
+
+        let mut names: Vec<&str> = files.iter().filter_map(|f| f.file_name()).collect();
+        names.sort_unstable();
+        assert_eq!(
+            names,
+            ["helpers.py", "test_foo.py"],
+            "doctest collection must reach modules `python_files` excludes, and \
+             must not pick up non-Python files"
+        );
+    }
+
     #[test]
     fn test_collect_empty_dir() {
         let dir = assert_fs::TempDir::new().unwrap();

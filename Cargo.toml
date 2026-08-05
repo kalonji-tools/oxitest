@@ -39,6 +39,11 @@ rayon = "1"
 regex = "1"
 
 [dev-dependencies]
+# `in_memory` gives `InMemoryTerm`, the only way to assert on what a
+# `ProgressStyle` actually renders — `with_template` does not validate
+# placeholders, so rendering is the only place a mistyped one is caught (#1832).
+# A dev-dependency, so resolver v3 keeps the feature out of release builds.
+indicatif = { version = "0.18", features = ["in_memory"] }
 tempfile = "3"
 assert_fs = "1"
 insta = { version = "1", features = ["redactions"] }
