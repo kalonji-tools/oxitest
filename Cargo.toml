@@ -88,3 +88,9 @@ uninlined_format_args = "deny"
 # Nursery too (measured: `-W clippy::nursery` fires it, `pedantic` does not), so
 # `all` misses it as well. `deny` for the same reason as above (#1835).
 use_self = "deny"
+# Pedantic, so `all` misses this one too. The Rust API docs became a CI-gated
+# artifact in #1813 (`cargo doc` in preflight), so their legibility is shipped
+# output rather than a private convenience. `doc-valid-idents` in `clippy.toml`
+# is what keeps this from backticking prose — without it the lint makes docs
+# worse, so the two changes are a pair (#1836).
+doc_markdown = "deny"
