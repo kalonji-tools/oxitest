@@ -230,3 +230,129 @@ def test_session_below_the_rootdir_package_is_rejected(tmp: TempDir) -> None:
         f"the hint must name the directory that IS the rootdir package, not just "
         f"say one is required; got:\n{output}"
     )
+
+
+def test_rule_4_verdict_does_not_depend_on_how_the_run_was_invoked() -> None:
+    """The same declaration must be legal, or illegal, under every invocation (#1798).
+
+    Rule 4 compares a declaration's anchor against the rootdir package, and that
+    directory was derived from the **collected** test files. A positional path
+    argument narrows what is collected, so narrowing a run to the subdirectory
+    that holds an illegal declaration made that subdirectory the rootdir package
+    and the declaration legal — exit 3 became exit 0 with no edit to any file.
+
+    The project below declares ``testpaths = ["slice4_session_below_root"]`` and
+    puts ``engine`` one level down in ``nested/``. Both runs must reject it, and
+    both must name the same directory as the root: a fix that made the *full*
+    run pass would satisfy an equality-only assertion while deleting the rule.
+    """
+    # Arrange — identical project and config; the runs differ only in argv.
+    rootdir_package = str(_REJECT_PROJECT / "slice4_session_below_root")
+
+    # Act
+    full_out, full_err, full_rc = helpers.run_oxitest(None, cwd=str(_REJECT_PROJECT))
+    narrow_out, narrow_err, narrow_rc = helpers.run_oxitest(
+        None, "slice4_session_below_root/nested", cwd=str(_REJECT_PROJECT)
+    )
+    full = full_out + full_err
+    narrow = narrow_out + narrow_err
+
+    # Assert
+    assert full_rc == 3, (
+        f"the control: a process declaration below the rootdir package must be a "
+        f"collection error on a full run; rc={full_rc}\n{full}"
+    )
+    assert narrow_rc == 3, (
+        f"narrowing the run to {'slice4_session_below_root/nested'!r} must not "
+        f"legalise the declaration — the rootdir package is a property of the "
+        f"project, not of argv; rc={narrow_rc}\n{narrow}"
+    )
+    for output, label in ((full, "full run"), (narrow, "narrowed run")):
+        assert rootdir_package in output, (
+            f"the {label} must name {rootdir_package!r} as the rootdir package; "
+            f"a diagnostic that names the narrowed directory instead is the same "
+            f"bug reported differently. Got:\n{output}"
+        )
+
+
+_UNDECLARED_PROJECT = _DATA_ROOT / "rootdir_undeclared"
+_DOT_DECLARED_PROJECT = _DATA_ROOT / "rootdir_dot_declared"
+
+
+def test_a_project_declaring_no_testpaths_keeps_its_process_fixture_legal() -> None:
+    """`testpaths` is optional, and omitting it must not outlaw the tier (#1798).
+
+    The configuration reference gives `testpaths` a default of `[]`. Deriving
+    the rootdir package from the project root in that case puts it above the
+    directory the tests actually live in, so a `lifetime="process"` declaration
+    beside them is rejected and the hint points at a directory holding no tests.
+
+    This is the case that regressed while every gate stayed green: every other
+    data project declares `testpaths`, so nothing exercised the default.
+    """
+    # Act
+    stdout, stderr, rc = helpers.run_oxitest(None, cwd=str(_UNDECLARED_PROJECT))
+
+    # Assert
+    assert rc == 0, (
+        f"a project that declares no testpaths must still be able to anchor a "
+        f"process fixture in the directory holding its tests; rc={rc}\n"
+        f"{stdout}{stderr}"
+    )
+
+
+@oxi.mark.xfail(
+    strict=True,
+    reason="blocked on #1765 — an ancestor __fixtures__.py is never registered "
+    "when the run is narrowed below it, so the narrowed run fails with "
+    "'fixture not found' before Rule 4 is reached. Strict, so this test fails "
+    "loudly once #1765 lands and the marker must then be removed.",
+)
+def test_the_undeclared_rootdir_package_is_also_invocation_independent() -> None:
+    """Narrowing must not move the rootdir package in the undeclared case either.
+
+    The project nests `tests/nested/` below `tests/`, so a root folded from the
+    *collected* files moves down to `tests/nested` when the run is narrowed —
+    which would put the declaration in `tests/` above the root and reject it.
+    Folding an unnarrowed walk keeps both invocations on `tests/`.
+
+    **This asserts a property spanning two issues, and #1798 delivers only half
+    of it.** The rootdir package no longer moves — that half is done. But
+    declaration homes are registered per directory holding a *collected* test
+    file (`collection.rs`, `register_declaration_home`), so narrowing below
+    `tests/` means `tests/__fixtures__.py` is never scanned at all and the run
+    dies with `fixture 'engine' not found` before Rule 4 has an opinion. That is
+    #1765, the last link in this chain.
+
+    Kept rather than deleted because it is the acceptance test #1765 needs, and
+    a deleted test is a requirement nobody re-derives.
+    """
+    # Act
+    full = helpers.run_oxitest(None, cwd=str(_UNDECLARED_PROJECT))
+    narrowed = helpers.run_oxitest(None, "tests/nested", cwd=str(_UNDECLARED_PROJECT))
+
+    # Assert
+    assert full[2] == narrowed[2] == 0, (
+        f"the same declaration must be legal under both invocations; "
+        f"full rc={full[2]}, narrowed rc={narrowed[2]}\n"
+        f"--- full ---\n{full[0]}{full[1]}\n"
+        f"--- narrowed ---\n{narrowed[0]}{narrowed[1]}"
+    )
+
+
+def test_an_explicitly_dot_declared_testpath_still_matches_its_anchor() -> None:
+    """`testpaths = ["."]` is a real declaration and must keep working.
+
+    `resolve_testpaths` joins each entry to rootdir, so `"."` becomes
+    `rootdir/.` while anchors are plain directories — Rule 4 compares the two by
+    equality. Predicting this case from those semantics gave the wrong answer
+    once, so it is pinned by a run rather than by an argument.
+    """
+    # Act
+    stdout, stderr, rc = helpers.run_oxitest(None, cwd=str(_DOT_DECLARED_PROJECT))
+
+    # Assert
+    assert rc == 0, (
+        f"declaring the project root explicitly must anchor a process fixture "
+        f"there; rc={rc}\n{stdout}{stderr}"
+    )
