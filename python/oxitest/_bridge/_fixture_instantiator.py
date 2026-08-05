@@ -187,6 +187,37 @@ def _boundary_for(defn: FixtureDef[Any], ctx: _ResolutionContext) -> str:
     return anchor if anchor is not None else ctx.boundary_path
 
 
+def _async_teardown_boundary(
+    defn: FixtureDef[Any], ctx: _ResolutionContext
+) -> str | None:
+    """The boundary whose exit disposes *defn*'s async teardown.
+
+    ``None`` means "no boundary of its own" and lands the teardown on
+    ``SESSION_BOUNDARY``, drained at ``end_task`` — right for ``shared=True``
+    and for the builtins' session tier, which have no narrower boundary to
+    wait for.
+
+    One function for two registration sites, and that is the point. They
+    disagreed before #1839: the lazy ``fx.`` route named a module boundary
+    while the eager ``Fixture[T]`` route sent everything to task end, so the
+    same ``lifetime="module"`` fixture was disposed per module through one
+    access spelling and at the end of the run through the other. The mismatch
+    was invisible because each route had its own copy of the mapping.
+    """
+    if defn.scope is FixtureScope.MODULE:
+        return ctx.module_path
+    if defn.scope is FixtureScope.PACKAGE:
+        # The anchor directory, matching what `end_package` drains and what
+        # `_package_scopes` is keyed by. `defn.anchor` is None only for
+        # unanchored sources, which cannot reach the package tier.
+        return defn.anchor
+    if defn.scope is FixtureScope.PROCESS:
+        # Its own key so it survives `end_task` — everything above drains
+        # with the task group (#1777).
+        return PROCESS_BOUNDARY
+    return None
+
+
 def _resolve_deps(
     instantiator: FixtureInstantiator,
     fn: Callable[..., Any],
@@ -571,9 +602,7 @@ class FixtureInstantiator:
             value = self._async_mgr.resolve(
                 defn.func,
                 deps,
-                boundary=(
-                    PROCESS_BOUNDARY if defn.scope is FixtureScope.PROCESS else None
-                ),
+                boundary=_async_teardown_boundary(defn, ctx),
             )
             self._setup_times[_cache_key(defn)].append(
                 (time.monotonic() - _start) * 1000.0
@@ -713,23 +742,17 @@ class FixtureInstantiator:
 
         Wider lifetimes outlive that loop by definition, so they go to the
         session-lifetime manager, tagged with the boundary whose exit should
-        dispose them. Module lifetime is keyed by module path; anything else
-        falls back to session end.
+        dispose them — see :func:`_async_teardown_boundary`, which the eager
+        ``Fixture[T]`` route shares.
         """
         dies_with_test = scope_refs is None or scope_refs.per_test
         if dies_with_test and register_async_teardown(defn.name, agen):
             return
         if self._async_mgr is None:
             return
-        # The process tier gets its own key so it survives end_task: everything
-        # else here drains with the task group (#1777).
-        if defn.scope is FixtureScope.MODULE:
-            boundary = ctx.module_path
-        elif defn.scope is FixtureScope.PROCESS:
-            boundary = PROCESS_BOUNDARY
-        else:
-            boundary = None
-        self._async_mgr.register_teardown(defn.name, agen, boundary=boundary)
+        self._async_mgr.register_teardown(
+            defn.name, agen, boundary=_async_teardown_boundary(defn, ctx)
+        )
 
     def _instantiate(
         self,

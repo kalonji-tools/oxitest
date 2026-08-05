@@ -1,0 +1,5 @@
+[tool.oxitest]
+testpaths = ["package_boundary_nested_async"]
+python_files = ["test_*.py"]
+strict = "abort"
+auto_arrange = false
