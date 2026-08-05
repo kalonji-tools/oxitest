@@ -1,6 +1,6 @@
 //! Key and mouse event handling for `oxitest inspect`.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 
 use super::app::{InputMode, InspectApp, ScopeMode, SearchState};
 use super::detail;
@@ -20,20 +20,13 @@ pub(crate) fn handle_key(app: &mut InspectApp, key: KeyEvent) {
     }
 }
 
-/// Process a mouse event and update application state.
-pub(crate) fn handle_mouse(app: &mut InspectApp, mouse: MouseEvent) {
-    match mouse.kind {
-        MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
-            // Scroll events — no-op until tree navigation is implemented.
-        }
-        MouseEventKind::Down(MouseButton::Left) => {
-            // Click to select — no-op until tree navigation is implemented.
-        }
-        _ => {}
-    }
-    // Suppress unused variable warning until navigation is wired up.
-    let _ = app;
-}
+/// Discard a mouse event.
+///
+/// `EnableMouseCapture` is on (see `ui.rs`), so events arrive, but none is
+/// routed anywhere: scroll and click do nothing and no app state is read or
+/// written. Keyboard is the only input that navigates. Takes no `InspectApp`
+/// deliberately — a parameter it never touches would be a claim it does.
+pub(crate) fn handle_mouse(_mouse: &MouseEvent) {}
 
 // ── Normal mode ──────────────────────────────────────────────────────────────
 
@@ -173,7 +166,8 @@ fn handle_search_key(app: &mut InspectApp, key: KeyEvent) {
             app.search = SearchState::new();
             app.input_mode = InputMode::Normal;
         }
-        // Accept search — navigate to selected result (no-op until #1116)
+        // Accept search: leaves the results on screen rather than jumping to the
+        // selected one. Does not navigate.
         KeyCode::Enter => {
             // Keep search results visible; just switch to normal mode
             app.input_mode = InputMode::Normal;

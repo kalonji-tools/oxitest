@@ -89,7 +89,6 @@ pub(crate) struct InspectGraph {
     pub marks: Vec<MarkNode>,
     pub conftests: Vec<ConftestNode>,
     pub plugins: Vec<PluginNode>,
-    #[allow(dead_code)] // displayed by detail view (#1117) and navigation (#1116)
     pub broken_edges: Vec<BrokenEdge>,
 }
 
@@ -124,7 +123,6 @@ impl InspectGraph {
     }
 
     /// Return the display name for the node at the given reference.
-    #[allow(dead_code)] // used by navigation (#1116), detail (#1117), and search (#1118)
     pub(crate) fn node_name(&self, r: &NodeRef) -> &str {
         match r.kind {
             NodeKind::Fixture => &self.fixtures[r.index].name,
@@ -135,14 +133,7 @@ impl InspectGraph {
         }
     }
 
-    /// Return the sigil character for the node at the given reference.
-    #[allow(dead_code)] // used by navigation (#1116), detail (#1117), and search (#1118)
-    pub(crate) fn node_sigil(&self, r: &NodeRef) -> char {
-        r.kind.sigil()
-    }
-
     /// Return the number of nodes of the given kind.
-    #[allow(dead_code)] // utility used by nodes_of_kind and graph tests
     pub(crate) fn node_count(&self, kind: NodeKind) -> usize {
         match kind {
             NodeKind::Fixture => self.fixtures.len(),
@@ -163,7 +154,7 @@ impl InspectGraph {
     }
 
     /// Return node refs for a specific kind.
-    #[allow(dead_code)] // used by context-scoped search tests
+    #[allow(dead_code)] // only reached from tests
     pub(crate) fn nodes_of_kind(&self, kind: NodeKind) -> Vec<NodeRef> {
         let count = self.node_count(kind);
         (0..count).map(|i| NodeRef { kind, index: i }).collect()
@@ -195,8 +186,7 @@ impl InspectGraph {
     ///
     /// Iteration order: tests → fixtures → marks → conftests → plugins.
     /// Each `NodeRef.index` is the position within its own typed vector,
-    /// matching the O(1) lookup semantics of `node_name` and `node_sigil`.
-    #[allow(dead_code)] // wired into nav/overview in follow-up tasks
+    /// matching the O(1) lookup semantics of `node_name`.
     pub(crate) fn all_node_refs(&self) -> Vec<NodeRef> {
         let mut refs = Vec::new();
         for i in 0..self.tests.len() {
@@ -350,7 +340,7 @@ mod tests {
     }
 
     #[test]
-    fn node_sigil_returns_correct_char_for_each_kind() {
+    fn sigil_returns_correct_char_for_each_kind() {
         let cases = [
             (NodeKind::Fixture, 'F'),
             (NodeKind::Test, 'T'),
@@ -358,14 +348,9 @@ mod tests {
             (NodeKind::Conftest, 'C'),
             (NodeKind::Plugin, 'P'),
         ];
-        let graph = InspectGraph::default();
         for (kind, expected) in &cases {
-            let r = NodeRef {
-                kind: *kind,
-                index: 0,
-            };
             assert_eq!(
-                graph.node_sigil(&r),
+                kind.sigil(),
                 *expected,
                 "sigil for {kind:?} should be '{expected}'"
             );

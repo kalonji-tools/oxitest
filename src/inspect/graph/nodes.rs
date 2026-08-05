@@ -3,11 +3,6 @@
 //! Each struct represents one of the five node kinds that make up the
 //! inspect graph.  Fields store domain data; edge fields store indices
 //! into the typed vectors held by [`super::InspectGraph`].
-//!
-//! Many fields are not yet read by production code — they will be consumed
-//! by navigation (#1116), detail views (#1117), and search (#1118).
-//! Suppress dead-code warnings at the module level until those features land.
-#![allow(dead_code)]
 
 // ── FixtureNode ──────────────────────────────────────────────────────────────
 

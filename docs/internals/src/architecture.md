@@ -117,7 +117,7 @@ Every `.rs` file in `src/`, with its responsibility:
 | `inspect::detail` | `src/inspect/detail/mod.rs` | Per-type detail renderers split across submodules: `fixture.rs`, `test.rs`, `mark.rs`, `conftest.rs`, `plugin.rs`, `styles.rs`. |
 | `inspect::search` | `src/inspect/search.rs` | `Searchable` trait, fuzzy substring + DSL auto-detection search. |
 | `inspect::ui` | `src/inspect/ui.rs` | `draw()` function, adaptive pane layout, footer, help overlay, loading indicators. |
-| `inspect::input` | `src/inspect/input.rs` | Key and mouse event → action mapping, nav stack integration. |
+| `inspect::input` | `src/inspect/input.rs` | Key event → action mapping, nav stack integration. Mouse events are captured but discarded. |
 | `inspect::graph` | `src/inspect/graph/mod.rs` | `InspectGraph`, `NodeRef`, `NodeKind`, `BrokenEdge`. |
 | `inspect::graph::nodes` | `src/inspect/graph/nodes.rs` | 5 node structs: `FixtureNode`, `TestNode`, `MarkNode`, `ConftestNode`, `PluginNode`. |
 | `inspect::graph::builder` | `src/inspect/graph/builder.rs` | `GraphBuilder` — constructs graph from `QueryEntry` data, resolves edges, supports progressive merge. |

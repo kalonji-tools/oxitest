@@ -113,7 +113,7 @@ impl SearchState {
     }
 
     /// Return the currently selected node reference, if any.
-    #[allow(dead_code)] // consumed once tree navigation (#1116) is wired up
+    #[allow(dead_code)] // only reached from tests
     pub(crate) fn selected(&self) -> Option<NodeRef> {
         self.results.get(self.selected_idx).cloned()
     }
@@ -339,7 +339,7 @@ impl InspectApp {
             if event::poll(std::time::Duration::from_millis(50))? {
                 match event::read()? {
                     Event::Key(key) => input::handle_key(self, key),
-                    Event::Mouse(mouse) => input::handle_mouse(self, mouse),
+                    Event::Mouse(mouse) => input::handle_mouse(&mouse),
                     _ => {}
                 }
             }
