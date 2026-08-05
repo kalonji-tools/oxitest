@@ -18,6 +18,7 @@ other half firing at the end of the run.
 
 from __future__ import annotations
 
+from itertools import groupby
 from pathlib import Path
 
 from oxitest import TempDir
@@ -57,6 +58,22 @@ def test_a_package_is_disposed_before_its_sibling_starts(tmp: TempDir) -> None:
     )
 
 
+def _blocks(events: tuple[str, ...]) -> list[str]:
+    """Collapse a nested-project log to runs of the package each event belongs to.
+
+    Which package the scheduler runs first is its own business — a persisted
+    timing cache reorders them between runs — so the assertion has to be that
+    neither package's events straddle the other's, not that a particular one
+    came first. Two blocks means neither straddles.
+    """
+    return [
+        label
+        for label, _ in groupby(
+            "zzz" if event.split()[1] == "other" else "api" for event in events
+        )
+    ]
+
+
 def test_a_nested_declaring_package_is_disposed_inside_its_ancestors_boundary(
     tmp: TempDir,
 ) -> None:
@@ -69,15 +86,24 @@ def test_a_nested_declaring_package_is_disposed_inside_its_ancestors_boundary(
         f"the data-project must pass; rc={run.rc}\nstdout:\n{run.stdout}\n"
         f"stderr:\n{run.stderr}"
     )
+    # `.index` raises an unmessaged ValueError when an event is missing, so
+    # pin presence first — a reformatted or absent event would otherwise fail
+    # pointing at nothing. "sees outer" also depends on FrozenProxy.__format__
+    # forwarding (#1735); if that regressed, the event text changes silently.
+    for required in ("TEARDOWN inner sees outer", "TEARDOWN outer", "SETUP other"):
+        assert required in run.events, (
+            f"{required!r} must appear at all — a missing event makes the "
+            f"ordering assertions below vacuous; got {run.events}"
+        )
     # The scheduler merges api and api/v1 into one group under api's anchor
     # alone, so only api's boundary is announced. Draining just that key leaves
     # api/v1's scope for the end-of-task backstop, which is #1839 one level
     # down: SETUP other would appear before TEARDOWN inner.
-    assert run.events.index("TEARDOWN inner sees outer") < run.events.index(
-        "SETUP other"
-    ), (
-        f"the nested package must be disposed at its ancestor's boundary, "
-        f"before an unrelated package starts; got {run.events}"
+    assert _blocks(run.events) in (["api", "zzz"], ["zzz", "api"]), (
+        f"the api subtree and the unrelated zzz package must each live and die "
+        f"in one contiguous block; got {_blocks(run.events)} from {run.events}. "
+        f"An api event after zzz's block means api/v1's scope was left to the "
+        f"end-of-task backstop, which is #1839 one level down"
     )
     # Innermost first. The inner fixture holds the outer one's value, so the
     # reverse order would run this teardown against a disposed value — and it
@@ -88,22 +114,6 @@ def test_a_nested_declaring_package_is_disposed_inside_its_ancestors_boundary(
         f"a nested package's value must be disposed before the ancestor value "
         f"it was built on; got {run.events}"
     )
-
-
-def _package_window(events: tuple[str, ...], label: str) -> tuple[int, int]:
-    """First SETUP and last TEARDOWN index for package *label*.
-
-    The span during which that package held a value. Two packages' spans
-    overlapping is the defect: it means one package's value was still alive
-    while another package's tests ran.
-    """
-    setups = [i for i, e in enumerate(events) if e.startswith(f"SETUP {label}-")]
-    teardowns = [i for i, e in enumerate(events) if e.startswith(f"TEARDOWN {label}-")]
-    assert setups and teardowns, (
-        f"package {label!r} must both build and dispose its fixtures — a "
-        f"missing end makes the overlap check below vacuous; got {events}"
-    )
-    return min(setups), max(teardowns)
 
 
 def test_an_async_package_is_disposed_before_its_sibling_starts(
@@ -129,12 +139,18 @@ def test_an_async_package_is_disposed_before_its_sibling_starts(
         f"the data-project must pass; rc={run.rc}\nstdout:\n{run.stdout}\n"
         f"stderr:\n{run.stderr}"
     )
-    a_start, a_end = _package_window(run.events, "a")
-    b_start, b_end = _package_window(run.events, "b")
-    assert a_end < b_start or b_end < a_start, (
-        f"the two packages' async values must not be alive at the same time — "
-        f"pkg_a held [{a_start}, {a_end}], pkg_b held [{b_start}, {b_end}] in "
-        f"{run.events}. Overlap means a teardown slid past its own package "
+    # Collapse the log to the package each event belongs to, then to runs of
+    # that. Two blocks means each package's whole life — setup, use, teardown —
+    # is contiguous. Anything that slid to the end-of-task backstop splits its
+    # package into two blocks and lands the sibling's in between.
+    blocks = [
+        label
+        for label, _ in groupby(event.split()[1].split("-")[0] for event in run.events)
+    ]
+    assert blocks in (["a", "b"], ["b", "a"]), (
+        f"each package's async fixtures must live and die inside one "
+        f"contiguous block; got blocks {blocks} from {run.events}. An "
+        f"interleaved block means a teardown slid past its own package "
         f"boundary to the end-of-task backstop, which is #1839 for async"
     )
 
@@ -151,18 +167,57 @@ def test_a_nested_async_package_is_disposed_inside_its_ancestors_boundary(
         f"the data-project must pass; rc={run.rc}\nstdout:\n{run.stdout}\n"
         f"stderr:\n{run.stderr}"
     )
-    assert run.events.index("TEARDOWN inner sees outer") < run.events.index(
-        "SETUP other"
-    ), (
-        f"the nested async package must be disposed at its ancestor's "
-        f"boundary, before an unrelated package starts; got {run.events}"
+    for required in ("TEARDOWN inner", "TEARDOWN outer", "SETUP other"):
+        assert required in run.events, (
+            f"{required!r} must appear at all — a missing event makes the "
+            f"ordering assertions below vacuous; got {run.events}"
+        )
+    assert _blocks(run.events) in (["api", "zzz"], ["zzz", "api"]), (
+        f"the api subtree and the unrelated zzz package must each live and die "
+        f"in one contiguous block; got {_blocks(run.events)} from {run.events}"
     )
-    # An async generator's post-yield half is resumed later than a sync one's,
-    # so the wrong order here resumes it against a disposed value rather than
-    # merely reading one — the use-after-teardown shape #1777 hit.
-    assert run.events.index("TEARDOWN inner sees outer") < run.events.index(
-        "TEARDOWN outer"
-    ), (
-        f"a nested async package's value must be disposed before the ancestor "
-        f"value it closes over; got {run.events}"
+    # Innermost first, structurally: api/v1 is nested inside api, so its value
+    # must go first whether or not it holds a reference to api's. The sync twin
+    # takes the dependency and proves the reference case; this one deliberately
+    # does not — see its __fixtures__.py for why that would make the project
+    # order-dependent rather than boundary-dependent.
+    assert run.events.index("TEARDOWN inner") < run.events.index("TEARDOWN outer"), (
+        f"a nested async package must be disposed before the ancestor package "
+        f"it sits inside; got {run.events}"
+    )
+
+
+def test_a_nested_async_package_is_disposed_innermost_first_in_a_worker(
+    tmp: TempDir,
+) -> None:
+    """Innermost-first holds on the parallel path too, where nothing calls end_package.
+
+    A worker's session covers exactly one task group, so the coordinator never
+    fires ``end_package`` for it and ``drain_task`` is the drain. That path
+    ordered async teardowns by registration rather than by nesting, which put
+    the ancestor's disposal first — the one order that can hand an inner
+    generator a value that is already gone.
+
+    Only the nesting assertion is made here. ``zzz`` runs in a different
+    process, so its position in a shared log says nothing about ordering.
+    """
+    # Act
+    run = helpers.run_with_event_log(
+        _NESTED_ASYNC, tmp, "NESTASYNCLOG", "-n", "2", log_name="parallel.log"
+    )
+
+    # Assert
+    assert run.rc == 0, (
+        f"the data-project must pass; rc={run.rc}\nstdout:\n{run.stdout}\n"
+        f"stderr:\n{run.stderr}"
+    )
+    for required in ("TEARDOWN inner", "TEARDOWN outer"):
+        assert required in run.events, (
+            f"{required!r} must appear at all — a missing event makes the "
+            f"ordering assertion below vacuous; got {run.events}"
+        )
+    assert run.events.index("TEARDOWN inner") < run.events.index("TEARDOWN outer"), (
+        f"under -n the worker drains its own package scopes, and it must still "
+        f"dispose the nested package before the ancestor package it sits inside; "
+        f"got {run.events}"
     )

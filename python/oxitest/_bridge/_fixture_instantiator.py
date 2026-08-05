@@ -193,16 +193,21 @@ def _async_teardown_boundary(
     """The boundary whose exit disposes *defn*'s async teardown.
 
     ``None`` means "no boundary of its own" and lands the teardown on
-    ``SESSION_BOUNDARY``, drained at ``end_task`` — right for ``shared=True``
-    and for the builtins' session tier, which have no narrower boundary to
-    wait for.
+    ``SESSION_BOUNDARY``, drained at ``end_task`` — the end of the task group,
+    which is the whole run only on the serial path. Three scopes take it:
+    ``shared=True`` and the builtins' session tier, neither of which has a
+    narrower boundary to wait for, and the function tier when no per-test sink
+    is active, where it is the backstop rather than the normal route.
 
     One function for two registration sites, and that is the point. They
     disagreed before #1839: the lazy ``fx.`` route named a module boundary
     while the eager ``Fixture[T]`` route sent everything to task end, so the
     same ``lifetime="module"`` fixture was disposed per module through one
-    access spelling and at the end of the run through the other. The mismatch
-    was invisible because each route had its own copy of the mapping.
+    access spelling and at the end of the task group through the other. The
+    mismatch was invisible because each route had its own copy of the mapping.
+
+    Every arm is pinned by ``test_async_teardown_boundary_covers_every_scope``;
+    the end-to-end suites reach only ``package``.
     """
     if defn.scope is FixtureScope.MODULE:
         return ctx.module_path

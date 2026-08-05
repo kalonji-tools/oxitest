@@ -10,8 +10,15 @@ end-to-end proof — that the guarantee survives parallel execution — lives in
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass, replace
 from typing import Any
 
+import oxitest as oxi
+from oxitest._bridge._async_orchestrator import PROCESS_BOUNDARY
+from oxitest._bridge._fixture_instantiator import (
+    _async_teardown_boundary,
+    _ResolutionContext,
+)
 from oxitest._bridge._fixture_registry import (
     FixtureDef,
     FixtureRegistry,
@@ -241,4 +248,56 @@ def test_end_package_does_not_dispose_a_shared_name_prefix_sibling() -> None:
         f"/proj/api2 is a sibling of /proj/api, not a descendant — disposing it "
         f"at /proj/api's boundary tears down a package whose tests may not have "
         f"run yet, events={events}"
+    )
+
+
+@dataclass(frozen=True)
+class _BoundaryCase:
+    """One scope and the teardown key it must be filed under."""
+
+    scope: FixtureScope
+    expected: str | None
+
+
+@oxi.parametrize(
+    # None means "no boundary of its own": SESSION_BOUNDARY, drained at
+    # end_task. Right for shared=True and the builtins' session tier, which
+    # have nothing narrower to wait for, and the correct backstop for the
+    # function tier when no per-test sink is active.
+    each=_BoundaryCase(FixtureScope.EACH, None),
+    shared=_BoundaryCase(FixtureScope.SHARED, None),
+    session=_BoundaryCase(FixtureScope.SESSION, None),
+    module=_BoundaryCase(FixtureScope.MODULE, _MOD_A),
+    package=_BoundaryCase(FixtureScope.PACKAGE, _ANCHOR),
+    process=_BoundaryCase(FixtureScope.PROCESS, PROCESS_BOUNDARY),
+)
+def test_async_teardown_boundary_covers_every_scope(
+    scope: FixtureScope, expected: str | None
+) -> None:
+    """Every FixtureScope maps to the key its own drain site pops (#1839).
+
+    Both async registration sites share this mapping, and before #1839 they
+    each carried their own copy that disagreed — the same ``lifetime="module"``
+    fixture was disposed per module through one access spelling and at the end
+    of the run through the other. A table over all six members is the ratchet
+    against a later refactor quietly collapsing an arm; the end-to-end suites
+    reach only ``package``.
+    """
+    # Arrange
+    defn = replace(_package_defn("engine", lambda: "engine"), scope=scope)
+    ctx = _ResolutionContext(
+        module_path=_MOD_A,
+        fn_teardowns=[],
+        resolving=frozenset(),
+        scope_callback=lambda _defn, _path: None,
+        boundary_path=_ANCHOR,
+    )
+
+    # Act
+    boundary = _async_teardown_boundary(defn, ctx)
+
+    # Assert
+    assert boundary == expected, (
+        f"{scope.name} must be filed under {expected!r} so the drain that pops "
+        f"that key disposes it at its declared boundary; got {boundary!r}"
     )

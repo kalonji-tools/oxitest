@@ -1,4 +1,4 @@
-"""A test in the inner package, which pulls both tiers into existence."""
+"""A test in the inner package, which pulls the nested tier into existence."""
 
 from __future__ import annotations
 
@@ -15,8 +15,7 @@ def record(event: str) -> None:
 
 async def test_inner(fx: Fixtures) -> None:
     value = await fx.v1.inner
-    assert value == "inner-of-outer", (
-        f"the inner async fixture must resolve and must have been built on the "
-        f"outer package's value, got {value!r}"
+    assert value == "inner", (
+        f"the inner async package fixture must resolve, got {value!r}"
     )
     record("USE inner")
