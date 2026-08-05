@@ -284,6 +284,47 @@ mod fixture_module_payload_tests {
              skipping"
         );
     }
+
+    /// The worker reads `plugins["modules"]` and `plugins["settings"]` by name
+    /// (`worker._activate_plugins`). Both keys are a cross-language contract:
+    /// a rename is a silent no-op over there, and a worker with no plugins has
+    /// no plugin fixtures — which is the defect #1717 exists to fix.
+    #[test]
+    fn plugin_inputs_serialize_under_the_keys_the_worker_reads() {
+        let plugins = vec!["oxi_pg".to_owned()];
+        let mut settings = std::collections::HashMap::new();
+        settings.insert(
+            "oxi_pg".to_owned(),
+            toml::Value::try_from(std::collections::HashMap::from([(
+                "namespace".to_owned(),
+                "postgres".to_owned(),
+            )]))
+            .expect("settings table builds"),
+        );
+
+        let raw = serialize_plugin_inputs(&plugins, &settings);
+
+        assert_eq!(
+            raw.get(),
+            r#"{"modules":["oxi_pg"],"settings":{"oxi_pg":{"namespace":"postgres"}}}"#,
+            "worker._activate_plugins indexes these two keys by name; a rename \
+             leaves every worker with no plugins and no diagnostic saying so"
+        );
+    }
+
+    /// Most projects configure no plugins. The worker must receive iterable
+    /// emptiness, not `null`.
+    #[test]
+    fn no_plugins_serializes_to_empty_collections() {
+        let raw = serialize_plugin_inputs(&[], &std::collections::HashMap::new());
+
+        assert_eq!(
+            raw.get(),
+            r#"{"modules":[],"settings":{}}"#,
+            "null would make the worker's `list(plugins.get(\"modules\", ()))` \
+             raise instead of yielding nothing to activate"
+        );
+    }
 }
 
 #[cfg(test)]

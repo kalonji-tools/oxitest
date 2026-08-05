@@ -689,13 +689,14 @@ def register_module_source_fixtures_for_module(
     )
 
 
-def register_plugin_source_fixtures_for_module(
+def register_plugin_source_fixtures_for_module(  # noqa: PLR0913 — mirrors the registrar it forwards to
     *,
     registry: FixtureRegistry,
     fixture_module_path: str,
     plugin_module: str,
     namespace: str,
     autouse_names: list[str],
+    emit_notices: bool = True,
 ) -> None:
     """Bridge entry point: import an activated plugin's __fixtures__.py (#1717).
 
@@ -719,6 +720,11 @@ def register_plugin_source_fixtures_for_module(
     autouse_names:
         Fixtures the user enabled for autouse. Arrives as a list because it
         crosses the PyO3 boundary.
+    emit_notices:
+        Whether to emit user-facing notices about the declarations. Workers
+        pass ``False``: the coordinator has already emitted them and runs
+        before any worker spawns, so repeating them multiplies each notice by
+        the worker count.
     """
     module = _load_declaration_module(fixture_module_path)
     if module is None:
@@ -729,6 +735,7 @@ def register_plugin_source_fixtures_for_module(
         plugin_module=plugin_module,
         namespace=namespace,
         autouse_names=tuple(autouse_names),
+        emit_notices=emit_notices,
     )
 
 
