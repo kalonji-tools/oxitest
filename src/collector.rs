@@ -35,6 +35,24 @@ pub fn build_glob_set(patterns: &[String]) -> Result<GlobSet, globset::Error> {
 pub fn collect_files(
     config: &Config,
 ) -> Result<(Vec<Utf8PathBuf>, Vec<Utf8PathBuf>), globset::Error> {
+    collect_files_in(&config.paths.testpaths, config)
+}
+
+/// [`collect_files`] over an explicit set of roots.
+///
+/// The roots are a parameter because three callers need a walk that is *not*
+/// `config.paths.testpaths`: the rootdir-package derivations, which must ignore
+/// how argv narrowed the run, and the doctest coverage audit, which reads the
+/// declared tree. Each of them used to clone the whole `Config` and overwrite
+/// one field to say so (#1798).
+///
+/// Everything else — `python_files`, `norecursedirs`, `use_gitignore`, the
+/// rootdir `conftest.py` — still comes from `config`, so a caller can change
+/// *where* the walk starts and nothing about what counts as a test file.
+pub fn collect_files_in(
+    roots: &[Utf8PathBuf],
+    config: &Config,
+) -> Result<(Vec<Utf8PathBuf>, Vec<Utf8PathBuf>), globset::Error> {
     let glob_set = build_glob_set(&config.paths.python_files)?;
     let mut files = Vec::new();
     let mut conftest_set: HashSet<Utf8PathBuf> = HashSet::new();
@@ -46,7 +64,7 @@ pub fn collect_files(
         conftest_set.insert(normalize_path(&rootdir_conftest, &config.rootdir));
     }
 
-    for testpath in &config.paths.testpaths {
+    for testpath in roots {
         collect_from(testpath, config, &glob_set, &mut files, &mut conftest_set);
     }
 

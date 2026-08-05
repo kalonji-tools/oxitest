@@ -1,0 +1,9 @@
+# Two declared testpaths, only one of which holds test files — oxitest's own
+# shape, where `python/oxitest` is declared so doctest coverage audits it and
+# contains no `test_*.py`. Folding `srconly` into the rootdir package would
+# drag the root up to the project root and outlaw the process fixture that
+# sits beside the tests (#1798).
+[tool.oxitest]
+testpaths = ["suite", "srconly"]
+python_files = ["test_*.py"]
+strict = "abort"

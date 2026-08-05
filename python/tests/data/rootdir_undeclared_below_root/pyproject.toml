@@ -1,0 +1,7 @@
+# Declares NO testpaths, so the rootdir package is implied by layout. The
+# process declaration sits one directory below that implied root, so the run
+# must be rejected — and the hint must say the root came from the layout
+# rather than from a `testpaths` entry the user could edit (#1798).
+[tool.oxitest]
+python_files = ["test_*.py"]
+strict = "abort"

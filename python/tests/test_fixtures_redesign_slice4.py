@@ -356,3 +356,89 @@ def test_an_explicitly_dot_declared_testpath_still_matches_its_anchor() -> None:
         f"declaring the project root explicitly must anchor a process fixture "
         f"there; rc={rc}\n{stdout}{stderr}"
     )
+
+
+_TESTLESS_SIBLING_PROJECT = _DATA_ROOT / "rootdir_testless_declared_sibling"
+_UNDECLARED_BELOW_ROOT_PROJECT = _DATA_ROOT / "rootdir_undeclared_below_root"
+
+#: Wording of the two provenance clauses, asserted rather than paraphrased:
+#: a test that matched only "testpaths" would pass against either phrasing.
+_DECLARED_CLAUSE = "the deepest directory covering your declared testpaths"
+_LAYOUT_CLAUSE = "derived from your test layout — no testpaths declared"
+
+
+def test_a_test_less_declared_testpath_does_not_move_the_rootdir_package() -> None:
+    """A declared directory holding no tests must not fold into the root (#1798).
+
+    This is oxitest's own shape: `pyproject.toml` declares
+    `testpaths = ["python/tests", "python/oxitest"]` so doctest coverage audits
+    the library, and `python/oxitest` contains no `test_*.py`. Folding every
+    declared entry moved this repository's rootdir package from `python/tests`
+    up to `python/` — a directory that is not a package, holds no tests, and is
+    where the Rule 4 hint would then send a `process` declaration.
+
+    Nothing failed when that landed, because the only fixtures in
+    `python/tests/__fixtures__.py` are `function` lifetime. The data project
+    here supplies the `process` declaration that repository lacks.
+    """
+    # Act
+    stdout, stderr, rc = helpers.run_oxitest(None, cwd=str(_TESTLESS_SIBLING_PROJECT))
+
+    # Assert
+    assert rc == 0, (
+        f"`srconly/` is declared but holds no test file, so it must not move "
+        f"the rootdir package away from `suite/` where the process fixture is "
+        f"anchored; rc={rc}\n{stdout}{stderr}"
+    )
+
+
+def test_the_rule_4_hint_says_when_the_root_came_from_declared_testpaths() -> None:
+    """A rejected declaration must say which edit would move the root (#1798).
+
+    The root is derived, and from one of two different places. Naming the
+    directory alone leaves the user unable to tell whether their `testpaths`
+    declaration put it there or their layout did — and since the declared fold
+    is always an ancestor-or-equal of the layout one, *adding* a `testpaths`
+    entry can reject a declaration that was legal the day before without
+    changing which tests run.
+    """
+    # Act
+    stdout, stderr, rc = helpers.run_oxitest(None, cwd=str(_REJECT_PROJECT))
+    output = stdout + stderr
+
+    # Assert
+    assert rc != 0, (
+        f"the control: a process declaration below the rootdir package must "
+        f"fail this run; rc={rc}\n{output}"
+    )
+    assert _DECLARED_CLAUSE in output, (
+        f"this project declares `testpaths`, so the hint must attribute the "
+        f"root to that declaration rather than leaving the user to guess which "
+        f"of two derivations produced it; got:\n{output}"
+    )
+
+
+def test_the_rule_4_hint_says_when_the_root_was_implied_by_layout() -> None:
+    """The undeclared case must name its own provenance, not the declared one.
+
+    The counterpart to the test above, and the reason both exist: a hint
+    hardcoded to either clause satisfies one of these two and fails the other.
+    Asserting only one would leave the wrong attribution shipping for every
+    project on the opposite branch.
+    """
+    # Act
+    stdout, stderr, rc = helpers.run_oxitest(
+        None, cwd=str(_UNDECLARED_BELOW_ROOT_PROJECT)
+    )
+    output = stdout + stderr
+
+    # Assert
+    assert rc != 0, (
+        f"a process declaration below the implied rootdir package must fail "
+        f"the run; rc={rc}\n{output}"
+    )
+    assert _LAYOUT_CLAUSE in output, (
+        f"this project declares no `testpaths`, so telling the user to edit "
+        f"one would send them after a setting that does not exist; got:\n"
+        f"{output}"
+    )
