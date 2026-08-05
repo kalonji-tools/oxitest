@@ -14,6 +14,7 @@ from oxitest._bridge._fixture_registry import (
     FixtureDef,
     FixtureRegistry,
     FixtureScope,
+    PluginModuleSource,
 )
 
 _BUILTIN_MODULE_PREFIX = "oxitest._bridge._builtins"
@@ -171,6 +172,10 @@ def _origin_key(defn: FixtureDef[Any]) -> tuple[int, str]:
     """Sort key: (0, '') for built-in, (1, plugin), (2, conftest_path)."""
     if _is_builtin(defn):
         return (0, "")
+    if isinstance(defn.source, PluginModuleSource):
+        # Groups with the FixtureProvider plugins rather than under a raw
+        # site-packages path, so one plugin's fixtures list together (#1717).
+        return (1, defn.source.plugin_module)
     if isinstance(defn.source, ConftestSource) and not defn.source.conftest_path:
         return (1, getattr(defn.source.func, "__module__", "plugin"))
     if not isinstance(defn.source, ConftestSource):
@@ -181,6 +186,8 @@ def _origin_key(defn: FixtureDef[Any]) -> tuple[int, str]:
 def _origin_header(defn: FixtureDef[Any]) -> str:
     if _is_builtin(defn):
         return "built-in"
+    if isinstance(defn.source, PluginModuleSource):
+        return f"plugin ({defn.source.plugin_module})"
     if isinstance(defn.source, ConftestSource) and not defn.source.conftest_path:
         mod = getattr(defn.source.func, "__module__", "plugin")
         return f"plugin ({mod})"
