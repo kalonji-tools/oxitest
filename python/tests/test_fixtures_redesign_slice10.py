@@ -11,11 +11,18 @@ from types import ModuleType
 
 from oxitest import Fixture, TempDir, raises
 from oxitest._bridge._errors import UsageError
-from oxitest._bridge._fixture_registry import FixtureRegistry
+from oxitest._bridge._fixture_registry import (
+    FixtureDef,
+    FixtureRegistry,
+    FixtureScope,
+    PluginModuleSource,
+)
+from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge._module_source_registrar import (
     register_module_source_fixtures,
     register_plugin_source_fixtures,
 )
+from oxitest._bridge.fixture_lister import _origin_header, _origin_key
 from oxitest._bridge.plugin_loader import plugin_fixture_homes
 from oxitest._bridge.result import Diagnostic
 
@@ -191,6 +198,27 @@ def test_two_plugins_claiming_one_namespace_are_refused(tmp: TempDir) -> None:
 
 
 # ── register_plugin_source_fixtures ───────────────────────────────────────────
+
+
+def _make_plugin_def() -> FixtureDef[int]:
+    """A FixtureDef as the plugin registrar builds it, for listing assertions."""
+    return FixtureDef(
+        name="conn",
+        fixture_type=int,
+        scope=FixtureScope.MODULE,
+        source=PluginModuleSource(
+            func=_plugin_conn,
+            defining_module_path="/site-packages/my_plugin/__fixtures__.py",
+            plugin_module="my_plugin",
+            lifetime=Lifetime.MODULE,
+        ),
+        namespace="my_plugin",
+    )
+
+
+def _plugin_conn() -> int:
+    """Stand-in plugin fixture factory."""
+    return 1
 
 
 def _plugin_fixture_module(source: str) -> ModuleType:
@@ -424,4 +452,24 @@ def test_a_user_declaration_colliding_with_a_plugin_does_not_raise(
         "both declarations must coexist so the shadow order can pick a winner; "
         f"raising instead would tell the user to delete a declaration inside an "
         f"installed package they cannot edit, got {defs!r}"
+    )
+
+
+def test_plugin_fixture_is_attributed_to_its_plugin_in_the_listing() -> None:
+    """The fixture listing names the owning plugin, not a site-packages path.
+
+    Verbosity 2 is the only place origins render, and driving that through the
+    CLI proved brittle, so the two helpers behind it are pinned directly.
+    """
+    defn = _make_plugin_def()
+
+    assert _origin_header(defn) == "plugin (my_plugin)", (
+        "falling through to the raw defining path prints a long site-packages "
+        "string that tells a user nothing about which installed package owns "
+        f"the fixture; got {_origin_header(defn)!r}"
+    )
+    assert _origin_key(defn) == (1, "my_plugin"), (
+        "the sort key groups a plugin's fixtures together and beside the "
+        f"FixtureProvider plugins rather than under a path; got "
+        f"{_origin_key(defn)!r}"
     )
