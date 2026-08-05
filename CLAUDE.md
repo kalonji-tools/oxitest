@@ -198,6 +198,12 @@ If the instruction is a **waiver** — *"skip preflight, there's no logical chan
 
 `.config/wt.toml` sets `pre-merge = "just preflight"`, so step 2 happens automatically for `wt merge` and is **bypassed by `gh pr merge`**. That asymmetry is why the sequence is written here rather than assumed.
 
+**Run step 2 alone. Two concurrent `just preflight` runs corrupt each other** (#1827) — and the failure lies about its cause, which is the only reason this note exists. It arrives as test failures attached to whichever branch lost the race, so it reads as "your branch broke something" and the honest response is a debugging session that finds nothing. Seen twice: `68 failed · 1481 passed` against `1549 passed` alone, and later a lone 30-second timeout against a lane that passed in 17 s alone.
+
+**The mechanism is unknown**, and three candidates are eliminated, so do not re-derive them: CPU starvation (44 busy loops on 22 cores, load 62 → still green), cache-derived timeouts (`resolve_timeout` floors at the global timeout, so every test has ≥30 s), and the shared `uv` cache lock (tests spawn `sys.executable -m oxitest`, never `uv run`). Reproduction is roughly 1 in 10 — see #1827 for the probe designs, including the barrier that overlaps *test* phases rather than builds.
+
+If you need the gate while someone else is running it, the individual phases have never been observed to collide: `just check && just test-rust && just build && just test-python`.
+
 **Never pass `--delete-branch`.** `main` is pinned to the primary worktree, so the merge lands but local cleanup cannot succeed — it failed 4/4 times in one session. Do the cleanup directly instead:
 
 ```bash
