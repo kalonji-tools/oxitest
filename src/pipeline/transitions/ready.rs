@@ -54,10 +54,7 @@ impl Pipeline {
                 vec![]
             };
 
-        let (json_path, junit_path) = match &shared.command {
-            crate::config::Command::Run(a) => (a.json.clone(), a.junit_xml.clone()),
-            _ => (None, None),
-        };
+        let (json_path, junit_path) = (shared.json_path(), shared.junit_xml_path());
 
         let mut rep = reporter::make_reporter(
             shared

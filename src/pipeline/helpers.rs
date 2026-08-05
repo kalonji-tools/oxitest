@@ -134,45 +134,60 @@ pub(super) struct StrictModeResult {
     pub suite_lines: Vec<String>,
 }
 
-/// Write the `--json` CTRF artifact for a `--strict=abort` run and return its
-/// exit code.
+/// Write the `--json` and `--junit-xml` artifacts for a `--strict=abort` run and
+/// return its exit code.
 ///
 /// This path renders its own console output via
 /// [`print_strict_abort`](reporter::print_strict_abort), so it cannot reuse
 /// `make_error_reporter` — that builds a console reporter too, and the
-/// violations would print twice. Each violation becomes one `failed` entry
+/// violations would print twice. Each violation becomes one failed entry
 /// named after the test it belongs to; suite-level violations have no node ID
-/// and fall back to `<strict>` (#1682).
+/// and fall back to a marker (#1682, #1858).
+///
+/// The two artifacts are independent: asking for one must never suppress the
+/// other, which is the asymmetry #1858 existed to close.
 fn write_strict_abort_report(
     shared: &super::PipelineShared,
     violations: &[strict::StrictViolation],
 ) -> ExitCode {
-    let Some(path) = shared.json_path() else {
-        return ExitCode::CollectError;
-    };
-
     use reporter::Reporter as _;
 
-    let mut json_reporter = reporter::json::JsonReporter::new(path);
-    for violation in violations {
-        let name = violation
-            .node_id()
-            .map_or_else(|| "<strict>".to_string(), ToString::to_string);
-        json_reporter.record_run_failure(name, strict::format_violation_line(violation));
-    }
-
     // A failed write votes `UsageError` (4), which outranks `CollectError` (3) —
-    // matching the documented "`--json` output file cannot be written" rule.
-    // A successful write abstains, which `code()` reads as `Success` (0).
+    // matching the documented "output file cannot be written" rule. A successful
+    // write abstains, which `code()` reads as `Success` (0).
     // Compared on `as_i32()`, never on `Ord`: `ExitCode` deliberately does not
     // derive it, so the enum's declaration order cannot reach this (#1863).
-    std::cmp::max_by_key(
-        json_reporter
+    let mut vote = ExitCode::CollectError;
+
+    if let Some(path) = shared.json_path() {
+        let mut json_reporter = reporter::json::JsonReporter::new(path);
+        for violation in violations {
+            let name = violation
+                .node_id()
+                .map_or_else(|| "<strict>".to_string(), ToString::to_string);
+            json_reporter.record_run_failure(name, strict::format_violation_line(violation));
+        }
+        let code = json_reporter
             .finish(&[], false, &reporter::ReporterSession::new(0))
-            .code(),
-        ExitCode::CollectError,
-        |code| code.as_i32(),
-    )
+            .code();
+        vote = std::cmp::max_by_key(vote, code, |code| code.as_i32());
+    }
+
+    if let Some(path) = shared.junit_xml_path() {
+        let mut junit_reporter = reporter::junit::JunitReporter::new(path);
+        for violation in violations {
+            junit_reporter.record_strict_violation(
+                violation.node_id(),
+                strict::format_violation_line(violation),
+            );
+        }
+        let code = junit_reporter
+            .finish(&[], false, &reporter::ReporterSession::new(0))
+            .code();
+        vote = std::cmp::max_by_key(vote, code, |code| code.as_i32());
+    }
+
+    vote
 }
 
 /// Evaluate strict-mode violations and partition items accordingly.
@@ -246,9 +261,18 @@ mod strict_abort_report_tests {
 
     /// A pipeline whose `--json` flag points at `json`, or omits `--json` for `None`.
     fn pipeline_with_json(json: Option<camino::Utf8PathBuf>) -> Pipeline {
+        pipeline_with_paths(json, None)
+    }
+
+    /// A pipeline with either, both, or neither artifact flag set.
+    fn pipeline_with_paths(
+        json: Option<camino::Utf8PathBuf>,
+        junit_xml: Option<camino::Utf8PathBuf>,
+    ) -> Pipeline {
         let mut pipeline = make_pipeline(PipelinePhase::Empty);
         let mut args = config::RunArgs::default_for_test();
         args.json = json;
+        args.junit_xml = junit_xml;
         pipeline.shared.command = config::Command::Run(args);
         pipeline
     }
@@ -299,6 +323,86 @@ mod strict_abort_report_tests {
             code,
             ExitCode::CollectError,
             "with no --json there is no report to fail at, so the strict violation alone decides the exit code — this early return is what keeps a plain strict-abort run from being reported as a usage error"
+        );
+    }
+
+    // ── --junit-xml, the second artifact (#1858) ──────────────────────────────
+
+    #[test]
+    fn test_writable_junit_path_writes_file_and_votes_collect_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = camino::Utf8PathBuf::from_path_buf(dir.path().join("results.xml")).unwrap();
+        let pipeline = pipeline_with_paths(None, Some(path.clone()));
+
+        let code = write_strict_abort_report(&pipeline.shared, &[]);
+
+        assert_eq!(
+            code,
+            ExitCode::CollectError,
+            "--junit-xml alone must behave exactly as --json alone does: the strict violation decides the exit code, and a successful write must not lower it to 0"
+        );
+        assert!(
+            path.exists(),
+            "--junit-xml without --json must still produce its artifact; before #1858 this route built a JSON-only reporter and returned early, so asking for XML alone silently produced nothing"
+        );
+    }
+
+    #[test]
+    fn test_unwritable_junit_path_votes_usage_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path =
+            camino::Utf8PathBuf::from_path_buf(dir.path().join("no-such-dir").join("results.xml"))
+                .unwrap();
+        let pipeline = pipeline_with_paths(None, Some(path));
+
+        let code = write_strict_abort_report(&pipeline.shared, &[]);
+
+        assert_eq!(
+            code,
+            ExitCode::UsageError,
+            "an unwritable --junit-xml path must outrank the CollectError baseline exactly as an unwritable --json path does; exiting 3 would send the operator hunting a broken test module rather than a bad --junit-xml argument"
+        );
+    }
+
+    #[test]
+    fn test_unwritable_junit_path_is_not_masked_by_a_writable_json_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let json = camino::Utf8PathBuf::from_path_buf(dir.path().join("ctrf.json")).unwrap();
+        let junit =
+            camino::Utf8PathBuf::from_path_buf(dir.path().join("no-such-dir").join("results.xml"))
+                .unwrap();
+        let pipeline = pipeline_with_paths(Some(json.clone()), Some(junit));
+
+        let code = write_strict_abort_report(&pipeline.shared, &[]);
+
+        assert_eq!(
+            code,
+            ExitCode::UsageError,
+            "the JSON block runs first and abstains on success; if its vote replaced the running total instead of raising it, the later JUnit write failure would vanish and a broken --junit-xml argument would exit 3"
+        );
+        assert!(
+            json.exists(),
+            "a failure to write one artifact must not prevent the other from being written — the two are independent, which is the asymmetry #1858 existed to close"
+        );
+    }
+
+    #[test]
+    fn test_both_paths_writable_produces_both_artifacts() {
+        let dir = tempfile::tempdir().unwrap();
+        let json = camino::Utf8PathBuf::from_path_buf(dir.path().join("ctrf.json")).unwrap();
+        let junit = camino::Utf8PathBuf::from_path_buf(dir.path().join("results.xml")).unwrap();
+        let pipeline = pipeline_with_paths(Some(json.clone()), Some(junit.clone()));
+
+        let code = write_strict_abort_report(&pipeline.shared, &[]);
+
+        assert_eq!(
+            code,
+            ExitCode::CollectError,
+            "two successful writes still abstain, so the strict violation alone decides the exit code"
+        );
+        assert!(
+            json.exists() && junit.exists(),
+            "asking for both artifacts must produce both; producing only the first would be the same class of silent gap #1858 fixed"
         );
     }
 }
