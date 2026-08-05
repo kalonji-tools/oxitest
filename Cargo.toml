@@ -94,3 +94,11 @@ use_self = "deny"
 # is what keeps this from backticking prose — without it the lint makes docs
 # worse, so the two changes are a pair (#1836).
 doc_markdown = "deny"
+# Nursery, so `all` misses it (verified against clippy 0.1.97's own `-Whelp`
+# group listing). Not a mechanisation of ADR-0005 — that ADR governs
+# `python/oxitest/` only, and its `&mut` notation describes Python mutability.
+# The motive is a measured gap: `all` already denies `unnecessary_mut_passed`
+# and `unused_mut`, which catch an over-broad `&mut` at the *call site*, while
+# nothing catches the *declaration* that over-claims. All three sites this
+# closed arose that way (#1833).
+needless_pass_by_ref_mut = "deny"
