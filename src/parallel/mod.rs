@@ -76,6 +76,29 @@ fn serialize_fixture_modules(
     std::sync::Arc::from(serde_json::value::RawValue::from_string(json_str).expect("valid JSON"))
 }
 
+/// Pre-serialize the plugin activation inputs, once for the whole run.
+///
+/// Workers rebuild their own `FixtureSession` and inherit nothing from the
+/// coordinator, so without these a worker has no plugins: both
+/// `FixtureProvider` fixtures and plugin `__fixtures__.py` declarations are
+/// invisible under `-n` while passing serially. That was true of the shipped
+/// provider path too, measured on `main` before this change (#1717).
+///
+/// A free function for the same reason as `serialize_fixture_modules`:
+/// `run_phase_parallel` needs live subprocesses, so nothing inlined there is
+/// reachable from `cargo test`.
+fn serialize_plugin_inputs(
+    plugins: &[String],
+    plugin_settings: &std::collections::HashMap<String, toml::Value>,
+) -> std::sync::Arc<serde_json::value::RawValue> {
+    let payload = serde_json::json!({
+        "modules": plugins,
+        "settings": plugin_settings,
+    });
+    let json_str = serde_json::to_string(&payload).expect("plugin inputs serialize");
+    std::sync::Arc::from(serde_json::value::RawValue::from_string(json_str).expect("valid JSON"))
+}
+
 pub(crate) fn run_phase_parallel(
     groups: Vec<scheduler::TaskGroup>,
     cfg: &config::Config,
@@ -114,6 +137,7 @@ pub(crate) fn run_phase_parallel(
         )
     };
     let fixture_modules_raw = serialize_fixture_modules(fixture_modules);
+    let plugins_raw = serialize_plugin_inputs(&cfg.features.plugins, &cfg.features.plugin_settings);
     let timeout_secs = cfg.exec.timeout_secs;
     let keep_tmp: Arc<str> = Arc::from(cfg.output.keep_tmp.as_str());
     let rootdir: Arc<str> = Arc::from(cfg.rootdir.as_str());
@@ -137,6 +161,7 @@ pub(crate) fn run_phase_parallel(
                 cancelled: Arc::clone(&cancelled),
                 conftest_json: std::sync::Arc::clone(&conftest_raw),
                 fixture_modules_json: std::sync::Arc::clone(&fixture_modules_raw),
+                plugins_json: std::sync::Arc::clone(&plugins_raw),
                 timeout_secs,
                 keep_tmp: keep_tmp.clone(),
                 rootdir: rootdir.clone(),

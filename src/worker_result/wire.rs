@@ -7,7 +7,7 @@ use camino::Utf8PathBuf;
 ///
 /// Bump when adding, removing, or changing fields in [`WorkerTask`] or
 /// [`WireResult`]. The coordinator warns on version mismatch.
-pub(crate) const PROTOCOL_VERSION: u32 = 6;
+pub(crate) const PROTOCOL_VERSION: u32 = 7;
 
 /// A JSON task sent to a worker subprocess over stdin.
 ///
@@ -28,6 +28,14 @@ pub(crate) struct WorkerTask<'a> {
     pub conftest_paths: &'a serde_json::value::RawValue,
     /// `[{"module": ..., "anchor": ...}]` — see `types::FixtureModule` (#1732).
     pub fixture_modules: &'a serde_json::value::RawValue,
+    /// `{"modules": [...], "settings": {...}}` — what a worker needs to
+    /// activate the run's plugins for itself.
+    ///
+    /// Workers rebuild their own `FixtureSession` and never inherit the
+    /// coordinator's, so before this field a worker had **no plugins at all**:
+    /// both `FixtureProvider` fixtures and plugin `__fixtures__.py`
+    /// declarations were invisible under `-n`, while passing serially (#1717).
+    pub plugins: &'a serde_json::value::RawValue,
     pub timeout_secs: Option<u64>,
     pub keep_tmp: &'a str,
     /// Project rootdir, appended to the worker's `sys.path` so test modules can

@@ -192,6 +192,9 @@ pub(crate) struct WorkerParams {
     /// `[{"module": ..., "anchor": ...}]` — every `__fixtures__.py` collection
     /// registered serially, so worker sessions match the coordinator (#1732).
     pub fixture_modules_json: std::sync::Arc<serde_json::value::RawValue>,
+    /// `{"modules": [...], "settings": {...}}` — the run.s plugin activation
+    /// inputs, so a worker can load plugins for itself (#1717).
+    pub plugins_json: std::sync::Arc<serde_json::value::RawValue>,
     /// Per-test timeout in seconds; `None` means no timeout.
     pub timeout_secs: Option<u64>,
     /// How to handle temp directories: "cleanup", "failed", or "always".
@@ -221,6 +224,7 @@ fn build_task<'a>(
     group: &'a scheduler::TaskGroup,
     conftest_json: &'a serde_json::value::RawValue,
     fixture_modules_json: &'a serde_json::value::RawValue,
+    plugins_json: &'a serde_json::value::RawValue,
     timeout_secs: Option<u64>,
     keep_tmp: &'a str,
     rootdir: &'a str,
@@ -248,6 +252,7 @@ fn build_task<'a>(
             .collect(),
         conftest_paths: conftest_json,
         fixture_modules: fixture_modules_json,
+        plugins: plugins_json,
         timeout_secs,
         keep_tmp,
         rootdir,
@@ -280,6 +285,7 @@ fn run_worker_loop(
         cancelled,
         conftest_json,
         fixture_modules_json,
+        plugins_json,
         timeout_secs,
         keep_tmp,
         rootdir,
@@ -311,6 +317,7 @@ fn run_worker_loop(
             &group,
             &conftest_json,
             &fixture_modules_json,
+            &plugins_json,
             timeout_secs,
             keep_tmp.as_ref(),
             &rootdir,
@@ -479,10 +486,17 @@ mod worker_session_tests {
         (child, session)
     }
 
+    /// Helper: the "no plugins configured" payload, as the coordinator sends it.
+    fn empty_plugins() -> Box<serde_json::value::RawValue> {
+        serde_json::value::RawValue::from_string(r#"{"modules":[],"settings":{}}"#.to_string())
+            .unwrap()
+    }
+
     /// Helper: build a minimal `WorkerTask` from the given `RawValue` payloads.
     fn minimal_task<'a>(
         conftest: &'a serde_json::value::RawValue,
         fixture_modules: &'a serde_json::value::RawValue,
+        plugins: &'a serde_json::value::RawValue,
     ) -> WorkerTask<'a> {
         WorkerTask {
             protocol_version: crate::worker_result::PROTOCOL_VERSION,
@@ -497,6 +511,7 @@ mod worker_session_tests {
             }],
             conftest_paths: conftest,
             fixture_modules,
+            plugins,
             timeout_secs: None,
             keep_tmp: "cleanup",
             rootdir: "/rootdir",
@@ -530,7 +545,8 @@ mod worker_session_tests {
         // Assert
         let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
-        let task = minimal_task(&conftest, &fixtures);
+        let no_plugins = empty_plugins();
+        let task = minimal_task(&conftest, &fixtures, &no_plugins);
         assert!(
             session.send_task(&task).is_err(),
             "closing stdin must actually release the pipe — the worker begins its \
@@ -593,8 +609,17 @@ mod worker_session_tests {
         };
 
         // Act
+        let no_plugins = empty_plugins();
         let task = build_task(
-            &group, &conftest, &fixtures, None, "cleanup", "/rootdir", false, false,
+            &group,
+            &conftest,
+            &fixtures,
+            &no_plugins,
+            None,
+            "cleanup",
+            "/rootdir",
+            false,
+            false,
         );
 
         // Assert
@@ -625,8 +650,17 @@ mod worker_session_tests {
         let group = crate::scheduler::TaskGroup::single(task_module("tests/test_a.py", 1));
 
         // Act
+        let no_plugins = empty_plugins();
         let task = build_task(
-            &group, &conftest, &fixtures, None, "cleanup", "/rootdir", false, false,
+            &group,
+            &conftest,
+            &fixtures,
+            &no_plugins,
+            None,
+            "cleanup",
+            "/rootdir",
+            false,
+            false,
         );
 
         // Assert — an unstamped task is rejected by every worker, so forgetting
@@ -644,7 +678,8 @@ mod worker_session_tests {
         let (mut child, mut session) = cat_session();
         let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let no_fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
-        let task = minimal_task(&conftest, &no_fixtures);
+        let no_plugins = empty_plugins();
+        let task = minimal_task(&conftest, &no_fixtures, &no_plugins);
 
         // Act
         session.send_task(&task).expect("send_task must succeed");
@@ -710,6 +745,7 @@ mod worker_session_tests {
             }],
             conftest_paths: &conftest,
             fixture_modules: &no_fixtures,
+            plugins: &empty_plugins(),
             timeout_secs: Some(30),
             keep_tmp: "cleanup",
             rootdir: "/rootdir",
@@ -744,7 +780,8 @@ mod worker_session_tests {
         let (mut child, mut session) = cat_session();
         let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let no_fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
-        let task = minimal_task(&conftest, &no_fixtures);
+        let no_plugins = empty_plugins();
+        let task = minimal_task(&conftest, &no_fixtures, &no_plugins);
 
         // Act
         session.send_task(&task).expect("send_task must succeed");
@@ -786,7 +823,8 @@ mod worker_session_tests {
 
         let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let no_fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
-        let task = minimal_task(&conftest, &no_fixtures);
+        let no_plugins = empty_plugins();
+        let task = minimal_task(&conftest, &no_fixtures, &no_plugins);
 
         // Act — writing to a dead process should eventually error.
         // The first write may succeed (kernel buffer), so send repeatedly.

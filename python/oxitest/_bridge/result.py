@@ -119,7 +119,7 @@ class Diagnostic:
 
 #: Keep in step with ``PROTOCOL_VERSION`` in ``src/worker_result/wire.rs``.
 #: The coordinator warns on mismatch, so a stale worker degrades loudly.
-PROTOCOL_VERSION: int = 6
+PROTOCOL_VERSION: int = 7
 
 
 def _wire_base(outcome: str, node_id: str, duration_ms: float) -> dict[str, Any]:
