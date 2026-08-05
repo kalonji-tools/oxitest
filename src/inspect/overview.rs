@@ -119,7 +119,7 @@ impl OverviewSections {
     }
 
     /// Total number of selectable items across all sections.
-    pub(crate) fn item_count(&self) -> usize {
+    pub(crate) const fn item_count(&self) -> usize {
         self.gravity.len() + self.marks.len() + self.conftests.len() + self.signals.len()
     }
 

@@ -75,11 +75,11 @@ pub struct DurationMs(f64);
 impl DurationMs {
     pub const ZERO: Self = Self(0.0);
 
-    pub fn new(ms: f64) -> Self {
+    pub const fn new(ms: f64) -> Self {
         Self(ms)
     }
 
-    pub fn as_f64(self) -> f64 {
+    pub const fn as_f64(self) -> f64 {
         self.0
     }
 }
@@ -122,11 +122,11 @@ pub struct LineNo(usize);
 impl LineNo {
     pub const ZERO: Self = Self(0);
 
-    pub fn new(n: usize) -> Self {
+    pub const fn new(n: usize) -> Self {
         Self(n)
     }
 
-    pub fn from_u32(n: u32) -> Self {
+    pub const fn from_u32(n: u32) -> Self {
         Self(n as usize)
     }
 }

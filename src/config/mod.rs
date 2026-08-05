@@ -13,7 +13,7 @@ pub use pyproject::{DoctestConfig, DoctestScope, ScopeEntry};
 
 impl DebugMode {
     /// Convert to the string representation sent across the Python bridge.
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::PostMortem => "post-mortem",
             Self::Always => "always",
@@ -38,18 +38,18 @@ impl Default for ExecutionMode {
 }
 
 impl ExecutionMode {
-    pub fn is_serial(&self) -> bool {
+    pub const fn is_serial(&self) -> bool {
         matches!(self, Self::Serial | Self::Debug(_))
     }
 
-    pub fn debug_mode(&self) -> Option<&DebugMode> {
+    pub const fn debug_mode(&self) -> Option<&DebugMode> {
         match self {
             Self::Debug(m) => Some(m),
             _ => None,
         }
     }
 
-    pub fn workers(&self) -> Option<&WorkerCount> {
+    pub const fn workers(&self) -> Option<&WorkerCount> {
         match self {
             Self::Parallel { workers } => Some(workers),
             _ => None,
@@ -184,7 +184,7 @@ pub enum Verbosity {
 
 impl KeepTmpMode {
     /// Convert to the string representation sent across the Python bridge.
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Cleanup => "cleanup",
             Self::Failed => "failed",
@@ -497,7 +497,7 @@ impl Config {
     ///
     /// True when a `[tool.oxitest.doctest]` table is present OR `--doctest-modules`
     /// was passed. Presence of the table = opt-in; absence = silent.
-    pub fn doctest_enabled(&self) -> bool {
+    pub const fn doctest_enabled(&self) -> bool {
         self.doctest.is_some()
     }
 }

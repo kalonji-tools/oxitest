@@ -20,7 +20,7 @@ pub enum ExitVote {
 
 impl ExitVote {
     /// Extract the exit code, treating `Abstain` as `ExitCode::Success`.
-    pub fn code(self) -> ExitCode {
+    pub const fn code(self) -> ExitCode {
         match self {
             Self::Abstain => ExitCode::Success,
             Self::Code(c) => c,

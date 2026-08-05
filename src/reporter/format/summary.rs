@@ -8,7 +8,7 @@ use crate::colors::{
 
 use super::diagnostic::sep_width;
 
-pub(crate) fn plural(n: usize) -> &'static str {
+pub(crate) const fn plural(n: usize) -> &'static str {
     if n == 1 { "" } else { "s" }
 }
 

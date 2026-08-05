@@ -177,7 +177,7 @@ fn detect_high_fan_in(graph: &InspectGraph, signals: &mut Vec<Signal>) {
 ///
 /// Requires fixture→fixture dependency edges which are not yet captured by
 /// the graph builder.  Reserved for a future implementation pass.
-fn detect_deep_chains(graph: &InspectGraph, signals: &mut Vec<Signal>) {
+const fn detect_deep_chains(graph: &InspectGraph, signals: &mut Vec<Signal>) {
     // No fixture→fixture dep edges yet — nothing to traverse.
     let _ = (graph, signals);
 }
@@ -186,7 +186,7 @@ fn detect_deep_chains(graph: &InspectGraph, signals: &mut Vec<Signal>) {
 ///
 /// Requires scope-aware edge traversal across fixture dependency chains.
 /// Reserved for a future implementation pass.
-fn detect_scope_mismatches(graph: &InspectGraph, signals: &mut Vec<Signal>) {
+const fn detect_scope_mismatches(graph: &InspectGraph, signals: &mut Vec<Signal>) {
     // Scope-aware traversal not yet implemented.
     let _ = (graph, signals);
 }

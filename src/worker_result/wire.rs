@@ -253,7 +253,7 @@ pub(crate) struct WireTrace {
 
 impl WireResult {
     /// Extract the protocol version from any variant.
-    pub(crate) fn protocol_version(&self) -> u32 {
+    pub(crate) const fn protocol_version(&self) -> u32 {
         match self {
             Self::Passed {
                 protocol_version, ..

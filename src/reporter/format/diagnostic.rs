@@ -48,7 +48,7 @@ pub(crate) fn sep_width() -> usize {
 ///
 /// Color mode gets a middle dot (`·`) for visual polish; plain mode gets a hyphen
 /// to stay safe in environments that don't support Unicode.
-pub(crate) fn case_sep(use_color: bool) -> &'static str {
+pub(crate) const fn case_sep(use_color: bool) -> &'static str {
     if use_color { " · " } else { " - " }
 }
 

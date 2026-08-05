@@ -84,7 +84,7 @@ pub(crate) struct SearchState {
 
 impl SearchState {
     /// Create a new empty search state.
-    pub(crate) fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             query: String::new(),
             results: Vec::new(),
@@ -95,14 +95,14 @@ impl SearchState {
     }
 
     /// Move selection to the next result, wrapping around.
-    pub(crate) fn select_next(&mut self) {
+    pub(crate) const fn select_next(&mut self) {
         if !self.results.is_empty() {
             self.selected_idx = (self.selected_idx + 1) % self.results.len();
         }
     }
 
     /// Move selection to the previous result, wrapping around.
-    pub(crate) fn select_prev(&mut self) {
+    pub(crate) const fn select_prev(&mut self) {
         if !self.results.is_empty() {
             self.selected_idx = if self.selected_idx == 0 {
                 self.results.len() - 1
@@ -161,7 +161,7 @@ pub(crate) struct SessionHistory {
 
 impl SessionHistory {
     /// Create a new empty history.
-    pub(crate) fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             entries: Vec::new(),
         }
@@ -173,7 +173,7 @@ impl SessionHistory {
     }
 
     /// Return the number of entries.
-    pub(crate) fn len(&self) -> usize {
+    pub(crate) const fn len(&self) -> usize {
         self.entries.len()
     }
 
@@ -392,7 +392,7 @@ impl InspectApp {
     }
 
     /// Returns `true` while phase-2 (fixture/plugin) data is still loading.
-    pub(crate) fn is_loading(&self) -> bool {
+    pub(crate) const fn is_loading(&self) -> bool {
         matches!(self.phase2, Phase2State::Loading { .. })
     }
 
@@ -444,7 +444,7 @@ impl InspectApp {
 
     /// Returns `true` while phase-2 data is still loading (alias for `is_loading`).
     #[allow(dead_code)] // convenience alias for future callers
-    pub(crate) fn is_phase2_loading(&self) -> bool {
+    pub(crate) const fn is_phase2_loading(&self) -> bool {
         self.is_loading()
     }
 

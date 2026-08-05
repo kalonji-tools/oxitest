@@ -11,7 +11,7 @@ use camino::Utf8Path;
 // ── Field sets per resource kind ──────────────────────────────────────────────
 
 /// Return the ordered list of field names to display for a given resource kind.
-fn fields_for(resource: ResourceKind) -> &'static [&'static str] {
+const fn fields_for(resource: ResourceKind) -> &'static [&'static str] {
     match resource {
         ResourceKind::Tests => &["source", "mark", "async"],
         ResourceKind::Fixtures => &["description", "source", "shared", "autouse", "async"],

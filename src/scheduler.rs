@@ -44,7 +44,7 @@ pub(crate) struct ModuleGroup {
 }
 
 impl ModuleGroup {
-    pub(crate) fn new(module_path: Utf8PathBuf, items: Vec<Arc<TestItem>>) -> Self {
+    pub(crate) const fn new(module_path: Utf8PathBuf, items: Vec<Arc<TestItem>>) -> Self {
         Self { module_path, items }
     }
 }
@@ -79,7 +79,7 @@ impl TaskGroup {
     }
 
     /// A declaring package's subtree, merged under the anchor that declared it.
-    pub(crate) fn package(anchor: Utf8PathBuf, modules: Vec<ModuleGroup>) -> Self {
+    pub(crate) const fn package(anchor: Utf8PathBuf, modules: Vec<ModuleGroup>) -> Self {
         Self {
             modules,
             anchor: Some(anchor),

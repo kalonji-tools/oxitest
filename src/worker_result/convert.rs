@@ -31,7 +31,7 @@ pub(super) fn filter_tips(lines: Vec<i64>) -> Vec<usize> {
 /// Called by [`RawOutcome::into_test_outcome()`] for the Failed and Error
 /// variants — the single conversion path shared by both the JSON worker
 /// and PyO3 bridge callers.
-fn build_diagnostic(
+const fn build_diagnostic(
     message: String,
     file: Utf8PathBuf,
     lineno: LineNo,

@@ -26,7 +26,7 @@ pub(crate) fn handle_key(app: &mut InspectApp, key: KeyEvent) {
 /// routed anywhere: scroll and click do nothing and no app state is read or
 /// written. Keyboard is the only input that navigates. Takes no `InspectApp`
 /// deliberately — a parameter it never touches would be a claim it does.
-pub(crate) fn handle_mouse(_mouse: &MouseEvent) {}
+pub(crate) const fn handle_mouse(_mouse: &MouseEvent) {}
 
 // ── Normal mode ──────────────────────────────────────────────────────────────
 

@@ -15,7 +15,7 @@ pub(crate) struct ParallelContext {
 
 impl ParallelContext {
     /// Create a new context that lazily snapshots the in-flight set.
-    pub fn new(
+    pub const fn new(
         worker_id: usize,
         in_flight: Arc<parking_lot::Mutex<ahash::AHashSet<String>>>,
     ) -> Self {

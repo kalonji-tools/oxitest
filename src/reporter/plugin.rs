@@ -10,7 +10,7 @@ pub(crate) struct PyPluginReporter {
 }
 
 impl PyPluginReporter {
-    pub fn new(obj: Py<PyAny>) -> Self {
+    pub const fn new(obj: Py<PyAny>) -> Self {
         Self { obj }
     }
 }

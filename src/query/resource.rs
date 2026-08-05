@@ -23,7 +23,7 @@ pub(crate) enum ResourceKind {
 
 impl ResourceKind {
     /// Return the predicate names that are valid for this resource kind.
-    pub(crate) fn valid_predicates(&self) -> &'static [&'static str] {
+    pub(crate) const fn valid_predicates(&self) -> &'static [&'static str] {
         match self {
             Self::Tests => &["name", "source", "mark", "async", "uses"],
             Self::Fixtures => &["name", "source", "shared", "autouse", "async", "uses"],
@@ -33,7 +33,7 @@ impl ResourceKind {
     }
 
     /// Return the lowercase string name used in error messages.
-    pub(crate) fn as_str(&self) -> &'static str {
+    pub(crate) const fn as_str(&self) -> &'static str {
         match self {
             Self::Tests => "tests",
             Self::Fixtures => "fixtures",

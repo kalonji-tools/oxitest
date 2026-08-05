@@ -149,15 +149,15 @@ pub(crate) struct StrictCounts {
 }
 
 impl OutcomeCounters {
-    pub(crate) fn get(&self, kind: OutcomeKind) -> usize {
+    pub(crate) const fn get(&self, kind: OutcomeKind) -> usize {
         self.by_kind[kind as usize]
     }
 
-    fn increment(&mut self, kind: OutcomeKind) {
+    const fn increment(&mut self, kind: OutcomeKind) {
         self.by_kind[kind as usize] += 1;
     }
 
-    fn decrement(&mut self, kind: OutcomeKind) {
+    const fn decrement(&mut self, kind: OutcomeKind) {
         self.by_kind[kind as usize] = self.by_kind[kind as usize].saturating_sub(1);
     }
 }
@@ -217,15 +217,15 @@ impl RunStats {
         self.collect_tips(item, no_message_lines);
     }
 
-    pub(crate) fn record_failed(&mut self) {
+    pub(crate) const fn record_failed(&mut self) {
         self.counts.increment(OutcomeKind::Failed);
     }
 
-    pub(crate) fn record_errored(&mut self) {
+    pub(crate) const fn record_errored(&mut self) {
         self.counts.increment(OutcomeKind::Error);
     }
 
-    pub(crate) fn record_timeout(&mut self) {
+    pub(crate) const fn record_timeout(&mut self) {
         self.counts.increment(OutcomeKind::Timeout);
     }
 
@@ -233,7 +233,7 @@ impl RunStats {
     ///
     /// The `original` kind identifies which counter was incremented during
     /// the initial run so we decrement the correct one.
-    pub(crate) fn record_flaky(&mut self, original: OutcomeKind) {
+    pub(crate) const fn record_flaky(&mut self, original: OutcomeKind) {
         self.counts.increment(OutcomeKind::Flaky);
         match original {
             OutcomeKind::Failed | OutcomeKind::Error | OutcomeKind::Timeout => {
@@ -243,7 +243,7 @@ impl RunStats {
         }
     }
 
-    pub(crate) fn record_skipped(&mut self) {
+    pub(crate) const fn record_skipped(&mut self) {
         self.counts.increment(OutcomeKind::Skipped);
     }
 
@@ -264,7 +264,7 @@ impl RunStats {
         self.collect_tips(item, no_message_lines);
     }
 
-    pub(crate) fn record_xfailed(&mut self) {
+    pub(crate) const fn record_xfailed(&mut self) {
         self.counts.increment(OutcomeKind::XFailed);
     }
 
@@ -287,14 +287,14 @@ impl RunStats {
         }
     }
 
-    pub(crate) fn record_xpassed(&mut self, strict: bool) {
+    pub(crate) const fn record_xpassed(&mut self, strict: bool) {
         self.counts.increment(OutcomeKind::XPassed);
         if strict {
             self.strict.xpassed_strict += 1;
         }
     }
 
-    pub(crate) fn record_strict_suite(&mut self, count: usize) {
+    pub(crate) const fn record_strict_suite(&mut self, count: usize) {
         self.strict.suite_violations += count;
     }
 

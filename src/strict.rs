@@ -58,7 +58,7 @@ pub enum PerTestViolation {
 }
 
 impl PerTestViolation {
-    pub fn node_id(&self) -> &NodeId {
+    pub const fn node_id(&self) -> &NodeId {
         match self {
             Self::BareAssert { node_id, .. }
             | Self::BroadFixtureType { node_id, .. }
@@ -95,7 +95,7 @@ pub enum StrictViolation {
 }
 
 impl StrictViolation {
-    pub fn node_id(&self) -> Option<&NodeId> {
+    pub const fn node_id(&self) -> Option<&NodeId> {
         match self {
             Self::PerTest(v) => Some(v.node_id()),
             Self::Suite(_) => None,

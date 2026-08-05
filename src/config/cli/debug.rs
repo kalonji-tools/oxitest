@@ -60,7 +60,7 @@ pub struct DebugArgs {
 
 impl DebugArgs {
     /// Return the debug mode based on the `--always` flag.
-    pub fn mode(&self) -> DebugMode {
+    pub const fn mode(&self) -> DebugMode {
         if self.always {
             DebugMode::Always
         } else {
