@@ -8,8 +8,6 @@ from oxitest import Fixture, TempDir, Yields
 from tests import helpers
 from tests.integration import helpers as integ
 
-fx = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
-
 
 def test_affected_parallel_runs_subcommands_correctly(tmp: TempDir) -> None:
     """Nested oxitest subprocesses work in parallel workers.
@@ -35,7 +33,7 @@ def test_affected_parallel_runs_subcommands_correctly(tmp: TempDir) -> None:
     integ.assert_passed(out, rc, count=1)
 
 
-@fx.fixture
+@oxitest.fixture(lifetime="function")
 def git_worktree(git_repo: Fixture[Path], tmp: TempDir) -> Yields[Path]:
     """Git worktree created from git_repo, placed inside a second TempDir."""
     main_repo = git_repo

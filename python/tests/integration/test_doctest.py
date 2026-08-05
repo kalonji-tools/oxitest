@@ -6,10 +6,8 @@ import oxitest
 from oxitest import Fixture, TempDir, Yields
 from tests import helpers
 
-fx = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
 
-
-@fx.fixture
+@oxitest.fixture(lifetime="function")
 def doctest_project(tmp: TempDir) -> Yields[Path]:
     """Tmp dir with a Python source file containing doctests."""
     (tmp / "mylib.py").write_text(

@@ -1,7 +1,6 @@
-"""Integration test fixtures.
+"""Integration test fixture declarations.
 
-Helper functions live in ``tests.integration.helpers`` (#1787) — this file
-now only holds the shared ``fx`` fixtures.
+Helper functions live in ``tests.integration.helpers`` (#1787).
 """
 
 from __future__ import annotations
@@ -9,17 +8,11 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-import oxitest
-from oxitest import TempDir, Yields
+from oxitest import TempDir, Yields, fixture
 from tests.integration.helpers import clean_git_env
 
-fx = oxitest.Fixtures()
 
-
-# ── Shared fixtures ──────────────────────────────────────────────────────────
-
-
-@fx.fixture
+@fixture(lifetime="function")
 def git_repo(tmp: TempDir) -> Yields[Path]:
     """Tmp dir initialized as a git repo with an initial commit."""
     git = ["git", "-C", str(tmp)]

@@ -1,25 +1,21 @@
-"""Shared test infrastructure for the oxitest test suite.
+"""Shared fixture declarations for the oxitest test suite.
 
-Holds only the shared ``fx`` fixtures. Test utility functions live in the
-``tests.helpers`` package (#1787) — reached with ``from tests import
-helpers``, called as ``helpers.<function>()``.
+Test utility functions live in the ``tests.helpers`` package (#1787) — reached
+with ``from tests import helpers``, called as ``helpers.<function>()``.
 """
 
 from __future__ import annotations
 
 import sys
 
-import oxitest
-from oxitest import Yields
+from oxitest import Yields, fixture
 from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge.plugin_loader import PluginRegistry
 from oxitest._bridge.result import Diagnostic
 
-fx = oxitest.Fixtures()
 
-
-@fx.fixture
+@fixture(lifetime="function")
 def fixture_session() -> Yields[FixtureSession]:
     """Provide a fresh ``FixtureSession`` with an empty registry."""
     session = FixtureSession([], PluginRegistry())
@@ -30,7 +26,7 @@ def fixture_session() -> Yields[FixtureSession]:
     session.end_process()
 
 
-@fx.fixture
+@fixture(lifetime="function")
 def diag_collector() -> Yields[list[Diagnostic]]:
     """Provide a fresh diagnostic collector, wired to the ContextVar.
 
@@ -43,7 +39,7 @@ def diag_collector() -> Yields[list[Diagnostic]]:
     _diagnostic_collector_var.reset(token)
 
 
-@fx.fixture
+@fixture(lifetime="function")
 def _clean_sys_modules() -> Yields[None]:
     """Snapshot-restore sys.modules — cleans up transitive imports a test triggers.
 
