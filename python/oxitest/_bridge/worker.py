@@ -3,7 +3,7 @@
 Reads a single JSON task from stdin, runs each test item using executor.run_test,
 and writes one JSON result line per test to stdout.
 
-Task schema (stdin, protocol v6):
+Task schema (stdin, protocol v7):
     {
         "protocol_version": int,
         "modules": [{
@@ -17,6 +17,7 @@ Task schema (stdin, protocol v6):
         }],
         "conftest_paths": [str],
         "fixture_modules": [{"module": str, "anchor": str}],
+        "plugins": {"modules": [str], "settings": {str: {str: any}}},
         "timeout_secs": int | null,
         "keep_tmp": str,
         "rootdir": str,
@@ -134,6 +135,13 @@ class WorkerTaskModule(TypedDict):
     items: list[WorkerTaskItem]
 
 
+class WorkerPluginInputs(TypedDict):
+    """What a worker needs to activate the run's plugins for itself (#1717)."""
+
+    modules: list[str]
+    settings: dict[str, dict[str, object]]
+
+
 class WorkerTask(TypedDict):
     """JSON task sent from the Rust coordinator to a worker subprocess.
 
@@ -144,6 +152,7 @@ class WorkerTask(TypedDict):
     modules: list[WorkerTaskModule]
     conftest_paths: list[str]
     fixture_modules: list[WorkerFixtureModule]
+    plugins: NotRequired[WorkerPluginInputs]
     timeout_secs: int | None
     keep_tmp: str
     rootdir: NotRequired[str]
@@ -246,6 +255,84 @@ def _register_fixture_modules(
             )
 
 
+def _activate_plugins(session: Any, plugins: Mapping[str, Any]) -> None:
+    """Load the run's plugins into this worker and register their fixtures.
+
+    Workers rebuild their own ``FixtureSession`` and inherit nothing from the
+    coordinator, so before this a worker had **no plugins at all** — both
+    ``FixtureProvider`` fixtures and plugin ``__fixtures__.py`` declarations
+    were invisible under ``-n`` while passing serially. That was true of the
+    shipped provider path too, not only the new one (#1717).
+
+    Mirrors what ``pipeline::helpers::init_session`` does serially, in the same
+    order: load plugins, register their providers, then prescan-free registration
+    of each plugin's ``__fixtures__.py``. The prescan itself is a coordinator
+    concern — the file is already known to exist and to declare fixtures, and a
+    worker re-deciding that would be a second authority on the question.
+
+    Failures are reported per plugin and do not kill the worker, for the same
+    reason ``_register_fixture_modules`` is defensive: anything the coordinator
+    could detect has already aborted the run, so what reaches here is the
+    unmodelled, and it should fail the tests that need the fixture rather than
+    strand the whole group.
+    """
+    from oxitest._bridge.importer import register_plugin_source_fixtures_for_module
+    from oxitest._bridge.plugin_loader import load_plugins, plugin_fixture_homes
+    from oxitest._bridge.result import Diagnostic, DiagnosticSeverity
+
+    modules: list[str] = list(plugins.get("modules", ()))
+    if not modules:
+        return
+    settings: dict[str, dict[str, object]] = dict(plugins.get("settings", {}))
+
+    try:
+        session._plugin_registry = load_plugins(modules, settings)  # noqa: SLF001
+        session._register_plugin_fixtures()  # noqa: SLF001
+    except BaseException as exc:  # noqa: BLE001 — must not kill the worker
+        _emit(
+            Diagnostic(
+                severity=DiagnosticSeverity.ERROR,
+                context="plugin activation",
+                message=f"{type(exc).__name__}: {exc}",
+            ).to_wire()
+        )
+        return
+
+    try:
+        homes = plugin_fixture_homes(
+            activated_modules=modules, plugin_settings=settings
+        )
+    except BaseException as exc:  # noqa: BLE001 — must not kill the worker
+        _emit(
+            Diagnostic(
+                severity=DiagnosticSeverity.ERROR,
+                context="plugin fixture homes",
+                message=f"{type(exc).__name__}: {exc}",
+            ).to_wire()
+        )
+        return
+
+    for home in homes:
+        try:
+            register_plugin_source_fixtures_for_module(
+                registry=session.registry,
+                fixture_module_path=os.path.join(  # noqa: PTH118 — worker imports stay lazy
+                    home.anchor_dir, "__fixtures__.py"
+                ),
+                plugin_module=home.plugin_module,
+                namespace=home.namespace,
+                autouse_names=list(home.autouse),
+            )
+        except BaseException as exc:  # noqa: BLE001 — must not kill the worker
+            _emit(
+                Diagnostic(
+                    severity=DiagnosticSeverity.ERROR,
+                    context=f"plugin fixture registration ({home.plugin_module})",
+                    message=f"{type(exc).__name__}: {exc}",
+                ).to_wire()
+            )
+
+
 def _maybe_start_coverage() -> None:
     """Activate coverage collection if the parent process requested it."""
     if os.environ.get("COVERAGE_PROCESS_START") and _coverage is not None:
@@ -274,6 +361,11 @@ def build_session(task: WorkerTask) -> Any:
     # always sends it.
     rootdir: str | None = task.get("rootdir")
     session, _violations, _diagnostics = create_session(conftest_paths, rootdir=rootdir)
+    # Plugins before fixture modules, mirroring the serial order in
+    # FixtureSession.__init__ (builtins → plugins → conftest): a user's own
+    # declaration must be able to shadow a plugin's, which requires the
+    # plugin's to be registered first (#1717).
+    _activate_plugins(session, task.get("plugins", {}))
     _register_fixture_modules(session, task.get("fixture_modules", []))
     return session
 
