@@ -16,9 +16,12 @@ from oxitest._bridge._fixture_registry import (
     FixtureRegistry,
     FixtureScope,
     ModuleSource,
+    PluginModuleSource,
     PluginSource,
+    _shadow_order,
 )
 from oxitest._bridge._lifetime import Lifetime
+from oxitest._bridge.query_bridge import fixture_entries
 from oxitest._bridge.result import Diagnostic, ViolationKind
 from tests import helpers
 
@@ -1235,4 +1238,130 @@ def test_module_source_declarations_sees_a_shadowed_declaration() -> None:
         f"would drop it, and the outer package would stop co-locating its "
         f"subtree — the exactly-once guarantee failing silently for any suite "
         f"that reuses a fixture name in a nested package; got {declarations!r}"
+    )
+
+
+# ── PluginModuleSource (#1717) ────────────────────────────────────────────────
+
+
+def _plugin_conn() -> int:
+    """Stand-in plugin fixture factory."""
+    return 1
+
+
+def _make_plugin_def(namespace: str = "oxi_pg") -> FixtureDef[int]:
+    """A FixtureDef as the plugin registrar will build it."""
+    return FixtureDef(
+        name="conn",
+        fixture_type=int,
+        scope=FixtureScope.MODULE,
+        source=PluginModuleSource(
+            func=_plugin_conn,
+            defining_module_path="/site-packages/oxi_pg/__fixtures__.py",
+            plugin_module="oxi_pg",
+            lifetime=Lifetime.MODULE,
+        ),
+        namespace=namespace,
+    )
+
+
+def test_plugin_module_source_is_b1_exempt() -> None:
+    """A plugin fixture carries no anchor, so B1 never filters it."""
+    defn = _make_plugin_def()
+
+    assert defn.anchor is None, (
+        "an anchor would bind the fixture to its site-packages directory, which "
+        "no user test can be under — every plugin fixture would be invisible"
+    )
+
+
+def test_plugin_module_source_is_visible_from_any_module() -> None:
+    """Ambient means reachable from every test in the run, at any depth."""
+    defn = _make_plugin_def()
+
+    assert defn.is_visible_from("/proj/tests/deep/nested/test_a.py"), (
+        "plugin fixtures are ambient in every fixture session (ADR-0009 Rule 6); "
+        "False here means the ancestor half of 'ambient ancestor' regressed"
+    )
+
+
+def test_plugin_module_source_scores_zero_in_the_shadow_order() -> None:
+    """A plugin fixture's shadow rank is exactly 0, not merely small.
+
+    Asserting the value rather than a comparison against some particular user
+    anchor: a `< deep_anchor` test passes for any rank below that anchor's
+    depth, so it cannot tell "unanchored scores 0" from "scores 3". Mutating
+    the 0 to a 1 left such a test green.
+    """
+    plugin = _make_plugin_def(namespace="api")
+
+    rank, _index = _shadow_order(plugin, 0)
+
+    assert rank == 0, (
+        "unanchored sources score 0 so they lose to *any* anchored declaration "
+        "that can see them; a non-zero rank makes a plugin outrank a user's own "
+        f"shallow declaration, silently changing their suite — got {rank}"
+    )
+
+
+def test_plugin_module_source_loses_to_the_shallowest_user_declaration() -> None:
+    """A user's anchored declaration outranks a plugin fixture at any depth."""
+    plugin = _make_plugin_def(namespace="api")
+    # The shallowest anchor that exists — depth 1. Any deeper anchor would let a
+    # mutated rank of 1, 2 or 3 still "lose" and keep this test green.
+    shallowest_user = FixtureDef(
+        name="conn",
+        fixture_type=int,
+        scope=FixtureScope.MODULE,
+        source=ModuleSource(
+            func=_plugin_conn,
+            defining_module_path="/__fixtures__.py",
+            anchor_package_path="/",
+            lifetime=Lifetime.MODULE,
+        ),
+        namespace="api",
+    )
+
+    assert _shadow_order(plugin, 0) < _shadow_order(shallowest_user, 0), (
+        "installing a plugin must never take precedence over a user's own "
+        "declaration — the user's suite would silently change behaviour"
+    )
+
+
+def test_plugin_module_source_conftest_path_names_the_plugin() -> None:
+    """conftest_path renders as <plugin:module>, not the site-packages path."""
+    defn = _make_plugin_def()
+
+    assert defn.conftest_path == "<plugin:oxi_pg>", (
+        "this string is what the shadow NOTICE prints; a 90-character "
+        "site-packages path makes 'shadows definition in ...' unreadable"
+    )
+
+
+def test_plugin_module_source_exposes_its_callable() -> None:
+    """The func property returns the factory, as for any user-declared fixture."""
+    defn = _make_plugin_def()
+
+    assert defn.func is _plugin_conn, (
+        "the instantiator routes plugin-module fixtures through "
+        "resolve_user_fixture, which needs the callable; without it every "
+        "resolution raises AttributeError instead of building the fixture"
+    )
+
+
+def test_plugin_module_source_renders_in_query_output() -> None:
+    """query_bridge names the owning plugin and carries the factory's docstring."""
+    reg = helpers.make_registry(_make_plugin_def())
+
+    entries = [e for e in fixture_entries(reg) if e["name"] == "conn"]
+
+    assert entries, "the plugin fixture must appear in `oxitest query fixtures`"
+    assert entries[0]["source"] == "<plugin:oxi_pg>", (
+        "an unhandled variant falls to '<unknown>', which tells a user nothing "
+        f"about which installed package owns the fixture — got {entries[0]['source']!r}"
+    )
+    assert entries[0]["description"] == "Stand-in plugin fixture factory.", (
+        "the factory's docstring is the only description a user gets for a "
+        f"fixture they cannot open in their own tree — got "
+        f"{entries[0]['description']!r}"
     )

@@ -10,6 +10,7 @@ from oxitest._bridge._fixture_registry import (
     BuiltinSource,
     ConftestSource,
     FixtureScope,
+    PluginModuleSource,
     PluginSource,
 )
 from oxitest._bridge._plugin_entry import ActivatedPluginEntry
@@ -35,7 +36,7 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
         match defn.source:
             case ConftestSource(conftest_path=p):
                 source = p
-            case PluginSource(plugin_module=m):
+            case PluginSource(plugin_module=m) | PluginModuleSource(plugin_module=m):
                 source = f"<plugin:{m}>"
             case BuiltinSource():
                 source = "<builtin>"
@@ -43,7 +44,7 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
                 source = "<unknown>"
 
         doc = ""
-        if isinstance(defn.source, ConftestSource):
+        if isinstance(defn.source, (ConftestSource, PluginModuleSource)):
             doc = (defn.source.func.__doc__ or "").strip()
         elif isinstance(defn.source, BuiltinSource):
             doc = (defn.source.impl_cls.__doc__ or "").strip()

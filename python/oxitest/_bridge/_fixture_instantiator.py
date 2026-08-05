@@ -54,6 +54,7 @@ from oxitest._bridge._fixture_registry import (
     ConftestSource,
     FixtureScope,
     ModuleSource,
+    PluginModuleSource,
     PluginSource,
     _fixture_inner_type,
 )
@@ -364,8 +365,13 @@ class FixtureInstantiator:
                 return True, ctx.resolve_user_fixture(param_name)
             raise FixtureNotFoundError(param_name) from None
 
-        # For Builtin/Plugin sources found by type, use direct instantiation
-        if not isinstance(defn.source, (ConftestSource, ModuleSource)):
+        # For Builtin/Plugin sources found by type, use direct instantiation.
+        # PluginModuleSource is deliberately on the *user* side: it carries a
+        # real callable declared with @oxi.fixture, so it needs cycle detection
+        # and scope caching, which resolve_by_source bypasses (#1717).
+        if not isinstance(
+            defn.source, (ConftestSource, ModuleSource, PluginModuleSource)
+        ):
             return True, self.resolve_by_source(defn, ctx)
 
         # For ConftestSource/ModuleSource: prefer name-based (preserves cycle
@@ -394,7 +400,7 @@ class FixtureInstantiator:
         - ``BuiltinSource``: delegates to ``inject_builtin`` with function scope.
         """
         match defn.source:
-            case ConftestSource() | ModuleSource():
+            case ConftestSource() | ModuleSource() | PluginModuleSource():
                 return ctx.resolve_user_fixture(defn.name)
             case PluginSource(provider=provider):
                 value = provider.create(ctx=None)

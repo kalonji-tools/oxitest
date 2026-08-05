@@ -9,6 +9,7 @@ __all__ = [
     "FixtureScope",
     "FixtureSource",
     "ModuleSource",
+    "PluginModuleSource",
     "PluginSource",
     "_fixture_inner_type",
 ]
@@ -125,6 +126,27 @@ class PluginSource:
 
 
 @dataclass(frozen=True, slots=True)
+class PluginModuleSource:
+    """A fixture declared via ``@oxi.fixture`` in a plugin's ``__fixtures__.py``.
+
+    Ambient by construction rather than by special case. Only ``ModuleSource``
+    is anchored, so :attr:`FixtureDef.anchor` returns ``None``,
+    :meth:`FixtureDef.is_visible_from` falls through to ``case _: return True``,
+    ``_anchor_of`` refuses it, and ``_shadow_order`` scores it 0 — a user's
+    anchored declaration always wins (#1717).
+
+    Distinct from :class:`PluginSource`, which wraps a ``FixtureProvider``
+    instance and carries no callable of its own. Both variants live until
+    #1720 retires the provider path.
+    """
+
+    func: ConftestFunc
+    defining_module_path: str
+    plugin_module: str
+    lifetime: Lifetime
+
+
+@dataclass(frozen=True, slots=True)
 class BuiltinSource:
     impl_cls: type  # type[BuiltinFixture] — use type to avoid circular import
 
@@ -139,7 +161,9 @@ class ModuleSource:
     lifetime: Lifetime
 
 
-FixtureSource = ConftestSource | PluginSource | BuiltinSource | ModuleSource
+FixtureSource = (
+    ConftestSource | PluginSource | PluginModuleSource | BuiltinSource | ModuleSource
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,7 +180,7 @@ class FixtureDef(Generic[T]):
     @property
     def func(self) -> Callable[..., T]:
         """Backward-compat: user-fixture callable (ConftestSource + ModuleSource)."""
-        if isinstance(self.source, (ConftestSource, ModuleSource)):
+        if isinstance(self.source, (ConftestSource, ModuleSource, PluginModuleSource)):
             return self.source.func
         msg = (
             f"FixtureDef '{self.name}' has no func "
@@ -170,7 +194,10 @@ class FixtureDef(Generic[T]):
         match self.source:
             case ConftestSource(conftest_path=p):
                 return p
-            case PluginSource(plugin_module=m):
+            case PluginSource(plugin_module=m) | PluginModuleSource(plugin_module=m):
+                # Deliberately not `defining_module_path`: this string is what
+                # the shadow notice prints, and a site-packages path makes
+                # "shadows definition in ..." unreadable (#1717).
                 return f"<plugin:{m}>"
             case BuiltinSource():
                 return "<builtin>"
