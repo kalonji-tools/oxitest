@@ -16,67 +16,72 @@ pub(crate) struct DoctestExample {
     pub lineno: usize,
 }
 
+/// The example currently being accumulated.
+///
+/// One `Option<PendingExample>` where the parser used to carry a `String` and a
+/// separate `Option<usize>` that had to be `Some` whenever the string was
+/// non-empty. That pairing was stated four times as `example_start.unwrap()`
+/// and checked zero times; making it one value is ADR-0011's principle applied
+/// to a loop variable.
+struct PendingExample {
+    source: String,
+    lineno: usize,
+}
+
 /// Parse a docstring for `>>>` interactive examples.
 pub(crate) fn parse_docstring_examples(docstring: &str) -> Vec<DoctestExample> {
     let mut examples = Vec::new();
-    let mut source = String::new();
+    let mut pending: Option<PendingExample> = None;
     let mut want = String::new();
-    let mut example_start: Option<usize> = None;
 
-    for (i, line) in docstring.lines().enumerate() {
+    for (index, line) in docstring.lines().enumerate() {
         let trimmed = line.trim();
 
         if let Some(rest) = trimmed
             .strip_prefix(">>> ")
             .or_else(|| if trimmed == ">>>" { Some("") } else { None })
         {
-            if !source.is_empty() && !want.is_empty() {
+            // A `>>>` line always ends whatever came before, whether or not it
+            // accumulated expected output, and starts a new example here.
+            if let Some(previous) = pending.take() {
                 examples.push(DoctestExample {
-                    source: std::mem::take(&mut source),
+                    source: previous.source,
                     want: std::mem::take(&mut want),
-                    lineno: example_start.unwrap(),
+                    lineno: previous.lineno,
                 });
             }
-            if source.is_empty() {
-                example_start = Some(i);
-            }
-            if !source.is_empty() && want.is_empty() {
-                examples.push(DoctestExample {
-                    source: std::mem::take(&mut source),
-                    want: String::new(),
-                    lineno: example_start.unwrap(),
-                });
-                example_start = Some(i);
-            }
-            source.push_str(rest);
-            source.push('\n');
             want.clear();
+            let current = pending.insert(PendingExample {
+                source: String::new(),
+                lineno: index,
+            });
+            current.source.push_str(rest);
+            current.source.push('\n');
         } else if let Some(rest) = trimmed
             .strip_prefix("... ")
             .or_else(|| if trimmed == "..." { Some("") } else { None })
         {
-            if !source.is_empty() {
-                source.push_str(rest);
-                source.push('\n');
+            if let Some(current) = pending.as_mut() {
+                current.source.push_str(rest);
+                current.source.push('\n');
             }
-        } else if !source.is_empty() && !trimmed.is_empty() {
-            want.push_str(line.trim());
+        } else if pending.is_some() && !trimmed.is_empty() {
+            want.push_str(trimmed);
             want.push('\n');
-        } else if !source.is_empty() {
+        } else if let Some(current) = pending.take() {
             examples.push(DoctestExample {
-                source: std::mem::take(&mut source),
+                source: current.source,
                 want: std::mem::take(&mut want),
-                lineno: example_start.unwrap(),
+                lineno: current.lineno,
             });
-            example_start = None;
         }
     }
 
-    if !source.is_empty() {
+    if let Some(current) = pending {
         examples.push(DoctestExample {
-            source: std::mem::take(&mut source),
-            want: std::mem::take(&mut want),
-            lineno: example_start.unwrap(),
+            source: current.source,
+            want,
+            lineno: current.lineno,
         });
     }
 

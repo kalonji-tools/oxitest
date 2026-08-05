@@ -78,14 +78,12 @@ impl QueryArgs {
     #[expect(dead_code, reason = "test helper not yet exercised by any test")]
     pub fn default_for_test() -> Self {
         use clap::Parser;
-        super::OxitestCli::try_parse_from(["oxitest", "query", "tests"])
-            .expect("default QueryArgs must parse")
-            .command
-            .map(|cmd| match cmd {
-                super::Command::Query(args) => args,
-                _ => unreachable!(),
-            })
-            .unwrap()
+        let parsed = super::OxitestCli::try_parse_from(["oxitest", "query", "tests"])
+            .expect("default QueryArgs must parse");
+        match parsed.command {
+            Some(super::Command::Query(args)) => args,
+            other => panic!("`oxitest query tests` must parse as Command::Query, got {other:?}"),
+        }
     }
 }
 

@@ -149,8 +149,15 @@ impl Pipeline {
         let PipelinePhase::FilesCollected = &self.phase else {
             unreachable!("query_without_session called outside FilesCollected phase")
         };
+        // Not covered by E1: this asks about the *command*, not the pipeline
+        // phase, so it is an ordinary dispatch error and gets an exit code
+        // rather than an abort (ADR-0011 — the carve-out is typestate-only).
         let config::Command::Query(ref args) = self.command else {
-            unreachable!("query_without_session only called for Query command");
+            eprintln!(
+                "error: internal dispatch error — query_without_session runs only for \
+                 `oxitest query`"
+            );
+            return Ok(ExitCode::UsageError);
         };
 
         if args.fzf {

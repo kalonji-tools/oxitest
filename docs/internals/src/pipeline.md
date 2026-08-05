@@ -8,6 +8,14 @@ via the `unreachable!` guard.
 
 This chapter covers the mechanics in enough detail that you can add a new phase yourself.
 
+> **These guards are exception E1 and nothing else is.** `clippy::unreachable` is denied
+> crate-wide; `src/pipeline/transitions/mod.rs` carries a module-level `#![allow]` for the
+> phase destructures, listed as E1 in
+> [ADR-0011](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0011-no-unhandled-panic-routes.md).
+> A new phase added inside that module inherits the allow. Anywhere else -- including a
+> guard *inside* the module that checks something other than the phase -- `unreachable!`
+> fails the build, and the fix is a type or an error return, never a per-site `#[expect]`.
+
 ## Phase Sequence per Command
 
 The pipeline dispatches in `run()` (in `src/pipeline/mod.rs`) based on the parsed `Command`

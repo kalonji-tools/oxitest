@@ -89,28 +89,29 @@ pub(super) fn format_collection_profile(profile: &CollectionProfile) -> String {
         0.0
     };
 
+    // `writeln!` into a `String` goes through `std::fmt::Write`, whose only
+    // error source is the sink — and a `String` sink never reports one. The
+    // discards below are the whole error handling this needs; per ADR-0011 a
+    // `Result` return here would be plumbing for an error that cannot occur.
     let file_count = profile.files.len();
-    writeln!(
+    let _ = writeln!(
         out,
         "Collection profile ({file_count} files, {total_ms:.0}ms total):"
-    )
-    .unwrap();
-    writeln!(out, "  prescan:    {prescan_ms:.0}ms ({prescan_pct:.1}%)").unwrap();
-    writeln!(
+    );
+    let _ = writeln!(out, "  prescan:    {prescan_ms:.0}ms ({prescan_pct:.1}%)");
+    let _ = writeln!(
         out,
         "  collection: {collection_ms:.0}ms ({collection_pct:.1}%)"
-    )
-    .unwrap();
-    writeln!(out, "  other:      {other_ms:.0}ms ({other_pct:.1}%)").unwrap();
+    );
+    let _ = writeln!(out, "  other:      {other_ms:.0}ms ({other_pct:.1}%)");
 
     let lazy_count = profile.files.iter().filter(|f| f.lazy_skipped).count();
     let eager_count = file_count - lazy_count;
     if lazy_count > 0 || eager_count < file_count {
-        writeln!(
+        let _ = writeln!(
             out,
             "  lazy: {lazy_count} files skipped, eager: {eager_count} files imported"
-        )
-        .unwrap();
+        );
     }
 
     // Top 5 slowest files
@@ -120,8 +121,8 @@ pub(super) fn format_collection_profile(profile: &CollectionProfile) -> String {
         .first()
         .is_some_and(|f| f.prescan_us + f.collection_us > 0);
     if has_slow {
-        writeln!(out).unwrap();
-        writeln!(out, "Slowest files:").unwrap();
+        let _ = writeln!(out);
+        let _ = writeln!(out, "Slowest files:");
         for fp in sorted.iter().take(5) {
             let file_ms = (fp.prescan_us + fp.collection_us) as f64 / 1000.0;
             let file_pct = if total_ms > 0.0 {
@@ -129,7 +130,7 @@ pub(super) fn format_collection_profile(profile: &CollectionProfile) -> String {
             } else {
                 0.0
             };
-            writeln!(out, "  {}    {file_ms:.0}ms ({file_pct:.1}%)", fp.path).unwrap();
+            let _ = writeln!(out, "  {}    {file_ms:.0}ms ({file_pct:.1}%)", fp.path);
         }
     }
 
@@ -252,31 +253,33 @@ fn register_and_record(
 
     // A plugin home diverges here and at the two steps below; everything else,
     // prescan included, is shared with the user path (#1717).
-    if let HomeKind::Plugin {
-        plugin_module,
-        namespace,
-        autouse,
-    } = kind
-    {
-        if let Err(e) = bridge::register_plugin_fixture_module(
-            py,
-            session_obj,
-            path,
+    //
+    // One `match` rather than an early-returning `if let` followed by a second
+    // destructure of the same value: the second destructure could only restate
+    // "the plugin arm returned" as an `unreachable!()`, which ADR-0011 bans.
+    let tree_root = match kind {
+        HomeKind::Plugin {
             plugin_module,
             namespace,
             autouse,
-        ) {
-            errors.push(e);
+        } => {
+            if let Err(e) = bridge::register_plugin_fixture_module(
+                py,
+                session_obj,
+                path,
+                plugin_module,
+                namespace,
+                autouse,
+            ) {
+                errors.push(e);
+            }
+            // No Rule 4 check: there is no tree root to compare against.
+            // No `fixture_modules` entry: `package` lifetime is refused for a
+            // plugin, so `package_declarations` would always be empty and the
+            // scheduler has no subtree to co-locate.
+            return;
         }
-        // No Rule 4 check: there is no tree root to compare against.
-        // No `fixture_modules` entry: `package` lifetime is refused for a
-        // plugin, so `package_declarations` would always be empty and the
-        // scheduler has no subtree to co-locate.
-        return;
-    }
-
-    let HomeKind::User { tree_root } = kind else {
-        unreachable!("the plugin arm returns above")
+        HomeKind::User { tree_root } => tree_root,
     };
 
     // Keyed on `path`, not `anchor`: a directory may hold both a

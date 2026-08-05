@@ -207,16 +207,17 @@ pub(crate) fn fmt_field_diffs(
         .max()
         .unwrap_or(0);
 
-    writeln!(out, "field diffs ({type_name}):").unwrap();
+    // Discarded rather than unwrapped: `std::fmt::Write` on a `String` has no
+    // failing sink, so there is no error to handle (ADR-0011).
+    let _ = writeln!(out, "field diffs ({type_name}):");
     for diff in field_diffs {
         let left_colored = color_fail(&diff.left, use_color);
         let right_colored = color_pass(&diff.right, use_color);
-        writeln!(
+        let _ = writeln!(
             out,
             "  {:<name_width$}  {left_colored} != {right_colored}",
             diff.field,
-        )
-        .unwrap();
+        );
     }
     out
 }

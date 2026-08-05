@@ -41,7 +41,7 @@ Option 4. The following lints are denied in `Cargo.toml`'s `[lints.clippy]` tabl
 | `exit` | restriction | [#1829](https://github.com/kalonji-tools/oxitest/issues/1829) | 0 |
 | `unwrap_used` | restriction | [#1832](https://github.com/kalonji-tools/oxitest/issues/1832) | 17 |
 | `expect_used` | restriction | [#1832](https://github.com/kalonji-tools/oxitest/issues/1832) | 15 |
-| `unreachable` | restriction | [#1832](https://github.com/kalonji-tools/oxitest/issues/1832) | 28 (16 excepted, see E1) |
+| `unreachable` | restriction | [#1832](https://github.com/kalonji-tools/oxitest/issues/1832) | 28 (13 excepted, see E1) |
 
 ### Scope
 
@@ -59,7 +59,7 @@ No `#[expect(clippy::unwrap_used, ...)]`, `#[expect(clippy::expect_used, ...)]`,
 
 Exceptions are module-scoped `#![allow(...)]` at the top of a module, carrying a `reason`, and numbered here. The real fix — the thing that would let the exception be deleted — must be named.
 
-#### E1 — `src/pipeline/transitions/**` · `clippy::unreachable` · 16 sites
+#### E1 — `src/pipeline/transitions/**` · `clippy::unreachable` · 13 sites
 
 `Pipeline` is a non-generic struct carrying one `phase: PipelinePhase` enum. Each transition method destructures the variant it expects and `unreachable!()`s otherwise:
 
@@ -72,7 +72,15 @@ This is a **runtime-checked typestate**. The `unreachable!()` is not covering an
 
 **Real fix:** restore compile-time typestate — `Pipeline<Ready>`, `Pipeline<Collected>`, and so on, where each transition consumes the state type it needs and no other state is constructible. Generic typestate was the original design and was replaced in [PR #1043](https://github.com/kalonji-tools/oxitest/pull/1043) with the runtime enum; re-introducing it is ADR-scale work with a wide blast radius across `src/pipeline/`, explicitly out of scope for [#1832](https://github.com/kalonji-tools/oxitest/issues/1832). When it lands, this allow is deleted, not amended.
 
-**The carve-out is typestate-only.** A site inside the module that is *not* a phase destructure does not get to hide behind it. One such site existed at adoption — `session_ready.rs` re-destructured a variant it had just matched, an artefact of `into_parts()` — and was fixed rather than absorbed, so that the module allow means exactly what it says.
+**The carve-out is typestate-only.** A site inside the module that is *not* a phase destructure does not get to hide behind it. The module held 16 at adoption and three were fixed rather than absorbed, so that the allow means exactly what it says:
+
+| Site | Why it was not typestate | Route taken |
+|---|---|---|
+| `session_ready.rs` `session()` | Re-destructured a variant it had just matched, an artefact of `into_parts()` | Phase consumed once, before the session is built |
+| `session_ready.rs` `query()` | Asserts the **command** is `Query`, not the phase | `eprintln!` + `ExitCode::UsageError` |
+| `files_collected.rs` `query_without_session()` | Same command assert | `eprintln!` + `ExitCode::UsageError` |
+
+The last two were not identified when this ADR was drafted; the module was assumed to be uniformly typestate. That is the reason the rule is written as a property of each *site* rather than as a count.
 
 ### Rule 3 — Growth process
 

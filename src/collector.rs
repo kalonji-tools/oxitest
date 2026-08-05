@@ -58,13 +58,22 @@ pub fn collect_files(
     Ok((files, conftests))
 }
 
+/// The `*.py` glob used by doctest collection, compiled once.
+///
+/// The pattern is a literal, so nothing a user configures can make it fail to
+/// compile. ADR-0011 bans restating that in an `expect()` message; an empty
+/// `GlobSet` is the degradation, which costs doctest discovery rather than the
+/// whole run.
+static EVERY_PYTHON_FILE: std::sync::LazyLock<GlobSet> = std::sync::LazyLock::new(|| {
+    build_glob_set(&["*.py".to_string()]).unwrap_or_else(|_| GlobSet::empty())
+});
+
 /// Collect all `.py` files for doctest scanning.
 ///
 /// Unlike `collect_files` which uses `python_files` glob patterns (e.g. `test_*.py`),
 /// this collects every `.py` file in `testpaths` (and rootdir) since any source module
 /// can contain doctests.
 pub fn collect_doctest_files(config: &Config) -> Vec<Utf8PathBuf> {
-    let glob_set = build_glob_set(&["*.py".to_string()]).expect("*.py is a valid glob");
     let mut files = Vec::new();
     let mut dummy_conftests = HashSet::new();
 
@@ -72,7 +81,7 @@ pub fn collect_doctest_files(config: &Config) -> Vec<Utf8PathBuf> {
         collect_from(
             testpath,
             config,
-            &glob_set,
+            &EVERY_PYTHON_FILE,
             &mut files,
             &mut dummy_conftests,
         );

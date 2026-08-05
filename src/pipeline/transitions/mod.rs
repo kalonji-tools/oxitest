@@ -3,6 +3,22 @@
 //! Each transition method consumes `Pipeline` and produces
 //! `Result<Pipeline, ExitCode>`. Each method guards on the expected
 //! `PipelinePhase` variant with a `let ... else { unreachable!(...) }`.
+//!
+//! Those guards are exception **E1** in `docs/adr/0011-no-unhandled-panic-routes.md`,
+//! the only entry on its list. They are a runtime-checked typestate, not an unhandled
+//! error: there is nothing to plumb, because the phase is correct by
+//! construction of the call chain and the arm exists only because
+//! `PipelinePhase` is one type rather than several. The exception is
+//! typestate-only — a site here that is not a phase destructure gets fixed, not
+//! absorbed (`session_ready.rs` had one, and it was).
+#![allow(
+    clippy::unreachable,
+    reason = "E1 in ADR-0011: runtime-checked pipeline typestate. The real fix \
+              is restoring the compile-time `Pipeline<Ready>` / \
+              `Pipeline<Collected>` typestate that PR #1043 replaced with the \
+              `PipelinePhase` enum, which is ADR-scale work across \
+              `src/pipeline/`. When it lands, delete this allow (#1832)."
+)]
 
 mod collected;
 mod empty;

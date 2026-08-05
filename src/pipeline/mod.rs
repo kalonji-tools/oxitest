@@ -167,6 +167,83 @@ impl PipelineShared {
     }
 }
 
+/// The subset of [`config::Command`] that builds a test pipeline.
+///
+/// `Inspect`, `Env` and `Completions` are dispatched and returned by `setup`
+/// before any pipeline config is loaded, so they have no variant here. That
+/// absence is the point: the two callers below used to end their config-loading
+/// `match` with `unreachable!("handled above")`, restating in a macro what this
+/// type now says (ADR-0011). [`from_command`](Self::from_command) is the single
+/// place that decides, and it answers with `None` rather than aborting.
+enum PipelineCommand<'a> {
+    Run(&'a config::RunArgs),
+    Debug(&'a config::DebugArgs),
+    Query(&'a config::QueryArgs),
+    Fixtures(&'a config::cli::FixturesArgs),
+}
+
+impl<'a> PipelineCommand<'a> {
+    fn from_command(command: &'a config::Command) -> Option<Self> {
+        match command {
+            config::Command::Run(args) => Some(Self::Run(args)),
+            config::Command::Debug(args) => Some(Self::Debug(args)),
+            config::Command::Query(args) => Some(Self::Query(args)),
+            config::Command::Fixtures(args) => Some(Self::Fixtures(args)),
+            config::Command::Inspect(_)
+            | config::Command::Env
+            | config::Command::Completions { .. } => None,
+        }
+    }
+
+    /// The first positional path, which seeds rootdir discovery.
+    fn first_path(&self) -> Option<&camino::Utf8Path> {
+        let paths = match self {
+            Self::Run(args) => &args.paths,
+            Self::Debug(args) => &args.paths,
+            Self::Query(args) => &args.paths,
+            Self::Fixtures(args) => &args.paths,
+        };
+        paths.first().map(camino::Utf8PathBuf::as_path)
+    }
+
+    /// Load the config under `rootdir` and merge this command's flags into it.
+    fn load_config(&self, rootdir: &camino::Utf8Path) -> config::Config {
+        let cfg = config::Config::load(rootdir);
+        match self {
+            Self::Run(args) => cfg.merge_run_args(args),
+            Self::Debug(args) => cfg.merge_debug_args(args),
+            Self::Query(args) => cfg.merge_query_args(args),
+            // The deprecated `oxitest fixtures` is `oxitest query fixtures`
+            // with every query flag at its default.
+            Self::Fixtures(args) => cfg.merge_query_args(&config::QueryArgs {
+                resource: query::resource::ResourceKind::Fixtures,
+                expression: None,
+                fzf: false,
+                detail: None,
+                jsonl: false,
+                count: false,
+                tree: false,
+                color: None,
+                paths: args.paths.clone(),
+            }),
+        }
+    }
+}
+
+/// Report a command that reached pipeline code after `setup` should have
+/// dispatched it, and give the caller an exit code to return.
+///
+/// The replacement for three `unreachable!("handled above")` arms: a runner
+/// that mis-dispatches must still exit with a code its caller understands, not
+/// abort with a backtrace (ADR-0011).
+fn report_non_pipeline_command(command: &config::Command) -> ExitCode {
+    eprintln!(
+        "error: internal dispatch error — `{command:?}` is handled before the test pipeline \
+         and must not reach it"
+    );
+    ExitCode::UsageError
+}
+
 /// Validate that no two plugins claim the same CLI prefix.
 ///
 /// Returns `Err` with a human-readable message if duplicate prefixes are found.
@@ -506,40 +583,11 @@ fn setup_with_plugin_recovery(
     }
 
     // Build the real config from the re-parsed command.
-    let first_path = match &command {
-        config::Command::Run(a) => a.paths.first().map(|p| p.as_path()),
-        config::Command::Debug(a) => a.paths.first().map(|p| p.as_path()),
-        config::Command::Query(a) => a.paths.first().map(|p| p.as_path()),
-        config::Command::Fixtures(a) => a.paths.first().map(|p| p.as_path()),
-        config::Command::Inspect(_)
-        | config::Command::Env
-        | config::Command::Completions { .. } => None,
+    let Some(pipeline_command) = PipelineCommand::from_command(&command) else {
+        return Ok(Err(report_non_pipeline_command(&command)));
     };
-    let rootdir = config::find_rootdir(first_path);
-    let mut cfg = match &command {
-        config::Command::Run(args) => config::Config::load(&rootdir).merge_run_args(args),
-        config::Command::Debug(args) => config::Config::load(&rootdir).merge_debug_args(args),
-        config::Command::Query(args) => config::Config::load(&rootdir).merge_query_args(args),
-        config::Command::Fixtures(args) => {
-            let synthetic = config::QueryArgs {
-                resource: query::resource::ResourceKind::Fixtures,
-                expression: None,
-                fzf: false,
-                detail: None,
-                jsonl: false,
-                count: false,
-                tree: false,
-                color: None,
-                paths: args.paths.clone(),
-            };
-            config::Config::load(&rootdir).merge_query_args(&synthetic)
-        }
-        config::Command::Inspect(_)
-        | config::Command::Env
-        | config::Command::Completions { .. } => {
-            unreachable!("non-run commands handled before")
-        }
-    };
+    let rootdir = config::find_rootdir(pipeline_command.first_path());
+    let mut cfg = pipeline_command.load_config(&rootdir);
 
     if !use_gitignore {
         cfg.paths.use_gitignore = false;
@@ -643,43 +691,11 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
         });
     }
 
-    let first_path = match &command {
-        config::Command::Run(a) => a.paths.first().map(|p| p.as_path()),
-        config::Command::Debug(a) => a.paths.first().map(|p| p.as_path()),
-        config::Command::Query(a) => a.paths.first().map(|p| p.as_path()),
-        config::Command::Fixtures(a) => a.paths.first().map(|p| p.as_path()),
-        config::Command::Inspect(_)
-        | config::Command::Env
-        | config::Command::Completions { .. } => None,
+    let Some(pipeline_command) = PipelineCommand::from_command(&command) else {
+        return Ok(Err(report_non_pipeline_command(&command)));
     };
-    let rootdir = config::find_rootdir(first_path);
-
-    let cfg = match &command {
-        config::Command::Run(args) => config::Config::load(&rootdir).merge_run_args(args),
-        config::Command::Debug(args) => config::Config::load(&rootdir).merge_debug_args(args),
-        config::Command::Query(args) => config::Config::load(&rootdir).merge_query_args(args),
-        config::Command::Fixtures(args) => {
-            let synthetic = config::QueryArgs {
-                resource: query::resource::ResourceKind::Fixtures,
-                expression: None,
-                fzf: false,
-                detail: None,
-                jsonl: false,
-                count: false,
-                tree: false,
-                color: None,
-                paths: args.paths.clone(),
-            };
-            config::Config::load(&rootdir).merge_query_args(&synthetic)
-        }
-        config::Command::Inspect(_)
-        | config::Command::Env
-        | config::Command::Completions { .. } => {
-            unreachable!("handled above")
-        }
-    };
-
-    let mut cfg = cfg;
+    let rootdir = config::find_rootdir(pipeline_command.first_path());
+    let mut cfg = pipeline_command.load_config(&rootdir);
     if !use_gitignore {
         cfg.paths.use_gitignore = false;
     }
@@ -836,7 +852,11 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
                 query::needs_python(args.resource, args.expression.as_deref()) || args.tree;
             query_command(py, pipeline, needs_session)
         }
-        config::Command::Fixtures(_) => {
+        // Bound by the arm, not re-matched inside it: the previous inner
+        // `match pipeline.command { Fixtures(a) => …, _ => unreachable!() }`
+        // asked the same question twice and answered the second one with a
+        // macro (ADR-0011).
+        config::Command::Fixtures(fixtures_args) => {
             eprintln!(
                 "Warning: 'oxitest fixtures' is deprecated and will be removed in a future release. \
                 Use 'oxitest query fixtures' instead."
@@ -852,20 +872,15 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
                 count: false,
                 tree: false,
                 color: None,
-                paths: match pipeline.command {
-                    config::Command::Fixtures(ref a) => a.paths.clone(),
-                    _ => unreachable!(),
-                },
+                paths: fixtures_args.paths.clone(),
             };
             let mut pipeline = pipeline;
             pipeline.shared.command = config::Command::Query(query_args);
             query_command(py, pipeline, true)
         }
-        config::Command::Inspect(_)
+        command @ (config::Command::Inspect(_)
         | config::Command::Env
-        | config::Command::Completions { .. } => {
-            unreachable!("handled in setup")
-        }
+        | config::Command::Completions { .. }) => Err(report_non_pipeline_command(command)),
     };
 
     match result {
