@@ -601,12 +601,13 @@ mod worker_session_tests {
         // Arrange
         let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
-        let group = crate::scheduler::TaskGroup {
-            modules: vec![
+        let group = crate::scheduler::TaskGroup::package(
+            camino::Utf8PathBuf::from("tests"),
+            vec![
                 task_module("tests/test_a.py", 2),
                 task_module("tests/test_b.py", 1),
             ],
-        };
+        );
 
         // Act
         let no_plugins = empty_plugins();

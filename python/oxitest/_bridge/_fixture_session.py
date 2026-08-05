@@ -658,18 +658,26 @@ class FixtureSession:
         for the whole run, so the session drain fires long after the package's
         last test.
 
+        *package_path* is the **declaring anchor directory** — the same value
+        the collector handed over as ``anchor_package_path`` and the only thing
+        ``_package_scopes`` is keyed by. Passing a module file path instead was
+        #1839: the pop could never match, so every boundary drain was inert and
+        the values survived to the end-of-task backstop.
+
         Fires once per package boundary, after every module in that package and
         its descendants has had :meth:`end_module`. The serial path drives this
-        from the group loop; under parallel execution the scheduler co-locates
-        the package's subtree onto one worker so the boundary is a single task.
+        from the group loop, using the anchor its task group was merged under;
+        under parallel execution the scheduler co-locates the package's subtree
+        onto one worker, whose whole session is that one task, so the worker
+        leaves the drain to ``end_task``.
         """
         # Async generators first, for the same reason as end_module: their
         # post-yield half may touch the sync values below.
         self._async_mgr.drain_boundary(package_path)
         scope = self._package_scopes.pop(package_path, None)
         if scope is None:
-            # Every group fires end_package, including ones whose package
-            # fixtures were never requested. Nothing to drain is normal.
+            # An anchored group whose package fixtures were never actually
+            # requested built no scope. Nothing to drain is normal.
             return
         for name, count in scope.hits.items():
             self._package_hits[name] += count
@@ -700,12 +708,19 @@ class FixtureSession:
         # sync scopes. `drain_task`, not `cleanup`: the process tier's async
         # teardowns and the event loop itself both outlive this task (#1777).
         self._async_mgr.drain_task()
-        # Any package scope still held is drained here as a backstop. The serial
-        # path pops each one at end_package, so this normally finds nothing; a
-        # worker never calls end_package at all, because its session covers
-        # exactly one task and the coordinator co-locates a package's subtree
-        # into that one task. Without this, every package-lifetime teardown
-        # would silently never run under parallel execution.
+        # Any package scope still held is drained here. This is not defence in
+        # depth on the worker path — it is the only drain there, because a
+        # worker never calls end_package at all: its session covers exactly one
+        # task and the coordinator co-locates a package's subtree into that one
+        # task. Without this, every package-lifetime teardown would silently
+        # never run under parallel execution.
+        #
+        # On the coordinator path it is a genuine backstop and normally finds
+        # nothing, because the serial loop pops each anchor at its boundary.
+        # That was false until #1839 — end_package was handed a module path, so
+        # nothing ever matched and this loop drained the entire run's worth of
+        # package fixtures, all at the end. A regression here looks like late
+        # teardown, not missing teardown.
         for package_path in list(self._package_scopes):
             self.end_package(package_path)
         # Drain shared (user fixtures) before session (builtins like TempDirFactory)

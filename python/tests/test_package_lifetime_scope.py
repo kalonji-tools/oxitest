@@ -191,8 +191,16 @@ def test_end_package_is_inert_for_an_unknown_anchor() -> None:
     # Act
     session.end_package("/proj/never-used")
 
-    # Assert — the serial path fires end_package for every group, including ones
-    # whose fixtures were never requested; raising there would abort a clean run.
+    # Assert — an anchored group fires end_package whether or not its package
+    # fixtures were actually resolved: one module's declaration co-locates the
+    # whole subtree, and no test in it need have asked for the fixture. Raising
+    # there would abort a clean run.
+    #
+    # This does NOT bless a permanent miss. Before #1839 every call landed here,
+    # because end_package was handed a module path against an anchor-keyed dict,
+    # and this test read as if that were the intended shape. What proves the hit
+    # happens is test_1839_package_boundary.py, end to end — a unit test that
+    # hands the anchor over by hand cannot see which value the caller chooses.
     assert session.get_cache_stats() is not None, (
         "end_package on an unused anchor must leave the session usable"
     )

@@ -301,12 +301,17 @@ impl<'a> ExecutionDispatch<'a> {
                             session.end_module(*py, module_path),
                         );
                     }
-                    let package = group.label();
-                    end_scope(
-                        rep,
-                        format!("end_package({package})"),
-                        session.end_package(*py, package),
-                    );
+                    // The anchor directory, not `label()`: `_package_scopes` is
+                    // keyed by the declaring anchor, so a module path can only
+                    // ever miss (#1839). A group with no anchor is covered by
+                    // no package declaration and has no boundary to fire.
+                    if let Some(anchor) = &group.anchor {
+                        end_scope(
+                            rep,
+                            format!("end_package({anchor})"),
+                            session.end_package(*py, anchor),
+                        );
+                    }
                 }
                 // Task tier only. `execute_groups` runs once per *phase*, and
                 // the coordinator has several — inprocess, each arranged
