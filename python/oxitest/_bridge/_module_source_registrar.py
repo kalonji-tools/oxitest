@@ -19,13 +19,14 @@ Either way the UsageError names both source paths.
 
 from __future__ import annotations
 
-__all__ = ["register_module_source_fixtures"]
+__all__ = ["register_module_source_fixtures", "register_plugin_source_fixtures"]
 
 import inspect
 from pathlib import Path
 from types import ModuleType
 from typing import Any, get_type_hints
 
+from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import UsageError
 from oxitest._bridge._fixture_decorator import MARKER_ATTR, _FixtureMarker
 from oxitest._bridge._fixture_registry import (
@@ -33,9 +34,11 @@ from oxitest._bridge._fixture_registry import (
     FixtureDef,
     FixtureRegistry,
     ModuleSource,
+    PluginModuleSource,
 )
 from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge._visibility import anchors_overlap
+from oxitest._bridge.result import DiagnosticSeverity
 
 
 def register_module_source_fixtures(
@@ -150,6 +153,113 @@ def register_module_source_fixtures(
         raise UsageError("\n\n".join(violations))
 
 
+def register_plugin_source_fixtures(
+    registry: FixtureRegistry,
+    fixture_module: ModuleType,
+    *,
+    plugin_module: str,
+    namespace: str,
+    autouse_names: tuple[str, ...],
+) -> None:
+    """Register an activated plugin's ``__fixtures__.py`` declarations (#1717).
+
+    Ambient and B1-exempt, and deliberately **without** the clash check the
+    user path runs: a plugin fixture must never hard-fail a suite. A colliding
+    user declaration shadows this one through the registry's ordering rule,
+    which is what keeps ``pip install`` from turning a green suite red.
+
+    Args:
+        registry: The live registry for this run.
+        fixture_module: The imported ``__fixtures__.py``.
+        plugin_module: The plugin's module path, for diagnostics.
+        namespace: The plugin's namespace — its module name unless overridden.
+        autouse_names: Fixtures the **user** enabled for autouse. A plugin
+            declaring ``autouse=True`` fires nothing until named here.
+
+    Raises:
+        UsageError: one or more declarations are illegal for a plugin. All of
+            them are reported together.
+    """
+    module_path = _canonical_module_path(fixture_module.__file__)
+    violations: list[str] = []
+
+    for attr_name, obj in vars(fixture_module).items():
+        # isinstance, not truthiness — see register_module_source_fixtures for
+        # why a __getattr__-happy object breaks a None guard here.
+        marker = getattr(obj, MARKER_ATTR, None)
+        if not isinstance(marker, _FixtureMarker):
+            continue
+
+        # Package lifetime keys on an anchor *directory in the user's test
+        # tree*. A plugin has none, and without this refusal the declaration
+        # reaches _anchor_of at resolution time, which reports it as an
+        # oxitest bug rather than as the plugin author's typo.
+        #
+        # Accumulated rather than raised, like the inline cap above: a plugin
+        # with three bad declarations should report three, not cost three
+        # run-fix cycles.
+        if marker.lifetime is Lifetime.PACKAGE:
+            violations.append(_plugin_package_cap_message(attr_name, plugin_module))
+            continue
+
+        # Autouse is the user's call. The plugin declares the capability; the
+        # user's pyproject decides whether it applies to their suite.
+        enabled = marker.autouse and attr_name in autouse_names
+        if marker.autouse and not enabled:
+            emit_diagnostic(
+                DiagnosticSeverity.NOTICE,
+                "plugin fixtures",
+                f"'{namespace}.{attr_name}' declares autouse=True but is not "
+                f'enabled. Add it to autouse = ["{attr_name}"] under '
+                f"[tool.oxitest.plugin_settings.{plugin_module}] to apply it "
+                f"to every test.",
+            )
+
+        # #1716's guard, ported: this path does not go through the registrar
+        # that owns it, and without it a plugin could do run-wide what a user
+        # is refused locally. Gated on `enabled` because a fixture that cannot
+        # fire cannot manufacture the illegal cell.
+        if enabled and marker.lifetime is Lifetime.FUNCTION and _is_async(obj):
+            violations.append(_async_autouse_message(attr_name, plugin_module))
+            continue
+
+        registry.register(
+            FixtureDef(
+                name=attr_name,
+                fixture_type=_infer_return_type(obj),
+                scope=LIFETIME_SCOPES[marker.lifetime],
+                source=PluginModuleSource(
+                    func=obj,
+                    defining_module_path=module_path,
+                    plugin_module=plugin_module,
+                    lifetime=marker.lifetime,
+                ),
+                autouse=enabled,
+                namespace=namespace,
+                is_async=_is_async(obj),
+            )
+        )
+
+    if violations:
+        raise UsageError("\n\n".join(violations))
+
+
+def _plugin_package_cap_message(fn_name: str, plugin_module: str) -> str:
+    """Why a plugin fixture cannot hold package lifetime, and what to use instead.
+
+    Naming the alternatives is load-bearing for the same reason as
+    :func:`_inline_cap_message`: the destination cannot be derived from the
+    refusal alone.
+    """
+    return (
+        f'{fn_name} in plugin "{plugin_module}" declares lifetime="package", '
+        f"but package lifetime binds a fixture to a directory in your test "
+        f"tree, and a plugin has none.\n"
+        f'Hint: use lifetime="process" for one instance per worker, or '
+        f'lifetime="module" for one per test module.'
+    )
+
+
 def _inline_cap_message(fn_name: str, module_path: str, lifetime: Lifetime) -> str:
     """Why an inline declaration cannot hold *lifetime*, and where to move it.
 
@@ -229,6 +339,17 @@ def _clashing_declaration(
     keeps working unchanged.
     """
     for defn in existing:
+        # A plugin fixture is unanchored, so the `anchor is None` arm below
+        # would treat it as clashing with everything — and plugin defs are
+        # registered before collection, so they are always the `existing`
+        # side. The user would be told to delete one of two declarations, one
+        # of which lives inside an installed package they cannot edit.
+        #
+        # Shadowing handles this instead: the anchored declaration wins and
+        # register() emits the notice. `pip install` must not be able to turn
+        # a green suite red (#1717).
+        if isinstance(defn.source, PluginModuleSource):
+            continue
         anchor = defn.anchor
         if anchor is None or anchors_overlap(anchor, anchor_package_path):
             return defn

@@ -10,19 +10,23 @@ __all__ = [
     "ActivatedPluginEntry",
     "DeferredPluginEntry",
     "PluginEntry",
+    "PluginFixtureHome",
     "PluginRegistry",
     "activate_deferred_plugins",
     "activate_entry",
     "load_plugins",
     "needs_eager_import",
+    "plugin_fixture_homes",
 ]
 
 import importlib
 import itertools
 import json
-from collections.abc import Sequence
+import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from types import MappingProxyType
+from pathlib import Path
+from types import MappingProxyType, ModuleType
 from typing import TYPE_CHECKING, Any
 
 from oxitest._bridge._coverage import _NULL_COVERAGE
@@ -30,11 +34,14 @@ from oxitest._bridge._debugger import (
     _NULL_DEBUGGER,
     DebuggerBackend,
 )
+from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import (
     ConflictingCoverageError,
     ConflictingDebuggerError,
     OxitestError,
+    UsageError,
 )
+from oxitest._bridge._namespace_validation import validate_namespace_name
 from oxitest._bridge._plugin_config import (
     CliExtension,
     IntrospectionError,
@@ -46,6 +53,7 @@ from oxitest._bridge._plugin_entry import (
     DeferredPluginEntry,
     PluginEntry,
 )
+from oxitest._bridge.result import DiagnosticSeverity
 from oxitest.plugin import CoverageProvider, Plugin
 
 if TYPE_CHECKING:
@@ -357,6 +365,7 @@ def _load_single_plugin(
         except IntrospectionError as e:
             msg = f'plugin "{module_name}" config dataclass error: {e}'
             raise PluginLoadError(msg) from e
+        _warn_on_reserved_config_fields(module_name, descriptors)
         overridden_ext = CliExtension(prefix=prefix, config_type=cli_ext.config_type)
         builder.add_cli_extension(module_name, overridden_ext, descriptors)
         # Phase 1 complete — defer activation to activate_deferred_plugins()
@@ -380,6 +389,143 @@ def _load_single_plugin(
         raise PluginLoadError(msg)
 
     builder.add_entry(ActivatedPluginEntry(module_name=module_name, plugin=result))
+
+
+@dataclass(frozen=True, slots=True)
+class PluginFixtureHome:
+    """An activated plugin package that declares fixtures (#1717).
+
+    ``anchor_dir`` is canonical-absolute. That is load-bearing rather than
+    tidy: ``_visibility`` requires anchors and module paths to arrive in the
+    same form, and the collection walk compares this against paths
+    ``collector.rs`` has already canonicalised, to avoid registering one
+    ``__fixtures__.py`` twice when a plugin is vendored under ``testpaths``.
+    """
+
+    plugin_module: str
+    anchor_dir: str
+    namespace: str
+    autouse: tuple[str, ...]
+
+
+#: ``fx.oxi`` is resolved before any namespace lookup (``proxy_ns``), so a
+#: plugin claiming it would be addressable by nothing.
+_RESERVED_NAMESPACE = "oxi"
+
+#: Keys oxitest reads out of ``[tool.oxitest.plugin_settings.<module>]`` for
+#: itself. A plugin config field of the same name is read by both, from the
+#: same table — which is not an error, but is worth saying out loud.
+#: ``protocols`` has had this collision available since it shipped.
+_RESERVED_CONFIG_KEYS = frozenset({"autouse", "namespace", "protocols"})
+
+
+def _warn_on_reserved_config_fields(
+    module_name: str, descriptors: Sequence[FieldDescriptor]
+) -> None:
+    """Notice when a plugin's own config field shadows a framework key."""
+    for reserved in sorted(
+        _RESERVED_CONFIG_KEYS.intersection(
+            descriptor.name for descriptor in descriptors
+        )
+    ):
+        emit_diagnostic(
+            DiagnosticSeverity.NOTICE,
+            "plugin config",
+            f"plugin '{module_name}' declares a config field named "
+            f"'{reserved}', which oxitest also reads as a framework key from "
+            f"the same table — both see the same value.",
+        )
+
+
+def plugin_fixture_homes(
+    *,
+    activated_modules: Sequence[str],
+    plugin_settings: dict[str, dict[str, object]],
+    modules: Mapping[str, ModuleType] | None = None,
+) -> tuple[PluginFixtureHome, ...]:
+    """Resolve each activated plugin's ``__fixtures__.py`` home (#1717).
+
+    Called once after ``activate_deferred_plugins``, when every plugin module
+    is imported — verified, not assumed: a plugin listed in ``plugins`` is in
+    ``sys.modules`` by the time tests execute.
+
+    Args:
+        activated_modules: Module paths from ``[tool.oxitest] plugins``.
+        plugin_settings: Per-plugin tables from
+            ``[tool.oxitest.plugin_settings.<module>]``.
+        modules: Module table to resolve against. Defaults to ``sys.modules``;
+            injected by tests so they need not mutate global import state.
+
+    Returns:
+        One entry per activated plugin package that has a ``__fixtures__.py``.
+
+    Raises:
+        UsageError: a namespace is reserved or claimed by two plugins.
+        ValueError: a namespace is a Python keyword or builtin.
+    """
+    module_table = sys.modules if modules is None else modules
+    homes: list[PluginFixtureHome] = []
+    claimed: dict[str, str] = {}
+
+    for module_name in activated_modules:
+        settings = plugin_settings.get(module_name, {})
+        module = module_table.get(module_name)
+        if module is None:
+            continue
+
+        if not hasattr(module, "__path__"):
+            # Only a package has a directory that can hold __fixtures__.py.
+            # Silence would leave the user believing their fixtures are live.
+            if "namespace" in settings or "autouse" in settings:
+                emit_diagnostic(
+                    DiagnosticSeverity.NOTICE,
+                    "plugin fixtures",
+                    f"plugin '{module_name}' sets namespace/autouse but is a "
+                    f"single module, not a package. Only a package can hold a "
+                    f"__fixtures__.py, so those keys do nothing.",
+                )
+            continue
+
+        namespace = str(settings.get("namespace") or module_name)
+        if namespace == _RESERVED_NAMESPACE:
+            msg = (
+                f"plugin '{module_name}' claims the reserved namespace "
+                f"'{_RESERVED_NAMESPACE}'.\n"
+                f"fx.{_RESERVED_NAMESPACE} is oxitest's own built-in namespace "
+                f"and resolves before any plugin, so these fixtures would be "
+                f"unreachable.\n"
+                f"Hint: set a different namespace under "
+                f"[tool.oxitest.plugin_settings.{module_name}]."
+            )
+            raise UsageError(msg)
+        validate_namespace_name(namespace, module_name)
+
+        if namespace in claimed:
+            msg = (
+                f"plugins '{claimed[namespace]}' and '{module_name}' both "
+                f"claim namespace '{namespace}'.\n"
+                f"fx.{namespace} would silently merge two distributions, and "
+                f"which fixture wins would depend on activation order.\n"
+                f'Hint: set namespace = "..." under '
+                f"[tool.oxitest.plugin_settings.{module_name}]."
+            )
+            raise UsageError(msg)
+        claimed[namespace] = module_name
+
+        anchor = Path(str(module.__file__)).resolve().parent
+        if not (anchor / "__fixtures__.py").is_file():
+            continue
+
+        homes.append(
+            PluginFixtureHome(
+                plugin_module=module_name,
+                anchor_dir=str(anchor),
+                namespace=namespace,
+                autouse=tuple(_coerce_str_list(settings.get("autouse"))),
+            )
+        )
+
+    return tuple(homes)
 
 
 def load_plugins(
