@@ -385,7 +385,10 @@ impl Default for FilterConfig {
 pub struct FeatureConfig {
     /// Python plugin module paths to load.
     pub plugins: Vec<String>,
-    /// Per-plugin TOML settings from `[tool.oxitest.<plugin>]`.
+    /// Per-plugin TOML settings from `[tool.oxitest.plugin_settings.<plugin>]`.
+    ///
+    /// Carries the plugin's own config *and* the framework keys read from the
+    /// same table — `protocols`, and since #1717 `namespace` and `autouse`.
     pub plugin_settings: std::collections::HashMap<String, toml::Value>,
     /// Async test backend name (e.g. `"asyncio"`).
     pub async_backend: String,

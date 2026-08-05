@@ -169,6 +169,98 @@ This is useful when a plugin naturally owns both a fixture and the reporting
 that accompanies it (for example, a coverage plugin that also provides a
 `coverage_session` fixture).
 
+## Ship fixtures from a `__fixtures__.py`
+
+A plugin that is a **package** can declare fixtures with `@oxi.fixture`, exactly
+as a user does in their own test tree. This is the recommended route for
+ordinary fixtures; `FixtureProvider` remains supported and is the only option
+when a fixture needs values computed inside your plugin's entry point.
+
+```
+oxi_pg/
+├── __init__.py        # your oxitest_plugin() entry point
+└── __fixtures__.py    # your fixtures
+```
+
+```python title="oxi_pg/__fixtures__.py"
+import oxitest as oxi
+
+
+class Conn:
+    def __init__(self) -> None:
+        self.dsn = "postgres://localhost/test"
+
+
+@oxi.fixture(lifetime="module")
+def conn() -> Conn:
+    return Conn()
+```
+
+The user activates the plugin the usual way, and the fixtures come with it:
+
+```toml
+[tool.oxitest]
+plugins = ["oxi_pg"]
+```
+
+```python
+from oxitest import Fixtures
+
+
+def test_query(fx: Fixtures) -> None:
+    assert fx.oxi_pg.conn.dsn.startswith("postgres://")
+```
+
+Plugin fixtures are **ambient**: they are reachable from every test in the run,
+at any directory depth, and are not subject to the
+[B1 boundary](use-fixtures.md#understand-fixture-visibility-the-b1-boundary)
+that anchors a user's declarations to their own subtree.
+
+Only the package's top-level `__fixtures__.py` is scanned. `__init__.py` is not
+a declaration home for a plugin — that is where your entry point lives.
+
+### Namespace
+
+The namespace defaults to your **module name**, so `fx.oxi_pg.conn` works with
+no configuration. A user can shorten it:
+
+```toml
+[tool.oxitest.plugin_settings.oxi_pg]
+namespace = "pg"        # now fx.pg.conn
+```
+
+The shortcut `fx.conn` also works, as it does for any fixture.
+
+Three namespaces are refused at activation, each because the fixtures would
+otherwise be unreachable or ambiguous: `oxi` (reserved for oxitest's built-ins),
+any Python keyword or builtin, and a namespace already claimed by another
+activated plugin.
+
+If a user declares a fixture of the same name in their own tree, **theirs
+wins** — the same way a local declaration outranks a `conftest.py` one. The run
+stays green and a notice names both.
+
+### Lifetimes
+
+`function`, `module` and `process` all work. **`package` is refused**: it binds
+a fixture to a directory in the user's test tree, and your plugin has none. Use
+`process` for one instance per worker, or `module` for one per test module.
+
+### Autouse
+
+You may declare `autouse=True`, but it does not fire until the **user** enables
+it in their own configuration:
+
+```toml
+[tool.oxitest.plugin_settings.oxi_pg]
+autouse = ["tx"]
+```
+
+Until then the fixture registers normally — requestable, but not automatic —
+and oxitest emits a notice naming the fixture and the key that turns it on.
+Installing a plugin is not consent to add setup to every test in a suite, so
+the decision belongs to the person whose suite it is.
+
 ## Protocols
 
 The `Plugin` dataclass has eight fields — five tuple-based protocol fields and
