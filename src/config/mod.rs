@@ -221,22 +221,32 @@ pub struct PathConfig {
     /// this invocation walking?" and not "what does this project declare?".
     pub testpaths: Vec<Utf8PathBuf>,
     /// What the project declares as its test surface — the **declared test
-    /// tree**. Identical to [`Self::testpaths`] until a positional path
-    /// argument narrows the run.
+    /// tree**. This doc comment is the single definition of that distinction;
+    /// the other sites involved point here rather than restating it.
     ///
-    /// The two were one field until #1798. `merge_paths` overwrites
-    /// `testpaths` with argv, so any consumer wanting the project's own
-    /// declaration silently received the run set instead and answered
-    /// differently depending on how the run was started. ADR-0009 Rule 4's
-    /// rootdir package is the consumer that forced the split.
+    /// The two were one field until #1798: `merge_paths` overwrites
+    /// `testpaths` with argv, so a consumer wanting the project's own
+    /// declaration silently received the run set and answered differently
+    /// depending on how the run was started. ADR-0009 Rule 4's rootdir package
+    /// is the consumer that forced the split.
     ///
-    /// INVARIANT: never written by an argv-derived merge. `merge_paths` is
+    /// **INVARIANT: never written by an argv-derived merge.** `merge_paths` is
     /// deliberately absent from the writer list, and a new `merge_*` method
-    /// that assigns this field silently reinstates #1798.
+    /// that assigns this field silently reinstates #1798 — with every existing
+    /// test still passing.
     ///
-    /// Stored unreduced. Collapsing a multi-entry declaration to a single
-    /// root here would foreclose #1755's decision about how a list of
-    /// declared roots reduces to one rootdir package.
+    /// **Empty means the project declared nothing**, which is `testpaths`'
+    /// documented default. It is deliberately not materialised to the rootdir
+    /// the way [`Self::testpaths`] is: "search from rootdir" is a sound default
+    /// for the *walk* and a wrong one for the rootdir package, which would then
+    /// sit above the directory the tests live in. The undeclared case resolves
+    /// from layout instead — [`crate::pipeline::collection`]. This also keeps
+    /// `testpaths = ["."]`, a deliberate declaration that the whole project is
+    /// the test surface, distinguishable from declaring nothing.
+    ///
+    /// Stored unreduced: collapsing a multi-entry declaration to one root here
+    /// would foreclose #1755's decision about how a list of declared roots
+    /// reduces to a single rootdir package.
     pub declared_testpaths: Vec<Utf8PathBuf>,
     /// Glob patterns matching test file names (e.g. `test_*.py`).
     pub python_files: Vec<String>,
@@ -250,7 +260,8 @@ impl Default for PathConfig {
     fn default() -> Self {
         Self {
             testpaths: vec![Utf8PathBuf::from(".")],
-            declared_testpaths: vec![Utf8PathBuf::from(".")],
+            // Empty, not `["."]`: nothing has been declared at this point.
+            declared_testpaths: vec![],
             python_files: vec!["test_*.py".to_string(), "*_test.py".to_string()],
             norecursedirs: vec![
                 ".git".to_string(),
@@ -589,8 +600,10 @@ impl Config {
         let pyproject_path = rootdir.join("pyproject.toml");
         let config = Self {
             paths: PathConfig {
+                // `testpaths` materialises "when empty, the rootdir itself is
+                // used"; `declared_testpaths` deliberately does not, and stays
+                // empty until `merge_toml` finds a real declaration.
                 testpaths: vec![rootdir.to_owned()],
-                declared_testpaths: vec![rootdir.to_owned()],
                 ..PathConfig::default()
             },
             rootdir: rootdir.to_owned(),

@@ -145,20 +145,21 @@ pub(super) struct CollectionOutput {
     pub fixture_modules: Vec<types::FixtureModule>,
 }
 
-/// The top of the collected test tree — the deepest directory that contains
-/// every collected test file.
+/// ADR-0009's "rootdir package" — the deepest directory containing every
+/// directory the project *declares* as its test surface.
 ///
-/// This is ADR-0009's "rootdir package". It is derived from the files actually
-/// collected rather than from `testpaths`, because a positional path argument
-/// overrides `testpaths` (`config/merge.rs`): `oxitest tests/` and a bare
-/// `oxitest` run from inside `tests/` would otherwise disagree about which
-/// directory is the root, making the same `lifetime="process"` declaration
-/// legal or illegal depending on the caller's shell.
+/// Folds `declared_testpaths`, never the collected files or `testpaths` — see
+/// [`crate::config::PathConfig::declared_testpaths`] for why those two cannot
+/// answer this (#1798).
 ///
-/// Returns `None` when nothing was collected, in which case there is no tree
+/// Takes directories. A declared entry that names a file contributes its
+/// parent, and that normalisation happens at the call site, where the
+/// filesystem is already being touched — this fold stays pure path arithmetic.
+///
+/// Returns `None` only when nothing is declared, in which case there is no tree
 /// and no declaration to place inside it.
-fn test_tree_root(test_files: &[camino::Utf8PathBuf]) -> Option<camino::Utf8PathBuf> {
-    let mut dirs = test_files.iter().filter_map(|file| file.parent());
+fn rootdir_package(declared_dirs: &[camino::Utf8PathBuf]) -> Option<camino::Utf8PathBuf> {
+    let mut dirs = declared_dirs.iter();
     let first = dirs.next()?;
     Some(dirs.fold(first.to_owned(), |common, dir| {
         common
@@ -167,6 +168,51 @@ fn test_tree_root(test_files: &[camino::Utf8PathBuf]) -> Option<camino::Utf8Path
             .unwrap_or(camino::Utf8Path::new(""))
             .to_owned()
     }))
+}
+
+/// The test surface a project implies by its layout, for use when it declares
+/// none.
+///
+/// Why an undeclared project is not simply given its rootdir:
+/// [`crate::config::PathConfig::declared_testpaths`].
+///
+/// Walks from `cfg.rootdir` rather than from `cfg.paths.testpaths`, so a
+/// positional path argument cannot move the answer — the invocation
+/// independence this issue buys has to hold for the undeclared case too.
+///
+/// **Not** gated on `has_explicit_paths`: that flag is also set by
+/// `merge_affected`, which narrows the *item set* without touching the walk
+/// (#1796). It answers a different question than "was the walk narrowed".
+///
+/// A walk that finds nothing yields no directories, which folds to `None` — the
+/// same answer as an empty declared list, and the honest one.
+fn implied_declared_dirs(cfg: &config::Config) -> Vec<camino::Utf8PathBuf> {
+    let mut unnarrowed = cfg.clone();
+    unnarrowed.paths.testpaths = vec![cfg.rootdir.clone()];
+    match crate::collector::collect_files(&unnarrowed) {
+        Ok((files, _)) => files
+            .iter()
+            .filter_map(|file| file.parent())
+            .map(camino::Utf8Path::to_owned)
+            .collect(),
+        // A glob-set failure here is the same failure collection is about to
+        // report for real; falling back to the rootdir keeps Rule 4 answering
+        // rather than adding a second diagnostic for one cause.
+        Err(_) => vec![cfg.rootdir.clone()],
+    }
+}
+
+/// Normalise a declared testpath to the directory it names.
+///
+/// `testpaths` entries are directories by convention, but nothing forbids
+/// naming a file, and [`rootdir_package`] folds directories. Split out rather
+/// than inlined so the fold stays free of I/O and its unit tests stay pure.
+fn declared_dir(path: &camino::Utf8Path) -> camino::Utf8PathBuf {
+    if path.is_file() {
+        path.parent().unwrap_or(path).to_owned()
+    } else {
+        path.to_owned()
+    }
 }
 
 /// One declaration-home file and where it sits in the collected test tree.
@@ -457,10 +503,19 @@ pub(super) fn collect_items(
     let profile_enabled = cfg.output.collection_profile;
     let wall_start = std::time::Instant::now();
     let mut file_profiles: Vec<FileProfile> = Vec::new();
-    // Computed once over the whole file list rather than per directory: the
-    // rootdir package is a property of the run, and the per-file loop below
+    // Computed once rather than per directory: the rootdir package is a
+    // property of the *project*, not of the run, and the per-file loop below
     // visits directories in collection order, not depth order.
-    let tree_root = test_tree_root(test_files);
+    let declared_dirs: Vec<camino::Utf8PathBuf> = if cfg.paths.declared_testpaths.is_empty() {
+        implied_declared_dirs(cfg)
+    } else {
+        cfg.paths
+            .declared_testpaths
+            .iter()
+            .map(|p| declared_dir(p))
+            .collect()
+    };
+    let tree_root = rootdir_package(&declared_dirs);
 
     // Deduplicate fixture-module registrations: multiple test files in the
     // same directory all share the same __fixtures__.py. Register once per dir.
@@ -1103,82 +1158,108 @@ mod tests {
         );
     }
 
-    // ── test_tree_root (#1711) ───────────────────────────────────────────────
+    // ── rootdir_package (#1711, re-based on the declared tree by #1798) ──────
 
     fn paths(entries: &[&str]) -> Vec<Utf8PathBuf> {
         entries.iter().map(Utf8PathBuf::from).collect()
     }
 
     #[test]
-    fn tree_root_of_one_directory_is_that_directory() {
-        let files = paths(&["tests/test_a.py", "tests/test_b.py"]);
+    fn rootdir_package_of_one_declared_directory_is_that_directory() {
+        let declared = paths(&["tests"]);
 
-        let root = test_tree_root(&files);
-
-        assert_eq!(
-            root,
-            Some(Utf8PathBuf::from("tests")),
-            "a flat suite's root is the directory holding it — that is where a \
-             lifetime=\"process\" declaration is legal"
-        );
-    }
-
-    #[test]
-    fn tree_root_climbs_to_the_common_ancestor_of_siblings() {
-        let files = paths(&["tests/api/test_a.py", "tests/db/test_b.py"]);
-
-        let root = test_tree_root(&files);
+        let root = rootdir_package(&declared);
 
         assert_eq!(
             root,
             Some(Utf8PathBuf::from("tests")),
-            "with tests in two sibling directories the root is their parent, \
-             even though it holds no test file itself; declaring session in \
-             either sibling would scope it below the run"
+            "a project declaring one test directory makes it the rootdir \
+             package — that is where a lifetime=\"process\" declaration is legal"
         );
     }
 
     #[test]
-    fn tree_root_is_independent_of_how_deep_the_search_started() {
-        // The same suite, whether reached via `oxitest project/` or by running
-        // inside it. A positional path overrides testpaths (config/merge.rs),
-        // so deriving the root from config would give two different answers and
-        // make the same declaration legal or illegal depending on the caller.
-        let files = paths(&["project/suite/test_a.py", "project/suite/test_b.py"]);
+    fn rootdir_package_climbs_to_the_common_ancestor_of_declared_siblings() {
+        let declared = paths(&["tests/api", "tests/db"]);
 
-        let root = test_tree_root(&files);
+        let root = rootdir_package(&declared);
+
+        assert_eq!(
+            root,
+            Some(Utf8PathBuf::from("tests")),
+            "two declared siblings put the root at their parent, even though it \
+             is not itself declared; declaring process in either sibling would \
+             scope it below the project's own test surface"
+        );
+    }
+
+    #[test]
+    fn rootdir_package_ignores_which_subtree_the_run_narrowed_to() {
+        // The whole point of #1798. `testpaths` and the collected file set are
+        // both narrowed by a positional path argument; `declared_testpaths` is
+        // not. Deriving from either of the first two made `oxitest project/` and
+        // `oxitest project/suite/` disagree about which directory is the root,
+        // and so disagree about whether the same declaration was legal.
+        //
+        // The unit can only assert that the fold reads the declared set; that
+        // the declared set survives merge is asserted end-to-end by
+        // test_rule_4_verdict_does_not_depend_on_how_the_run_was_invoked.
+        let declared = paths(&["project/suite"]);
+
+        let root = rootdir_package(&declared);
 
         assert_eq!(
             root,
             Some(Utf8PathBuf::from("project/suite")),
-            "the root is derived from the files collected, not from the search \
-             root, so invocation style cannot change which directory is rootdir"
+            "the root is the declared test tree, so no argv can move it; a \
+             narrowed run must not be able to legalise a declaration the \
+             project's own layout rejects"
         );
     }
 
     #[test]
-    fn tree_root_of_nothing_collected_is_none() {
-        let root = test_tree_root(&[]);
+    fn rootdir_package_of_nothing_declared_is_none() {
+        let root = rootdir_package(&[]);
 
         assert!(
             root.is_none(),
-            "with no tests there is no tree, so no directory can be the rootdir \
-             package and no session declaration can sit inside one"
+            "with nothing declared there is no tree, so no directory can be the \
+             rootdir package and no process declaration can sit inside one"
         );
     }
 
     #[test]
-    fn tree_root_of_a_single_file_is_its_directory() {
-        let files = paths(&["tests/api/test_only.py"]);
+    fn declared_dir_of_a_directory_is_itself() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        let sub = dir.child("suite");
+        sub.create_dir_all().unwrap();
+        let path = Utf8PathBuf::from_path_buf(sub.path().to_owned()).unwrap();
 
-        let root = test_tree_root(&files);
+        let normalised = declared_dir(&path);
 
         assert_eq!(
-            root,
-            Some(Utf8PathBuf::from("tests/api")),
-            "a one-directory run makes that directory the rootdir package — \
-             otherwise a suite that lives in a subdirectory could never declare \
-             a session fixture at all"
+            normalised, path,
+            "a declared directory is already the unit the fold works in; \
+             rewriting it to its parent would silently move the rootdir package \
+             one level up for every project"
+        );
+    }
+
+    #[test]
+    fn declared_dir_of_a_file_is_its_parent() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        let file = dir.child("suite/test_only.py");
+        file.touch().unwrap();
+        let path = Utf8PathBuf::from_path_buf(file.path().to_owned()).unwrap();
+
+        let normalised = declared_dir(&path);
+
+        assert_eq!(
+            normalised,
+            path.parent().unwrap(),
+            "nothing forbids testpaths naming a file, and folding the file path \
+             itself would make the rootdir package a path that is not a \
+             directory — so Rule 4 could never match any declaration's anchor"
         );
     }
 

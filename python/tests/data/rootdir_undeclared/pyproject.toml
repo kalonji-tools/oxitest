@@ -1,0 +1,6 @@
+# Deliberately declares NO testpaths: this project exists to pin the undeclared
+# case, where the rootdir package is implied by layout rather than declared
+# (#1798). Adding testpaths here would silently retire the regression guard.
+[tool.oxitest]
+python_files = ["test_*.py"]
+strict = "abort"

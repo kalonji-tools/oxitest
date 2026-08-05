@@ -1,0 +1,6 @@
+# `["."]` is a DELIBERATE declaration that the whole project is the test
+# surface — distinct from declaring nothing, which is rootdir_undeclared.
+[tool.oxitest]
+testpaths = ["."]
+python_files = ["test_*.py"]
+strict = "abort"

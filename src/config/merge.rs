@@ -325,13 +325,8 @@ impl Config {
     /// Merge CLI paths into testpaths, resolving relative paths against rootdir.
     ///
     /// Writes [`PathConfig::testpaths`] and **not**
-    /// [`PathConfig::declared_testpaths`]. That asymmetry is the whole of
-    /// #1798: argv narrows what this invocation walks, it does not change what
-    /// the project declares its test surface to be. Adding the second
-    /// assignment here would make ADR-0009 Rule 4's rootdir package
-    /// invocation-dependent again, and every existing test would still pass —
-    /// only the cross-invocation test in `test_fixtures_redesign_slice4.py`
-    /// catches it.
+    /// [`PathConfig::declared_testpaths`] — see that field for why. This is the
+    /// site the invariant is broken from (#1798).
     fn merge_paths(&mut self, paths: &[Utf8PathBuf]) {
         if !paths.is_empty() {
             self.filter.has_explicit_paths = true;
