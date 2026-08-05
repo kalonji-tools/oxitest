@@ -84,48 +84,47 @@ def test_missing_directory_is_appended_anyway(tmp: TempDir) -> None:
 
 
 @oxitest.arrange("_restore_sys_path")
-def test_empty_sys_path_entry_does_not_shadow_the_append(
-    tmp: TempDir, patch: Patcher
+def test_a_non_str_sys_path_entry_does_not_abort_the_append(
+    tmp: TempDir,
 ) -> None:
-    """A pre-existing '' on sys.path must not be mistaken for the rootdir.
+    """A non-str entry on sys.path must not stop the rootdir being appended.
 
-    ``Path('').resolve() == Path.cwd()``, so when a test's rootdir *is* the
-    current directory, an unguarded loop would match '' against it and
-    return early without appending anything — #1780 would silently do
-    nothing. This is reachable in production: an empty ``PYTHONPATH``
-    segment (the classic ``PYTHONPATH="$PYTHONPATH:/foo"``-with-unset
-    accident) puts '' on sys.path — see python/tests/test_worker.py:41,
-    which filters this deliberately for the same reason.
+    sys.path entries are conventionally str, but nothing enforces it. The
+    previous implementation called ``Path(entry)`` on every entry, which
+    raises TypeError on a bytes entry and would abort session creation from
+    inside conftest loading. Membership uses ``==``, and ``str.__eq__``
+    returns NotImplemented for bytes rather than raising, so the comparison
+    is total over whatever sys.path holds (#1786).
+
+    ``sys.path`` is typed ``list[str]``, so the bytes entry is widened
+    through ``Any`` — the same escape this file already uses to call a
+    keyword-only parameter positionally. The point of the test is precisely
+    that runtime admits what the stub does not.
     """
-    sys.path.append("")
-    patch.chdir(tmp.path)
+    non_str_entry: Any = b"/non-str-entry"
+    sys.path.insert(0, non_str_entry)
+
     ensure_rootdir_importable(str(tmp.path))
-    resolved = tmp.path.resolve()
-    assert any(Path(entry) == resolved for entry in sys.path), (
-        "an empty sys.path entry resolves to the current directory too, and "
-        "must not be treated as the rootdir already being present — the "
-        "absolute entry must still be appended"
+
+    assert str(tmp.path.resolve()) in sys.path, (
+        "a non-str sys.path entry must not prevent the append — the entry "
+        "side is never converted to a Path, so no entry type can raise"
     )
 
 
 @oxitest.arrange("_restore_sys_path")
-def test_symlinked_entry_already_on_sys_path_is_not_duplicated(
+def test_symlinked_entry_yields_one_duplicate_and_no_more(
     tmp: TempDir,
 ) -> None:
-    """A symlinked spelling already on sys.path must be recognized as equivalent.
+    """A foreign symlinked spelling is not recognized — by design (#1786).
 
-    Trailing-slash normalisation happens once, on the incoming argument,
-    before the loop over existing entries is ever reached — it says nothing
-    about whether that loop resolves *existing* entries. A directory reached
-    through a symlink is the only spelling difference plain ``Path()``
-    equality does not collapse on its own, so it is the only way to exercise
-    the entry-side ``Path(entry).resolve()`` the loop exists for.
+    The entry side is no longer resolved, so a spelling something else put
+    on sys.path (PYTHONPATH, an installed .pth file) is not matched, and
+    the canonical form is appended alongside it. That costs one duplicate.
 
-    The symlinked spelling is seeded onto sys.path directly, bypassing
-    ``ensure_rootdir_importable``, because the function under test always
-    appends its own canonical form — the gap this test targets only shows up
-    for an entry something *else* put there (e.g. PYTHONPATH, an installed
-    .pth file).
+    It must cost exactly one. Workers call this once per task, so an append
+    that repeated would grow sys.path without bound over a long run — the
+    only way the dropped dedup could become more than cosmetic.
     """
     real_dir = tmp.path.resolve() / "real"
     real_dir.mkdir()
@@ -133,12 +132,14 @@ def test_symlinked_entry_already_on_sys_path_is_not_duplicated(
     link_dir.symlink_to(real_dir, target_is_directory=True)
     sys.path.append(str(link_dir))
 
-    ensure_rootdir_importable(str(real_dir))
+    for _ in range(3):
+        ensure_rootdir_importable(str(real_dir))
 
     matches = [entry for entry in sys.path if Path(entry).resolve() == real_dir]
-    assert matches == [str(link_dir)], (
-        "a directory already reachable on sys.path through a symlink must be "
-        f"recognized as the same target, not duplicated — got {matches}"
+    assert matches == [str(link_dir), str(real_dir)], (
+        "a foreign symlinked spelling is not recognized, so the canonical "
+        "form is appended once beside it — and only once, or a worker "
+        f"calling this per task would grow sys.path without bound; got {matches}"
     )
 
 
