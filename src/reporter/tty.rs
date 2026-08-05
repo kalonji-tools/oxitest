@@ -61,32 +61,49 @@ pub struct TtyReporter {
     running_tests: Vec<Arc<str>>,
 }
 
+/// Build the progress-bar style for a run.
+///
+/// A free function rather than a block inside [`TtyReporter::new`], which
+/// prints to the terminal and so is not something `cargo test` can enter —
+/// the same reason `worker_session::build_task` was extracted after
+/// `codecov/patch/rust` failed on #1747. Pure, so the tests below cover both
+/// arms.
+///
+/// Both templates are literals, so nothing a user supplies can make
+/// `with_template` fail. Degrading to indicatif's stock style costs the run its
+/// progress *decoration* and nothing else — no test result and no exit code
+/// depends on it — but it is logged rather than swallowed, because a
+/// degradation nobody can observe is the failure mode ADR-0011 warns about.
+fn progress_style(use_color: bool) -> ProgressStyle {
+    fn stock(err: &indicatif::style::TemplateError) {
+        tracing::warn!(error = %err, "progress bar template rejected — using the stock style");
+    }
+
+    if use_color {
+        ProgressStyle::with_template(SPINNER_TEMPLATE)
+            .unwrap_or_else(|err| {
+                stock(&err);
+                ProgressStyle::default_spinner()
+            })
+            .tick_strings(&["⣾", "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽", ""])
+    } else {
+        ProgressStyle::with_template(PLAIN_TEMPLATE).unwrap_or_else(|err| {
+            stock(&err);
+            ProgressStyle::default_bar()
+        })
+    }
+}
+
+/// Named so the tests can assert on the same string the code uses. Inlining
+/// them would let a mistyped template pass a test that re-typed it correctly.
+const SPINNER_TEMPLATE: &str = "  {pos}/{len}  {spinner:.cyan}  {msg}";
+const PLAIN_TEMPLATE: &str = "  {pos}/{len}  {msg}";
+
 impl TtyReporter {
     pub fn new(opts: ReporterOpts) -> Self {
         super::print_collected(opts.total, opts.fn_count, opts.async_count);
         let pb = ProgressBar::new(opts.total as u64);
-        // Both templates are literals, so nothing a user supplies can make
-        // `with_template` fail. Degrading to indicatif's stock style costs the
-        // run its progress *decoration* and nothing else — no test result and
-        // no exit code depends on it — but it is logged rather than swallowed,
-        // because a degradation nobody can observe is the failure mode
-        // ADR-0011 warns about.
-        let fallback = |err: indicatif::style::TemplateError| {
-            tracing::warn!(error = %err, "progress bar template rejected — using the stock style");
-        };
-        let style = if opts.use_color {
-            ProgressStyle::with_template("  {pos}/{len}  {spinner:.cyan}  {msg}")
-                .unwrap_or_else(|err| {
-                    fallback(err);
-                    ProgressStyle::default_spinner()
-                })
-                .tick_strings(&["⣾", "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽", ""])
-        } else {
-            ProgressStyle::with_template("  {pos}/{len}  {msg}").unwrap_or_else(|err| {
-                fallback(err);
-                ProgressStyle::default_bar()
-            })
-        };
+        let style = progress_style(opts.use_color);
         pb.set_style(style);
         pb.enable_steady_tick(std::time::Duration::from_millis(80));
         super::tracing_writer::register(pb.clone());
@@ -390,6 +407,43 @@ mod tests {
 
     use super::*;
     use crate::types::{DurationMs, TestOutcome};
+
+    /// Both styles must actually render the progress counter.
+    ///
+    /// **`ProgressStyle::with_template` does not validate.** Measured against
+    /// indicatif 0.18.6, it returns `Ok` for `{nonexistent_key}`, for a bare
+    /// `{`, and for a bare `}` — so `with_template(..).is_ok()` is a vacuous
+    /// assertion, and a mistyped placeholder simply renders as nothing. The
+    /// failure mode is a progress bar that quietly stopped showing `3/10`, with
+    /// no error, no diagnostic and no exit code. Rendering is the only place it
+    /// can be caught.
+    #[test]
+    fn both_progress_styles_render_the_counter() {
+        for use_color in [true, false] {
+            let term = indicatif::InMemoryTerm::new(4, 80);
+            let bar = ProgressBar::with_draw_target(
+                Some(10),
+                indicatif::ProgressDrawTarget::term_like(Box::new(term.clone())),
+            );
+            bar.set_style(progress_style(use_color));
+            bar.set_message("running");
+            bar.set_position(3);
+            bar.tick();
+
+            let rendered = term.contents();
+            assert!(
+                rendered.contains("3/10"),
+                "the use_color = {use_color} template must render `{{pos}}/{{len}}`, \
+                 got {rendered:?} — indicatif accepts a mistyped placeholder and \
+                 renders it as nothing, so this is the only place it can be caught"
+            );
+            assert!(
+                rendered.contains("running"),
+                "the use_color = {use_color} template must render `{{msg}}`, got \
+                 {rendered:?} — losing it hides which test is currently running"
+            );
+        }
+    }
 
     /// Serializes tests that mutate `console::set_colors_enabled` (global state).
     fn color_test_lock() -> &'static Mutex<()> {
