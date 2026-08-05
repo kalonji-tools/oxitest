@@ -101,8 +101,16 @@ impl Pipeline {
             // promoted to collection errors so `strict = "abort"` exits
             // non-zero via the existing early-exit path. Warning/Notice pass
             // through as pending diagnostics for the reporter.
+            // Audited over the *declared* tree, not the walked one. The two
+            // differ exactly when argv narrowed the run, which is when the
+            // audit silently stopped covering the rest of the project (#1798).
+            // The glob is the same `*.py` constant the walk above builds, so
+            // this cannot fail where that one succeeded; the empty default on
+            // the impossible arm avoids reporting one cause twice.
+            let coverage_files =
+                collector::collect_declared_doctest_files(&shared.cfg).unwrap_or_default();
             let coverage_diags =
-                collection::collect_coverage_diagnostics(&doctest_files, &shared.cfg);
+                collection::collect_coverage_diagnostics(&coverage_files, &shared.cfg);
             if !coverage_diags.is_empty() {
                 tracing::debug!(
                     coverage_diagnostics = coverage_diags.len(),

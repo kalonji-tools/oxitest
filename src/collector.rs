@@ -86,11 +86,20 @@ pub fn collect_files_in(
 /// so swallowing the error would silently drop the whole doctest suite under a
 /// green gate.
 pub fn collect_doctest_files(config: &Config) -> Result<Vec<Utf8PathBuf>, globset::Error> {
+    collect_doctest_files_in(&config.paths.testpaths, config)
+}
+
+/// [`collect_doctest_files`] over an explicit set of roots. See
+/// [`collect_files_in`] for why the roots are a parameter.
+fn collect_doctest_files_in(
+    roots: &[Utf8PathBuf],
+    config: &Config,
+) -> Result<Vec<Utf8PathBuf>, globset::Error> {
     let glob_set = build_glob_set(&["*.py".to_string()])?;
     let mut files = Vec::new();
     let mut dummy_conftests = HashSet::new();
 
-    for testpath in &config.paths.testpaths {
+    for testpath in roots {
         collect_from(
             testpath,
             config,
@@ -102,6 +111,34 @@ pub fn collect_doctest_files(config: &Config) -> Result<Vec<Utf8PathBuf>, globse
 
     files.sort();
     Ok(files)
+}
+
+/// Collect the `.py` files of the **declared** test tree, for the doctest
+/// coverage audit.
+///
+/// [`collect_doctest_files`] walks `testpaths`, which positional CLI paths
+/// overwrite. So `oxitest tests/` stopped auditing every subject outside
+/// `tests/` — a green run that had audited nothing, with no diagnostic saying
+/// so. Coverage asks what the *project* declares as its surface, which is
+/// `declared_testpaths` (#1798).
+///
+/// Deliberately **unfiltered**, unlike the rootdir package's fold: a declared
+/// directory holding no test files is precisely what coverage exists to audit —
+/// this project declares `python/oxitest` for that reason — so the filter that
+/// keeps such a directory out of the rootdir fold must not reach here.
+///
+/// The *item* walk stays on `testpaths`. Pointing both at the declared tree
+/// would make `oxitest tests/test_one.py` execute every doctest in the project.
+///
+/// Falls back to `testpaths` when nothing is declared: there the two are the
+/// same walk, and `Config::load` has already materialised the rootdir default.
+pub fn collect_declared_doctest_files(config: &Config) -> Result<Vec<Utf8PathBuf>, globset::Error> {
+    let roots = if config.paths.declared_testpaths.is_empty() {
+        &config.paths.testpaths
+    } else {
+        &config.paths.declared_testpaths
+    };
+    collect_doctest_files_in(roots, config)
 }
 
 /// Return only conftests that are ancestors of any matched test module.
