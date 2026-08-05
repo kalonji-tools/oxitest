@@ -102,3 +102,10 @@ doc_markdown = "deny"
 # nothing catches the *declaration* that over-claims. All three sites this
 # closed arose that way (#1833).
 needless_pass_by_ref_mut = "deny"
+# Nursery, so `all` misses it (verified against clippy 0.1.97's `-Whelp` group
+# listing). #1837 proposed rejecting this because `const` ratchets a semver
+# promise; it does not. `crate-type = ["cdylib"]` means no Rust crate can depend
+# on this one, and `stability.md` names "Internal module structure and Rust crate
+# layout" under "no guarantee" — so there is no surface to promise anything
+# about. A ratchet against new code, not a cleanup (#1837).
+missing_const_for_fn = "deny"
