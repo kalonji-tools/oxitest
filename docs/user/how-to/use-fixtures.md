@@ -128,6 +128,32 @@ refused at the access, before the fixture body runs.
     find out. Neither is enforced — oxitest has no setting that warns on or
     forbids the shortcut — so this is a convention for your team to pick.
 
+### Fixtures that come from a plugin
+
+An activated plugin can ship fixtures of its own, and they appear under the
+plugin's namespace — its module name by default:
+
+```python
+def test_query(fx: Fixtures) -> None:
+    conn = fx.oxi_pg.conn   # a fixture declared by the oxi_pg plugin
+    conn = fx.conn          # the shortcut works the same way
+```
+
+Two differences from your own declarations are worth knowing:
+
+- **They are ambient.** A plugin fixture is reachable from every test in the
+  run, at any depth. The B1 boundary below anchors *your* declarations to their
+  own subtree; a plugin has no place in your tree to be anchored to.
+- **Yours wins a name collision.** If you declare `conn` in your own
+  `__fixtures__.py`, your declaration outranks the plugin's for every test that
+  can see it — the same locality rule that lets a nearer declaration override a
+  farther one. The run stays green, and a notice names both so the shadowing is
+  visible rather than silent.
+
+To shorten a long namespace, or to enable a plugin fixture the plugin declared
+as `autouse`, see
+[Ship fixtures from a `__fixtures__.py`](write-plugins.md#ship-fixtures-from-a-__fixtures__py).
+
 ## Choose a lifetime
 
 `lifetime` names the code-structural unit whose exit disposes the value. There

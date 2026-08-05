@@ -136,10 +136,16 @@ class FixtureProvider(Protocol):
 
         `'shared'` and `'session'` are both built once per **task group** — the
         unit of work a worker picks up, which is a single module unless a
-        `lifetime="package"` declaration merges a subtree. Both caches hang off
-        the same per-task-group `FixtureSession`. Neither is once per run, and
-        neither is once per worker process — a worker pops task groups until the
-        queue drains and builds a fresh session for each (ADR-0009 Amendment 4).
+        `lifetime="package"` declaration merges a subtree. Neither is once per
+        run, and neither is once per worker process.
+
+        The *mechanism* changed in #1777, though the rate above did not. A
+        worker now builds **one** `FixtureSession` for the whole process rather
+        than a fresh one per task, so these caches no longer expire by being
+        thrown away with their session — they are drained by `end_task`, which
+        a worker calls once per task group. The tier that is genuinely once per
+        process is `lifetime="process"`, drained by `end_process`; it is a
+        declaration-side tier and not one of the values here.
 
         Optional. Defaults to 'each' if not implemented.
         """

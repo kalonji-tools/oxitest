@@ -52,7 +52,7 @@ A fixture accidentally placed in `helpers.py` or `utils.py` is invisible to the 
 
 ### Rule 2 — Lifetime tiers and boundaries
 
-**Status:** shipped (#1710, #1711, #1745); amended by Amendment 1, its `session` row corrected by Amendment 4, and that tier replaced by `process` in Amendment 6.
+**Status:** shipped (#1710, #1711, #1745); amended by Amendment 1, its `session` row corrected by Amendment 4, and that tier replaced by `process` in Amendment 6. Amendment 8 adds the table's first per-source exception: `package` is refused for a plugin declaration.
 
 `Lifetime` is a `StrEnum` with four values. The first three are ordered by the **breadth of the code-structural unit** they name — not by the strength of the guarantee they offer. `process` is the exception and the reason the ordering has to be stated rather than assumed: it names the **runtime** unit, not a code-structural one, and it is the only tier whose instance count the user sets directly, with `-n`. Under parallel execution the ladder is deliberately non-monotonic in guarantee strength; see *Lifetimes under parallel execution* below. Each tier has exactly one boundary whose exit triggers teardown.
 
@@ -110,7 +110,7 @@ The amendment is not a weakening of the loud-rejection principle, because a coll
 
 ### Rule 4 — Lifetime cap
 
-**Status:** shipped (#1711); amended by Amendment 1, whose retraction of the `package`/`session` equivalence is itself re-grounded by Amendment 4, and the tier renamed to `process` by Amendment 6. **The rootdir restriction survives every one of those** — see below, where the rename strengthens its argument rather than weakening it.
+**Status:** shipped (#1711); amended by Amendment 1, whose retraction of the `package`/`session` equivalence is itself re-grounded by Amendment 4, and the tier renamed to `process` by Amendment 6. **The rootdir restriction survives every one of those** — see below, where the rename strengthens its argument rather than weakening it. Amendment 8 records that it does not reach a plugin package at all, which sits outside the rule rather than satisfying it.
 
 Declared `lifetime` cannot exceed the declaration site's boundary.
 
@@ -137,7 +137,7 @@ The *restriction* to rootdir survives, and the rename **strengthens** its argume
 
 ### Rule 5 — Access via the `fx` proxy
 
-**Status:** shipped (#1708, #1713, #1714); amended by Amendments 2 and 3, and the `hlp` half is retracted by Amendment 5. The `namespace=` override this rule names is still unbuilt — `@oxi.fixture` accepts only `lifetime=` — and is [#1782](https://github.com/kalonji-tools/oxitest/issues/1782)'s question, not a helpers-only gap.
+**Status:** shipped (#1708, #1713, #1714); amended by Amendments 2 and 3, and the `hlp` half is retracted by Amendment 5. The `namespace=` override this rule names is still unbuilt — `@oxi.fixture` accepts only `lifetime=` — and is [#1782](https://github.com/kalonji-tools/oxitest/issues/1782)'s question, not a helpers-only gap. For *plugin* namespaces the override shipped in Amendment 8 as a pyproject key rather than a decorator argument.
 
 Tests receive fixtures via a synthesized proxy parameter — the type annotation `Fixtures` reappears here as an access proxy (the old instance-registry meaning is retired, see Rule 8):
 
@@ -187,7 +187,7 @@ The constraint is about *reachability of both views*, not about object count. Th
 
 ### Rule 6 — Plugin convergence
 
-**Status:** not yet built (#1717, #1718); amended by Amendment 4.
+**Status:** **shipped** (#1717, slice 10); the runtime hook is retracted (#1773, #1718 closed `wontfix`). Amended by Amendment 4, then **replaced by Amendment 8** — read that instead of the rule body below, which records the plan rather than what was built.
 
 Plugins register fixtures via the **same decorator path as user code**. A plugin package with a `__fixtures__.py` file declares fixtures with `@oxi.fixture` exactly as users do; the framework treats each activated plugin as an ambient ancestor, making plugin fixtures visible session-wide under the plugin's declared namespace (e.g., `fx.postgres.pg_session` for a `postgres` plugin).
 
@@ -684,3 +684,72 @@ The shallowest-frame argument is satisfied either way: both abort collection bef
 #### What did not change
 
 Rule 7's finding **(b)** — that slice 9 must B1-filter the autouse enumeration — was already discharged by [#1774](https://github.com/kalonji-tools/oxitest/issues/1774) and needed verifying, not building. Finding **(d)** — that autouse reached through the `fx.` proxy builds twice — was **stale**: [#1775](https://github.com/kalonji-tools/oxitest/issues/1775) keyed the per-test cache on the definition with no route discriminator, so additive means shared-instance. Both are removed from the rule body rather than carried forward.
+
+### Amendment 8 — static plugin fixtures ship, and workers get plugins at all (2026-08-05)
+
+**Issue:** [#1717](https://github.com/kalonji-tools/oxitest/issues/1717), slice 10. Amends Rules 2, 4, 5 and 6.
+
+Rule 6 was written before any of it existed, and three of its statements could not be built as worded. Amendment 4 had already flagged four separate drifts in it; this amendment replaces the plan rather than annotating it further.
+
+#### 1. The pyproject schema could never have been written
+
+Rule 6 promised activation "under the plugin's declared namespace" and #1717 proposed `[tool.oxitest.plugins.<name>]` to declare it. That table cannot exist: `plugins` is already `Option<Vec<String>>` (`src/config/pyproject.rs:180`), an array of module paths, and TOML forbids one key being both an array and a table. `OxitestConfig` also carries `deny_unknown_fields`.
+
+The schema lives in the per-plugin table that already exists:
+
+```toml
+[tool.oxitest]
+plugins = ["oxi_pg"]                      # unchanged
+
+[tool.oxitest.plugin_settings.oxi_pg]
+namespace = "postgres"                    # default: the module name
+autouse   = ["tx"]                        # default: [] — nothing fires
+```
+
+Framework keys already live there — `protocols` is read from it at `plugin_loader.py:311` — and `merge_config` is descriptor-driven, so keys a plugin did not declare are ignored rather than rejected. `namespace`, `autouse` and `protocols` are reserved; a plugin config field of the same name gets a notice.
+
+**The namespace defaults to the module name**, which removes a question Rule 6 left open. There is no plugin "name" anywhere in the codebase: `load_plugins`, `_load_single_plugin` and `bridge.rs` all key by module path. A declared namespace is an optional shortening, never a second identity.
+
+#### 2. "The same decorator path" and "ambient" cannot both be taken literally
+
+Rule 6 says plugins register "via the same decorator path as user code", and Amendment 4 recorded that the *ambient* half of "ambient ancestor" already holds while the *ancestor* half was unbuilt. Reusing the user path literally would have destroyed the half that held: that path produces `ModuleSource`, the only B1-anchored variant, so a plugin's anchor would be its `site-packages` directory and `is_visible_from` would return `False` for every user test.
+
+A sentinel empty anchor does not work either — `_visibility.py:56-62` refuses it by construction, because `()` is what `Path("").parts` yields and treating it as universal is the exact inversion that module exists to prevent.
+
+Plugin declarations therefore carry a new source variant, `PluginModuleSource`. It gets ambient semantics *by construction* rather than by special case: `anchor` returns `None`, `is_visible_from` falls to `case _: return True`, `_anchor_of` refuses it, and `_shadow_order` scores it `0` so a user's anchored declaration always wins. Prescan and its three-arm dispatch are genuinely shared; what the two kinds do not share is the Rule 4 check and the `FixtureModule` record, both meaningless off-tree.
+
+#### 3. Rule 2 — `package` is refused for a plugin
+
+The first per-source exception in the tier table. `package` binds a fixture to an anchor directory in the user's test tree and a plugin has none; without an explicit refusal the declaration reaches `_anchor_of` at *resolution* time, which reports a plugin author's typo as an oxitest bug and asks them to file an issue. `function`, `module` and `process` are unaffected.
+
+#### 4. Rule 4 — a plugin package is outside the rule, not a rootdir package
+
+Rule 4 restricts `process` to a rootdir package because a `process` fixture anchored *below* the root attaches to no boundary. A plugin's attaches to the process regardless, so the rule has nothing to say about it. This is expressed as a `HomeKind` on the declaration home rather than by synthesising a tree root equal to the anchor — the latter reaches the same outcome for a reason that reads like a coincidence.
+
+#### 5. Rule 5 — the namespace override lives in pyproject
+
+Rule 5 says the default namespace is "overridable via `namespace=` on the decorator", which remains unbuilt and is [#1782](https://github.com/kalonji-tools/oxitest/issues/1782)'s question. For plugins the override is a **pyproject key**, not a decorator argument, because the thing being overridden is a distribution's module name rather than a name the author picked for readability. Whatever #1782 decides for user declarations, the plugin case is already served.
+
+#### 6. Autouse is declared by the plugin and enabled by the user
+
+Rule 7 governs autouse generally. Plugin autouse gets one additional gate: a plugin declaring `autouse=True` registers with autouse **off** until the user names the fixture in `autouse = [...]` under that plugin's settings table, with a notice naming the fixture and the key.
+
+Installing a plugin is not consent to add setup to every test in a suite. The ecosystem agrees, which is why the gate is a gate rather than an invention: the plugins whose whole purpose is per-test side effects — pytest-randomly, pytest-socket — use hooks rather than autouse fixtures, and **gate them on config anyway**; pytest-django uses autouse fixtures because [hooks cannot request fixtures](https://github.com/pytest-dev/pytest/issues/5012), and four of its nine are inert without a marker. oxitest's own per-test plugin hook, `ExecutionWrapper`, is already marker-gated, so the gate keeps the framework consistent with itself.
+
+#### 7. Plugin fixtures now work under `-n` — they never did before
+
+Not a change to any rule, and the largest user-visible consequence of this slice.
+
+Workers rebuild their own `FixtureSession` and inherit nothing from the coordinator, and **nothing ever activated plugins in a worker**. Both plugin-fixture routes were silently serial-only. Measured with a `FixtureProvider` plugin against `main` @ `c78b4da3`, before any of this slice existed:
+
+| | serial | `-n 2` |
+|---|---|---|
+| `FixtureProvider` fixture | `2 passed` | `2 errors` |
+
+So Amendment 4's finding (a) — that plugin fixtures "are registered into every worker session" — described the *serial* session only. The claim is now true: the task wire carries the run's plugin modules and settings (protocol v6 → v7), and a worker activates plugins before registering fixture modules, mirroring the serial order so a user's declaration can still shadow a plugin's.
+
+This repaired a pre-existing defect in the shipped `FixtureProvider` path that had no ticket.
+
+#### What did not change
+
+The runtime `register_fixtures` hook stays retracted — [#1773](https://github.com/kalonji-tools/oxitest/issues/1773), recorded in [#1755](https://github.com/kalonji-tools/oxitest/issues/1755)'s amendment. `FixtureProvider`'s retirement is untouched and remains Rule 8's problem; it now has a documented blocker, since a static declaration has no route to plugin config and `create(*, ctx)` documents `ctx` as always `None`.
