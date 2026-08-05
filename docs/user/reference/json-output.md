@@ -122,5 +122,12 @@ file, and each such error appears as its own `failed` entry:
 These entries are counted in `summary.tests` and `summary.failed`. The pass rate for such a run is
 `0` of `N`, which is accurate: no test executed.
 
-`--junit-xml` does not yet do this — an aborted run produces an empty `<testsuites>`. Use `--json`
-if your CI needs the aborted-run signal.
+[`--junit-xml`](junit-output.md#aborted-runs) also writes its artifact on every early exit, and
+passing both flags produces both. They agree about *whether* the run aborted, but they do not spell
+it identically, so do not diff one against the other field by field:
+
+- CTRF has a single flat `name`, so an import failure is named after the file and `<collection>` is
+  used only when the error carries no path. JUnit has `classname` as well, so the file goes there
+  and `<collection>` is used for every collection error.
+- A collection error counts toward `summary.failed` here, but toward `errors=` — not `failures=` —
+  in the XML. Compare `summary.failed` against `failures + errors`, never against `failures` alone.

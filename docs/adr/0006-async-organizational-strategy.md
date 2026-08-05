@@ -118,8 +118,8 @@ in `strict`
 | `strict` | Style violations (bare asserts, dict parametrize, missing mark reasons) | Diagnostic severity |
 |---|---|---|
 | absent, or `"off"` | not checked | none emitted |
-| `"enforce"` | reported; the rest of the run proceeds (`src/pipeline/helpers.rs:203`–`226`) | `Warning` |
-| `"abort"` | printed, then an early `Err` before any test executes — `ExitCode::CollectError`, or `UsageError` when a `--json` artifact is requested and cannot be written (`src/pipeline/helpers.rs:193`–`201`, [#1682](https://github.com/kalonji-tools/oxitest/issues/1682)) | `Error` |
+| `"enforce"` | reported; the rest of the run proceeds (`src/pipeline/helpers.rs:223`–`246`) | `Warning` |
+| `"abort"` | printed, then an early `Err` before any test executes — `ExitCode::CollectError`, or `UsageError` when a requested `--json` or `--junit-xml` artifact cannot be written (`src/pipeline/helpers.rs:214`–`221`, [#1682](https://github.com/kalonji-tools/oxitest/issues/1682), [#1858](https://github.com/kalonji-tools/oxitest/issues/1858)) | `Error` |
 
 The severity column is `src/pipeline/collection.rs:673`–`677`.
 
