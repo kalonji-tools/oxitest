@@ -50,12 +50,7 @@ class DbCase:
     expected: str
 
 
-# ── Module-level fixture registry (for FixtureRef test) ────────────────────
-
-_fixtures = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
-
-
-@_fixtures.fixture
+@oxitest.fixture(lifetime="function")
 def pg_db() -> str:
     """Provide a database connection string for parametrize composition tests."""
     return "postgres"
@@ -126,8 +121,8 @@ def test_three_layers(label: str, value: int, multiplier: int) -> None:
 
 # ── FixtureRef in composition ──────────────────────────────────────────────
 # One layer provides a FixtureRef field; the other provides a plain field.
-# The module-level Fixtures() instance is registered during collection so
-# pg_db is resolvable from the session without a conftest.py.
+# The inline declaration is registered during collection so pg_db is
+# resolvable from the session without a declaration file.
 
 
 @oxitest.parametrize(
