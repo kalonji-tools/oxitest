@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import oxitest
@@ -153,6 +154,141 @@ def test_json_written_on_strict_abort(tmp: TempDir) -> None:
     assert data["results"]["summary"]["failed"] >= 1, (
         "an aborted run must not serialise as a clean run, or CI treats a "
         "suite that never executed as green"
+    )
+
+
+def _junit_counts(path: Path) -> tuple[int, int, int]:
+    """Parse a JUnit XML file into (tests, failures, errors) from <testsuites>.
+
+    Parsing rather than substring-matching is the point: `"<testsuites" in text`
+    passes against the `tests="0" errors="0"` artifact these tests exist to
+    prevent, so only a real parse can tell a red report from a green one.
+    """
+    # S314 is suppressed deliberately: the input is the artifact oxitest wrote
+    # seconds earlier into this test's own temp dir, not untrusted data, and
+    # adding defusedxml to read our own output would be a dependency for nothing.
+    root = ET.parse(path).getroot()  # noqa: S314
+    return (
+        int(root.get("tests", "0")),
+        int(root.get("failures", "0")),
+        int(root.get("errors", "0")),
+    )
+
+
+def test_junit_written_on_collection_failure(tmp: TempDir) -> None:
+    """--junit-xml must still write a parseable XML file when a file fails to import.
+
+    #1682 fixed this for --json and deliberately left --junit-xml out, because
+    threading the path through alone would emit <testsuites tests="0"
+    errors="0"/> — an artifact that reports an aborted run as clean (#1858).
+    """
+    integ.write_project(
+        tmp,
+        tests={
+            "test_bad_import.py": """\
+                import definitely_not_a_real_module_xyz
+
+                def test_thing() -> None:
+                    assert definitely_not_a_real_module_xyz, "module must import"
+            """,
+        },
+    )
+    xml_path = Path(tmp) / "results.xml"
+
+    out, _, rc = helpers.run_oxitest(tmp, "--junit-xml", str(xml_path))
+
+    integ.assert_collection_error(out, rc)
+    assert xml_path.exists(), (
+        "--junit-xml promises the file exists after the run; a collection "
+        "failure that writes nothing looks identical to a job that never started"
+    )
+    tests, failures, errors = _junit_counts(xml_path)
+    assert failures + errors >= 1, (
+        "an aborted run must not serialise as a clean one — failures=0 and "
+        f"errors=0 makes every JUnit consumer render it green; got "
+        f"tests={tests} failures={failures} errors={errors}"
+    )
+    assert "test_bad_import" in xml_path.read_text(), (
+        "the artifact must name the file that failed to import, or a dashboard "
+        "cannot point at the cause"
+    )
+
+
+def test_junit_written_on_strict_abort(tmp: TempDir) -> None:
+    """--junit-xml must still write an XML file when strict=abort halts the run.
+
+    A second, independent early-exit route: it prints and returns before any
+    reporter is built, so it needs its own artifact write (#1858).
+    """
+    integ.write_project(
+        tmp,
+        pyproject="""\
+            [project]
+            name = "strict-abort-junit"
+            version = "0.0.0"
+
+            [tool.oxitest]
+            strict = "abort"
+        """,
+        tests={
+            "test_bare.py": """\
+                def test_bare_assert() -> None:
+                    assert 1 + 1 == 2
+            """,
+        },
+    )
+    xml_path = Path(tmp) / "results.xml"
+
+    out, _, rc = helpers.run_oxitest(tmp, "--junit-xml", str(xml_path))
+
+    integ.assert_collection_error(out, rc)
+    assert xml_path.exists(), (
+        "strict=abort exits before any reporter is constructed, so it is the "
+        "route most likely to silently drop the --junit-xml artifact"
+    )
+    tests, failures, errors = _junit_counts(xml_path)
+    assert failures + errors >= 1, (
+        "a strict-abort run must not serialise as clean, or CI treats a suite "
+        f"that never executed as green; got tests={tests} "
+        f"failures={failures} errors={errors}"
+    )
+
+
+def test_junit_and_json_agree_on_an_aborted_run(tmp: TempDir) -> None:
+    """Both artifacts must be written, and neither may report the run as clean.
+
+    The two formats travel independent code paths, so a fix to one says nothing
+    about the other — which is exactly how the asymmetry in #1858 arose.
+    """
+    integ.write_project(
+        tmp,
+        tests={
+            "test_bad_import.py": """\
+                import definitely_not_a_real_module_xyz
+
+                def test_thing() -> None:
+                    assert definitely_not_a_real_module_xyz, "module must import"
+            """,
+        },
+    )
+    xml_path = Path(tmp) / "results.xml"
+    json_path = Path(tmp) / "results.json"
+
+    out, _, rc = helpers.run_oxitest(
+        tmp, "--junit-xml", str(xml_path), "--json", str(json_path)
+    )
+
+    integ.assert_collection_error(out, rc)
+    assert xml_path.exists() and json_path.exists(), (
+        "--junit-xml and --json are independent flags on independent code paths; "
+        "passing both must produce both artifacts"
+    )
+    _, failures, errors = _junit_counts(xml_path)
+    ctrf_failed = json.loads(json_path.read_text())["results"]["summary"]["failed"]
+    assert failures + errors >= 1 and ctrf_failed >= 1, (
+        "the two artifacts describe one run and must not disagree about whether "
+        f"it aborted; junit failures+errors={failures + errors}, "
+        f"ctrf failed={ctrf_failed}"
     )
 
 

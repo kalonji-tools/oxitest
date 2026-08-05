@@ -141,6 +141,18 @@ impl PipelineShared {
         }
     }
 
+    /// The `--junit-xml` path this invocation asked for, if any.
+    ///
+    /// Same promise as [`json_path`](Self::json_path), and needed on the same
+    /// early exits: `--junit-xml PATH` means `PATH` exists once the process is
+    /// gone, whatever the exit code (#1858).
+    pub(in crate::pipeline) fn junit_xml_path(&self) -> Option<Utf8PathBuf> {
+        match &self.command {
+            config::Command::Run(args) => args.junit_xml.clone(),
+            _ => None,
+        }
+    }
+
     fn make_error_reporter(&self) -> Box<dyn reporter::Reporter> {
         reporter::make_reporter(
             self.base
@@ -149,11 +161,7 @@ impl PipelineShared {
                 .build(),
             self.is_tty,
             self.json_path(),
-            // `--junit-xml` deliberately stays absent: `JunitReporter::finish`
-            // discards its collect errors, so wiring it here would write
-            // `<testsuites tests="0" failures="0"/>` — an artifact that reports
-            // an aborted run as clean.
-            None,
+            self.junit_xml_path(),
             vec![],
         )
     }
