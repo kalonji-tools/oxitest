@@ -109,10 +109,15 @@ impl Config {
     pub(super) fn merge_toml(mut self, tc: OxitestConfig, rootdir: Option<&Utf8Path>) -> Self {
         // ── Paths ────────────────────────────────────────────────────────
         if let Some(paths) = tc.testpaths {
-            self.paths.testpaths = match rootdir {
+            let resolved: Vec<Utf8PathBuf> = match rootdir {
                 Some(root) => resolve_testpaths(&paths, root),
                 None => paths.into_iter().map(Utf8PathBuf::from).collect(),
             };
+            // Both fields, from the same value and in the same arm: this is the
+            // project's declaration, which is exactly what `declared_testpaths`
+            // means. They diverge only in `merge_paths`, which is argv.
+            self.paths.testpaths.clone_from(&resolved);
+            self.paths.declared_testpaths = resolved;
         }
         apply_if_some!(self.paths, python_files, tc.python_files);
         apply_if_some!(self.paths, norecursedirs, tc.norecursedirs);
@@ -318,6 +323,15 @@ impl Config {
     }
 
     /// Merge CLI paths into testpaths, resolving relative paths against rootdir.
+    ///
+    /// Writes [`PathConfig::testpaths`] and **not**
+    /// [`PathConfig::declared_testpaths`]. That asymmetry is the whole of
+    /// #1798: argv narrows what this invocation walks, it does not change what
+    /// the project declares its test surface to be. Adding the second
+    /// assignment here would make ADR-0009 Rule 4's rootdir package
+    /// invocation-dependent again, and every existing test would still pass —
+    /// only the cross-invocation test in `test_fixtures_redesign_slice4.py`
+    /// catches it.
     fn merge_paths(&mut self, paths: &[Utf8PathBuf]) {
         if !paths.is_empty() {
             self.filter.has_explicit_paths = true;
