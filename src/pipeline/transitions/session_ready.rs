@@ -1,5 +1,5 @@
-//! Transitions: session (FilesCollected/MetadataFiltered -> SessionReady),
-//! collect (SessionReady -> Collected), query (SessionReady -> terminal)
+//! Transitions: session (`FilesCollected`/`MetadataFiltered` -> `SessionReady`),
+//! collect (`SessionReady` -> `Collected`), query (`SessionReady` -> terminal)
 
 use pyo3::prelude::*;
 

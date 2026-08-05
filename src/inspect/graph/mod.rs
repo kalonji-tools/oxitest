@@ -236,7 +236,7 @@ impl InspectGraph {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /// Extract the base function name from a node ID by stripping `[param_id]`.
-/// Returns the full node_id if no `[` is found.
+/// Returns the full `node_id` if no `[` is found.
 #[allow(dead_code)] // retained for future parametrize group collapsing
 pub(crate) fn base_test_name(node_id: &str) -> &str {
     node_id.rfind('[').map_or(node_id, |pos| &node_id[..pos])

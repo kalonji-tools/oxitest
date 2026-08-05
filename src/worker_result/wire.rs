@@ -69,7 +69,7 @@ pub(crate) struct WorkerTaskItem<'a> {
 }
 
 /// Unified intermediate frame type used by both the JSON worker path
-/// (serde deserialize) and the PyO3 bridge path (FromPyObject impl in bridge.rs).
+/// (serde deserialize) and the PyO3 bridge path (`FromPyObject` impl in bridge.rs).
 #[derive(Debug, Clone, serde::Deserialize)]
 pub(crate) struct RawFrame {
     pub file: String,
@@ -205,7 +205,7 @@ pub(crate) enum WireResult {
 
 /// Minimal deserialization target for unknown/malformed wire results.
 ///
-/// Used by the drain loop to extract node_id and duration_ms from results
+/// Used by the drain loop to extract `node_id` and `duration_ms` from results
 /// that fail full `WireResult` deserialization (e.g., unknown outcome strings).
 #[derive(serde::Deserialize)]
 pub(crate) struct WireMinimal {

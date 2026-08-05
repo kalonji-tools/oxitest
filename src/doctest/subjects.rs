@@ -242,7 +242,7 @@ fn classify_rhs(rhs: &ast::Expr) -> SubjectSource {
 /// - `__all__` present ⇒ authoritative; each entry becomes a subject regardless of whether
 ///   it's imported or defined here.
 /// - `__all__` absent ⇒ fallback: non-underscore top-level names that are *defined here*
-///   (ClassDef, FunctionDef, AsyncFunctionDef, or Assign whose LHS is a non-underscore Name).
+///   (`ClassDef`, `FunctionDef`, `AsyncFunctionDef`, or `Assign` whose LHS is a non-underscore `Name`).
 ///
 /// Caller is responsible for having filtered the module through Layer 1 (`is_public_module_path`).
 pub(crate) fn enumerate_subjects(
@@ -270,7 +270,7 @@ pub(crate) fn enumerate_subjects(
 
 /// Fallback name list when `__all__` is absent.
 ///
-/// Includes: ClassDef, FunctionDef, AsyncFunctionDef with non-underscore names, plus
+/// Includes: `ClassDef`, `FunctionDef`, `AsyncFunctionDef` with non-underscore names, plus
 /// Assign statements whose single LHS Name is non-underscore. This mirrors #1603's
 /// "defined here, not imported" filter — imports (`from X import Y`) are excluded.
 fn fallback_top_level_names(stmts: &[ast::Stmt]) -> Vec<String> {

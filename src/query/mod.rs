@@ -12,7 +12,7 @@ pub(crate) mod resource;
 use crate::config;
 use resource::{QueryEntry, ResourceKind};
 
-/// Determine whether the query requires a Python session (i.e., SessionPhase).
+/// Determine whether the query requires a Python session (i.e., `SessionPhase`).
 ///
 /// Fixtures and plugins always need Python. Tests and marks are
 /// instant-tier unless the DSL expression references predicates that require

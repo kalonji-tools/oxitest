@@ -53,7 +53,7 @@ pub(crate) fn render_preview<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Ve
 
 // ── Edge navigation helpers ──────────────────────────────────────────────────
 
-/// Collect all selectable edge NodeRefs for a node.
+/// Collect all selectable edge `NodeRefs` for a node.
 fn collect_selectable_edges(graph: &InspectGraph, node: &NodeRef) -> Vec<NodeRef> {
     match node.kind {
         NodeKind::Fixture => fixture::collect_edges(graph, node),
@@ -64,7 +64,7 @@ fn collect_selectable_edges(graph: &InspectGraph, node: &NodeRef) -> Vec<NodeRef
     }
 }
 
-/// Return the NodeRef of the selectable edge at `index` within a focused node.
+/// Return the `NodeRef` of the selectable edge at `index` within a focused node.
 pub(crate) fn edge_node_at(graph: &InspectGraph, node: &NodeRef, index: usize) -> Option<NodeRef> {
     let edges = collect_selectable_edges(graph, node);
     edges.get(index).cloned()
@@ -79,7 +79,7 @@ pub(crate) fn selectable_edge_count(graph: &InspectGraph, node: &NodeRef) -> usi
 
 /// Compute the intersection of index slices across a set of test variants.
 ///
-/// Returns the indices that appear in every variant's slice (e.g. fixture_deps or marks).
+/// Returns the indices that appear in every variant's slice (e.g. `fixture_deps` or marks).
 /// Returns an empty vec if `indices` is empty.
 #[allow(dead_code)] // retained for future parametrize group detail rendering
 fn shared_indices<'a>(indices: &[usize], extractor: impl Fn(usize) -> &'a [usize]) -> Vec<usize> {

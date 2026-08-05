@@ -95,7 +95,7 @@ impl GraphBuilder {
 
     /// Add test nodes from instant-tier AST extraction.
     ///
-    /// Expected entry fields: `name` (node_id), `source`, `mark`, `async`.
+    /// Expected entry fields: `name` (`node_id`), `source`, `mark`, `async`.
     pub(crate) fn add_test_entries(&mut self, entries: &[QueryEntry]) {
         for entry in entries {
             let node_id = entry.get("name").unwrap_or_default().to_string();
@@ -213,7 +213,7 @@ impl GraphBuilder {
     /// Wire test→fixture consumer edges from Python-tier fixture dependency data.
     ///
     /// Expected entry fields: `test_node_id`, `fixture_names` (comma-separated).
-    /// For each entry, looks up the test by node_id and each fixture by name,
+    /// For each entry, looks up the test by `node_id` and each fixture by name,
     /// then adds forward (test→fixture) and inverse (fixture→test) edges.
     /// Entries referencing unknown tests or fixtures are silently skipped.
     ///
@@ -293,9 +293,9 @@ impl GraphBuilder {
     /// 1. **Test -> Mark** edges from test entry `mark` fields
     /// 2. **Fixture -> Conftest** membership edges (by source path)
     /// 3. **Fixture -> Plugin** edges (by `<plugin:name>` source prefix)
-    /// 4. **Parametrize grouping** (strip `[param_id]` from node_id)
+    /// 4. **Parametrize grouping** (strip `[param_id]` from `node_id`)
     /// 5. **Broken edges** for unresolved fixture references
-    /// 6. **Inverse edges** (consumers, used_by, conftest.fixtures)
+    /// 6. **Inverse edges** (`consumers`, `used_by`, `conftest.fixtures`)
     pub(crate) fn resolve_edges(&mut self) {
         self.resolve_test_to_mark_edges();
         self.resolve_fixture_to_conftest_edges();
@@ -470,7 +470,7 @@ impl GraphBuilder {
 mod tests {
     use super::*;
 
-    /// Helper to create a QueryEntry from key-value pairs.
+    /// Helper to create a `QueryEntry` from key-value pairs.
     fn entry(pairs: &[(&str, &str)]) -> QueryEntry {
         let fields = pairs
             .iter()

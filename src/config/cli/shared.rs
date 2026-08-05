@@ -7,7 +7,7 @@ pub struct FilteringArgs {
     #[arg(short = 'E', value_name = "EXPR", help_heading = "Filtering")]
     pub expression: Option<String>,
 
-    /// Run only tests affected by git changes (default ref from affected_base config, or HEAD)
+    /// Run only tests affected by git changes (default ref from `affected_base` config, or HEAD)
     #[arg(
         long,
         value_name = "REF",

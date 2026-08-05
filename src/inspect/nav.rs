@@ -111,9 +111,9 @@ impl Trail {
 
 /// Resolve a name against the graph for direct-jump navigation.
 ///
-/// - 0 matches → Overview only (depth 1).
-/// - 1 match   → Overview + NodeFocus on the matched node (depth 2).
-/// - N matches → Overview + Disambiguation screen (depth 2).
+/// - 0 matches → `Overview` only (depth 1).
+/// - 1 match   → `Overview` + `NodeFocus` on the matched node (depth 2).
+/// - N matches → `Overview` + `Disambiguation` screen (depth 2).
 pub(crate) fn resolve_direct_jump(graph: &InspectGraph, name: &str) -> Trail {
     let name_lower = name.to_lowercase();
     let mut matches: Vec<NodeRef> = graph

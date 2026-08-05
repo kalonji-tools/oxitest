@@ -111,7 +111,7 @@ pub(crate) const LIFETIME_PACKAGE: &str = "package";
 /// reads the decorator off the AST, before any Python runs.
 pub(crate) const LIFETIME_PROCESS: &str = "process";
 
-/// Per-fixture-module payload (mirrors PrescanPayload).
+/// Per-fixture-module payload (mirrors `PrescanPayload`).
 ///
 /// `declarations` drives package co-location in `collection.rs` and is consumed
 /// further by later slices (slice 5+ diagnostics, slice 9 async support).
@@ -773,7 +773,7 @@ fn collect_declarations(stmts: &[ast::Stmt], line_index: &[u32]) -> Vec<PrescanD
 /// Returns `Some(lifetime_string)` if the decorator is a static call with a
 /// `lifetime="..."` kwarg and no positional args; any other kwarg is ignored.
 /// Returns `None` otherwise (unrecognized shape → skipped, does NOT set
-/// has_dynamic flag).
+/// `has_dynamic` flag).
 fn extract_fixture_decorator_lifetime(dec: &ast::Expr) -> Option<String> {
     let call = match dec {
         ast::Expr::Call(c) => c,
@@ -1613,7 +1613,7 @@ def not_a_fixture():
         /// Every decorator shape the slice-1 recognizer must reject.
         ///
         /// Each case is a decorator the user might plausibly write that
-        /// slice 1 does not accept. All must fall through to NoFixtures with
+        /// slice 1 does not accept. All must fall through to `NoFixtures` with
         /// `has_unrecognized_decorated_functions` set, which is what drives
         /// the MED-3 "check your import alias" diagnostic — a silent
         /// acceptance here would register a fixture the runtime cannot honour.

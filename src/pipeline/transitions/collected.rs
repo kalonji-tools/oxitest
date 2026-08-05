@@ -1,4 +1,4 @@
-//! Transitions from Collected phase: validate, strict_or_skip
+//! Transitions from `Collected` phase: `validate`, `strict_or_skip`
 
 use pyo3::prelude::*;
 

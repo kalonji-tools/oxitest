@@ -207,7 +207,7 @@ mod tests {
         }
     }
 
-    /// Build a mark node with the given name and used_by list.
+    /// Build a mark node with the given name and `used_by` list.
     fn make_mark(name: &str, used_by: Vec<usize>) -> MarkNode {
         MarkNode {
             name: name.to_string(),

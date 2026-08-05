@@ -95,7 +95,7 @@ fn register_plugin_fixture_homes(
     }
 }
 
-/// Initialize a FixtureSession: load conftest fixtures, plugins, and async backend.
+/// Initialize a `FixtureSession`: load conftest fixtures, plugins, and async backend.
 pub(super) fn init_session(
     py: Python<'_>,
     conftest_files: &[camino::Utf8PathBuf],

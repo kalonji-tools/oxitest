@@ -23,7 +23,7 @@ use super::overview;
 
 // ── Visible row model for parametrize collapsing ─────────────────────────────
 
-/// A single visible row in the Test NodeList.
+/// A single visible row in the Test `NodeList`.
 ///
 /// When parametrize collapsing is active, tests sharing a base name
 /// (everything before `[`) are grouped.  The group appears as a single
@@ -34,7 +34,7 @@ pub(super) enum TestRow {
     /// A standalone test (not part of a parametrize group).
     Standalone { index: usize },
     /// A collapsed parametrize group header.
-    /// `base_name` is the node_id prefix before `[`.
+    /// `base_name` is the `node_id` prefix before `[`.
     /// `indices` lists all graph indices that belong to this group.
     GroupHeader {
         base_name: String,
@@ -44,7 +44,7 @@ pub(super) enum TestRow {
     Variant { index: usize },
 }
 
-/// Build the visible row list for the Test NodeList, accounting for
+/// Build the visible row list for the Test `NodeList`, accounting for
 /// parametrize group collapsing.
 ///
 /// Groups are identified by stripping the `[param_id]` suffix from the
@@ -465,7 +465,7 @@ fn build_overview_content(
     (lines, cursor_line_idx)
 }
 
-/// Render the NodeFocus screen: node properties + selectable edge list.
+/// Render the `NodeFocus` screen: node properties + selectable edge list.
 ///
 /// Returns `(lines, cursor_line)` — the rendered lines and the index of
 /// the line that holds the cursor within the "Related" section.

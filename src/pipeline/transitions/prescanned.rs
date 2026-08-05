@@ -1,4 +1,4 @@
-//! Transition: Prescanned -> MetadataFiltered
+//! Transition: `Prescanned` -> `MetadataFiltered`
 
 use super::super::{Pipeline, PipelinePhase};
 use super::FilterPredicates;

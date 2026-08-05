@@ -94,7 +94,7 @@ fn colorize_field_value(field: &str, val: &str, use_color: bool) -> String {
 }
 
 /// Extract the source code of a function from its file, given a query entry
-/// with `name` (node_id like `path::fn_name`) and `source` (file path) fields.
+/// with `name` (`node_id` like `path::fn_name`) and `source` (file path) fields.
 fn extract_source_snippet(entry: &QueryEntry) -> Option<String> {
     let source_path = entry.get("source")?;
     let name = entry.get("name")?;

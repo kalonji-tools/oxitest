@@ -3,7 +3,7 @@
 //! Given a Subject whose source is `AliasImport { source_module, source_name }` or
 //! `LocalAlias { source_name }`, this module follows the chain across module files
 //! until it hits a `ClassDef` or `FunctionDef`, and returns:
-//! - the terminal file:line where the definition lives
+//! - the terminal `file:line` where the definition lives
 //! - the terminal docstring (may be `None` — coverage rule handles that)
 //!
 //! Errors:

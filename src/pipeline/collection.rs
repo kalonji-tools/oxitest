@@ -1812,9 +1812,9 @@ mod tests {
     }
 
     /// Config for the stale-entry tests. `strict = abort`, one entry naming
-    /// *entry_path*, placed in `scope` or `skip` per *as_scope*.
+    /// `entry_path`, placed in `scope` or `skip` per `as_scope`.
     ///
-    /// *rootdir* must exist on disk: the staleness verdict resolves each entry
+    /// `rootdir` must exist on disk: the staleness verdict resolves each entry
     /// against it, so a synthetic root would make every entry trivially
     /// "missing" and every assertion here would stop meaning anything.
     ///
@@ -1846,7 +1846,7 @@ mod tests {
         cfg
     }
 
-    /// Count stale diagnostics of either kind for *cfg*, scanning *doctest_files*.
+    /// Count stale diagnostics of either kind for `cfg`, scanning `doctest_files`.
     ///
     /// `doctest_files` are absolute paths; `collect_coverage_diagnostics` strips
     /// `rootdir` from them to build the scanned set. Pass an empty slice to

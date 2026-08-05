@@ -19,7 +19,7 @@ impl NodeId {
         Self(s.into())
     }
 
-    /// Create a NodeId from an already-formatted string (e.g. received from a worker subprocess).
+    /// Create a `NodeId` from an already-formatted string (e.g. received from a worker subprocess).
     pub fn from_raw(s: &str) -> Self {
         Self(Arc::from(s))
     }
