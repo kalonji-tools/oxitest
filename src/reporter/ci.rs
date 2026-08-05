@@ -1,8 +1,8 @@
 use crate::types::{CollectError, DurationMs, LineNo, TestItem, TestOutcome};
 
-use super::colors::{color_dim, color_error_token, color_fail};
 use super::format::{case_sep, fmt_diagnostic_block};
 use super::{Reporter, ReporterOpts, StandardReporter, sep_width};
+use crate::colors::{color_dim, color_error_token, color_fail};
 
 pub struct CiReporter {
     opts: ReporterOpts,

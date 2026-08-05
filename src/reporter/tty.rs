@@ -7,12 +7,12 @@ use crate::types::{CollectError, DurationMs, TestItem, TestOutcome};
 use super::ColorCategory;
 use super::parametrize_buffer::ParametrizeBuffer;
 
-use super::colors::{
+use super::format::{fmt_diagnostic_block, pad_to, plural};
+use super::{Reporter, ReporterOpts, StandardReporter};
+use crate::colors::{
     color_bold_white, color_cyan, color_dim, color_dim_green, color_error_token, color_fail,
     color_skip, color_timeout, color_warn,
 };
-use super::format::{fmt_diagnostic_block, pad_to, plural};
-use super::{Reporter, ReporterOpts, StandardReporter};
 
 use indicatif::{ProgressBar, ProgressStyle};
 

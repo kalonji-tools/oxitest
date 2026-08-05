@@ -4,11 +4,11 @@ use std::io::{self, Write};
 
 use crate::types::{CollectError, ExitCode};
 
-use super::colors;
 use super::exit::compute_exit_code;
 use super::format::{fmt_diagnostics_block, fmt_summary, fmt_tip_block};
 use super::stats::RunStats;
 use super::{ReporterOpts, sep_width};
+use crate::colors;
 
 pub(crate) fn print_collected(total: usize, fn_count: usize, async_count: usize) {
     let suffix = if total == 1 { "" } else { "s" };

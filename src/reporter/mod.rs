@@ -8,7 +8,6 @@
 
 pub(crate) mod bridge;
 mod ci;
-pub(crate) use crate::colors;
 mod composite;
 mod exit;
 mod format;
