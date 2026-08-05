@@ -109,3 +109,11 @@ needless_pass_by_ref_mut = "deny"
 # layout" under "no guarantee" — so there is no surface to promise anything
 # about. A ratchet against new code, not a cleanup (#1837).
 missing_const_for_fn = "deny"
+# Nursery, so `all` misses it (verified against clippy 0.1.97's `-Whelp` group
+# listing). Inside a non-`pub` module `pub` and `pub(crate)` are the same
+# effective visibility, and no module in this crate is `pub` — none ever has
+# been, across 1758 commits — so the qualifier was uniformly redundant. Nothing
+# outside can observe either spelling: `crate-type = ["cdylib"]` means no Rust
+# crate can depend on this one. One site keeps `pub(crate)` behind an `#[allow]`
+# because a Python script parses it as text; see `worker_result/wire.rs` (#1838).
+redundant_pub_crate = "deny"
