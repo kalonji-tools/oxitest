@@ -24,6 +24,15 @@ pub(crate) struct SourceViewState {
     pub scroll_offset: u16,
     /// The node this source view was opened for (used by `e` to open editor).
     pub node_ref: super::graph::NodeRef,
+    /// Footer label — `<sigil> <name>` — resolved from the graph here, at the
+    /// one point in the program where the graph is known to exist.
+    ///
+    /// Carrying the rendered label rather than looking the node up again is
+    /// what lets `ui::draw` render this overlay without holding the graph at
+    /// all. The alternative was `app.graph.as_ref().expect("source_view can
+    /// only be Some when graph is Some")` — an invariant restated in a string
+    /// (ADR-0011).
+    pub node_label: String,
 }
 
 // ── RefreshArgs ──────────────────────────────────────────────────────────────
@@ -457,11 +466,13 @@ impl InspectApp {
             return;
         };
         let lines = super::source::read_source_lines(&path);
+        let node_label = format!("{} {}", node.kind.sigil(), graph.node_name(node));
         self.source_view = Some(SourceViewState {
             path,
             lines,
             scroll_offset: 0,
             node_ref: node.clone(),
+            node_label,
         });
     }
 

@@ -48,63 +48,73 @@ pub(crate) struct PhaseResult {
     pub timings: Vec<types::TestTiming>,
 }
 
-/// Everything a worker needs to rebuild the coordinator's fixture registry.
+/// The JSON blobs every worker task carries, serialized once for the whole run.
 ///
-/// Both halves are collected once and sent with every task: a worker has its
-/// own `FixtureSession`, and anything missing here is simply invisible to it.
+/// Workers rebuild their own `FixtureSession` and inherit nothing from the
+/// coordinator, so anything missing here is simply invisible to them: without
+/// the plugin half, both `FixtureProvider` fixtures and plugin
+/// `__fixtures__.py` declarations vanish under `-n` while passing serially
+/// (#1717). Every task carries identical bytes, so this is built once per run
+/// rather than once per task.
+///
+/// **Holding the serialized form is what makes `run_phase_parallel` total.**
+/// It receives bytes, so there is no serialization left for it to fail at, and
+/// no failure branch to invent. The fallible step happens exactly once, in
+/// `Pipeline::execute`, where a `Result` already flows and the error reaches
+/// the reporter like any other. That is ADR-0011's principle applied here: the
+/// invariant that these payloads exist lives in this type, not in a comment
+/// promising that serializing them cannot fail.
+pub(crate) struct WorkerPayloads {
+    conftest: std::sync::Arc<serde_json::value::RawValue>,
+    fixture_modules: std::sync::Arc<serde_json::value::RawValue>,
+    plugins: std::sync::Arc<serde_json::value::RawValue>,
+}
+
+impl WorkerPayloads {
+    /// Serialize the three payloads, or fail before any worker is spawned.
+    ///
+    /// All three or none: a worker missing any of them runs a session that
+    /// silently differs from the coordinator's, which is worse than not
+    /// starting.
+    pub(crate) fn new(
+        conftest_paths: &[camino::Utf8PathBuf],
+        fixture_modules: &[types::FixtureModule],
+        plugins: &[String],
+        plugin_settings: &std::collections::HashMap<String, toml::Value>,
+    ) -> Result<Self, serde_json::Error> {
+        let conftest_strs: Vec<&str> = conftest_paths.iter().map(|p| p.as_str()).collect();
+
+        // Built with `to_value` and `?` rather than `serde_json::json!`. The
+        // macro expands to `to_value(&$other).unwrap()` (serde_json
+        // `src/macros.rs`), and clippy does not lint `unwrap` inside an
+        // external macro — so `json!` would have smuggled a live panic route
+        // past the very gate ADR-0011 adds.
+        let mut plugin_payload = serde_json::Map::new();
+        plugin_payload.insert("modules".to_owned(), serde_json::to_value(plugins)?);
+        plugin_payload.insert(
+            "settings".to_owned(),
+            serde_json::to_value(plugin_settings)?,
+        );
+
+        Ok(Self {
+            conftest: to_shared_raw(&conftest_strs)?,
+            fixture_modules: to_shared_raw(fixture_modules)?,
+            plugins: to_shared_raw(&serde_json::Value::Object(plugin_payload))?,
+        })
+    }
+}
+
+/// Everything a worker needs to rebuild the coordinator's fixture registry.
 #[derive(Clone, Copy)]
 pub(crate) struct SessionInputs<'a> {
-    pub conftest_paths: &'a [camino::Utf8PathBuf],
-    pub fixture_modules: &'a [types::FixtureModule],
+    /// Already serialized — see [`WorkerPayloads`].
+    pub payloads: &'a WorkerPayloads,
     /// Names of `lifetime="process"` fixtures. Not sent to workers — used by
     /// the coordinator to name what a killed worker never tore down (#1777).
     pub process_fixture_names: &'a [String],
 }
 
-/// Pre-serialize the fixture-module list, once for the whole run.
-///
-/// Every task carries the identical list, so serializing per task would repeat
-/// the work for no gain — the same reason `conftest_paths` is prepared once.
-///
-/// A free function rather than a block inside `run_phase_parallel`, because
-/// that function needs a live scheduler and real subprocesses: nothing in
-/// `cargo test` can enter it, so anything inlined there is untestable.
-fn serialize_fixture_modules(
-    fixture_modules: &[types::FixtureModule],
-) -> Result<std::sync::Arc<serde_json::value::RawValue>, serde_json::Error> {
-    to_shared_raw(fixture_modules)
-}
-
-/// Pre-serialize the plugin activation inputs, once for the whole run.
-///
-/// Workers rebuild their own `FixtureSession` and inherit nothing from the
-/// coordinator, so without these a worker has no plugins: both
-/// `FixtureProvider` fixtures and plugin `__fixtures__.py` declarations are
-/// invisible under `-n` while passing serially. That was true of the shipped
-/// provider path too, measured on `main` before this change (#1717).
-///
-/// A free function for the same reason as `serialize_fixture_modules`:
-/// `run_phase_parallel` needs live subprocesses, so nothing inlined there is
-/// reachable from `cargo test`.
-fn serialize_plugin_inputs(
-    plugins: &[String],
-    plugin_settings: &std::collections::HashMap<String, toml::Value>,
-) -> Result<std::sync::Arc<serde_json::value::RawValue>, serde_json::Error> {
-    to_shared_raw(&serde_json::json!({
-        "modules": plugins,
-        "settings": plugin_settings,
-    }))
-}
-
 /// Serialize `value` into a raw JSON blob shared by reference across tasks.
-///
-/// One step where the three call sites each used two (`to_string` then
-/// `RawValue::from_string`), which also drops the intermediate `String`.
-///
-/// The `Result` is not decorative even though every current input is a
-/// `derive(Serialize)` struct with string-keyed maps: ADR-0011 bans stating
-/// that in an `expect()` message, because the message is not checked when a
-/// future field changes it.
 fn to_shared_raw<T: serde::Serialize + ?Sized>(
     value: &T,
 ) -> Result<std::sync::Arc<serde_json::value::RawValue>, serde_json::Error> {
@@ -121,8 +131,7 @@ pub(crate) fn run_phase_parallel(
     pool: Option<Vec<PrewarmedWorker>>,
 ) -> PhaseResult {
     let SessionInputs {
-        conftest_paths,
-        fixture_modules,
+        payloads,
         process_fixture_names: session_process_fixtures,
     } = session_inputs;
     use std::sync::Arc;
@@ -141,32 +150,11 @@ pub(crate) fn run_phase_parallel(
         std::sync::Arc::new(parking_lot::Mutex::new(ahash::AHashSet::new()));
     let sched = Arc::new(scheduler::Scheduler::new(groups));
     let cancelled = Arc::new(AtomicBool::new(false));
-    // All three payloads or none: a worker missing any of them runs a session
-    // that silently differs from the coordinator's. Serialization has never
-    // failed here, but ADR-0011 forbids saying so in an `expect()` message —
-    // so the failure route reports and interrupts instead of aborting the
-    // user's run with a backtrace.
-    let shared_payloads = (|| {
-        let conftest_strs: Vec<&str> = conftest_paths.iter().map(|p| p.as_str()).collect();
-        Ok::<_, serde_json::Error>((
-            to_shared_raw(&conftest_strs)?,
-            serialize_fixture_modules(fixture_modules)?,
-            serialize_plugin_inputs(&cfg.features.plugins, &cfg.features.plugin_settings)?,
-        ))
-    })();
-    let (conftest_raw, fixture_modules_raw, plugins_raw) = match shared_payloads {
-        Ok(payloads) => payloads,
-        Err(err) => {
-            eprintln!(
-                "error: the shared worker payload could not be serialized ({err}) — \
-                 parallel execution cannot start"
-            );
-            return PhaseResult {
-                interrupted: true,
-                timings: Vec::new(),
-            };
-        }
-    };
+    let WorkerPayloads {
+        conftest: conftest_raw,
+        fixture_modules: fixture_modules_raw,
+        plugins: plugins_raw,
+    } = payloads;
     let timeout_secs = cfg.exec.timeout_secs;
     let keep_tmp: Arc<str> = Arc::from(cfg.output.keep_tmp.as_str());
     let rootdir: Arc<str> = Arc::from(cfg.rootdir.as_str());
@@ -188,9 +176,9 @@ pub(crate) fn run_phase_parallel(
                 worker_id: i,
                 sched: Arc::clone(&sched),
                 cancelled: Arc::clone(&cancelled),
-                conftest_json: std::sync::Arc::clone(&conftest_raw),
-                fixture_modules_json: std::sync::Arc::clone(&fixture_modules_raw),
-                plugins_json: std::sync::Arc::clone(&plugins_raw),
+                conftest_json: std::sync::Arc::clone(conftest_raw),
+                fixture_modules_json: std::sync::Arc::clone(fixture_modules_raw),
+                plugins_json: std::sync::Arc::clone(plugins_raw),
                 timeout_secs,
                 keep_tmp: keep_tmp.clone(),
                 rootdir: rootdir.clone(),
@@ -276,6 +264,18 @@ pub(crate) fn run_phase_parallel(
 mod fixture_module_payload_tests {
     use super::*;
 
+    /// Build the payloads the way `Pipeline::execute` does, so these tests
+    /// exercise the constructor that actually ships rather than a helper it
+    /// happens to call.
+    fn payloads_for(
+        fixture_modules: &[types::FixtureModule],
+        plugins: &[String],
+        plugin_settings: &std::collections::HashMap<String, toml::Value>,
+    ) -> WorkerPayloads {
+        WorkerPayloads::new(&[], fixture_modules, plugins, plugin_settings)
+            .expect("the worker payloads serialize")
+    }
+
     /// The worker iterates this list and indexes each entry by name, so both
     /// the array shape and the key names are a cross-language contract.
     #[test]
@@ -290,10 +290,10 @@ mod fixture_module_payload_tests {
             package_declarations: vec![],
         }];
 
-        let raw = serialize_fixture_modules(&modules).expect("FixtureModule serializes");
+        let payloads = payloads_for(&modules, &[], &std::collections::HashMap::new());
 
         assert_eq!(
-            raw.get(),
+            payloads.fixture_modules.get(),
             r#"[{"module":"pkg/__fixtures__.py","anchor":"pkg"}]"#,
             "worker.py reads entry['module'] and entry['anchor'] — a rename or \
              a switch to positional arrays is a silent KeyError over there"
@@ -304,10 +304,10 @@ mod fixture_module_payload_tests {
     /// empty array it can iterate, not `null`.
     #[test]
     fn empty_input_serializes_to_an_empty_array() {
-        let raw = serialize_fixture_modules(&[]).expect("an empty slice serializes");
+        let payloads = payloads_for(&[], &[], &std::collections::HashMap::new());
 
         assert_eq!(
-            raw.get(),
+            payloads.fixture_modules.get(),
             "[]",
             "null would make the worker's `for entry in ...` raise instead of \
              skipping"
@@ -331,10 +331,10 @@ mod fixture_module_payload_tests {
             .expect("settings table builds"),
         );
 
-        let raw = serialize_plugin_inputs(&plugins, &settings).expect("plugin inputs serialize");
+        let payloads = payloads_for(&[], &plugins, &settings);
 
         assert_eq!(
-            raw.get(),
+            payloads.plugins.get(),
             r#"{"modules":["oxi_pg"],"settings":{"oxi_pg":{"namespace":"postgres"}}}"#,
             "worker._activate_plugins indexes these two keys by name; a rename \
              leaves every worker with no plugins and no diagnostic saying so"
@@ -345,11 +345,10 @@ mod fixture_module_payload_tests {
     /// emptiness, not `null`.
     #[test]
     fn no_plugins_serializes_to_empty_collections() {
-        let raw = serialize_plugin_inputs(&[], &std::collections::HashMap::new())
-            .expect("empty plugin inputs serialize");
+        let payloads = payloads_for(&[], &[], &std::collections::HashMap::new());
 
         assert_eq!(
-            raw.get(),
+            payloads.plugins.get(),
             r#"{"modules":[],"settings":{}}"#,
             "null would make the worker's `list(plugins.get(\"modules\", ()))` \
              raise instead of yielding nothing to activate"

@@ -143,17 +143,16 @@ impl OxitestCli {
                 // No subcommand given (bare `oxitest`) — treat as `run` with no args.
                 let run_args: Vec<&str> = vec![&args[0], "run"];
                 // (no extra args to forward)
+                use clap::CommandFactory;
                 let cli = Self::try_parse_from(&run_args)?;
-                // `run` is in `run_args`, so clap yields `Some` — but ADR-0011
-                // bans unwrapping on that claim. A `None` is a usage error like
-                // any other, not a reason to abort the process.
-                let Some(mut cmd) = cli.command else {
-                    use clap::CommandFactory;
-                    return Err(Self::command().error(
+                // A usage error, not an abort: `run_args` contains "run", but
+                // ADR-0011 bans unwrapping on that claim.
+                let mut cmd = cli.command.ok_or_else(|| {
+                    Self::command().error(
                         clap::error::ErrorKind::MissingSubcommand,
                         "bare `oxitest` could not be resolved to `oxitest run`",
-                    ));
-                };
+                    )
+                })?;
                 partition_command(&mut cmd);
                 Ok((cmd, use_gitignore))
             }

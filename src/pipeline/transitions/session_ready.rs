@@ -74,7 +74,21 @@ impl Pipeline {
         // via `--doctest-modules` on the CLI or a `[tool.oxitest.doctest]`
         // table in pyproject.toml.
         if shared.cfg.doctest_enabled() {
-            let doctest_files = collector::collect_doctest_files(&shared.cfg);
+            // Reported, not swallowed: an empty file list is indistinguishable
+            // from "this project has no doctests", so degrading here would
+            // silently drop the whole doctest suite under a green gate.
+            let doctest_files = match collector::collect_doctest_files(&shared.cfg) {
+                Ok(files) => files,
+                Err(err) => {
+                    errors.push(crate::types::CollectError::ImportError {
+                        path: shared.cfg.rootdir.clone(),
+                        message: format!(
+                            "doctest collection could not compile its `*.py` glob: {err}"
+                        ),
+                    });
+                    Vec::new()
+                }
+            };
             let doctest_items = collection::collect_doctest_items(&doctest_files);
             tracing::debug!(
                 doctest_files = doctest_files.len(),
@@ -139,16 +153,17 @@ impl Pipeline {
     }
 
     // 8. query: SessionReady -> terminal
-    pub(crate) fn query(self, py: Python<'_>) -> Result<ExitCode, ExitCode> {
+    /// `args` is a parameter rather than a destructure of `self.command`. The
+    /// caller has already matched `Command::Query` to get here, so passing what
+    /// it matched removes the second, unprovable check this used to make — no
+    /// arm, no message, nothing to be wrong about (ADR-0011).
+    pub(crate) fn query(
+        self,
+        py: Python<'_>,
+        args: &config::QueryArgs,
+    ) -> Result<ExitCode, ExitCode> {
         let PipelinePhase::SessionReady { ref session, .. } = self.phase else {
             unreachable!("query called outside SessionReady phase")
-        };
-        // Not covered by E1: this asks about the *command*, not the pipeline
-        // phase, so it is an ordinary dispatch error and gets an exit code
-        // rather than an abort (ADR-0011 — the carve-out is typestate-only).
-        let config::Command::Query(ref args) = self.command else {
-            eprintln!("error: internal dispatch error — query runs only for `oxitest query`");
-            return Ok(ExitCode::UsageError);
         };
 
         if args.tree {
