@@ -263,6 +263,61 @@ mod tests {
         assert_eq!(examples[1].source, "2 + 2\n");
     }
 
+    /// Two `>>>` lines in a row are two examples, and the second one's
+    /// `lineno` is its own line — not the first one's.
+    ///
+    /// This is the branch the `Option<PendingExample>` rewrite collapsed
+    /// (#1832). The old parser reached it through a *third* `if` inside the
+    /// `>>>` arm — "source non-empty and want empty" — distinct from the
+    /// blank-line flush `multiple_examples` covers. Nothing exercised it.
+    #[test]
+    fn adjacent_prompts_are_separate_examples() {
+        let doc = ">>> a\n>>> b\n2\n";
+
+        let examples = parse_docstring_examples(doc);
+
+        assert_eq!(
+            examples.len(),
+            2,
+            "a `>>>` line ends the previous example even with no blank line between them"
+        );
+        assert_eq!(examples[0].source, "a\n");
+        assert!(
+            examples[0].want.is_empty(),
+            "the first example produced no output before the next prompt began"
+        );
+        assert_eq!(
+            examples[0].lineno, 0,
+            "lineno is where the example started, not where it was flushed"
+        );
+        assert_eq!(examples[1].source, "b\n");
+        assert_eq!(examples[1].want, "2\n");
+        assert_eq!(
+            examples[1].lineno, 1,
+            "the second example starts at its own prompt — reusing the first \
+             example's lineno would misreport every failure location in a \
+             back-to-back block"
+        );
+    }
+
+    /// A prompt immediately after an expected-output line: the same flush, but
+    /// reached through the "want is non-empty" branch instead.
+    #[test]
+    fn prompt_directly_after_output_starts_a_new_example() {
+        let doc = ">>> a\n1\n>>> b\n2\n";
+
+        let examples = parse_docstring_examples(doc);
+
+        assert_eq!(examples.len(), 2, "each prompt begins its own example");
+        assert_eq!(examples[0].want, "1\n");
+        assert_eq!(examples[0].lineno, 0);
+        assert_eq!(examples[1].want, "2\n");
+        assert_eq!(
+            examples[1].lineno, 2,
+            "the second example starts at line 2, after the first example's output"
+        );
+    }
+
     #[test]
     fn bare_prompt_no_space() {
         let doc = "    >>>\n";
