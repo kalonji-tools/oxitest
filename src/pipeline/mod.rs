@@ -851,10 +851,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
         config::Command::Query(args) => {
             let needs_session =
                 query::needs_python(args.resource, args.expression.as_deref()) || args.tree;
-            // Cloned so the args can outlive the borrow of `pipeline.command`
-            // that `pipeline` being moved ends. Once per run, and it buys the
-            // query transitions a parameter they can trust instead of a
-            // `Command::Query` assert against global pipeline state.
+            // Cloned: `pipeline` is moved below, ending the borrow.
             let args = args.clone();
             query_command(py, pipeline, &args, needs_session)
         }

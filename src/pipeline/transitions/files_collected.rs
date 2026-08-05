@@ -145,9 +145,6 @@ impl Pipeline {
     }
 
     // 7. query_without_session: FilesCollected -> terminal
-    /// `args` is a parameter for the same reason as [`Pipeline::query`]: the
-    /// caller matched `Command::Query` to reach this, so it passes what it
-    /// matched instead of leaving this function to re-assert it (ADR-0011).
     pub(crate) fn query_without_session(
         self,
         py: Python<'_>,

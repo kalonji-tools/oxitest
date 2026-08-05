@@ -153,10 +153,6 @@ impl Pipeline {
     }
 
     // 8. query: SessionReady -> terminal
-    /// `args` is a parameter rather than a destructure of `self.command`. The
-    /// caller has already matched `Command::Query` to get here, so passing what
-    /// it matched removes the second, unprovable check this used to make — no
-    /// arm, no message, nothing to be wrong about (ADR-0011).
     pub(crate) fn query(
         self,
         py: Python<'_>,
