@@ -220,7 +220,7 @@ class CollectedViolation:
 
 ```rust
 #[derive(pyo3::FromPyObject, Debug, Clone)]
-pub(crate) struct RawViolation {
+pub struct RawViolation {
     pub node_id: String,
     pub kind: ViolationKind,
     pub detail: String,
@@ -250,7 +250,7 @@ class Frame:
 
 ```rust
 #[derive(Debug, Clone, serde::Deserialize)]
-pub(crate) struct RawFrame {
+pub struct RawFrame {
     pub file: String,
     pub lineno: u64,
     pub name: String,

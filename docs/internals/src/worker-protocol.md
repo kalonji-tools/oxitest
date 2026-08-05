@@ -261,7 +261,7 @@ written as JSON to the worker's stdin.
 
 ```rust
 #[derive(serde::Serialize)]
-pub(crate) struct WorkerTask<'a> {
+pub struct WorkerTask<'a> {
     pub protocol_version: u32,
     pub modules: Vec<WorkerTaskModule<'a>>,
     pub conftest_paths: &'a serde_json::value::RawValue,
@@ -276,13 +276,13 @@ pub(crate) struct WorkerTask<'a> {
 }
 
 #[derive(serde::Serialize)]
-pub(crate) struct WorkerTaskModule<'a> {
+pub struct WorkerTaskModule<'a> {
     pub module_path: &'a str,
     pub items: Vec<WorkerTaskItem<'a>>,
 }
 
 #[derive(serde::Serialize)]
-pub(crate) struct WorkerTaskItem<'a> {
+pub struct WorkerTaskItem<'a> {
     pub fn_name: &'a str,
     pub param_id: Option<&'a str>,
     pub node_id: &'a str,
@@ -313,7 +313,7 @@ the JSON.
 ```rust
 #[derive(Debug, serde::Deserialize)]
 #[serde(tag = "outcome")]
-pub(crate) enum WireResult {
+pub enum WireResult {
     #[serde(rename = "passed")]
     Passed {
         node_id: String,
@@ -357,7 +357,7 @@ Steps:
 
 - Use `#[serde(default)]` on every new `WireResult` variant field so older workers work.
 - Use `#[serde(skip_serializing_if = "Option::is_none")]` on new `WorkerTask` fields.
-- The `PROTOCOL_VERSION` constant (currently `6`) in both `src/worker_result/wire.rs` and
+- The `PROTOCOL_VERSION` constant (currently `7`) in both `src/worker_result/wire.rs` and
   `python/oxitest/_bridge/result.py` should be bumped when adding, removing, or
   renaming wire fields.
 
@@ -375,7 +375,7 @@ it immediately spawns all worker subprocesses via `prewarm_workers()` in
 `src/parallel/pool.rs`:
 
 ```rust
-pub(crate) fn prewarm_workers(python_bin: &str, count: usize) -> Vec<PrewarmedWorker> {
+pub fn prewarm_workers(python_bin: &str, count: usize) -> Vec<PrewarmedWorker> {
     (0..count)
         .filter_map(|_| crate::worker_session::setup_worker_process(python_bin))
         .collect()
@@ -396,7 +396,7 @@ receive tasks immediately.
 The pre-warmed workers are held in a `PoolGuard` struct that implements `Drop`:
 
 ```rust
-pub(crate) struct PoolGuard {
+pub struct PoolGuard {
     workers: Vec<PrewarmedWorker>,
 }
 
@@ -434,7 +434,7 @@ introduction, `spawn_worker()` took 11 positional arguments -- making call sites
 fragile and hard to read. The named struct in `src/worker_session.rs` replaces them:
 
 ```rust
-pub(crate) struct WorkerParams {
+pub struct WorkerParams {
     pub worker_id: usize,
     pub sched: Arc<scheduler::Scheduler>,
     pub cancelled: Arc<AtomicBool>,

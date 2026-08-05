@@ -520,7 +520,7 @@ Markers have two halves: Rust (collection-time validation) and Python (execution
 ### 1. Add to `BUILTIN_MARKERS` in `src/filter.rs`
 
 ```rust
-pub(crate) const BUILTIN_MARKERS: &[&str] =
+pub const BUILTIN_MARKERS: &[&str] =
     &["skip", "xfail", "timeout", "inprocess"];
 ```
 

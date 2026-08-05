@@ -169,9 +169,9 @@ The pipeline uses a **runtime `PipelinePhase` enum** to track its current phase.
 `Pipeline` implements `Deref<Target = PipelineShared>` and `DerefMut`, so transition methods can access shared fields directly through `self` without `self.shared.`:
 
 ```rust
-pub(crate) struct Pipeline {
-    pub(crate) shared: PipelineShared,
-    pub(crate) phase: PipelinePhase,
+pub struct Pipeline {
+    pub shared: PipelineShared,
+    pub phase: PipelinePhase,
 }
 
 impl std::ops::Deref for Pipeline {
@@ -189,7 +189,7 @@ Each transition consumes `Pipeline` and produces `Result<Pipeline, ExitCode>`. T
 ```rust
 // In src/pipeline/transitions/empty.rs
 impl Pipeline {
-    pub(crate) fn collect_files(self) -> Result<Pipeline, ExitCode> {
+    pub fn collect_files(self) -> Result<Pipeline, ExitCode> {
         let PipelinePhase::Empty = self.phase else {
             unreachable!("collect_files called outside Empty phase");
         };

@@ -84,9 +84,9 @@ fn query_command(
 The core type is a two-field struct:
 
 ```rust
-pub(crate) struct Pipeline {
-    pub(crate) shared: PipelineShared,
-    pub(crate) phase: PipelinePhase,
+pub struct Pipeline {
+    pub shared: PipelineShared,
+    pub phase: PipelinePhase,
 }
 ```
 
@@ -97,18 +97,18 @@ pub(crate) struct Pipeline {
 `PipelineShared` carries data that lives for the entire pipeline run, regardless of which phase the pipeline is in:
 
 ```rust
-pub(crate) struct PipelineShared {
-    pub(crate) cfg: config::Config,
-    pub(crate) command: config::Command,
-    pub(crate) rootdir: Utf8PathBuf,
-    pub(crate) is_tty: bool,
-    pub(crate) use_color: bool,
-    pub(crate) base: reporter::ReporterOptsBuilder,
-    pub(crate) cache: cache::TestCache,
-    pub(crate) python_bin: String,
-    pub(crate) ast_weight: Option<types::DurationMs>,
-    pub(crate) test_files: Vec<Utf8PathBuf>,
-    pub(crate) conftest_files: Vec<Utf8PathBuf>,
+pub struct PipelineShared {
+    pub cfg: config::Config,
+    pub command: config::Command,
+    pub rootdir: Utf8PathBuf,
+    pub is_tty: bool,
+    pub use_color: bool,
+    pub base: reporter::ReporterOptsBuilder,
+    pub cache: cache::TestCache,
+    pub python_bin: String,
+    pub ast_weight: Option<types::DurationMs>,
+    pub test_files: Vec<Utf8PathBuf>,
+    pub conftest_files: Vec<Utf8PathBuf>,
 }
 ```
 
@@ -169,7 +169,7 @@ Every transition follows the same three-step pattern:
 
 ## The PipelinePhase Enum
 
-All phase variants are defined in `src/pipeline/mod.rs` as variants of a single `pub(crate) enum PipelinePhase`. Each variant carries the data that was previously held by separate typestate structs:
+All phase variants are defined in `src/pipeline/mod.rs` as variants of a single `pub enum PipelinePhase`. Each variant carries the data that was previously held by separate typestate structs:
 
 | Variant            | Key fields                                           | Created by          |
 |--------------------|------------------------------------------------------|---------------------|
@@ -221,7 +221,7 @@ in the same state type. The caller does not know it was a no-op.
 
 ```rust
 impl Pipeline {
-    pub(crate) fn affected(mut self) -> Result<Pipeline, ExitCode> {
+    pub fn affected(mut self) -> Result<Pipeline, ExitCode> {
         let PipelinePhase::FilesCollected = self.phase else {
             unreachable!("affected called outside FilesCollected phase");
         };
@@ -358,7 +358,7 @@ lint pass over collected items.
 In `src/pipeline/mod.rs`, add a new variant to the `PipelinePhase` enum:
 
 ```rust
-pub(crate) enum PipelinePhase {
+pub enum PipelinePhase {
     // ...existing variants...
     /// Lint pass complete; holds lint warnings alongside collected data.
     Linted {
@@ -377,7 +377,7 @@ Since this transition starts from `Collected`, add it to `src/pipeline/transitio
 
 ```rust
 impl Pipeline {
-    pub(crate) fn lint(self) -> Result<Pipeline, ExitCode> {
+    pub fn lint(self) -> Result<Pipeline, ExitCode> {
         let (shared, phase) = self.into_parts();
         let PipelinePhase::Collected { session, items, raw_violations } = phase else {
             unreachable!("lint called outside Collected phase");
@@ -405,7 +405,7 @@ now guard on `Linted` instead. Update its `let ... else` destructuring:
 
 ```rust
 impl Pipeline {
-    pub(crate) fn strict_or_skip(self, _py: Python<'_>)
+    pub fn strict_or_skip(self, _py: Python<'_>)
         -> Result<Pipeline, ExitCode>
     {
         let (shared, phase) = self.into_parts();
