@@ -343,6 +343,11 @@ class FixtureSession:
         # the executor's existing drain stays the single teardown authority.
         self._function_scope: _Scope | None = None
         self._has_wide_async: bool | None = None
+        # Anchor directories of the activated plugins whose __fixtures__.py was
+        # registered into this session. Read back during collection to seed the
+        # per-directory dedupe set, so a plugin vendored under `testpaths` is
+        # not registered a second time as a user package (#1717).
+        self._plugin_anchor_dirs: list[str] = []
         # Module scopes are discarded at end_module, taking their counters with
         # them, so cache stats are folded into these before the pop. Without
         # that, a run using only module-lifetime fixtures reports no cache
@@ -443,6 +448,20 @@ class FixtureSession:
             self._instantiator.plugin_registry = value
             # Register any new plugin fixture providers into the unified registry
             self._register_plugin_fixtures()
+
+    def record_plugin_anchor(self, anchor_dir: str) -> None:
+        """Remember that *anchor_dir* was registered as a plugin fixture home.
+
+        Called once per activated plugin package during session init, before
+        collection. The collection walk reads these back so it can skip a
+        directory it would otherwise register a second time — as an anchored
+        user package under the same derived namespace (#1717).
+        """
+        self._plugin_anchor_dirs.append(anchor_dir)
+
+    def plugin_anchor_dirs(self) -> tuple[str, ...]:
+        """Anchor directories of every plugin fixture home in this session."""
+        return tuple(self._plugin_anchor_dirs)
 
     def _register_plugin_fixtures(self) -> None:
         """Register all fixtures from the current plugin registry."""
