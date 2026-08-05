@@ -1,0 +1,8 @@
+[tool.oxitest]
+testpaths = ["package_boundary_order"]
+python_files = ["test_*.py"]
+strict = "abort"
+# Arrangement would pull these modules into a different phase, and phases use
+# different fixture sessions — the boundary under test would then be hidden
+# behind a phase change rather than exercised.
+auto_arrange = false

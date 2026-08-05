@@ -287,7 +287,14 @@ pub fn group_by_package(
         }
     }
 
-    out.extend(merged.into_values().map(|modules| TaskGroup { modules }));
+    // into_iter(), not into_values(): the key *is* the package boundary the
+    // group's teardowns are keyed by on the Python side, and dropping it here
+    // is what left `end_package` with nothing but a module path to pass (#1839).
+    out.extend(
+        merged
+            .into_iter()
+            .map(|(anchor, modules)| TaskGroup::package(anchor, modules)),
+    );
     out
 }
 
@@ -555,6 +562,35 @@ mod tests {
         // Assert — a declaring package holding one module costs no parallelism,
         // so it must not be treated as a special case.
         assert_eq!(out.len(), 2, "one module per unit when nothing merges");
+    }
+
+    #[test]
+    fn group_by_package_carries_the_anchor_the_boundary_drain_needs() {
+        // Arrange
+        let groups = vec![
+            mod_group("tests/api/a.py"),
+            mod_group("tests/api/v1/b.py"),
+            mod_group("tests/core/c.py"),
+        ];
+        let declaring = vec![Utf8PathBuf::from("tests/api")];
+
+        // Act
+        let out = group_by_package(groups, &declaring);
+
+        // Assert — the anchor is the only value `end_package` may be called
+        // with: the Python side keys `_package_scopes` by it. Discarding it
+        // here left the caller with nothing but a module path, so the boundary
+        // drain never matched and teardown slid to the end of the run (#1839).
+        let anchors: Vec<Option<String>> = out
+            .iter()
+            .map(|group| group.anchor.as_ref().map(ToString::to_string))
+            .collect();
+        assert_eq!(
+            anchors,
+            vec![None, Some("tests/api".to_string())],
+            "the merged group must carry its declaring anchor, and the \
+             undeclared sibling must carry none — it has no package boundary"
+        );
     }
 
     #[test]
