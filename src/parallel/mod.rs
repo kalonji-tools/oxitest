@@ -11,10 +11,10 @@
 mod drain;
 mod pool;
 
-pub(crate) use drain::{
+pub use drain::{
     DrainContext, DrainOutcome, drain_until_eof, drain_worker_results, handle_drain_outcome,
 };
-pub(crate) use pool::{PoolGuard, PrewarmedWorker, kill_pool, prewarm_workers};
+pub use pool::{PoolGuard, PrewarmedWorker, kill_pool, prewarm_workers};
 
 use crate::{
     config, reporter, scheduler, types,
@@ -24,7 +24,7 @@ use crate::{
 use drain::{drain_remaining_into_crashed, handle_worker_result};
 
 /// Channel item carrying the result of one test execution from a worker thread.
-pub(crate) struct WorkerResult {
+pub struct WorkerResult {
     pub resolved: types::ResolvedOutcome,
     pub worker_id: usize,
 }
@@ -35,13 +35,13 @@ pub(crate) struct WorkerResult {
 /// consumer loop breaks early on maxfail, so anything drained only after the
 /// loop would be silently skipped on exactly that path — which is the
 /// missable-drain failure #1840 exists to remove, one layer down.
-pub(crate) enum WorkerMessage {
+pub enum WorkerMessage {
     Result(WorkerResult),
     Diagnostic(crate::reporter::stats::DiagnosticEntry),
 }
 
 /// Result of a test execution phase (serial or parallel).
-pub(crate) struct PhaseResult {
+pub struct PhaseResult {
     /// Whether execution was interrupted (e.g., by maxfail).
     pub interrupted: bool,
     /// Per-test timing data.
@@ -57,7 +57,7 @@ pub(crate) struct PhaseResult {
 ///
 /// Holding the *serialized* form is what leaves `run_phase_parallel` with
 /// nothing to fail at — see ADR-0011's worked example.
-pub(crate) struct WorkerPayloads {
+pub struct WorkerPayloads {
     conftest: std::sync::Arc<serde_json::value::RawValue>,
     fixture_modules: std::sync::Arc<serde_json::value::RawValue>,
     plugins: std::sync::Arc<serde_json::value::RawValue>,
@@ -94,7 +94,7 @@ impl WorkerPayloads {
 
 /// Everything a worker needs to rebuild the coordinator's fixture registry.
 #[derive(Clone, Copy)]
-pub(crate) struct SessionInputs<'a> {
+pub struct SessionInputs<'a> {
     /// Already serialized — see [`WorkerPayloads`].
     pub payloads: &'a WorkerPayloads,
     /// Names of `lifetime="process"` fixtures. Not sent to workers — used by
@@ -102,7 +102,7 @@ pub(crate) struct SessionInputs<'a> {
     pub process_fixture_names: &'a [String],
 }
 
-pub(crate) fn run_phase_parallel(
+pub fn run_phase_parallel(
     groups: Vec<scheduler::TaskGroup>,
     cfg: &config::Config,
     worker_count: usize, // caller computes optimal count

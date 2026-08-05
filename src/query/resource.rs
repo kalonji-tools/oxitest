@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 /// The kinds of resources that the query DSL can filter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
-pub(crate) enum ResourceKind {
+pub enum ResourceKind {
     /// Test functions and parametrize cases.
     Tests,
     /// Fixture definitions.
@@ -50,7 +50,7 @@ impl ResourceKind {
 /// Values for multi-valued fields (e.g. marks) are comma-separated strings
 /// so the evaluator can split and check each value independently.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct QueryEntry {
+pub struct QueryEntry {
     /// The field map.
     pub(crate) fields: HashMap<String, String>,
 }

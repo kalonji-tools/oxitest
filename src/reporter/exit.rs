@@ -8,7 +8,7 @@ use crate::types::{ExitCode, OutcomeKind};
 /// - **Interrupted** (2) — the run was interrupted (e.g. Ctrl-C / SIGINT).
 /// - **Failure** (1) — at least one hard failure (failed, errored, timed out, strict-xpassed, or suite violation).
 /// - **Success** (0) — all tests passed (or were skipped / xfailed).
-pub(crate) const fn compute_exit_code(
+pub const fn compute_exit_code(
     stats: &RunStats,
     collect_err_count: usize,
     interrupted: bool,

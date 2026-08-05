@@ -24,7 +24,7 @@ fn match_field_value(field_value: &str, pattern: &str) -> bool {
 /// Evaluate an [`Expr`] against a [`crate::query::resource::QueryEntry`].
 ///
 /// Returns `true` if the entry matches the expression.
-pub(crate) fn eval(expr: &Expr, entry: &crate::query::resource::QueryEntry) -> bool {
+pub fn eval(expr: &Expr, entry: &crate::query::resource::QueryEntry) -> bool {
     match expr {
         Expr::And(a, b) => eval(a, entry) && eval(b, entry),
         Expr::Or(a, b) => eval(a, entry) || eval(b, entry),
@@ -50,7 +50,7 @@ pub(crate) fn eval(expr: &Expr, entry: &crate::query::resource::QueryEntry) -> b
 ///
 /// Returns [`DslError::InvalidPredicate`] for the first invalid predicate found,
 /// or [`DslError::InvalidRegex`] if a regex pattern fails to compile.
-pub(crate) fn validate_predicates(expr: &Expr, resource: &ResourceKind) -> Result<(), DslError> {
+pub fn validate_predicates(expr: &Expr, resource: &ResourceKind) -> Result<(), DslError> {
     match expr {
         Expr::And(a, b) | Expr::Or(a, b) => {
             validate_predicates(a, resource)?;

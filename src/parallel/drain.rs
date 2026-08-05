@@ -78,7 +78,7 @@ fn dispatch_non_result(trimmed: &str, tx: &crossbeam_channel::Sender<WorkerMessa
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum DrainOutcome {
+pub enum DrainOutcome {
     /// All `expected` results received successfully.
     Complete,
     /// Watchdog deadline elapsed before all results arrived; subprocess should be killed.
@@ -93,7 +93,7 @@ pub(crate) enum DrainOutcome {
 /// resets only when a real (non-empty, parseable or not) result line is received.
 /// Empty lines do NOT reset the deadline — a subprocess spamming blank output
 /// cannot prevent the watchdog from firing.
-pub(crate) fn drain_worker_results(
+pub fn drain_worker_results(
     line_rx: &crossbeam_channel::Receiver<String>,
     expected: usize,
     watchdog: std::time::Duration,
@@ -229,7 +229,7 @@ pub(crate) fn drain_worker_results(
 /// output would otherwise be read forever — and every diagnostic it produced
 /// would accumulate in the reporter. [`MAX_TAIL_LINES`] bounds that; the
 /// dispatch loop proper has no such need because `expected` bounds it.
-pub(crate) fn drain_until_eof(
+pub fn drain_until_eof(
     line_rx: &crossbeam_channel::Receiver<String>,
     watchdog: std::time::Duration,
     tx: &crossbeam_channel::Sender<WorkerMessage>,
@@ -280,7 +280,7 @@ pub(crate) fn drain_until_eof(
 }
 
 /// Bundles the mutable and shared state needed by [`handle_drain_outcome`].
-pub(crate) struct DrainContext<'a> {
+pub struct DrainContext<'a> {
     pub child: &'a mut std::process::Child,
     pub items: &'a [std::sync::Arc<crate::types::TestItem>],
     pub watchdog: std::time::Duration,
@@ -350,7 +350,7 @@ fn skipped_teardown_message(worker_id: usize, cause: &str, names: &[String]) -> 
 
 /// Handles the result of draining worker output for one group.
 /// Returns `false` if the subprocess died and should not receive more tasks.
-pub(crate) fn handle_drain_outcome(
+pub fn handle_drain_outcome(
     outcome: DrainOutcome,
     received: usize,
     ctx: &mut DrainContext<'_>,

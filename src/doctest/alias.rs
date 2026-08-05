@@ -22,7 +22,7 @@ use crate::doctest::subjects::SubjectSource;
 ///
 /// Typically the project root joined with the first `testpaths` entry (often `python/`).
 #[derive(Debug, Clone)]
-pub(crate) struct ModuleRoot {
+pub struct ModuleRoot {
     pub(crate) root: Utf8PathBuf,
     pub(crate) use_gitignore: bool,
 }
@@ -104,7 +104,7 @@ impl ModuleRoot {
 }
 
 #[derive(Debug)]
-pub(crate) enum AliasError {
+pub enum AliasError {
     Cycle { path: Vec<String> },
     UnknownTerminus { at: String },
     ParseFailure { file: Utf8PathBuf },
@@ -113,14 +113,14 @@ pub(crate) enum AliasError {
 }
 
 #[derive(Debug)]
-pub(crate) struct Resolved {
+pub struct Resolved {
     pub(crate) file: Utf8PathBuf,
     pub(crate) lineno: u32,
     pub(crate) docstring: Option<String>,
 }
 
 /// Follow the alias chain to its terminal ClassDef/FunctionDef; return (file, lineno, docstring).
-pub(crate) fn resolve_alias(
+pub fn resolve_alias(
     root: &ModuleRoot,
     source: &SubjectSource,
     starting_module: &str,

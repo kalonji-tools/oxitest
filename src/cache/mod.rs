@@ -27,7 +27,7 @@ const CACHE_VERSION: u32 = 2;
 /// `age` counts how many runs have elapsed since this test last executed.
 /// Entries with `age > cache_max_age` are pruned during [`TestCache::merge_timings`].
 #[derive(Debug, ::serde::Serialize, ::serde::Deserialize)]
-pub(super) struct CacheEntry {
+pub struct CacheEntry {
     duration_ms: DurationMs,
     age: u32,
     #[serde(default)]
@@ -45,7 +45,7 @@ pub(super) struct CacheEntry {
 /// `node_id` and `module_path` are reconstructed from the map key on deserialization
 /// (they are `#[serde(skip)]` on `TestItem`).
 #[derive(Debug, ::serde::Serialize, ::serde::Deserialize)]
-pub(super) struct ModuleCacheEntry {
+pub struct ModuleCacheEntry {
     mtime_secs: u64,
     items: Vec<crate::types::TestItem>,
 }
@@ -57,7 +57,7 @@ pub(super) struct ModuleCacheEntry {
 /// `timings` and `modules` maps are serialized in sorted key order for
 /// deterministic output (see [`serde::serialize_sorted`]).
 #[derive(Debug, ::serde::Serialize, ::serde::Deserialize)]
-pub(super) struct CacheFile {
+pub struct CacheFile {
     version: u32,
     #[serde(serialize_with = "serde::serialize_sorted")]
     timings: AHashMap<String, CacheEntry>,

@@ -13,7 +13,7 @@ use crate::reporter::Reporter;
 use crate::types::{NodeId, OutcomeKind, TestItem, TestOutcome, TestTiming};
 
 /// Result of the retry phase.
-pub(crate) struct RetryResult {
+pub struct RetryResult {
     /// Node IDs of tests that passed on retry (flaky).
     pub flaky_ids: Vec<NodeId>,
     /// Updated timings — flaky tests get their retry timing.
@@ -21,7 +21,7 @@ pub(crate) struct RetryResult {
 }
 
 /// Context for running retries — bundles parameters to stay under clippy's argument limit.
-pub(crate) struct RetryContext<'a> {
+pub struct RetryContext<'a> {
     pub py: pyo3::Python<'a>,
     pub max_retries: usize,
     pub delay_secs: u64,
@@ -34,7 +34,7 @@ pub(crate) struct RetryContext<'a> {
 ///
 /// Returns each failed item paired with its original outcome kind so the
 /// retry logic can thread it into `TestOutcome::Flaky`.
-pub(crate) fn identify_failed_items(
+pub fn identify_failed_items(
     items: &[Arc<TestItem>],
     timings: &[TestTiming],
 ) -> Vec<(Arc<TestItem>, OutcomeKind)> {
@@ -54,7 +54,7 @@ pub(crate) fn identify_failed_items(
 }
 
 /// Merge retry timings into the original timing list.
-pub(crate) fn merge_flaky_timings(
+pub fn merge_flaky_timings(
     original: Vec<TestTiming>,
     flaky_ids: &[NodeId],
     retry_timings: Vec<TestTiming>,
@@ -74,7 +74,7 @@ pub(crate) fn merge_flaky_timings(
 /// Returns which tests are flaky (passed on retry) and updated timings.
 /// Tests that pass on any retry are reported as `TestOutcome::Flaky` to the reporter.
 /// Tests that fail all retries are NOT re-reported (original failure stands).
-pub(crate) fn run_retries(
+pub fn run_retries(
     ctx: &RetryContext<'_>,
     failed_items: &[(Arc<TestItem>, OutcomeKind)],
     rep: &mut dyn Reporter,

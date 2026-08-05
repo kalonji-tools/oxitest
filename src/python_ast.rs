@@ -10,31 +10,31 @@ use rustpython_parser::{Parse, ast};
 ///
 /// Returns `None` on read error or syntax error — callers should fall through
 /// to Python-side handling, which provides proper diagnostics.
-pub(crate) fn parse_file(path: &Utf8Path) -> Option<(String, Vec<ast::Stmt>)> {
+pub fn parse_file(path: &Utf8Path) -> Option<(String, Vec<ast::Stmt>)> {
     let source = std::fs::read_to_string(path.as_std_path()).ok()?;
     let stmts = ast::Suite::parse(&source, path.as_str()).ok()?;
     Some((source, stmts))
 }
 
 /// Check whether a name follows the `test_*` convention.
-pub(crate) fn is_test_fn(name: &str) -> bool {
+pub fn is_test_fn(name: &str) -> bool {
     name.starts_with("test_")
 }
 
 /// Check whether a name follows the `Test*` class convention.
-pub(crate) fn is_test_class(name: &str) -> bool {
+pub fn is_test_class(name: &str) -> bool {
     name.starts_with("Test")
 }
 
 /// Returns true for the `"oxi"` or `"oxitest"` namespace identifiers.
-pub(crate) fn is_oxitest_namespace(s: &str) -> bool {
+pub fn is_oxitest_namespace(s: &str) -> bool {
     s == "oxi" || s == "oxitest"
 }
 
 /// Unified view of `FunctionDef` and `AsyncFunctionDef`.
 ///
 /// Erases the sync/async distinction so callers don't need separate match arms.
-pub(crate) enum FnDef<'a> {
+pub enum FnDef<'a> {
     Sync(&'a ast::StmtFunctionDef),
     Async(&'a ast::StmtAsyncFunctionDef),
 }
@@ -93,7 +93,7 @@ impl<'a> FnDef<'a> {
 /// Handles the common "top-level `test_*` functions + `Test*` class methods" pattern
 /// that every AST consumer repeats. Non-test functions, non-test classes, and
 /// non-test methods inside test classes are all skipped.
-pub(crate) fn walk_test_defs(
+pub fn walk_test_defs(
     stmts: &[ast::Stmt],
     mut visit: impl FnMut(&FnDef<'_>, Option<&ast::StmtClassDef>),
 ) {
@@ -117,7 +117,7 @@ pub(crate) fn walk_test_defs(
 }
 
 /// Build an index mapping byte offsets to 1-based line numbers.
-pub(crate) fn build_line_index(source: &str) -> Vec<u32> {
+pub fn build_line_index(source: &str) -> Vec<u32> {
     let mut newlines = vec![0u32]; // line 1 starts at byte 0
     for (i, b) in source.bytes().enumerate() {
         if b == b'\n' {
@@ -128,7 +128,7 @@ pub(crate) fn build_line_index(source: &str) -> Vec<u32> {
 }
 
 /// Convert a byte offset to a 1-based line number using a pre-built index.
-pub(crate) fn offset_to_line(line_index: &[u32], offset: u32) -> u32 {
+pub fn offset_to_line(line_index: &[u32], offset: u32) -> u32 {
     match line_index.binary_search(&offset) {
         Ok(i) => i as u32 + 1,
         Err(i) => i as u32,
@@ -141,7 +141,7 @@ pub(crate) fn offset_to_line(line_index: &[u32], offset: u32) -> u32 {
 /// For `try`/`try*`: body + handler bodies + orelse + finalbody.
 /// For `with`/`class`/`match`/`function`: body.
 /// For simple statements: empty.
-pub(crate) fn compound_children(stmt: &ast::Stmt) -> Vec<&ast::Stmt> {
+pub fn compound_children(stmt: &ast::Stmt) -> Vec<&ast::Stmt> {
     match stmt {
         ast::Stmt::If(n) => chain(&n.body, &n.orelse),
         ast::Stmt::While(n) => chain(&n.body, &n.orelse),
@@ -186,7 +186,7 @@ fn try_children<'a>(
 /// Returns `None` on read error or syntax error (caller should fall through
 /// to Python collection, which handles these cases with proper diagnostics).
 #[cfg(test)]
-pub(crate) fn has_test_functions(path: &Utf8Path) -> Option<bool> {
+pub fn has_test_functions(path: &Utf8Path) -> Option<bool> {
     let (_, stmts) = parse_file(path)?;
     let mut found = false;
     walk_test_defs(&stmts, |_, _| found = true);
@@ -195,7 +195,7 @@ pub(crate) fn has_test_functions(path: &Utf8Path) -> Option<bool> {
 
 /// Count the number of test functions in a parsed module.
 #[cfg(test)]
-pub(crate) fn count_tests(stmts: &[ast::Stmt]) -> usize {
+pub fn count_tests(stmts: &[ast::Stmt]) -> usize {
     let mut count = 0;
     walk_test_defs(stmts, |_, _| count += 1);
     count
@@ -206,7 +206,7 @@ pub(crate) fn count_tests(stmts: &[ast::Stmt]) -> usize {
 /// Recognises `oxi.mark.NAME` and `oxitest.mark.NAME` in both bare decorator
 /// form (`@oxi.mark.slow`) and call form (`@oxi.mark.slow()`).
 /// Returns `None` for `parametrize` or unrecognised patterns.
-pub(crate) fn extract_mark_name(dec: &ast::Expr) -> Option<String> {
+pub fn extract_mark_name(dec: &ast::Expr) -> Option<String> {
     // Unwrap call form: @oxi.mark.slow(...) → look at the func
     let attr_expr = match dec {
         ast::Expr::Call(call) => &call.func,
@@ -252,7 +252,7 @@ pub(crate) fn extract_mark_name(dec: &ast::Expr) -> Option<String> {
 /// A body of just a docstring (`"""..."""`) is not a stub — that's a
 /// docstring-only function with an implicit `return None`, which does
 /// have a docstring worth using.
-pub(crate) fn is_stub_body(body: &[ast::Stmt]) -> bool {
+pub fn is_stub_body(body: &[ast::Stmt]) -> bool {
     let [ast::Stmt::Expr(e)] = body else {
         return false;
     };
@@ -269,7 +269,7 @@ pub(crate) fn is_stub_body(body: &[ast::Stmt]) -> bool {
 /// in the given statement list.
 ///
 /// Skips `parametrize`. Returns a sorted, deduplicated `Vec<String>`.
-pub(crate) fn extract_decorator_marks(stmts: &[ast::Stmt]) -> Vec<String> {
+pub fn extract_decorator_marks(stmts: &[ast::Stmt]) -> Vec<String> {
     let mut marks = std::collections::BTreeSet::new();
     walk_test_defs(stmts, |def, _| {
         for dec in def.decorator_list() {
@@ -282,20 +282,20 @@ pub(crate) fn extract_decorator_marks(stmts: &[ast::Stmt]) -> Vec<String> {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+pub mod tests {
     use super::*;
     use camino::Utf8PathBuf;
     use std::io::Write;
 
     /// Create a temporary `.py` file with the given content.
-    pub(crate) fn write_temp_py(content: &str) -> tempfile::NamedTempFile {
+    pub fn write_temp_py(content: &str) -> tempfile::NamedTempFile {
         let mut f = tempfile::Builder::new().suffix(".py").tempfile().unwrap();
         f.write_all(content.as_bytes()).unwrap();
         f
     }
 
     /// Convert a `NamedTempFile` path to a `Utf8PathBuf`.
-    pub(crate) fn temp_path(f: &tempfile::NamedTempFile) -> Utf8PathBuf {
+    pub fn temp_path(f: &tempfile::NamedTempFile) -> Utf8PathBuf {
         Utf8PathBuf::from_path_buf(f.path().to_path_buf()).unwrap()
     }
 

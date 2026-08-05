@@ -7,10 +7,10 @@
 //! [`TestOutcome`](crate::types::TestOutcome).
 
 mod wire;
-pub(crate) use wire::*;
+pub use wire::*;
 
 mod convert;
-pub(crate) use convert::RawOutcome;
+pub use convert::RawOutcome;
 
 #[cfg(test)]
 mod tests;

@@ -35,7 +35,7 @@ const fn fields_for(resource: ResourceKind) -> &'static [&'static str] {
 ///
 /// Fields that are absent or empty in the entry are skipped.
 /// If a `_source_code` field is present it is appended after a blank line.
-pub(crate) fn format_detail(entry: &QueryEntry, resource: ResourceKind, use_color: bool) -> String {
+pub fn format_detail(entry: &QueryEntry, resource: ResourceKind, use_color: bool) -> String {
     let name = entry.get("name").unwrap_or("<unknown>");
     let mut out = format!(
         "{} {} {}\n\n",

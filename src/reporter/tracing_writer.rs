@@ -27,19 +27,19 @@ fn deregister_in(handle: &PbHandle) {
 }
 
 /// Register a progress bar so tracing output routes through `pb.println()`.
-pub(crate) fn register(pb: ProgressBar) {
+pub fn register(pb: ProgressBar) {
     register_in(&shared_handle(), pb);
 }
 
 /// Deregister the progress bar so tracing output falls back to stderr.
-pub(crate) fn deregister() {
+pub fn deregister() {
     deregister_in(&shared_handle());
 }
 
 // ─── MakeWriter ──────────────────────────────────────────────────────────────
 
 /// Factory that produces [`PbWriter`] instances for `tracing_subscriber`.
-pub(crate) struct PbMakeWriter {
+pub struct PbMakeWriter {
     handle: PbHandle,
 }
 
@@ -67,7 +67,7 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for PbMakeWriter {
 /// Buffers a single tracing event, then flushes it through `pb.println()` on
 /// drop (or explicit `flush()`). Falls back to `eprintln!` when no progress
 /// bar is registered.
-pub(crate) struct PbWriter {
+pub struct PbWriter {
     handle: PbHandle,
     buf: Vec<u8>,
 }

@@ -9,25 +9,25 @@ use crate::inspect::graph::{BrokenEdge, InspectGraph, NodeRef};
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
-pub(crate) fn label_style() -> Style {
+pub fn label_style() -> Style {
     Style::default()
         .fg(Color::DarkGray)
         .add_modifier(Modifier::BOLD)
 }
 
-pub(crate) fn value_style() -> Style {
+pub fn value_style() -> Style {
     Style::default().fg(Color::White)
 }
 
-pub(crate) fn sigil_style() -> Style {
+pub fn sigil_style() -> Style {
     Style::default().fg(Color::Cyan)
 }
 
-pub(crate) fn warning_style() -> Style {
+pub fn warning_style() -> Style {
     Style::default().fg(Color::Yellow)
 }
 
-pub(crate) fn header_style() -> Style {
+pub fn header_style() -> Style {
     Style::default()
         .fg(Color::Yellow)
         .add_modifier(Modifier::BOLD)
@@ -36,7 +36,7 @@ pub(crate) fn header_style() -> Style {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 /// Render a single `label: value` field line.
-pub(crate) fn field_line<'a>(label: &str, value: &str) -> Line<'a> {
+pub fn field_line<'a>(label: &str, value: &str) -> Line<'a> {
     Line::from(vec![
         Span::styled(format!("  {label}: "), label_style()),
         Span::styled(value.to_string(), value_style()),
@@ -44,17 +44,17 @@ pub(crate) fn field_line<'a>(label: &str, value: &str) -> Line<'a> {
 }
 
 /// Render a boolean field as yes/no.
-pub(crate) fn bool_field<'a>(label: &str, value: bool) -> Line<'a> {
+pub fn bool_field<'a>(label: &str, value: bool) -> Line<'a> {
     field_line(label, if value { "yes" } else { "no" })
 }
 
 /// Render a section header (e.g., "Depends On", "Consumers").
-pub(crate) fn section_header<'a>(title: &str) -> Line<'a> {
+pub fn section_header<'a>(title: &str) -> Line<'a> {
     Line::from(Span::styled(format!("  {title}"), header_style()))
 }
 
 /// Render a connection entry: `sigil name`.
-pub(crate) fn connection_line<'a>(sigil: char, name: &str) -> Line<'a> {
+pub fn connection_line<'a>(sigil: char, name: &str) -> Line<'a> {
     Line::from(vec![
         Span::raw("    "),
         Span::styled(format!("{sigil}"), sigil_style()),
@@ -63,7 +63,7 @@ pub(crate) fn connection_line<'a>(sigil: char, name: &str) -> Line<'a> {
 }
 
 /// Render a broken edge entry with warning sigil.
-pub(crate) fn broken_edge_line<'a>(qualifier: &str, binding_type: &str) -> Line<'a> {
+pub fn broken_edge_line<'a>(qualifier: &str, binding_type: &str) -> Line<'a> {
     Line::from(vec![
         Span::raw("    "),
         Span::styled("!", warning_style()),
@@ -73,7 +73,7 @@ pub(crate) fn broken_edge_line<'a>(qualifier: &str, binding_type: &str) -> Line<
 }
 
 /// Collect broken edges for a given node reference.
-pub(crate) fn broken_edges_for<'a>(
+pub fn broken_edges_for<'a>(
     broken_edges: &'a [BrokenEdge],
     node_ref: &NodeRef,
 ) -> Vec<&'a BrokenEdge> {
@@ -85,7 +85,7 @@ pub(crate) fn broken_edges_for<'a>(
 
 /// Append up to `max_shown` connection lines from `edges`, then a "N more"
 /// line if any are truncated.
-pub(crate) fn preview_edges<'a>(
+pub fn preview_edges<'a>(
     lines: &mut Vec<Line<'a>>,
     edges: &[NodeRef],
     graph: &InspectGraph,

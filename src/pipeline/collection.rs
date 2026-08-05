@@ -23,10 +23,7 @@ fn file_mtime_secs(path: &camino::Utf8Path) -> u64 {
 /// Prefix entries match by `starts_with`; File/Symbol entries match only when
 /// the entry's `file` equals `rel`. Used by the Phase-1 prescreen to filter
 /// the file set handed to the scanner.
-pub(crate) fn file_could_match(
-    rel: &camino::Utf8Path,
-    entries: &[crate::config::ScopeEntry],
-) -> bool {
+pub fn file_could_match(rel: &camino::Utf8Path, entries: &[crate::config::ScopeEntry]) -> bool {
     use crate::config::ScopeEntry;
     entries.iter().any(|e| match e {
         ScopeEntry::Prefix(p) => rel.starts_with(p),
@@ -38,7 +35,7 @@ pub(crate) fn file_could_match(
 
 /// Per-file collection timing.
 #[derive(Debug)]
-pub(crate) struct FileProfile {
+pub struct FileProfile {
     pub(super) path: Utf8PathBuf,
     pub(super) prescan_us: u64,
     pub(super) collection_us: u64,
@@ -48,7 +45,7 @@ pub(crate) struct FileProfile {
 
 /// Aggregate collection timing profile.
 #[derive(Debug, Default)]
-pub(crate) struct CollectionProfile {
+pub struct CollectionProfile {
     pub(super) files: Vec<FileProfile>,
     pub(super) total_us: u64,
 }

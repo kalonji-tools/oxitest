@@ -8,7 +8,7 @@ use super::graph::NodeRef;
 use super::nav::Screen;
 
 /// Process a key event and update application state.
-pub(crate) fn handle_key(app: &mut InspectApp, key: KeyEvent) {
+pub fn handle_key(app: &mut InspectApp, key: KeyEvent) {
     // Source view intercept — when active, only source-view keys are handled.
     if app.source_view.is_some() {
         handle_source_view_key(app, key);
@@ -26,7 +26,7 @@ pub(crate) fn handle_key(app: &mut InspectApp, key: KeyEvent) {
 /// routed anywhere: scroll and click do nothing and no app state is read or
 /// written. Keyboard is the only input that navigates. Takes no `InspectApp`
 /// deliberately — a parameter it never touches would be a claim it does.
-pub(crate) const fn handle_mouse(_mouse: &MouseEvent) {}
+pub const fn handle_mouse(_mouse: &MouseEvent) {}
 
 // ── Normal mode ──────────────────────────────────────────────────────────────
 

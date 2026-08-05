@@ -1,13 +1,13 @@
-pub(crate) mod ast;
-pub(crate) mod bridge;
-pub(crate) mod compile;
-pub(crate) mod detail;
-pub(crate) mod eval;
-pub(crate) mod extract;
-pub(crate) mod format;
-pub(crate) mod fzf;
-pub(crate) mod highlight;
-pub(crate) mod resource;
+pub mod ast;
+pub mod bridge;
+pub mod compile;
+pub mod detail;
+pub mod eval;
+pub mod extract;
+pub mod format;
+pub mod fzf;
+pub mod highlight;
+pub mod resource;
 
 use crate::config;
 use resource::{QueryEntry, ResourceKind};
@@ -17,7 +17,7 @@ use resource::{QueryEntry, ResourceKind};
 /// Fixtures and plugins always need Python. Tests and marks are
 /// instant-tier unless the DSL expression references predicates that require
 /// Python data (shared, autouse, protocol, uses).
-pub(crate) fn needs_python(resource: ResourceKind, expr_str: Option<&str>) -> bool {
+pub fn needs_python(resource: ResourceKind, expr_str: Option<&str>) -> bool {
     match resource {
         ResourceKind::Fixtures | ResourceKind::Plugins => true,
         ResourceKind::Tests | ResourceKind::Marks => {
@@ -47,7 +47,7 @@ fn expr_needs_python(expr: &ast::Expr) -> bool {
 }
 
 /// Return the default columns to display for a given resource kind.
-pub(crate) fn default_columns(resource: ResourceKind) -> Vec<&'static str> {
+pub fn default_columns(resource: ResourceKind) -> Vec<&'static str> {
     match resource {
         ResourceKind::Tests => vec!["name"],
         ResourceKind::Fixtures => vec!["name"],
@@ -61,7 +61,7 @@ pub(crate) fn default_columns(resource: ResourceKind) -> Vec<&'static str> {
 /// For instant-tier resources (tests, marks), this performs pure-Rust AST
 /// extraction. For full-tier resources (fixtures, plugins), this
 /// delegates to the Python bridge.
-pub(crate) fn collect_entries(
+pub fn collect_entries(
     py: pyo3::Python<'_>,
     resource: ResourceKind,
     test_files: &[camino::Utf8PathBuf],
@@ -159,7 +159,7 @@ fn extract_plugin_entries(
 /// Handles the full pipeline: collect entries, parse/validate/apply DSL filter,
 /// handle --detail, --count, --format, and default columnar output.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn run_query(
+pub fn run_query(
     py: pyo3::Python<'_>,
     args: &config::QueryArgs,
     test_files: &[camino::Utf8PathBuf],

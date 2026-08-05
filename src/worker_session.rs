@@ -37,7 +37,7 @@ fn take_child_pipes(
 
 /// Spawns a worker subprocess and returns its stdin, a line receiver for stdout,
 /// and the child handle. Returns `None` on spawn or pipe failure.
-pub(crate) fn setup_worker_process(
+pub fn setup_worker_process(
     python_bin: &str,
 ) -> Option<(
     std::process::Child,
@@ -180,7 +180,7 @@ impl WorkerSession {
 /// Bundles the 10 fields that are common to both [`spawn_worker`] and
 /// [`spawn_worker_with_process`] so call sites build a struct instead of
 /// passing a long positional argument list.
-pub(crate) struct WorkerParams {
+pub struct WorkerParams {
     /// Unique zero-based index identifying this worker.
     pub worker_id: usize,
     /// Shared scheduler that distributes test groups to workers.
@@ -387,7 +387,7 @@ fn run_worker_loop(
     let _ = child.wait();
 }
 
-pub(crate) fn spawn_worker(
+pub fn spawn_worker(
     python_bin: std::sync::Arc<str>,
     params: WorkerParams,
 ) -> std::thread::JoinHandle<()> {
@@ -403,7 +403,7 @@ pub(crate) fn spawn_worker(
 /// Like [`spawn_worker`] but accepts a pre-spawned `(Child, BufWriter, Receiver)` tuple
 /// instead of calling `setup_worker_process` internally. Used by the pre-warming pool
 /// so that subprocess startup overlaps with earlier pipeline stages.
-pub(crate) fn spawn_worker_with_process(
+pub fn spawn_worker_with_process(
     prewarmed: (
         std::process::Child,
         std::io::BufWriter<std::process::ChildStdin>,

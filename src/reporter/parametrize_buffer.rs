@@ -12,7 +12,7 @@ use crate::types::{DurationMs, TestItem, TestOutcome};
 ///
 /// Statistics are computed incrementally on each `push()` to avoid repeated
 /// iteration over the results vector.
-pub(crate) struct ParametrizeBuffer {
+pub struct ParametrizeBuffer {
     pub fn_name: Arc<str>,
     pub results: Vec<(TestItem, TestOutcome, DurationMs)>,
     total_ms: DurationMs,

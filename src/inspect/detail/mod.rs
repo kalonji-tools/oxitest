@@ -8,7 +8,7 @@ mod conftest;
 mod fixture;
 mod mark;
 mod plugin;
-pub(crate) mod styles;
+pub mod styles;
 mod test;
 
 use ratatui::text::{Line, Span};
@@ -23,7 +23,7 @@ use styles::{bool_field, connection_line, field_line, section_header, sigil_styl
 ///
 /// Returns a `Vec<Line>` suitable for embedding in a `Paragraph` widget.
 /// When `node_ref` is `None`, returns a placeholder message.
-pub(crate) fn render_detail<'a>(graph: &InspectGraph, node_ref: Option<&NodeRef>) -> Vec<Line<'a>> {
+pub fn render_detail<'a>(graph: &InspectGraph, node_ref: Option<&NodeRef>) -> Vec<Line<'a>> {
     let Some(node_ref) = node_ref else {
         return vec![Line::from("Select a node to view details")];
     };
@@ -41,7 +41,7 @@ pub(crate) fn render_detail<'a>(graph: &InspectGraph, node_ref: Option<&NodeRef>
 ///
 /// Shows: node header, 2-3 key properties, top 3 edges per group.
 /// Omits: description text, some boolean fields.
-pub(crate) fn render_preview<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
+pub fn render_preview<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
     match node_ref.kind {
         NodeKind::Fixture => fixture::preview_fixture(graph, node_ref),
         NodeKind::Test => test::preview_test(graph, node_ref),
@@ -65,13 +65,13 @@ fn collect_selectable_edges(graph: &InspectGraph, node: &NodeRef) -> Vec<NodeRef
 }
 
 /// Return the `NodeRef` of the selectable edge at `index` within a focused node.
-pub(crate) fn edge_node_at(graph: &InspectGraph, node: &NodeRef, index: usize) -> Option<NodeRef> {
+pub fn edge_node_at(graph: &InspectGraph, node: &NodeRef, index: usize) -> Option<NodeRef> {
     let edges = collect_selectable_edges(graph, node);
     edges.get(index).cloned()
 }
 
 /// Count the number of selectable edge items for a focused node.
-pub(crate) fn selectable_edge_count(graph: &InspectGraph, node: &NodeRef) -> usize {
+pub fn selectable_edge_count(graph: &InspectGraph, node: &NodeRef) -> usize {
     collect_selectable_edges(graph, node).len()
 }
 
@@ -103,7 +103,7 @@ fn shared_indices<'a>(indices: &[usize], extractor: impl Fn(usize) -> &'a [usize
 /// Shows the shared base name, variant count, and connections that are
 /// common across all variants (fixture deps, marks).
 #[allow(dead_code)] // retained for future parametrize group detail rendering
-pub(crate) fn render_group_detail<'a>(graph: &InspectGraph, indices: &[usize]) -> Vec<Line<'a>> {
+pub fn render_group_detail<'a>(graph: &InspectGraph, indices: &[usize]) -> Vec<Line<'a>> {
     if indices.is_empty() {
         return vec![Line::from("Empty group")];
     }

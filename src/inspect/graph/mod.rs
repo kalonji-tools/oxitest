@@ -5,8 +5,8 @@
 //! lightweight handle (kind + index) used by the navigation stack,
 //! search results, and detail views.
 
-pub(crate) mod builder;
-pub(crate) mod nodes;
+pub mod builder;
+pub mod nodes;
 
 use nodes::{ConftestNode, FixtureNode, MarkNode, PluginNode, TestNode};
 
@@ -16,7 +16,7 @@ use crate::query::resource::QueryEntry;
 
 /// Discriminant for the five node types in the inspect graph.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum NodeKind {
+pub enum NodeKind {
     Fixture,
     Test,
     Mark,
@@ -52,7 +52,7 @@ impl NodeKind {
 
 /// A uniform handle for referencing any node in the graph.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct NodeRef {
+pub struct NodeRef {
     pub kind: NodeKind,
     pub index: usize,
 }
@@ -70,7 +70,7 @@ impl NodeRef {
 /// Typically a fixture dependency name that does not match any known
 /// fixture node.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct BrokenEdge {
+pub struct BrokenEdge {
     /// The node that references the missing target.
     pub from: NodeRef,
     /// The qualifier (name) that could not be resolved.
@@ -83,7 +83,7 @@ pub(crate) struct BrokenEdge {
 
 /// The immutable in-memory graph consumed by the inspect TUI.
 #[derive(Debug, Default)]
-pub(crate) struct InspectGraph {
+pub struct InspectGraph {
     pub fixtures: Vec<FixtureNode>,
     pub tests: Vec<TestNode>,
     pub marks: Vec<MarkNode>,
@@ -228,7 +228,7 @@ impl InspectGraph {
 /// Extract the base function name from a node ID by stripping `[param_id]`.
 /// Returns the full `node_id` if no `[` is found.
 #[allow(dead_code)] // retained for future parametrize group collapsing
-pub(crate) fn base_test_name(node_id: &str) -> &str {
+pub fn base_test_name(node_id: &str) -> &str {
     node_id.rfind('[').map_or(node_id, |pos| &node_id[..pos])
 }
 

@@ -81,7 +81,7 @@ pub trait Reporter {
 // ─── StandardReporter ────────────────────────────────────────────────────────
 
 /// Reporters whose shutdown differs only in what they must drain first.
-pub(crate) trait StandardReporter {
+pub trait StandardReporter {
     /// Drain whatever this reporter has buffered, before the summary is printed.
     ///
     /// Called by [`standard_finish`] — **do not call it as well**. Implementations
@@ -95,7 +95,7 @@ pub(crate) trait StandardReporter {
 ///
 /// Owns the [`StandardReporter::pre_finish`] call so the ordering cannot be got
 /// wrong or forgotten by an implementer.
-pub(crate) fn standard_finish(
+pub fn standard_finish(
     r: &mut impl StandardReporter,
     session: &ReporterSession,
     collect_errors: &[CollectError],

@@ -15,7 +15,7 @@ use super::ui;
 // ── SourceViewState ──────────────────────────────────────────────────────────
 
 /// State for the full-screen source view overlay.
-pub(crate) struct SourceViewState {
+pub struct SourceViewState {
     /// Display path of the source file.
     pub path: String,
     /// Pre-rendered lines (with line numbers) from the source file.
@@ -35,7 +35,7 @@ pub(crate) struct SourceViewState {
 
 /// Arguments needed to re-run file collection and graph construction
 /// when the user presses `r` to refresh.
-pub(crate) struct RefreshArgs {
+pub struct RefreshArgs {
     pub inspect_args: crate::config::cli::InspectArgs,
     pub config: crate::config::Config,
 }
@@ -44,7 +44,7 @@ pub(crate) struct RefreshArgs {
 
 /// Current input mode of the TUI.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum InputMode {
+pub enum InputMode {
     /// Normal navigation mode.
     Normal,
     /// Search mode — keystrokes append to the query string.
@@ -55,7 +55,7 @@ pub(crate) enum InputMode {
 
 /// Whether search scans the current screen's nodes or the entire graph.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ScopeMode {
+pub enum ScopeMode {
     /// Search only nodes visible on the current screen.
     Context,
     /// Search all nodes in the graph.
@@ -69,7 +69,7 @@ pub(crate) enum ScopeMode {
 /// Tracks the current query, matched results, and selection cursor
 /// within those results.
 #[derive(Debug, Clone)]
-pub(crate) struct SearchState {
+pub struct SearchState {
     /// The current search query string.
     pub(crate) query: String,
     /// Node references matching the current query.
@@ -139,7 +139,7 @@ enum Phase2State {
 // ── Phase2Data ──────────────────────────────────────────────────────────────
 
 /// Payload sent from the background thread once Python-tier data is ready.
-pub(crate) struct Phase2Data {
+pub struct Phase2Data {
     pub(crate) fixture_entries: Vec<crate::query::resource::QueryEntry>,
     pub(crate) plugin_entries: Vec<crate::query::resource::QueryEntry>,
     pub(crate) fixture_dep_entries: Vec<crate::query::resource::QueryEntry>,
@@ -154,7 +154,7 @@ pub(crate) struct Phase2Data {
 /// the same node twice produces two entries.  The history is session-only
 /// and is lost when the TUI exits.
 #[derive(Debug, Clone)]
-pub(crate) struct SessionHistory {
+pub struct SessionHistory {
     /// Entries in reverse-chronological order (most recent first).
     pub(crate) entries: Vec<NodeRef>,
 }
@@ -186,7 +186,7 @@ impl SessionHistory {
 // ── InspectApp ───────────────────────────────────────────────────────────────
 
 /// Top-level application state for the inspect TUI.
-pub(crate) struct InspectApp {
+pub struct InspectApp {
     pub(crate) should_quit: bool,
     pub(crate) terminal_width: u16,
     pub(crate) input_mode: InputMode,

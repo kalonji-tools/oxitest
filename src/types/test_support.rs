@@ -12,7 +12,7 @@ use std::sync::Arc;
 ///
 /// Required fields (`module_path`, `fn_name`) are set at construction.
 /// All other fields default to empty/zero/false.
-pub(crate) struct TestItemBuilder {
+pub struct TestItemBuilder {
     pub(crate) node_id: Option<NodeId>,
     pub(crate) module_path: Utf8PathBuf,
     pub(crate) fn_name: String,
@@ -93,7 +93,7 @@ impl TestItemBuilder {
 ///
 /// Created via [`TestOutcome::failed(msg)`]. All fields default to sensible
 /// test values (file = `"tests/test_foo.py"`, lineno = 1, everything else empty).
-pub(crate) struct FailedOutcomeBuilder {
+pub struct FailedOutcomeBuilder {
     pub(crate) message: String,
     pub(crate) file: Utf8PathBuf,
     pub(crate) lineno: LineNo,
@@ -162,7 +162,7 @@ impl FailedOutcomeBuilder {
 ///
 /// Created via [`TestOutcome::error(msg)`]. All fields default to sensible
 /// test values (file = `"tests/test_foo.py"`, lineno = 1, everything else empty).
-pub(crate) struct ErrorOutcomeBuilder {
+pub struct ErrorOutcomeBuilder {
     pub(crate) message: String,
     pub(crate) file: Utf8PathBuf,
     pub(crate) lineno: LineNo,

@@ -12,7 +12,7 @@ use rustpython_parser::lexer;
 /// Highlight Python source code with ANSI colors.
 ///
 /// Returns the source unchanged when `use_color` is false.
-pub(crate) fn highlight_python(source: &str, use_color: bool) -> String {
+pub fn highlight_python(source: &str, use_color: bool) -> String {
     if !use_color {
         return source.to_string();
     }

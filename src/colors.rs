@@ -2,7 +2,7 @@
 
 macro_rules! color_fn {
     ($name:ident, |$s:ident| $styled:expr) => {
-        pub(crate) fn $name(s: &str, use_color: bool) -> String {
+        pub fn $name(s: &str, use_color: bool) -> String {
             if use_color {
                 let $s = console::style(s).force_styling(true);
                 $styled.to_string()

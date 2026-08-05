@@ -7,7 +7,7 @@ use crate::python_ast;
 
 /// A single doctest found in a docstring.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DoctestExample {
+pub struct DoctestExample {
     /// Source code (all `>>>` and `...` lines joined).
     pub source: String,
     /// Expected output (lines following source, before next `>>>` or blank line).
@@ -25,7 +25,7 @@ struct PendingExample {
 }
 
 /// Parse a docstring for `>>>` interactive examples.
-pub(crate) fn parse_docstring_examples(docstring: &str) -> Vec<DoctestExample> {
+pub fn parse_docstring_examples(docstring: &str) -> Vec<DoctestExample> {
     let mut examples = Vec::new();
     let mut pending: Option<PendingExample> = None;
     let mut want = String::new();
@@ -101,7 +101,7 @@ pub(super) fn parse_docstring_examples_v2(docstring: &str) -> (bool, Vec<Doctest
 
 /// A location in a Python file where a docstring with `>>>` examples was found.
 #[derive(Debug, Clone)]
-pub(crate) struct DoctestLocation {
+pub struct DoctestLocation {
     pub name: String,
     pub lineno: usize,
     #[allow(
@@ -150,7 +150,7 @@ fn try_push_doctest(
 ///
 /// Returns a `DoctestLocation` per docstring that has at least one example.
 /// Walks module-level, function, class, and class method docstrings.
-pub(crate) fn scan_doctests(path: &Utf8Path) -> Vec<DoctestLocation> {
+pub fn scan_doctests(path: &Utf8Path) -> Vec<DoctestLocation> {
     let parsed = match crate::python_ast::parse_file(path) {
         Some(p) => p,
         None => return vec![],

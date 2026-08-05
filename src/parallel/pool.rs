@@ -6,7 +6,7 @@
 /// A pre-spawned worker subprocess ready for task dispatch.
 ///
 /// Tuple of `(child process, buffered stdin writer, stdout line receiver)`.
-pub(crate) type PrewarmedWorker = (
+pub type PrewarmedWorker = (
     std::process::Child,
     std::io::BufWriter<std::process::ChildStdin>,
     crossbeam_channel::Receiver<String>,
@@ -14,14 +14,14 @@ pub(crate) type PrewarmedWorker = (
 
 /// Spawn `count` worker subprocesses eagerly so their startup overlaps with
 /// earlier pipeline stages (fixture arrangement, inprocess tests, etc.).
-pub(crate) fn prewarm_workers(python_bin: &str, count: usize) -> Vec<PrewarmedWorker> {
+pub fn prewarm_workers(python_bin: &str, count: usize) -> Vec<PrewarmedWorker> {
     (0..count)
         .filter_map(|_| crate::worker_session::setup_worker_process(python_bin))
         .collect()
 }
 
 /// Kill all remaining workers in a pre-warmed pool (e.g., excess workers).
-pub(crate) fn kill_pool(mut pool: Vec<PrewarmedWorker>) {
+pub fn kill_pool(mut pool: Vec<PrewarmedWorker>) {
     for (mut child, _stdin, _rx) in pool.drain(..) {
         let _ = child.kill();
         let _ = child.wait();
@@ -32,7 +32,7 @@ pub(crate) fn kill_pool(mut pool: Vec<PrewarmedWorker>) {
 ///
 /// On drop, kills all remaining workers. Use `take()` to move workers out
 /// before drop (e.g., to pass them to `ParallelHarness`).
-pub(crate) struct PoolGuard {
+pub struct PoolGuard {
     workers: Vec<PrewarmedWorker>,
 }
 

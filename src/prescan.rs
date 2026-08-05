@@ -16,14 +16,14 @@ use crate::python_ast;
 
 /// Marker metadata extracted from a decorator without Python import.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct PrescanMarker {
+pub struct PrescanMarker {
     pub(crate) name: String,
     pub(crate) has_dynamic_args: bool,
 }
 
 /// Per-test-function metadata extracted from AST without Python import.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct PrescanItem {
+pub struct PrescanItem {
     pub(crate) fn_name: String,
     pub(crate) lineno: crate::types::LineNo,
     pub(crate) is_async: bool,
@@ -38,7 +38,7 @@ pub(crate) struct PrescanItem {
 
 /// Per-module prescan result used in the pipeline state.
 #[derive(Debug)]
-pub(crate) struct PrescanModule {
+pub struct PrescanModule {
     pub(crate) path: Utf8PathBuf,
     pub(crate) items: Vec<PrescanItem>,
     pub(crate) has_dynamic_collection: bool,
@@ -51,7 +51,7 @@ pub(crate) struct PrescanModule {
 
 /// Payload extracted from a Python file that has test functions.
 #[derive(Debug)]
-pub(crate) struct PrescanPayload {
+pub struct PrescanPayload {
     pub(crate) source: String,
     pub(crate) stmts: Vec<ast::Stmt>,
     pub(crate) items: Vec<PrescanItem>,
@@ -77,7 +77,7 @@ pub(crate) struct PrescanPayload {
 
 /// Result of pre-scanning a Python file for test functions.
 #[derive(Debug)]
-pub(crate) enum PrescanResult {
+pub enum PrescanResult {
     /// File has test functions; the parsed AST is available for reuse.
     HasTests(PrescanPayload),
     /// File has no test functions.
@@ -92,7 +92,7 @@ pub(crate) enum PrescanResult {
 /// The `HasFixtures` variant is matched in collection to gate the bridge call;
 /// the inner payload data is reserved for future optimisations.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct PrescanDeclaration {
+pub struct PrescanDeclaration {
     pub(crate) fn_name: String,
     pub(crate) lineno: crate::types::LineNo,
     pub(crate) lifetime: String,
@@ -103,13 +103,13 @@ pub(crate) struct PrescanDeclaration {
 ///
 /// Compared as a string because prescan reads the decorator off the AST, before
 /// any Python runs — there is no `Lifetime` enum on this side of the bridge.
-pub(crate) const LIFETIME_PACKAGE: &str = "package";
+pub const LIFETIME_PACKAGE: &str = "package";
 
 /// The `lifetime=` value that is legal only in a rootdir package (#1711).
 ///
 /// Compared as a string for the same reason as [`LIFETIME_PACKAGE`]: prescan
 /// reads the decorator off the AST, before any Python runs.
-pub(crate) const LIFETIME_PROCESS: &str = "process";
+pub const LIFETIME_PROCESS: &str = "process";
 
 /// Per-fixture-module payload (mirrors `PrescanPayload`).
 ///
@@ -118,13 +118,13 @@ pub(crate) const LIFETIME_PROCESS: &str = "process";
 /// `is_async` and `lineno` on each `PrescanDeclaration` remain intentional
 /// scaffolding; their `#[allow(dead_code)]` markers document the deferral.
 #[derive(Debug)]
-pub(crate) struct PrescanFixturePayload {
+pub struct PrescanFixturePayload {
     pub(crate) declarations: Vec<PrescanDeclaration>,
 }
 
 /// Payload for the `NoFixtures` variant — carries the registration hint.
 #[derive(Debug, Default)]
-pub(crate) struct NoFixturesPayload {
+pub struct NoFixturesPayload {
     /// Whether any top-level function carries a decorator, of any kind.
     ///
     /// Not a claim about oxitest: the decorator is never inspected. It means
@@ -140,7 +140,7 @@ pub(crate) struct NoFixturesPayload {
 /// `HasFixtures` is matched in `collection.rs` to gate the Python bridge call.
 /// The inner payload is reserved for later-slice optimisations.
 #[derive(Debug)]
-pub(crate) enum PrescanFixtureResult {
+pub enum PrescanFixtureResult {
     /// File contains @oxi.fixture declarations. The payload fields are reserved
     /// for later-slice optimisations; the variant itself gates the bridge call.
     #[allow(dead_code)] // inner payload read in later pipeline slice
@@ -374,7 +374,7 @@ static STDLIB_NAMES: OnceLock<std::collections::HashSet<String>> = OnceLock::new
 ///
 /// Must be called once while the GIL is held, before prescan runs.
 /// Safe to call multiple times — `OnceLock` ignores subsequent calls.
-pub(crate) fn init_stdlib_names(py: pyo3::Python<'_>) {
+pub fn init_stdlib_names(py: pyo3::Python<'_>) {
     STDLIB_NAMES.get_or_init(|| {
         // The empty set is the "uninitialized" state the doc comment above
         // already describes. The only consumer is `has_nonstdlib_star_import`,
@@ -586,7 +586,7 @@ fn compute_body_weight(
 /// Detect heavy third-party imports in the top-level module statements.
 ///
 /// Returns 20.0 if any heavy package is found, 0.0 otherwise.
-pub(crate) fn heavy_import_weight(stmts: &[ast::Stmt]) -> f64 {
+pub fn heavy_import_weight(stmts: &[ast::Stmt]) -> f64 {
     for stmt in stmts {
         match stmt {
             ast::Stmt::Import(imp) => {
@@ -657,7 +657,7 @@ macro_rules! build_prescan_item {
 /// are returned inside `HasTests` so downstream analysis (e.g. bare-assert
 /// detection) can skip re-parsing. When `keep_ast` is false, the source and
 /// stmts are empty (saves memory when the AST won't be reused).
-pub(crate) fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult {
+pub fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult {
     let parsed = match python_ast::parse_file(path) {
         Some(p) => p,
         None => return PrescanResult::Unavailable,
@@ -841,7 +841,7 @@ fn has_fixture_shaped_decorator(stmts: &[ast::Stmt]) -> bool {
 /// Read `path` from disk and prescan it as a fixture module.
 ///
 /// Returns `Unavailable` if the file can't be read or parsed.
-pub(crate) fn prescan_fixture_module(path: &Utf8Path) -> PrescanFixtureResult {
+pub fn prescan_fixture_module(path: &Utf8Path) -> PrescanFixtureResult {
     let source = match std::fs::read_to_string(path.as_std_path()) {
         Ok(s) => s,
         Err(_) => return PrescanFixtureResult::Unavailable,
@@ -850,10 +850,7 @@ pub(crate) fn prescan_fixture_module(path: &Utf8Path) -> PrescanFixtureResult {
 }
 
 /// Test-friendly variant that takes source directly (skips fs read).
-pub(crate) fn prescan_fixture_module_from_source(
-    path: &Utf8Path,
-    source: &str,
-) -> PrescanFixtureResult {
+pub fn prescan_fixture_module_from_source(path: &Utf8Path, source: &str) -> PrescanFixtureResult {
     let stmts = match ast::Suite::parse(source, path.as_str()) {
         Ok(s) => s,
         Err(_) => return PrescanFixtureResult::Unavailable,

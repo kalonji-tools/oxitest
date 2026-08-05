@@ -21,7 +21,7 @@ use rustpython_parser::ast;
 /// - `source`: the file path as a string
 /// - `async`: `"true"` or `"false"`
 /// - `mark`: comma-joined mark names from decorators (empty string if none)
-pub(crate) fn extract_test_entries(test_files: &[Utf8PathBuf]) -> Vec<QueryEntry> {
+pub fn extract_test_entries(test_files: &[Utf8PathBuf]) -> Vec<QueryEntry> {
     let mut entries = Vec::new();
 
     for file in test_files {
@@ -80,7 +80,7 @@ fn make_test_entry(
 /// - `name`: the marker name
 /// - `source`: comma-joined file paths where the marker appears (empty for
 ///   registered-only markers)
-pub(crate) fn extract_mark_entries(
+pub fn extract_mark_entries(
     test_files: &[Utf8PathBuf],
     registered_markers: &[String],
 ) -> Vec<QueryEntry> {
@@ -126,7 +126,7 @@ pub(crate) fn extract_mark_entries(
 /// `oxitest inspect`).  The two returned `Vec`s are equivalent to calling
 /// [`extract_test_entries`] and [`extract_mark_entries`] separately on the
 /// same inputs.
-pub(crate) fn extract_test_and_mark_entries(
+pub fn extract_test_and_mark_entries(
     test_files: &[Utf8PathBuf],
     registered_markers: &[String],
 ) -> (Vec<QueryEntry>, Vec<QueryEntry>) {

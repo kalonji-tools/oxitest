@@ -73,7 +73,7 @@ fn git_root(dir: &Utf8Path) -> Result<Utf8PathBuf, AffectedError> {
 }
 
 /// Run `git diff --name-only <base>` and return changed file paths (relative to git root).
-pub(crate) fn git_changed_files(
+pub fn git_changed_files(
     rootdir: &Utf8Path,
     base: &str,
 ) -> Result<(Utf8PathBuf, Vec<String>), AffectedError> {
@@ -95,7 +95,7 @@ pub(crate) fn git_changed_files(
 
 /// Result of classifying git-changed files.
 #[derive(Debug)]
-pub(crate) struct ChangedFiles {
+pub struct ChangedFiles {
     /// `pyproject.toml` was changed — must run all tests.
     pub run_all: bool,
     /// Changed `conftest.py` files (relative paths).
@@ -109,7 +109,7 @@ pub(crate) struct ChangedFiles {
 /// Each field captures per-stage information that the pipeline
 /// transition renders to stderr at the appropriate verbosity level.
 #[derive(Debug, Default)]
-pub(crate) struct AffectedDiagnostics {
+pub struct AffectedDiagnostics {
     /// Base ref used for `git diff`.
     pub base_ref: String,
     /// Total files changed in git diff.
@@ -134,7 +134,7 @@ pub(crate) struct AffectedDiagnostics {
 
 /// Per-file result of import graph analysis.
 #[derive(Debug)]
-pub(crate) struct ImportAnalysis {
+pub struct ImportAnalysis {
     /// Test file path (relative to project root for display).
     pub test_file: String,
     /// Whether this test was selected as affected.
@@ -144,9 +144,7 @@ pub(crate) struct ImportAnalysis {
 }
 
 /// Classify changed files and return the non-Python count for diagnostics.
-pub(crate) fn classify_changed_files_with_diagnostics(
-    changed: Vec<String>,
-) -> (ChangedFiles, usize) {
+pub fn classify_changed_files_with_diagnostics(changed: Vec<String>) -> (ChangedFiles, usize) {
     let mut result = ChangedFiles {
         run_all: false,
         conftest_files: Vec::new(),
@@ -220,7 +218,7 @@ fn directly_changed_tests(
 /// - `Ok(Some(filtered))` — filtered list of affected test files.
 /// - `Ok(None)` — `pyproject.toml` changed or root conftest changed; run all.
 /// - `Err(e)` — git error or import analysis error.
-pub(crate) fn filter_affected_test_files(
+pub fn filter_affected_test_files(
     test_files: &[Utf8PathBuf],
     rootdir: &Utf8Path,
     base_ref: &str,
@@ -232,7 +230,7 @@ pub(crate) fn filter_affected_test_files(
 ///
 /// Returns the same result as [`filter_affected_test_files`] plus an
 /// [`AffectedDiagnostics`] struct populated at each stage.
-pub(crate) fn filter_affected_with_diagnostics(
+pub fn filter_affected_with_diagnostics(
     test_files: &[Utf8PathBuf],
     rootdir: &Utf8Path,
     base_ref: &str,

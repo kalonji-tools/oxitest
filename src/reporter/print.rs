@@ -10,7 +10,7 @@ use super::stats::RunStats;
 use super::{ReporterOpts, sep_width};
 use crate::colors;
 
-pub(crate) fn print_collected(total: usize, fn_count: usize, async_count: usize) {
+pub fn print_collected(total: usize, fn_count: usize, async_count: usize) {
     let suffix = if total == 1 { "" } else { "s" };
     let from_fns = if fn_count > 0 && fn_count < total {
         format!(
@@ -28,7 +28,7 @@ pub(crate) fn print_collected(total: usize, fn_count: usize, async_count: usize)
     }
 }
 
-pub(crate) fn print_summary_section(
+pub fn print_summary_section(
     stats: &RunStats,
     opts: &ReporterOpts,
     collect_errors: &[CollectError],
@@ -116,11 +116,11 @@ pub(crate) fn print_summary_section(
     compute_exit_code(stats, collect_errors.len(), interrupted)
 }
 
-pub(crate) fn flush() {
+pub fn flush() {
     let _ = io::stdout().flush();
 }
 
-pub(crate) fn print_collect_errors(collect_errors: &[CollectError], use_color: bool) {
+pub fn print_collect_errors(collect_errors: &[CollectError], use_color: bool) {
     if !collect_errors.is_empty() {
         println!("\nCOLLECTION ERRORS");
         println!("{}", colors::color_dim(&"═".repeat(sep_width()), use_color));
@@ -134,7 +134,7 @@ pub(crate) fn print_collect_errors(collect_errors: &[CollectError], use_color: b
     }
 }
 
-pub(crate) fn print_strict_suite_section(opts: &ReporterOpts) {
+pub fn print_strict_suite_section(opts: &ReporterOpts) {
     if !opts.strict_suite_lines.is_empty() {
         let hdr = format!(
             "STRICT {}",
@@ -150,7 +150,7 @@ pub(crate) fn print_strict_suite_section(opts: &ReporterOpts) {
     }
 }
 
-pub(crate) fn print_strict_abort(formatted_lines: &[String], use_color: bool) {
+pub fn print_strict_abort(formatted_lines: &[String], use_color: bool) {
     println!("\nSTRICT VIOLATIONS");
     println!("{}", colors::color_dim(&"═".repeat(sep_width()), use_color));
     for line in formatted_lines {

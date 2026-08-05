@@ -55,7 +55,7 @@ const fn build_diagnostic(
 /// Each variant carries exactly the fields needed for that outcome kind, using
 /// Rust-native types (`usize`, `Vec<Frame>`) — all wire/PyO3 type conversions
 /// happen *before* constructing a `RawOutcome`.
-pub(crate) enum RawOutcome {
+pub enum RawOutcome {
     Passed {
         no_message_lines: Vec<usize>,
     },

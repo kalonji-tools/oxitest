@@ -1,6 +1,6 @@
 use camino::{Utf8Path, Utf8PathBuf};
 
-pub(crate) mod cli;
+pub mod cli;
 pub use cli::{Command, DebugArgs, DebugMode, OxitestCli, QueryArgs, RunArgs};
 
 mod merge;
@@ -8,7 +8,7 @@ mod merge;
 mod pyproject;
 #[cfg(test)]
 use pyproject::PyprojectToml;
-pub(crate) use pyproject::render_entry;
+pub use pyproject::render_entry;
 pub use pyproject::{DoctestConfig, DoctestScope, ScopeEntry};
 
 impl DebugMode {
@@ -556,7 +556,7 @@ pub fn find_rootdir(start: Option<&Utf8Path>) -> Utf8PathBuf {
 }
 
 /// Returns the number of logical CPUs available, or 1 on error.
-pub(crate) fn cpu_count() -> usize {
+pub fn cpu_count() -> usize {
     std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1)
@@ -632,7 +632,7 @@ impl Config {
 /// The heuristic caps at `cpu_count` and, when a timing estimate is available,
 /// avoids spawning more workers than the estimated total runtime warrants given
 /// the subprocess spawn overhead (`spawn_overhead_ms` per worker).
-pub(crate) fn compute_optimal_workers(
+pub fn compute_optimal_workers(
     mode: &ExecutionMode,
     cpu_count: usize,
     estimated: Option<std::time::Duration>,

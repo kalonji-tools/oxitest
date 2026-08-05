@@ -10,7 +10,7 @@ use rustpython_parser::ast;
 ///
 /// A module whose dotted path contains any `_`-prefixed component is package-internal —
 /// its `__all__` declaration is not a public API commitment. Never a coverage source.
-pub(crate) fn is_public_module_path(dotted: &str) -> bool {
+pub fn is_public_module_path(dotted: &str) -> bool {
     dotted
         .split('.')
         .all(|component| !component.starts_with('_'))
@@ -21,7 +21,7 @@ pub(crate) fn is_public_module_path(dotted: &str) -> bool {
 /// `oxitest/_bridge/_fixture_type.py` → `oxitest._bridge._fixture_type`.
 /// `oxitest/__init__.py` → `oxitest`.
 /// The caller must have already stripped any `python/` (or other `testpaths` root) prefix.
-pub(crate) fn dotted_path_for(rel: &Utf8Path) -> String {
+pub fn dotted_path_for(rel: &Utf8Path) -> String {
     let mut parts: Vec<String> = rel.components().map(|c| c.as_str().to_string()).collect();
     if let Some(last) = parts.last_mut()
         && let Some(stem) = last.strip_suffix(".py")
@@ -42,7 +42,7 @@ pub(crate) fn dotted_path_for(rel: &Utf8Path) -> String {
 ///
 /// Falls back to `dotted_path_for(rel)` if no filesystem lookup is possible
 /// (e.g. the file no longer exists).
-pub(crate) fn dotted_path_for_file(rel: &Utf8Path, rootdir: &Utf8Path) -> String {
+pub fn dotted_path_for_file(rel: &Utf8Path, rootdir: &Utf8Path) -> String {
     // Start from the file's parent and walk up. Track how many components sit
     // AT OR ABOVE the source root — those get stripped.
     let mut strip_count = 0usize;
@@ -88,7 +88,7 @@ pub(crate) fn dotted_path_for_file(rel: &Utf8Path, rootdir: &Utf8Path) -> String
 /// Non-string list elements are silently dropped. Real-world `__all__` is always a list
 /// of string literals; the tolerance is defensive against malformed code, not intended
 /// to support other shapes.
-pub(crate) fn extract_dunder_all(stmts: &[ast::Stmt]) -> Option<Vec<String>> {
+pub fn extract_dunder_all(stmts: &[ast::Stmt]) -> Option<Vec<String>> {
     for stmt in stmts {
         let ast::Stmt::Assign(assign) = stmt else {
             continue;
@@ -123,7 +123,7 @@ pub(crate) fn extract_dunder_all(stmts: &[ast::Stmt]) -> Option<Vec<String>> {
 
 /// A public-facing subject the coverage rule may target.
 #[derive(Debug, Clone)]
-pub(crate) struct Subject {
+pub struct Subject {
     /// Public dotted path — used in diagnostics.
     pub(crate) public_id: String,
     /// The leaf symbol name (last segment of `public_id`). Stored separately
@@ -144,7 +144,7 @@ pub(crate) struct Subject {
 
 /// How a public-facing name is bound at the top level of its module.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum SubjectSource {
+pub enum SubjectSource {
     /// `class Foo: ...` or `def foo(...)` defined in this module.
     ///
     /// The lineno is resolved at coverage-check time via the module's line index —
@@ -172,7 +172,7 @@ pub(crate) enum SubjectSource {
 ///
 /// `LocalDefinition` carries no lineno — `run_coverage_check` resolves the def line at
 /// check time via the module's line index (the AST `range` is a byte offset, not a lineno).
-pub(crate) fn classify_top_level_binding(stmts: &[ast::Stmt], name: &str) -> Option<SubjectSource> {
+pub fn classify_top_level_binding(stmts: &[ast::Stmt], name: &str) -> Option<SubjectSource> {
     for stmt in stmts {
         match stmt {
             ast::Stmt::ClassDef(cls) if cls.name.as_str() == name => {
@@ -245,7 +245,7 @@ fn classify_rhs(rhs: &ast::Expr) -> SubjectSource {
 ///   (`ClassDef`, `FunctionDef`, `AsyncFunctionDef`, or `Assign` whose LHS is a non-underscore `Name`).
 ///
 /// Caller is responsible for having filtered the module through Layer 1 (`is_public_module_path`).
-pub(crate) fn enumerate_subjects(
+pub fn enumerate_subjects(
     stmts: &[ast::Stmt],
     module_dotted: &str,
     file: &Utf8Path,

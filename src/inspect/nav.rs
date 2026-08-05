@@ -14,7 +14,7 @@ use super::graph::{InspectGraph, NodeRef};
 /// - `Disambiguation` is shown when multiple nodes match a direct-jump name.
 /// - `History` lists previously visited nodes.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Screen {
+pub enum Screen {
     /// Overview screen: all node kinds shown together with counts and sigils.
     /// `selected` is the cursor index within the flat list of all nodes.
     Overview { selected: usize },
@@ -45,7 +45,7 @@ pub(crate) enum Screen {
 /// are total. They previously read `screens.last().expect("must be non-empty")`
 /// — a true claim that nothing checked (ADR-0011).
 #[derive(Debug)]
-pub(crate) struct Trail {
+pub struct Trail {
     /// Always the Overview screen. `pop()` cannot remove it.
     root: Screen,
     /// Screens pushed on top of the root, oldest first.
@@ -114,7 +114,7 @@ impl Trail {
 /// - 0 matches → `Overview` only (depth 1).
 /// - 1 match   → `Overview` + `NodeFocus` on the matched node (depth 2).
 /// - N matches → `Overview` + `Disambiguation` screen (depth 2).
-pub(crate) fn resolve_direct_jump(graph: &InspectGraph, name: &str) -> Trail {
+pub fn resolve_direct_jump(graph: &InspectGraph, name: &str) -> Trail {
     let name_lower = name.to_lowercase();
     let mut matches: Vec<NodeRef> = graph
         .all_node_refs()

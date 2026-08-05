@@ -8,7 +8,7 @@
 
 /// A fixture definition (conftest or plugin-provided).
 #[derive(Debug, Clone)]
-pub(crate) struct FixtureNode {
+pub struct FixtureNode {
     pub name: String,
     pub binding_type: String,
     pub scope: String,
@@ -29,7 +29,7 @@ pub(crate) struct FixtureNode {
 
 /// A test function (possibly parametrized).
 #[derive(Debug, Clone)]
-pub(crate) struct TestNode {
+pub struct TestNode {
     pub node_id: String,
     pub is_async: bool,
     pub param_id: Option<String>,
@@ -48,7 +48,7 @@ pub(crate) struct TestNode {
 
 /// A marker name (e.g. `slow`, `integration`).
 #[derive(Debug, Clone)]
-pub(crate) struct MarkNode {
+pub struct MarkNode {
     pub name: String,
     /// Indices into `InspectGraph::tests` — tests that carry this mark.
     pub used_by: Vec<usize>,
@@ -58,7 +58,7 @@ pub(crate) struct MarkNode {
 
 /// A `conftest.py` file.
 #[derive(Debug, Clone)]
-pub(crate) struct ConftestNode {
+pub struct ConftestNode {
     pub path: String,
     /// Indices into `InspectGraph::fixtures` — fixtures defined in this conftest.
     pub fixtures: Vec<usize>,
@@ -68,7 +68,7 @@ pub(crate) struct ConftestNode {
 
 /// A registered plugin.
 #[derive(Debug, Clone)]
-pub(crate) struct PluginNode {
+pub struct PluginNode {
     pub name: String,
     pub protocols: Vec<String>,
     /// Indices into `InspectGraph::fixtures` — fixtures this plugin provides.

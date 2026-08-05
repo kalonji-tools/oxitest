@@ -62,7 +62,7 @@ pub struct TestTiming {
 ///
 /// Every call to [`record`](FailureAccumulator::record) returns `true` once the failure
 /// count reaches `maxfail`. A `maxfail` of 0 disables the limit (never stops early).
-pub(crate) struct FailureAccumulator {
+pub struct FailureAccumulator {
     count: usize,
     max: usize,
 }

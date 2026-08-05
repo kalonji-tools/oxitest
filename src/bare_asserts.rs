@@ -19,7 +19,7 @@ struct BareAssert {
 }
 
 /// Parse a Python test file and return bare-assert violations for test functions.
-pub(crate) fn collect_bare_asserts(path: &Utf8Path) -> Vec<RawViolation> {
+pub fn collect_bare_asserts(path: &Utf8Path) -> Vec<RawViolation> {
     let (source, stmts) = match python_ast::parse_file(path) {
         Some(parsed) => parsed,
         None => return vec![],
@@ -33,7 +33,7 @@ pub(crate) fn collect_bare_asserts(path: &Utf8Path) -> Vec<RawViolation> {
 ///
 /// Same logic as [`collect_bare_asserts`] but skips file I/O and parsing.
 /// Used by `collect_items()` to avoid double-parsing in strict mode.
-pub(crate) fn collect_bare_asserts_from_ast(
+pub fn collect_bare_asserts_from_ast(
     path: &Utf8Path,
     source: &str,
     stmts: &[ast::Stmt],

@@ -17,7 +17,7 @@ use super::nodes::{ConftestNode, FixtureNode, MarkNode, PluginNode, TestNode};
 // ── GraphBuilder ─────────────────────────────────────────────────────────────
 
 /// Incrementally builds an [`InspectGraph`] from flat [`QueryEntry`] slices.
-pub(crate) struct GraphBuilder {
+pub struct GraphBuilder {
     graph: InspectGraph,
     // Lookup tables for deduplication during construction.
     fixture_by_name: HashMap<String, usize>,

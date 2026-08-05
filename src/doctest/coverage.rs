@@ -18,7 +18,7 @@ use crate::types::LineNo;
 
 /// The two ways a subject can be uncovered — differentiates the diagnostic message per #1606.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum CoverageGap {
+pub enum CoverageGap {
     /// No `Examples:` header found in the docstring (or no docstring at all).
     MissingHeader,
     /// Header present but no `>>>` block. The docstring has an empty Examples section.
@@ -27,7 +27,7 @@ pub(crate) enum CoverageGap {
 
 /// Result of checking a single subject.
 #[derive(Debug)]
-pub(crate) enum CheckOutcome {
+pub enum CheckOutcome {
     /// Subject is fully covered — no diagnostic.
     Covered,
     /// Subject is uncovered — emit a diagnostic at (file, lineno).
@@ -45,7 +45,7 @@ pub(crate) enum CheckOutcome {
 /// `direct_docstring` / `direct_lineno` / `direct_file` are what the orchestrator resolved
 /// at the subject's own site — used only for `LocalDefinition` subjects. Aliased subjects
 /// (`AliasImport`, `LocalAlias`) resolve via the walker and ignore these.
-pub(crate) fn check_subject(
+pub fn check_subject(
     root: &ModuleRoot,
     subject: &Subject,
     starting_module: &str,
@@ -97,7 +97,7 @@ pub(crate) fn check_subject(
 ///
 /// Message differentiation per #1606: `MissingHeader` vs `HeaderNoExamples` produce distinct
 /// inline fix hints. Both use `context = "doctest.coverage"`.
-pub(crate) fn diagnostic_for_gap(
+pub fn diagnostic_for_gap(
     subject: &Subject,
     gap: &CoverageGap,
     file: &Utf8PathBuf,
@@ -144,7 +144,7 @@ fn subject_matches(
 /// `(scope_matched, skip_matched)` pair of `Vec<bool>` indexed by entry
 /// position — surfaced by `filter_subjects_by_scope` for stale-entry detection.
 /// `scope_matched` is empty under `Public` scope.
-pub(crate) type ScopeMatchBits = (Vec<bool>, Vec<bool>);
+pub type ScopeMatchBits = (Vec<bool>, Vec<bool>);
 
 /// Per-file outcome of the scan's parse step — the three-state scanned set (#1800).
 ///
@@ -156,7 +156,7 @@ pub(crate) type ScopeMatchBits = (Vec<bool>, Vec<bool>);
 /// differently: parsed files ground staleness verdicts, parse-failed files
 /// ground a parse-failure report, and unattempted files force abstention.
 #[derive(Debug, Default)]
-pub(crate) struct ScannedFiles {
+pub struct ScannedFiles {
     /// Files opened and parsed successfully, relative to the module root.
     pub(crate) parsed: Vec<Utf8PathBuf>,
     /// Files the scan attempted to read but could not parse (syntax or I/O
@@ -176,7 +176,7 @@ pub(crate) struct ScannedFiles {
     clippy::type_complexity,
     reason = "tuple return is local — introducing a struct would add a struct definition + two field renames at each callsite for one function's use"
 )]
-pub(crate) fn filter_subjects_by_scope(
+pub fn filter_subjects_by_scope(
     subjects: Vec<(String, crate::doctest::subjects::Subject)>,
     scope: &Option<crate::config::DoctestScope>,
     skip: &[crate::config::ScopeEntry],
@@ -255,7 +255,7 @@ pub(crate) fn filter_subjects_by_scope(
 /// `pipeline::collection` and #1796. A file the scan attempted but could not
 /// parse lands in `scanned.parse_failed` and produces its own
 /// `doctest.coverage.parse-error` diagnostic here.
-pub(crate) fn run_coverage_check(
+pub fn run_coverage_check(
     files: &[Utf8PathBuf],
     root: &ModuleRoot,
     severity: DiagnosticSeverity,
@@ -551,7 +551,7 @@ fn find_class_method<'a>(
     matches!(target, DefTarget::Function(_) | DefTarget::AsyncFunction(_)).then_some(target)
 }
 
-pub(crate) fn diagnostic_for_walk_error(
+pub fn diagnostic_for_walk_error(
     subject: &Subject,
     error: &AliasError,
     file: Option<Utf8PathBuf>,

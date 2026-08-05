@@ -10,13 +10,13 @@
 
 mod app;
 mod detail;
-pub(crate) mod graph;
+pub mod graph;
 mod input;
-pub(crate) mod nav;
-pub(crate) mod overview;
-pub(crate) mod search;
-pub(crate) mod signals;
-pub(crate) mod source;
+pub mod nav;
+pub mod overview;
+pub mod search;
+pub mod signals;
+pub mod source;
 mod ui;
 
 use std::sync::mpsc;
@@ -40,7 +40,7 @@ use graph::InspectGraph;
 /// 3. `-E` expression — evaluate DSL against test entries, discard non-matching
 /// 4. `--lf` — load `TestCache`, keep only previously-failed tests
 /// 5. Build graph from surviving entries
-pub(crate) fn build_phase1_graph(
+pub fn build_phase1_graph(
     args: &InspectArgs,
     cfg: &config::Config,
     mut test_files: Vec<Utf8PathBuf>,
@@ -114,7 +114,7 @@ pub(crate) fn build_phase1_graph(
 /// `Config`, which are supplied directly by the caller) is reachable by
 /// `cargo test` without a thread or a live Python session. Same rationale as
 /// `build_task` in `worker_session.rs:187`-`:189`.
-pub(crate) struct Phase2Args {
+pub struct Phase2Args {
     pub(crate) conftest_files: Vec<Utf8PathBuf>,
     pub(crate) test_files: Vec<Utf8PathBuf>,
     pub(crate) plugins: Vec<String>,
@@ -125,7 +125,7 @@ pub(crate) struct Phase2Args {
 /// Build [`Phase2Args`] from a `Config` plus the file lists the caller already
 /// collected. `conftest_files` and `test_files` come from `collect_files`, not
 /// `Config`, so they are supplied separately rather than cloned off `cfg`.
-pub(crate) fn phase2_args(
+pub fn phase2_args(
     cfg: &config::Config,
     conftest_files: Vec<Utf8PathBuf>,
     test_files: Vec<Utf8PathBuf>,
@@ -146,7 +146,7 @@ pub(crate) fn phase2_args(
 /// Python session fails, the sender is simply dropped, which causes the
 /// receiver to see `Disconnected` — the TUI then transitions to
 /// `LoadingState::Complete` with whatever data it already has.
-pub(crate) fn spawn_phase2(args: Phase2Args, tx: mpsc::Sender<Phase2Data>) {
+pub fn spawn_phase2(args: Phase2Args, tx: mpsc::Sender<Phase2Data>) {
     let Phase2Args {
         conftest_files,
         test_files,
@@ -218,10 +218,7 @@ pub(crate) fn spawn_phase2(args: Phase2Args, tx: mpsc::Sender<Phase2Data>) {
 /// then starts the TUI immediately.  Phase 2 spawns a background thread to
 /// collect fixture and plugin data from the Python session, which is
 /// merged into the graph when ready.
-pub(crate) fn run(
-    args: &InspectArgs,
-    cfg: &config::Config,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(args: &InspectArgs, cfg: &config::Config) -> Result<(), Box<dyn std::error::Error>> {
     // Collect files first so conftest paths are available before AST work begins.
     let (test_files, conftest_files) = crate::collector::collect_files(cfg)?;
 

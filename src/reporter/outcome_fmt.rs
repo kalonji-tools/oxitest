@@ -9,7 +9,7 @@ use crate::types::TestOutcome;
 
 /// Classification of a [`TestOutcome`] for color/style selection in TTY output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ColorCategory {
+pub enum ColorCategory {
     Pass,
     Fail,
     Error,
@@ -21,7 +21,7 @@ pub(crate) enum ColorCategory {
 
 /// Classification of a [`TestOutcome`] for JUnit XML element selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum JunitCategory {
+pub enum JunitCategory {
     Passed,
     Failed,
     Error,

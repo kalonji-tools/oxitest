@@ -491,7 +491,7 @@ fn rewrite_value<'py>(
 /// Parse `source` into a Python AST, rewrite assert nodes, and return
 /// `(tree, bare_asserts)` where `bare_asserts` is a `dict[str, list[int]]`
 /// mapping function names to sorted bare-assert line numbers.
-pub(crate) fn rewrite_asserts(
+pub fn rewrite_asserts(
     py: Python<'_>,
     source: &str,
     filename: &str,

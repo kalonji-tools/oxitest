@@ -4,7 +4,7 @@
 
 /// Tokens produced by [`super::compile::lex`].
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) enum Token {
+pub enum Token {
     /// A bare identifier (predicate name or word-form operator).
     Ident(String),
     /// A string value (quoted or bare word inside parentheses).
@@ -37,7 +37,7 @@ pub(crate) enum Token {
 
 /// Errors produced by the DSL lexer, parser, and validator.
 #[derive(thiserror::Error, Debug, miette::Diagnostic)]
-pub(crate) enum DslError {
+pub enum DslError {
     /// A string literal was not properly terminated.
     #[error("unterminated string literal")]
     #[diagnostic(help("close the string with a matching quote character"))]
@@ -83,7 +83,7 @@ pub(crate) enum DslError {
 
 /// How a predicate argument matches a field value.
 #[derive(Debug, Clone)]
-pub(crate) enum Matcher {
+pub enum Matcher {
     /// Field exists and is non-empty and non-"false" (boolean predicate).
     Any,
     /// Any comma-separated value contains the string (substring match).
@@ -96,7 +96,7 @@ pub(crate) enum Matcher {
 
 /// A parsed DSL expression tree.
 #[derive(Debug, Clone)]
-pub(crate) enum Expr {
+pub enum Expr {
     /// A single predicate: `field_name(matcher)`.
     Predicate {
         /// The field name to look up.

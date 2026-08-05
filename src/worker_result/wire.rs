@@ -7,6 +7,16 @@ use camino::Utf8PathBuf;
 ///
 /// Bump when adding, removing, or changing fields in [`WorkerTask`] or
 /// [`WireResult`]. The coordinator warns on version mismatch.
+///
+/// Stays `pub(crate)` against `clippy::redundant_pub_crate`, which would widen it
+/// to `pub` like the rest of the crate. `scripts/check_bridge_sync.py:341` matches
+/// this declaration with `r"pub\(crate\)\s+const\s+PROTOCOL_VERSION…"` to check it
+/// against `result.py`, and `python/tests/test_check_protocol_version.py` rewrites
+/// it with the same literal. Widening it makes both silently find nothing — the
+/// prek `bridge-sync` hook reports "`PROTOCOL_VERSION` not found", and the test's own
+/// assertion message says every downstream check becomes meaningless. The coupling
+/// is a Python script parsing Rust source as text; the qualifier is load-bearing.
+#[allow(clippy::redundant_pub_crate)]
 pub(crate) const PROTOCOL_VERSION: u32 = 7;
 
 /// A JSON task sent to a worker subprocess over stdin.
@@ -19,7 +29,7 @@ pub(crate) const PROTOCOL_VERSION: u32 = 7;
 /// package's whole subtree a single task so a package-lifetime fixture can be
 /// instantiated exactly once per run.
 #[derive(serde::Serialize)]
-pub(crate) struct WorkerTask<'a> {
+pub struct WorkerTask<'a> {
     /// Lets a stale worker reject a task it cannot parse instead of failing
     /// with a `KeyError` deep inside `run()` — which would emit no result line,
     /// so the coordinator's result-side version warning never fires.
@@ -54,14 +64,14 @@ pub(crate) struct WorkerTask<'a> {
 /// a flat list would make item *ordering* load-bearing, since the worker would
 /// have to detect module transitions to know where `end_module` fires.
 #[derive(serde::Serialize)]
-pub(crate) struct WorkerTaskModule<'a> {
+pub struct WorkerTaskModule<'a> {
     pub module_path: &'a str,
     pub items: Vec<WorkerTaskItem<'a>>,
 }
 
 /// One test item within a [`WorkerTaskModule`].
 #[derive(serde::Serialize)]
-pub(crate) struct WorkerTaskItem<'a> {
+pub struct WorkerTaskItem<'a> {
     pub fn_name: &'a str,
     pub param_id: Option<&'a str>,
     pub node_id: &'a str,
@@ -71,7 +81,7 @@ pub(crate) struct WorkerTaskItem<'a> {
 /// Unified intermediate frame type used by both the JSON worker path
 /// (serde deserialize) and the PyO3 bridge path (`FromPyObject` impl in bridge.rs).
 #[derive(Debug, Clone, serde::Deserialize)]
-pub(crate) struct RawFrame {
+pub struct RawFrame {
     pub file: String,
     pub lineno: u64,
     pub name: String,
@@ -102,7 +112,7 @@ impl From<RawFrame> for Frame {
 /// typed [`ResolvedOutcome`](crate::types::ResolvedOutcome).
 #[derive(Debug, serde::Deserialize)]
 #[serde(tag = "outcome")]
-pub(crate) enum WireResult {
+pub enum WireResult {
     #[serde(rename = "passed")]
     Passed {
         node_id: String,
@@ -208,7 +218,7 @@ pub(crate) enum WireResult {
 /// Used by the drain loop to extract `node_id` and `duration_ms` from results
 /// that fail full `WireResult` deserialization (e.g., unknown outcome strings).
 #[derive(serde::Deserialize)]
-pub(crate) struct WireMinimal {
+pub struct WireMinimal {
     pub node_id: String,
     pub duration_ms: f64,
 }
@@ -218,7 +228,7 @@ pub(crate) struct WireMinimal {
 /// Deserialized first to determine which full type to parse.
 /// Missing `type` field defaults to "result" for backwards compatibility.
 #[derive(serde::Deserialize)]
-pub(crate) struct WireEnvelope {
+pub struct WireEnvelope {
     #[serde(rename = "type", default = "default_result_type")]
     pub(crate) msg_type: String,
 }
@@ -233,7 +243,7 @@ fn default_result_type() -> String {
 /// turns it into a `DiagnosticEntry` for the reporter (#1840). The follow-up
 /// PR the old `dead_code` expectation was waiting for is that one.
 #[derive(serde::Deserialize)]
-pub(crate) struct WireDiagnostic {
+pub struct WireDiagnostic {
     pub severity: String,
     pub context: String,
     pub message: String,
@@ -245,7 +255,7 @@ pub(crate) struct WireDiagnostic {
 
 /// A developer trace from a worker subprocess.
 #[derive(serde::Deserialize)]
-pub(crate) struct WireTrace {
+pub struct WireTrace {
     pub level: String,
     pub module: String,
     pub message: String,

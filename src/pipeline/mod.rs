@@ -6,8 +6,8 @@
 //! Both serial and parallel execution paths converge through this module.
 
 mod arrange;
-pub(crate) mod collection;
-pub(crate) mod execution;
+pub mod collection;
+pub mod execution;
 mod helpers;
 mod transitions;
 
@@ -25,7 +25,7 @@ use std::io::IsTerminal;
 
 /// Runtime pipeline phase — each variant carries the data that was previously
 /// held by a separate typestate struct.
-pub(crate) enum PipelinePhase {
+pub enum PipelinePhase {
     /// Initial pipeline state before any work has been done.
     Empty,
     /// Files discovered on disk; test file and conftest paths live in `PipelineShared`.
@@ -66,7 +66,7 @@ pub(crate) enum PipelinePhase {
 
 // ─── ExecutionResults ────────────────────────────────────────────────────────
 
-pub(crate) struct ExecutionResults {
+pub struct ExecutionResults {
     pub(crate) timings: Vec<types::TestTiming>,
     pub(crate) interrupted: bool,
     pub(crate) reporter: Box<dyn reporter::Reporter>,
@@ -74,7 +74,7 @@ pub(crate) struct ExecutionResults {
 
 // ─── Pipeline ────────────────────────────────────────────────────────────────
 
-pub(crate) struct Pipeline {
+pub struct Pipeline {
     pub(crate) shared: PipelineShared,
     pub(crate) phase: PipelinePhase,
 }
@@ -107,7 +107,7 @@ impl Pipeline {
 }
 
 /// Data shared across all pipeline phases, accessible via `Deref`/`DerefMut` on `Pipeline`.
-pub(crate) struct PipelineShared {
+pub struct PipelineShared {
     pub(crate) cfg: config::Config,
     pub(crate) command: config::Command,
     pub(crate) rootdir: Utf8PathBuf,
@@ -834,7 +834,7 @@ fn query_command(
 
 // ─── run() ───────────────────────────────────────────────────────────────────
 
-pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
+pub fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
     let shared = match setup(py, &args)? {
         Err(code) => return Ok(code.as_i32()),
         Ok(shared) => shared,
@@ -892,10 +892,7 @@ pub(crate) fn run(py: Python<'_>, args: Vec<String>) -> PyResult<i32> {
 
 // ─── format_fixture_errors (kept public for tests) ──────────────────────────
 
-pub(crate) fn format_fixture_errors(
-    errors: &[(types::NodeId, String)],
-    registered: &[String],
-) -> String {
+pub fn format_fixture_errors(errors: &[(types::NodeId, String)], registered: &[String]) -> String {
     let mut messages = Vec::with_capacity(errors.len());
     for (node_id, bad_name) in errors {
         let suggestion =

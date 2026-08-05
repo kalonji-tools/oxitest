@@ -11,21 +11,21 @@ use super::signals::Signal;
 // ── Entry types ──────────────────────────────────────────────────────────────
 
 /// A fixture node ranked by how many tests/fixtures consume it.
-pub(crate) struct GravityEntry {
+pub struct GravityEntry {
     pub node_ref: NodeRef,
     pub name: String,
     pub consumer_count: usize,
 }
 
 /// A mark node ranked by how many tests carry it.
-pub(crate) struct MarkEntry {
+pub struct MarkEntry {
     pub node_ref: NodeRef,
     pub name: String,
     pub test_count: usize,
 }
 
 /// A conftest node ranked by how many fixtures it defines.
-pub(crate) struct ConftestEntry {
+pub struct ConftestEntry {
     pub node_ref: NodeRef,
     pub path: String,
     pub fixture_count: usize,
@@ -36,7 +36,7 @@ pub(crate) struct ConftestEntry {
 /// A single selectable item in the overview panel (flat cursor abstraction).
 #[cfg(test)]
 #[allow(dead_code)] // variants matched by pattern, fields not read directly
-pub(crate) enum OverviewItem {
+pub enum OverviewItem {
     Gravity(GravityEntry),
     Mark(MarkEntry),
     Conftest(ConftestEntry),
@@ -53,7 +53,7 @@ pub(crate) enum OverviewItem {
 /// [gravity[0], …, marks[0], …, conftests[0], …, signals[0], …]
 /// ```
 #[derive(Default)]
-pub(crate) struct OverviewSections {
+pub struct OverviewSections {
     pub gravity: Vec<GravityEntry>,
     pub marks: Vec<MarkEntry>,
     pub conftests: Vec<ConftestEntry>,

@@ -275,7 +275,7 @@ impl FixtureSession {
 /// Reads `session.diagnostics`, converts each to a `DiagnosticEntry`, clears the
 /// Python list, and returns the entries. Callers (pipeline code) push these into
 /// `RunStats.diagnostics.entries`.
-pub(crate) fn drain_session_diagnostics(
+pub fn drain_session_diagnostics(
     py: Python<'_>,
     session: &FixtureSession,
 ) -> Vec<crate::reporter::stats::DiagnosticEntry> {
@@ -359,7 +359,7 @@ impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for RawArrangedEntry {
 /// Typed violation kind coming from Python. Variants map 1-to-1 to the
 /// string values produced by `python/oxitest/_bridge/result.py`.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum ViolationKind {
+pub enum ViolationKind {
     BareAssert,
     BroadFixtureType,
     DictParametrize,
@@ -408,7 +408,7 @@ impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for ViolationKind {
 /// Raw violation extracted from Python. Field names MUST stay in sync with
 /// `python/oxitest/_bridge/result.py` `CollectedViolation`.
 #[derive(pyo3::FromPyObject, Debug, Clone)]
-pub(crate) struct RawViolation {
+pub struct RawViolation {
     pub node_id: String,
     pub kind: ViolationKind,
     pub detail: String,
@@ -429,7 +429,7 @@ pub fn get_plugin_reporters(py: Python<'_>, session: &FixtureSession) -> PyResul
 ///
 /// The trait-based `ModuleCollector` implementation calls this directly,
 /// bypassing the `Option<&FixtureSession>` indirection.
-pub(crate) fn collect_module_with_session_obj(
+pub fn collect_module_with_session_obj(
     py: Python<'_>,
     path: &Utf8Path,
     session_obj: Bound<'_, PyAny>,
@@ -514,7 +514,7 @@ pub(crate) fn collect_module_with_session_obj(
 ///
 /// Returns a `CollectError::PyError` if the Python import or registration
 /// raises (e.g. syntax error in `__fixtures__.py`, or fixture name collision).
-pub(crate) fn register_fixture_module_for_path(
+pub fn register_fixture_module_for_path(
     py: Python<'_>,
     session_obj: Bound<'_, PyAny>,
     fixture_module_path: &Utf8Path,
@@ -552,7 +552,7 @@ pub(crate) fn register_fixture_module_for_path(
 ///
 /// Mirrors `plugin_loader.PluginFixtureHome`. Resolved once after plugin
 /// activation, when every plugin module is imported (#1717).
-pub(crate) struct PluginFixtureHome {
+pub struct PluginFixtureHome {
     pub plugin_module: String,
     pub anchor_dir: Utf8PathBuf,
     pub namespace: String,
@@ -565,7 +565,7 @@ pub(crate) struct PluginFixtureHome {
 ///
 /// Returns a `CollectError::PyError` if a namespace is reserved, invalid, or
 /// claimed by two plugins — all three are refusals, not warnings.
-pub(crate) fn plugin_fixture_homes(
+pub fn plugin_fixture_homes(
     py: Python<'_>,
     plugins: &[String],
     plugin_settings: &HashMap<String, toml::Value>,
@@ -643,7 +643,7 @@ pub(crate) fn plugin_fixture_homes(
 /// Returns a `CollectError::PyError` if the import or registration raises —
 /// a syntax error in the plugin's `__fixtures__.py`, a `package` lifetime
 /// declaration, or a reserved namespace.
-pub(crate) fn register_plugin_fixture_module(
+pub fn register_plugin_fixture_module(
     py: Python<'_>,
     session_obj: Bound<'_, PyAny>,
     fixture_module_path: &Utf8Path,
@@ -689,7 +689,7 @@ pub(crate) fn register_plugin_fixture_module(
 ///
 /// Returns `(node_id, fixture_name)` pairs for names that cannot resolve.
 /// FixtureRef-resolved parameters (from `@parametrize`) are excluded.
-pub(crate) fn validate_fixture_names(
+pub fn validate_fixture_names(
     py: Python<'_>,
     session: &FixtureSession,
     items: &[Arc<TestItem>],
@@ -732,7 +732,7 @@ pub(crate) fn validate_fixture_names(
 }
 
 /// Return all fixture names known to the registry.
-pub(crate) fn registered_fixture_names(
+pub fn registered_fixture_names(
     py: Python<'_>,
     session: &FixtureSession,
 ) -> Result<Vec<String>, CollectError> {
@@ -747,7 +747,7 @@ pub(crate) fn registered_fixture_names(
 ///
 /// The trait-based `TestRunner` implementation calls this directly,
 /// bypassing the `Option<&FixtureSession>` indirection.
-pub(crate) fn run_test_with_session_obj(
+pub fn run_test_with_session_obj(
     py: Python<'_>,
     item: &TestItem,
     session_obj: Bound<'_, PyAny>,
@@ -765,7 +765,7 @@ pub(crate) fn run_test_with_session_obj(
 
 /// Call `FixtureSession.find_unused_fixtures()` to detect fixtures defined
 /// in conftest but never referenced by any collected test.
-pub(crate) fn find_unused_fixtures(
+pub fn find_unused_fixtures(
     py: Python<'_>,
     session: &FixtureSession,
     items: &[std::sync::Arc<TestItem>],
