@@ -6,7 +6,7 @@ use super::{ModuleCacheEntry, TestCache};
 use crate::types::{NodeId, TestItem};
 
 impl TestCache {
-    /// Returns cached TestItems for `path` if the file's mtime matches `current_mtime_secs`.
+    /// Returns cached `TestItems` for `path` if the file's mtime matches `current_mtime_secs`.
     /// Returns None on mtime mismatch or unknown path (caller must run Python collection).
     pub fn cached_module_items(
         &self,

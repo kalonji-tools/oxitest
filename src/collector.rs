@@ -31,7 +31,7 @@ pub(crate) fn build_glob_set(patterns: &[String]) -> Result<GlobSet, globset::Er
 }
 
 /// Returns `(test_files, conftest_files)` sorted by path.
-/// conftest_files are deduplicated and sorted shallow-first.
+/// `conftest_files` are deduplicated and sorted shallow-first.
 pub fn collect_files(
     config: &Config,
 ) -> Result<(Vec<Utf8PathBuf>, Vec<Utf8PathBuf>), globset::Error> {

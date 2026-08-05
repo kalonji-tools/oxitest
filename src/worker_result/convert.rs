@@ -12,7 +12,7 @@ fn wire_frames(raw: Vec<RawFrame>) -> Vec<Frame> {
     raw.into_iter().map(Into::into).collect()
 }
 
-/// Filter no_message_lines into tips (positive values only).
+/// Filter `no_message_lines` into tips (positive values only).
 ///
 /// Converts `Vec<i64>` (from JSON wire protocol) to `Option<Box<[usize]>>`,
 /// dropping non-positive values. The PyO3 path extracts `Vec<usize>` directly

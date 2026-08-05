@@ -1,4 +1,4 @@
-//! Transitions from FilesCollected phase: affected, prescan, query_without_session
+//! Transitions from `FilesCollected` phase: `affected`, `prescan`, `query_without_session`
 
 use super::super::{Pipeline, PipelinePhase};
 use crate::types::ExitCode;

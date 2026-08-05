@@ -1,4 +1,4 @@
-//! Transition: Empty -> FilesCollected
+//! Transition: `Empty` -> `FilesCollected`
 
 use super::super::{Pipeline, PipelinePhase};
 use crate::collector;

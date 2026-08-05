@@ -1135,14 +1135,14 @@ mod repro_tests {
     /// Regression test for bug #44: a subprocess spamming empty lines must not
     /// prevent the watchdog from firing.
     ///
-    /// The old inline loop called recv_timeout(watchdog) fresh on every iteration,
+    /// The old inline loop called `recv_timeout(watchdog)` fresh on every iteration,
     /// so continuous empty lines reset the full timer indefinitely.
     ///
-    /// drain_worker_results() fixes this by tracking a result_deadline that is
+    /// `drain_worker_results()` fixes this by tracking a `result_deadline` that is
     /// only reset when a real result line is received.
     ///
     /// Expected (bug present):  loop spins for ~300ms (spammer duration).
-    /// Expected (bug fixed):    drain_worker_results exits via TimedOut within ~50ms.
+    /// Expected (bug fixed):    `drain_worker_results` exits via `TimedOut` within ~50ms.
     #[test]
     fn bug44_empty_lines_spin_without_progress() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();

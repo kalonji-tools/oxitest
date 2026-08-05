@@ -6,7 +6,7 @@ use super::{DebugMode, FailedFilterArgs, FilteringArgs, VerbosityArgs};
 /// Arguments for `oxitest debug`.
 #[derive(clap::Args, Debug, Clone)]
 pub struct DebugArgs {
-    /// Paths to test files/directories, or node IDs (path::test_name)
+    /// Paths to test files/directories, or node IDs (`path::test_name`)
     pub paths: Vec<Utf8PathBuf>,
 
     /// Node IDs extracted from positional args (populated by resolve, not by clap)
@@ -39,7 +39,7 @@ pub struct DebugArgs {
     #[arg(long, help_heading = "Output")]
     pub show_locals: bool,
 
-    /// Preserve TempDir contents instead of cleaning up.
+    /// Preserve `TempDir` contents instead of cleaning up.
     /// Bare `--keep-tmp` defaults to failed mode (preserve on test failure only).
     /// Use `--keep-tmp=MODE` with `=` (e.g. `--keep-tmp=always`).
     #[arg(

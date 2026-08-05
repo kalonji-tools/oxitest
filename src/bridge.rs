@@ -270,7 +270,7 @@ impl FixtureSession {
     }
 }
 
-/// Drain diagnostics from the Python session and convert to DiagnosticEntry.
+/// Drain diagnostics from the Python session and convert to `DiagnosticEntry`.
 ///
 /// Reads `session.diagnostics`, converts each to a `DiagnosticEntry`, clears the
 /// Python list, and returns the entries. Callers (pipeline code) push these into
@@ -858,7 +858,7 @@ pub fn activate_deferred_plugins(
     Ok(())
 }
 
-/// Phase 1: Import plugin modules and read oxitest_cli_extension attributes.
+/// Phase 1: Import plugin modules and read `oxitest_cli_extension` attributes.
 /// Returns CLI option descriptors for dynamic clap building.
 pub fn discover_plugin_cli(
     py: Python<'_>,
@@ -1018,7 +1018,7 @@ fn try_run_test_with_session_obj(
 
 /// Two-phase extraction: extract status first, then only the fields needed
 /// for that outcome kind. Passed tests (the majority) go from 13 PyO3
-/// getattr() calls to 2.
+/// `getattr()` calls to 2.
 ///
 /// Each status arm extracts PyO3 fields, builds a
 /// [`RawOutcome`](crate::worker_result::RawOutcome), and calls

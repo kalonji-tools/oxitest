@@ -80,7 +80,7 @@ const MARKER_INPROCESS: u8 = 8;
 
 /// Type-safe marker set with O(1) access for builtin markers.
 ///
-/// Stores the 4 builtin markers as bitflags and custom markers in a HashSet.
+/// Stores the 4 builtin markers as bitflags and custom markers in a `HashSet`.
 /// Replaces `Vec<String>` for marker storage in `TestItem`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MarkerSet {
@@ -240,9 +240,9 @@ pub struct TestItem {
 }
 
 impl TestItem {
-    /// Derive the module path from the node_id.
+    /// Derive the module path from the `node_id`.
     ///
-    /// The node_id format is `"module_path::fn_name"` or
+    /// The `node_id` format is `"module_path::fn_name"` or
     /// `"module_path::fn_name[param_id]"`. This extracts the prefix before `::`.
     pub(crate) fn module_path(&self) -> &str {
         self.node_id.module_path().unwrap_or("")
@@ -319,8 +319,8 @@ impl TestItem {
         }
     }
 
-    /// Create a builder from a pre-formatted node_id string.
-    /// `module_path` defaults to `"tests/test_foo.py"` and `fn_name` to the full node_id.
+    /// Create a builder from a pre-formatted `node_id` string.
+    /// `module_path` defaults to `"tests/test_foo.py"` and `fn_name` to the full `node_id`.
     pub(crate) fn builder_raw(node_id: &str) -> TestItemBuilder {
         TestItemBuilder {
             node_id: Some(NodeId::from_raw(node_id)),
@@ -490,7 +490,7 @@ mod item_tests {
 mod marker_set_tests {
     use super::*;
 
-    /// Builtins are stored as bitflags and custom markers in HashSet — both
+    /// Builtins are stored as bitflags and custom markers in `HashSet` — both
     /// must be correctly partitioned from a single input Vec.
     #[test]
     fn from_vec_partitions_builtins_and_custom() {
@@ -513,7 +513,7 @@ mod marker_set_tests {
         assert_eq!(set.len(), 4);
     }
 
-    /// The `has()` method must route to bitflags for builtins and HashSet for custom,
+    /// The `has()` method must route to bitflags for builtins and `HashSet` for custom,
     /// returning false for markers not present in either.
     #[test]
     fn has_returns_false_for_absent_markers() {
@@ -551,7 +551,7 @@ mod marker_set_tests {
         assert_eq!(raw, vec!["timeout"]);
     }
 
-    /// iter() is consumed by filter.rs for marker validation — it must yield all markers
+    /// `iter()` is consumed by filter.rs for marker validation — it must yield all markers
     /// and builtins must come first (before custom) for deterministic output.
     #[test]
     fn iter_yields_builtins_before_custom() {
@@ -598,7 +598,7 @@ mod marker_set_tests {
 mod wire_format_tests {
     use super::*;
 
-    /// ParamPair serializes as `[name, value]` — the Python bridge reads this format
+    /// `ParamPair` serializes as `[name, value]` — the Python bridge reads this format
     /// from the wire and cache. Breaking this breaks parametrized test collection.
     #[test]
     fn param_pair_serde_format_is_two_element_array() {
@@ -613,7 +613,7 @@ mod wire_format_tests {
         );
     }
 
-    /// ParamPair round-trip: serialize then deserialize must yield the original value.
+    /// `ParamPair` round-trip: serialize then deserialize must yield the original value.
     #[test]
     fn param_pair_serde_roundtrip() {
         let original = ParamPair {
@@ -629,7 +629,7 @@ mod wire_format_tests {
         );
     }
 
-    /// LocalVar serializes as `[name, repr]` — the Python bridge sends locals in
+    /// `LocalVar` serializes as `[name, repr]` — the Python bridge sends locals in
     /// traceback frames using this format. Breaking this breaks failure diagnostics.
     #[test]
     fn local_var_serde_format_is_two_element_array() {
@@ -644,7 +644,7 @@ mod wire_format_tests {
         );
     }
 
-    /// LocalVar round-trip: serialize then deserialize must yield the original value.
+    /// `LocalVar` round-trip: serialize then deserialize must yield the original value.
     #[test]
     fn local_var_serde_roundtrip() {
         let original = LocalVar {
@@ -660,7 +660,7 @@ mod wire_format_tests {
         );
     }
 
-    /// FieldDiff serializes as `[field, left, right]` — the Python bridge sends
+    /// `FieldDiff` serializes as `[field, left, right]` — the Python bridge sends
     /// per-field assertion diffs in this format. Breaking this breaks dataclass
     /// comparison reporting.
     #[test]
@@ -677,7 +677,7 @@ mod wire_format_tests {
         );
     }
 
-    /// FieldDiff round-trip: serialize then deserialize must yield the original value.
+    /// `FieldDiff` round-trip: serialize then deserialize must yield the original value.
     #[test]
     fn field_diff_serde_roundtrip() {
         let original = FieldDiff {

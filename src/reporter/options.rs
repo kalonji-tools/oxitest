@@ -48,8 +48,8 @@ pub struct ReporterOptsBuilder {
 }
 
 impl ReporterOptsBuilder {
-    /// Sensible defaults for tests: total=0, use_color=false, tb=Detail,
-    /// show_tips=false, show_warnings=false, verbosity=Normal.
+    /// Sensible defaults for tests: `total=0`, `use_color=false`, `tb=Detail`,
+    /// `show_tips=false`, `show_warnings=false`, `verbosity=Normal`.
     pub fn new() -> Self {
         Self {
             total: 0,

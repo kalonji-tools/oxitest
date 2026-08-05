@@ -44,7 +44,7 @@ pub(crate) enum CheckOutcome {
 ///
 /// `direct_docstring` / `direct_lineno` / `direct_file` are what the orchestrator resolved
 /// at the subject's own site — used only for `LocalDefinition` subjects. Aliased subjects
-/// (AliasImport, LocalAlias) resolve via the walker and ignore these.
+/// (`AliasImport`, `LocalAlias`) resolve via the walker and ignore these.
 pub(crate) fn check_subject(
     root: &ModuleRoot,
     subject: &Subject,
@@ -95,7 +95,7 @@ pub(crate) fn check_subject(
 
 /// Construct a `DiagnosticEntry` for a coverage gap.
 ///
-/// Message differentiation per #1606: MissingHeader vs HeaderNoExamples produce distinct
+/// Message differentiation per #1606: `MissingHeader` vs `HeaderNoExamples` produce distinct
 /// inline fix hints. Both use `context = "doctest.coverage"`.
 pub(crate) fn diagnostic_for_gap(
     subject: &Subject,
@@ -469,7 +469,7 @@ enum DefTarget<'a> {
 /// behavior preserved from the pre-refactor top-level helper. The same
 /// filter applies to class-body walks used by `find_class_method`, which
 /// makes an ellipsis-body abstract method surface as a stale-entry
-/// diagnostic rather than a false-positive MissingHeader.
+/// diagnostic rather than a false-positive `MissingHeader`.
 fn find_def_by_name<'a>(
     stmts: &'a [rustpython_parser::ast::Stmt],
     name: &str,

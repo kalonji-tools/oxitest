@@ -58,7 +58,7 @@ pub(crate) struct TimingEntry {
     pub(crate) duration_ms: DurationMs,
 }
 
-/// A print() call inside a passing test (potential debugging leftover).
+/// A `print()` call inside a passing test (potential debugging leftover).
 #[derive(Clone, Debug)]
 pub(crate) struct TipLine {
     pub(crate) file: camino::Utf8PathBuf,
@@ -140,11 +140,11 @@ impl Default for OutcomeCounters {
 }
 
 /// Strict-mode counters — separate from outcome counts because these
-/// are not test outcomes (xpassed_strict is a sub-count, suite_violations
+/// are not test outcomes (`xpassed_strict` is a sub-count, `suite_violations`
 /// are collection-time violations).
 #[derive(Clone, Debug, Default)]
 pub(crate) struct StrictCounts {
-    /// Subset of XPassed where the xfail mark was strict.
+    /// Subset of `XPassed` where the xfail mark was strict.
     pub(crate) xpassed_strict: usize,
     /// Strict-mode suite violations (not test outcomes).
     pub(crate) suite_violations: usize,

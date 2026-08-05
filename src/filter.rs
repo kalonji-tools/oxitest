@@ -69,7 +69,7 @@ fn partition_by_failed(
     FailedPartition { failed, remaining }
 }
 
-/// Keep only items whose node_id is in `failed_ids`.
+/// Keep only items whose `node_id` is in `failed_ids`.
 /// Used by `--lf` (last-failed) mode.
 #[must_use = "returns filtered items; original is consumed"]
 pub fn filter_last_failed(
@@ -79,7 +79,7 @@ pub fn filter_last_failed(
     partition_by_failed(items, failed_ids).failed
 }
 
-/// Move items whose node_id is in `failed_ids` to the front; preserve relative order within each group.
+/// Move items whose `node_id` is in `failed_ids` to the front; preserve relative order within each group.
 /// Used by `--ff` (failed-first) mode.
 #[must_use = "returns reordered items; original is consumed"]
 pub fn sort_failed_first(

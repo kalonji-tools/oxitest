@@ -58,7 +58,7 @@ pub trait Reporter {
     ) -> ExitVote;
 
     /// Record a teardown warning (default: no-op).
-    /// `context` identifies what failed (e.g. "end_module(path)" or "end_task").
+    /// `context` identifies what failed (e.g. `end_module(path)` or `end_task`).
     /// `error` is the stringified error message.
     fn record_teardown_warning(&mut self, _context: &str, _error: &str) {}
 

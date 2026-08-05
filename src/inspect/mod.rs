@@ -38,7 +38,7 @@ use graph::InspectGraph;
 /// 1. `--affected` — narrow test files before AST extraction
 /// 2. Extract AST entries from surviving files (single-pass combined extraction)
 /// 3. `-E` expression — evaluate DSL against test entries, discard non-matching
-/// 4. `--lf` — load TestCache, keep only previously-failed tests
+/// 4. `--lf` — load `TestCache`, keep only previously-failed tests
 /// 5. Build graph from surviving entries
 pub(crate) fn build_phase1_graph(
     args: &InspectArgs,

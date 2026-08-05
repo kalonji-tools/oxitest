@@ -4,7 +4,7 @@ use crate::types::{ExitCode, OutcomeKind};
 /// Compute the process exit code from the final run statistics.
 ///
 /// Priority (highest wins):
-/// - **CollectError** (3) — one or more collection errors (import failures, syntax errors).
+/// - **`CollectError`** (3) — one or more collection errors (import failures, syntax errors).
 /// - **Interrupted** (2) — the run was interrupted (e.g. Ctrl-C / SIGINT).
 /// - **Failure** (1) — at least one hard failure (failed, errored, timed out, strict-xpassed, or suite violation).
 /// - **Success** (0) — all tests passed (or were skipped / xfailed).
