@@ -3,3 +3,8 @@ allow-panic-in-tests = true
 # Clippy has no `allow-unreachable-in-tests` key (#1832).
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
+# `doc_markdown` fires on any camel-humped or underscored word. These three are
+# prose in this codebase, not code: two proper nouns and an arch string inside a
+# quoted example (#1836). `".."` extends clippy's built-in list rather than
+# replacing it — that list is toolchain-dependent.
+doc-valid-idents = ["PyO3", "JUnit", "x86_64", ".."]
