@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-__all__ = ["collect_module", "register_module_source_fixtures_for_module"]
+__all__ = [
+    "collect_module",
+    "register_module_source_fixtures_for_module",
+    "register_plugin_source_fixtures_for_module",
+]
 
 import dataclasses
 import hashlib
@@ -28,7 +32,10 @@ from oxitest._bridge._fn_metadata import _update, get_metadata
 from oxitest._bridge._loader import _load_module, _LoadError
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._metadata import get_marks
-from oxitest._bridge._module_source_registrar import register_module_source_fixtures
+from oxitest._bridge._module_source_registrar import (
+    register_module_source_fixtures,
+    register_plugin_source_fixtures,
+)
 from oxitest._bridge._test_kind import Parametrized, Solitary
 from oxitest._bridge._violation_checkers import check_fn_violations
 from oxitest._bridge.parametrize import ComposedCases, _as_composed
@@ -674,6 +681,67 @@ def register_module_source_fixtures_for_module(
         Absolute path to the directory containing the fixture module. Used
         to derive the namespace name (the final path segment).
     """
+    module = _load_declaration_module(fixture_module_path)
+    if module is None:
+        return
+    register_module_source_fixtures(
+        registry, module, anchor_package_path=anchor_package_path
+    )
+
+
+def register_plugin_source_fixtures_for_module(
+    *,
+    registry: FixtureRegistry,
+    fixture_module_path: str,
+    plugin_module: str,
+    namespace: str,
+    autouse_names: list[str],
+) -> None:
+    """Bridge entry point: import an activated plugin's __fixtures__.py (#1717).
+
+    The plugin counterpart of
+    :func:`register_module_source_fixtures_for_module`. Shares the import
+    machinery and differs only in which registrar it hands the module to —
+    plugin declarations become ambient ``PluginModuleSource`` defs rather than
+    anchored ``ModuleSource`` ones.
+
+    Parameters
+    ----------
+    registry:
+        The live FixtureRegistry for this run.
+    fixture_module_path:
+        Absolute path to the plugin package's ``__fixtures__.py``.
+    plugin_module:
+        The plugin's module path, carried on each def for diagnostics.
+    namespace:
+        The plugin's namespace — its module name unless overridden in
+        ``[tool.oxitest.plugin_settings.<module>]``.
+    autouse_names:
+        Fixtures the user enabled for autouse. Arrives as a list because it
+        crosses the PyO3 boundary.
+    """
+    module = _load_declaration_module(fixture_module_path)
+    if module is None:
+        return
+    register_plugin_source_fixtures(
+        registry,
+        module,
+        plugin_module=plugin_module,
+        namespace=namespace,
+        autouse_names=tuple(autouse_names),
+    )
+
+
+def _load_declaration_module(fixture_module_path: str) -> ModuleType | None:
+    """Import a declaration home under a private module name.
+
+    Shared by both bridge entry points rather than copied: the
+    ``sys.modules.pop`` on failure is a recorded fix (HIGH-2) and a second
+    copy would drift away from it.
+
+    Returns ``None`` when no spec can be created — prescan has already flagged
+    such a file, so the usual import error is left to surface at test time.
+    """
     # Unsigned 64-bit hash — force positive to avoid a leading hyphen in the
     # internal module name. Python's built-in hash() may return a negative
     # integer; `:x` would format that as e.g. `-7f3a…` which contains a
@@ -682,9 +750,7 @@ def register_module_source_fixtures_for_module(
     module_name = f"_oxitest_fixture_module_{key:x}"
     spec = importlib.util.spec_from_file_location(module_name, fixture_module_path)
     if spec is None or spec.loader is None:
-        # prescan already flagged this file; defer to the usual import errors
-        # during test execution if we can't create a spec here.
-        return
+        return None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     try:
@@ -695,7 +761,4 @@ def register_module_source_fixtures_for_module(
         # sees the error and surfaces it to the user.
         sys.modules.pop(spec.name, None)
         raise
-
-    register_module_source_fixtures(
-        registry, module, anchor_package_path=anchor_package_path
-    )
+    return module
