@@ -85,11 +85,8 @@ impl Pipeline {
             rep.record_diagnostics(pending);
         }
 
-        // Serialized here, once, because here is where a `Result` already
-        // flows. Everything downstream — `ExecutionContext`, `SessionInputs`,
-        // `run_phase_parallel` — then carries bytes and cannot fail at it
-        // (ADR-0011). Done before any worker is spawned, so a failure costs
-        // nothing to unwind.
+        // Serialized here, once, because here is where a `Result` already flows
+        // (ADR-0011). Everything downstream carries bytes and cannot fail at it.
         let payloads = match parallel::WorkerPayloads::new(
             &shared.conftest_files,
             &shared.fixture_modules,
@@ -97,19 +94,17 @@ impl Pipeline {
             &shared.cfg.features.plugin_settings,
         ) {
             Ok(payloads) => payloads,
+            // Reported as a *collect error*, not as a diagnostic.
+            // `compute_exit_code` never reads diagnostics, so a diagnostic here
+            // would print an error and still exit 0 — a run that executed zero
+            // tests reporting success, which is the exact failure ADR-0011
+            // Rule 0 calls a silent default.
             Err(err) => {
-                rep.record_diagnostics(vec![reporter::stats::DiagnosticEntry {
-                    severity: reporter::stats::DiagnosticSeverity::Error,
-                    context: "worker payload".into(),
-                    message: format!(
-                        "could not serialize the fixture and plugin data every worker needs: \
-                         {err}"
-                    ),
-                    file: None,
-                    lineno: None,
-                }]);
+                let errors = [crate::types::CollectError::PyError(format!(
+                    "could not serialize the fixture and plugin data every worker needs: {err}"
+                ))];
                 return Err(rep
-                    .finish(&[], false, &reporter::ReporterSession::new(0))
+                    .finish(&errors, false, &reporter::ReporterSession::new(0))
                     .code());
             }
         };

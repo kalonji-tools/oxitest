@@ -51,19 +51,12 @@ pub(crate) struct PhaseResult {
 /// The JSON blobs every worker task carries, serialized once for the whole run.
 ///
 /// Workers rebuild their own `FixtureSession` and inherit nothing from the
-/// coordinator, so anything missing here is simply invisible to them: without
-/// the plugin half, both `FixtureProvider` fixtures and plugin
-/// `__fixtures__.py` declarations vanish under `-n` while passing serially
-/// (#1717). Every task carries identical bytes, so this is built once per run
-/// rather than once per task.
+/// coordinator, so anything missing here is invisible to them: without the
+/// plugin half, both `FixtureProvider` fixtures and plugin `__fixtures__.py`
+/// declarations vanish under `-n` while passing serially (#1717).
 ///
-/// **Holding the serialized form is what makes `run_phase_parallel` total.**
-/// It receives bytes, so there is no serialization left for it to fail at, and
-/// no failure branch to invent. The fallible step happens exactly once, in
-/// `Pipeline::execute`, where a `Result` already flows and the error reaches
-/// the reporter like any other. That is ADR-0011's principle applied here: the
-/// invariant that these payloads exist lives in this type, not in a comment
-/// promising that serializing them cannot fail.
+/// Holding the *serialized* form is what leaves `run_phase_parallel` with
+/// nothing to fail at — see ADR-0011's worked example.
 pub(crate) struct WorkerPayloads {
     conftest: std::sync::Arc<serde_json::value::RawValue>,
     fixture_modules: std::sync::Arc<serde_json::value::RawValue>,
@@ -71,11 +64,8 @@ pub(crate) struct WorkerPayloads {
 }
 
 impl WorkerPayloads {
-    /// Serialize the three payloads, or fail before any worker is spawned.
-    ///
     /// All three or none: a worker missing any of them runs a session that
-    /// silently differs from the coordinator's, which is worse than not
-    /// starting.
+    /// silently differs from the coordinator's.
     pub(crate) fn new(
         conftest_paths: &[camino::Utf8PathBuf],
         fixture_modules: &[types::FixtureModule],
@@ -84,22 +74,20 @@ impl WorkerPayloads {
     ) -> Result<Self, serde_json::Error> {
         let conftest_strs: Vec<&str> = conftest_paths.iter().map(|p| p.as_str()).collect();
 
-        // Built with `to_value` and `?` rather than `serde_json::json!`. The
-        // macro expands to `to_value(&$other).unwrap()` (serde_json
-        // `src/macros.rs`), and clippy does not lint `unwrap` inside an
-        // external macro — so `json!` would have smuggled a live panic route
-        // past the very gate ADR-0011 adds.
-        let mut plugin_payload = serde_json::Map::new();
-        plugin_payload.insert("modules".to_owned(), serde_json::to_value(plugins)?);
-        plugin_payload.insert(
-            "settings".to_owned(),
-            serde_json::to_value(plugin_settings)?,
-        );
+        // Not `serde_json::json!`: it expands to `to_value(..).unwrap()`, and
+        // clippy does not lint `unwrap` inside an external macro (#1832).
+        let plugin_payload = serde_json::Map::from_iter([
+            ("modules".to_owned(), serde_json::to_value(plugins)?),
+            (
+                "settings".to_owned(),
+                serde_json::to_value(plugin_settings)?,
+            ),
+        ]);
 
         Ok(Self {
-            conftest: to_shared_raw(&conftest_strs)?,
-            fixture_modules: to_shared_raw(fixture_modules)?,
-            plugins: to_shared_raw(&serde_json::Value::Object(plugin_payload))?,
+            conftest: serde_json::value::to_raw_value(&conftest_strs)?.into(),
+            fixture_modules: serde_json::value::to_raw_value(fixture_modules)?.into(),
+            plugins: serde_json::value::to_raw_value(&plugin_payload)?.into(),
         })
     }
 }
@@ -112,13 +100,6 @@ pub(crate) struct SessionInputs<'a> {
     /// Names of `lifetime="process"` fixtures. Not sent to workers — used by
     /// the coordinator to name what a killed worker never tore down (#1777).
     pub process_fixture_names: &'a [String],
-}
-
-/// Serialize `value` into a raw JSON blob shared by reference across tasks.
-fn to_shared_raw<T: serde::Serialize + ?Sized>(
-    value: &T,
-) -> Result<std::sync::Arc<serde_json::value::RawValue>, serde_json::Error> {
-    serde_json::value::to_raw_value(value).map(std::sync::Arc::from)
 }
 
 pub(crate) fn run_phase_parallel(
@@ -264,9 +245,8 @@ pub(crate) fn run_phase_parallel(
 mod fixture_module_payload_tests {
     use super::*;
 
-    /// Build the payloads the way `Pipeline::execute` does, so these tests
-    /// exercise the constructor that actually ships rather than a helper it
-    /// happens to call.
+    /// Built the way `Pipeline::execute` does, so these tests exercise the
+    /// constructor that ships.
     fn payloads_for(
         fixture_modules: &[types::FixtureModule],
         plugins: &[String],

@@ -14,11 +14,8 @@ pub(super) struct ExecutionContext<'a> {
     pub(super) cache: &'a cache::TestCache,
     pub(super) session: &'a bridge::FixtureSession,
     pub(super) fixture_modules: &'a [types::FixtureModule],
-    /// The worker payloads, already serialized by `Pipeline::execute`. Passing
-    /// bytes rather than the values means the parallel phase has no
-    /// serialization left to fail at (ADR-0011) — and it is why `conftest_files`
-    /// is no longer a field: the only thing this struct did with it was hand it
-    /// to `SessionInputs` for serialization.
+    /// Already serialized by `Pipeline::execute`, so the parallel phase has
+    /// nothing left to fail at (ADR-0011).
     pub(super) payloads: &'a parallel::WorkerPayloads,
     pub(super) python_bin: &'a str,
     /// Sum of AST-derived body weights from prescan; used as fallback for cold-cache estimation.

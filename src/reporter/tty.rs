@@ -63,41 +63,24 @@ pub struct TtyReporter {
 
 /// Build the progress-bar style for a run.
 ///
-/// A free function rather than a block inside [`TtyReporter::new`], which
-/// prints to the terminal and so is not something `cargo test` can enter —
-/// the same reason `worker_session::build_task` was extracted after
-/// `codecov/patch/rust` failed on #1747. Pure, so the tests below cover both
-/// arms.
-///
-/// Both templates are literals, so nothing a user supplies can make
-/// `with_template` fail. Degrading to indicatif's stock style costs the run its
-/// progress *decoration* and nothing else — no test result and no exit code
-/// depends on it — but it is logged rather than swallowed, because a
-/// degradation nobody can observe is the failure mode ADR-0011 warns about.
+/// A free function so `cargo test` can reach it — [`TtyReporter::new`] prints to
+/// the terminal. Falling back to the stock style costs the run its progress
+/// decoration and nothing else, but is logged rather than swallowed.
 fn progress_style(use_color: bool) -> ProgressStyle {
-    fn stock(err: &indicatif::style::TemplateError) {
-        tracing::warn!(error = %err, "progress bar template rejected — using the stock style");
-    }
-
     if use_color {
-        ProgressStyle::with_template(SPINNER_TEMPLATE)
+        ProgressStyle::with_template("  {pos}/{len}  {spinner:.cyan}  {msg}")
             .unwrap_or_else(|err| {
-                stock(&err);
+                tracing::warn!(error = %err, "progress bar template rejected — using the stock style");
                 ProgressStyle::default_spinner()
             })
             .tick_strings(&["⣾", "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽", ""])
     } else {
-        ProgressStyle::with_template(PLAIN_TEMPLATE).unwrap_or_else(|err| {
-            stock(&err);
+        ProgressStyle::with_template("  {pos}/{len}  {msg}").unwrap_or_else(|err| {
+            tracing::warn!(error = %err, "progress bar template rejected — using the stock style");
             ProgressStyle::default_bar()
         })
     }
 }
-
-/// Named so the tests can assert on the same string the code uses. Inlining
-/// them would let a mistyped template pass a test that re-typed it correctly.
-const SPINNER_TEMPLATE: &str = "  {pos}/{len}  {spinner:.cyan}  {msg}";
-const PLAIN_TEMPLATE: &str = "  {pos}/{len}  {msg}";
 
 impl TtyReporter {
     pub fn new(opts: ReporterOpts) -> Self {
@@ -410,13 +393,9 @@ mod tests {
 
     /// Both styles must actually render the progress counter.
     ///
-    /// **`ProgressStyle::with_template` does not validate.** Measured against
-    /// indicatif 0.18.6, it returns `Ok` for `{nonexistent_key}`, for a bare
-    /// `{`, and for a bare `}` — so `with_template(..).is_ok()` is a vacuous
-    /// assertion, and a mistyped placeholder simply renders as nothing. The
-    /// failure mode is a progress bar that quietly stopped showing `3/10`, with
-    /// no error, no diagnostic and no exit code. Rendering is the only place it
-    /// can be caught.
+    /// `with_template` does not validate — measured against indicatif 0.18.6 it
+    /// returns `Ok` for `{nonexistent_key}`, so a mistyped placeholder renders
+    /// as nothing and only the rendered output can catch it.
     #[test]
     fn both_progress_styles_render_the_counter() {
         for use_color in [true, false] {

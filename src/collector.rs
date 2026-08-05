@@ -64,12 +64,9 @@ pub fn collect_files(
 /// this collects every `.py` file in `testpaths` (and rootdir) since any source module
 /// can contain doctests.
 ///
-/// Returns `Err` rather than an empty list if the glob fails to compile. The
-/// distinction matters: an empty `GlobSet` matches nothing, so swallowing the
-/// error would make the whole doctest suite silently disappear under a green
-/// gate — a test runner reporting success for tests it never found. Same shape
-/// as [`collect_files`] above, which has always returned a `Result` for this
-/// reason.
+/// Returns `Err` rather than an empty list: an empty `GlobSet` matches nothing,
+/// so swallowing the error would silently drop the whole doctest suite under a
+/// green gate.
 pub fn collect_doctest_files(config: &Config) -> Result<Vec<Utf8PathBuf>, globset::Error> {
     let glob_set = build_glob_set(&["*.py".to_string()])?;
     let mut files = Vec::new();
@@ -221,15 +218,9 @@ mod tests {
         }
     }
 
-    /// Doctest collection takes every `.py` file, not just the ones matching
-    /// `python_files` — a docstring example can live in any module.
-    ///
-    /// The distinction is the whole reason this function exists separately from
-    /// `collect_files`, and nothing else asserts it: `collect_files` above uses
-    /// the same walk with the configured `test_*.py` globs, so a regression
-    /// that made doctest collection reuse them would leave every non-test
-    /// module's doctests silently uncollected while both functions still
-    /// returned files.
+    /// The distinction from `collect_files`: a regression that reused the
+    /// configured `test_*.py` globs would silently uncollect every non-test
+    /// module's doctests while still returning files.
     #[test]
     fn doctest_collection_takes_every_py_file_not_just_test_files() {
         let dir = assert_fs::TempDir::new().unwrap();

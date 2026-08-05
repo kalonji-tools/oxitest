@@ -24,14 +24,10 @@ pub(crate) struct SourceViewState {
     pub scroll_offset: u16,
     /// The node this source view was opened for (used by `e` to open editor).
     pub node_ref: super::graph::NodeRef,
-    /// Footer label — `<sigil> <name>` — resolved from the graph here, at the
-    /// one point in the program where the graph is known to exist.
-    ///
-    /// Carrying the rendered label rather than looking the node up again is
-    /// what lets `ui::draw` render this overlay without holding the graph at
-    /// all. The alternative was `app.graph.as_ref().expect("source_view can
-    /// only be Some when graph is Some")` — an invariant restated in a string
-    /// (ADR-0011).
+    /// Footer label — `<sigil> <name>` — resolved here, where the graph is
+    /// known to exist, so `ui::draw` never needs it. Also freezes the label to
+    /// the node the view was opened for, which `merge_phase2` would otherwise
+    /// re-resolve against a rebuilt graph.
     pub node_label: String,
 }
 
