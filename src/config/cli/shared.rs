@@ -37,7 +37,7 @@ pub struct FailedFilterArgs {
 
 impl FailedFilterArgs {
     /// Resolve the three flags into a single `Option<FailedMode>`.
-    pub fn resolve(&self) -> Option<FailedMode> {
+    pub const fn resolve(&self) -> Option<FailedMode> {
         if self.lf {
             Some(FailedMode::Only)
         } else if self.ff {
@@ -78,7 +78,7 @@ impl VerbosityArgs {
     }
 
     /// Resolve the two flags into a single `Option<Verbosity>`.
-    pub fn resolve(&self) -> Option<Verbosity> {
+    pub const fn resolve(&self) -> Option<Verbosity> {
         if let Some(level) = self.verbose {
             Some(level)
         } else if self.verbose_count >= 2 {

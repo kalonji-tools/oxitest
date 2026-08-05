@@ -40,7 +40,7 @@ pub(crate) enum FnDef<'a> {
 }
 
 impl<'a> FnDef<'a> {
-    pub(crate) fn try_from_stmt(stmt: &'a ast::Stmt) -> Option<Self> {
+    pub(crate) const fn try_from_stmt(stmt: &'a ast::Stmt) -> Option<Self> {
         match stmt {
             ast::Stmt::FunctionDef(f) => Some(Self::Sync(f)),
             ast::Stmt::AsyncFunctionDef(f) => Some(Self::Async(f)),
@@ -76,14 +76,14 @@ impl<'a> FnDef<'a> {
         }
     }
 
-    pub(crate) fn range(&self) -> rustpython_parser::text_size::TextRange {
+    pub(crate) const fn range(&self) -> rustpython_parser::text_size::TextRange {
         match self {
             Self::Sync(f) => f.range,
             Self::Async(f) => f.range,
         }
     }
 
-    pub(crate) fn is_async(&self) -> bool {
+    pub(crate) const fn is_async(&self) -> bool {
         matches!(self, Self::Async(_))
     }
 }

@@ -77,7 +77,7 @@ fn parse_marker_descriptions(raw_markers: &[String]) -> (Vec<String>, Vec<String
 
 impl Config {
     /// Apply shared overrides from either TOML or CLI source.
-    fn apply_overrides(&mut self, ovr: Overrides) {
+    const fn apply_overrides(&mut self, ovr: Overrides) {
         // ── Execution ──────────────────────────────────────────────────
         apply_if_some!(self.filter, schedule, ovr.schedule);
         apply_if_some!(self.exec, retries, ovr.retries);

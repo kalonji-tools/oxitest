@@ -54,7 +54,7 @@ pub(crate) struct Trail {
 
 impl Trail {
     /// Create a new trail starting at the Overview screen.
-    pub(crate) fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             root: Screen::Overview { selected: 0 },
             rest: Vec::new(),
@@ -85,7 +85,7 @@ impl Trail {
 
     /// Return the depth of the trail (1 = Overview only).
     #[allow(dead_code)] // used in nav tests
-    pub(crate) fn depth(&self) -> usize {
+    pub(crate) const fn depth(&self) -> usize {
         self.rest.len() + 1
     }
 

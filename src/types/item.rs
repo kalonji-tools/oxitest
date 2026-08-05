@@ -97,16 +97,16 @@ impl MarkerSet {
         }
     }
 
-    pub fn has_skip(&self) -> bool {
+    pub const fn has_skip(&self) -> bool {
         self.builtins & MARKER_SKIP != 0
     }
-    pub fn has_xfail(&self) -> bool {
+    pub const fn has_xfail(&self) -> bool {
         self.builtins & MARKER_XFAIL != 0
     }
-    pub fn has_timeout(&self) -> bool {
+    pub const fn has_timeout(&self) -> bool {
         self.builtins & MARKER_TIMEOUT != 0
     }
-    pub fn has_inprocess(&self) -> bool {
+    pub const fn has_inprocess(&self) -> bool {
         self.builtins & MARKER_INPROCESS != 0
     }
 
@@ -282,7 +282,7 @@ pub struct FixtureModule {
 
 impl FixtureModule {
     /// Whether this file declares any package-lifetime fixture.
-    pub fn declares_package(&self) -> bool {
+    pub const fn declares_package(&self) -> bool {
         !self.package_declarations.is_empty()
     }
 }

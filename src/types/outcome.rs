@@ -44,7 +44,7 @@ pub struct FailureDiagnostic {
 
 impl FailureDiagnostic {
     /// Create an error diagnostic (no comparison fields).
-    pub fn error(
+    pub const fn error(
         message: String,
         file: Utf8PathBuf,
         lineno: LineNo,
@@ -114,7 +114,7 @@ impl TestOutcome {
     ///
     /// Includes strict `XPassed` (unexpected pass in strict mode is a CI failure).
     /// See also [`OutcomeKind::is_retryable_failure`] for retry-eligible failures.
-    pub fn is_hard_failure(&self) -> bool {
+    pub const fn is_hard_failure(&self) -> bool {
         matches!(
             self,
             Self::Failed(..)
@@ -125,7 +125,7 @@ impl TestOutcome {
     }
 
     /// Canonical lowercase status string. Matches the strings sent by worker subprocesses.
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Passed { .. } => "passed",
             Self::Failed(..) => "failed",
@@ -234,12 +234,12 @@ impl OutcomeKind {
     /// Excludes `XPassed` (retrying won't change the outcome) and `Unknown`
     /// (protocol error, not a test failure).
     /// See also [`TestOutcome::is_hard_failure`] for exit-code failures.
-    pub fn is_retryable_failure(&self) -> bool {
+    pub const fn is_retryable_failure(&self) -> bool {
         matches!(self, Self::Failed | Self::Error | Self::Timeout)
     }
 
     /// Canonical lowercase status string matching [`TestOutcome::as_str()`].
-    pub fn as_str(&self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Passed => "passed",
             Self::Failed => "failed",

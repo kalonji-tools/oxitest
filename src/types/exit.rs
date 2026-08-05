@@ -27,7 +27,7 @@ pub enum ExitCode {
 }
 
 impl ExitCode {
-    pub fn as_i32(self) -> i32 {
+    pub const fn as_i32(self) -> i32 {
         match self {
             Self::Success => 0,
             Self::Failure => 1,
@@ -68,7 +68,7 @@ pub(crate) struct FailureAccumulator {
 }
 
 impl FailureAccumulator {
-    pub(crate) fn new(maxfail: usize) -> Self {
+    pub(crate) const fn new(maxfail: usize) -> Self {
         Self {
             count: 0,
             max: maxfail,
@@ -77,7 +77,7 @@ impl FailureAccumulator {
 
     /// Record an outcome. Returns `true` if execution should stop (maxfail reached).
     #[must_use = "caller must check whether maxfail was reached"]
-    pub(crate) fn record(&mut self, outcome: &TestOutcome) -> bool {
+    pub(crate) const fn record(&mut self, outcome: &TestOutcome) -> bool {
         if outcome.is_hard_failure() {
             self.count += 1;
         }

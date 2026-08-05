@@ -30,7 +30,7 @@ pub(crate) enum JunitCategory {
 
 impl TestOutcome {
     /// Single character for CI dot-progress output.
-    pub(crate) fn dot_char(&self) -> char {
+    pub(crate) const fn dot_char(&self) -> char {
         match self {
             Self::Passed { tips: None } => '.',
             Self::Passed { .. } => '\u{00B7}', // middot — bare assert passed
@@ -46,7 +46,7 @@ impl TestOutcome {
     }
 
     /// Short display label for TTY output. Empty string for passing tests.
-    pub(crate) fn label(&self) -> &'static str {
+    pub(crate) const fn label(&self) -> &'static str {
         match self {
             Self::Failed(..) => "FAIL ",
             Self::Error(..) => "ERROR",
@@ -61,7 +61,7 @@ impl TestOutcome {
     }
 
     /// Classifies the outcome for color/style selection in TTY output.
-    pub(crate) fn color_category(&self) -> ColorCategory {
+    pub(crate) const fn color_category(&self) -> ColorCategory {
         match self {
             Self::Passed { .. } => ColorCategory::Pass,
             Self::Failed(..) | Self::XPassed { strict: true } => ColorCategory::Fail,
@@ -76,7 +76,7 @@ impl TestOutcome {
     }
 
     /// Classifies the outcome for JUnit XML element selection.
-    pub(crate) fn junit_category(&self) -> JunitCategory {
+    pub(crate) const fn junit_category(&self) -> JunitCategory {
         match self {
             Self::Passed { .. }
             | Self::Warned { .. }
@@ -92,7 +92,7 @@ impl TestOutcome {
     ///
     /// CTRF defines only three statuses. This method centralises the mapping so
     /// reporter code does not duplicate match arms.
-    pub(crate) fn ctrf_status(&self) -> &'static str {
+    pub(crate) const fn ctrf_status(&self) -> &'static str {
         match self {
             Self::Passed { .. }
             | Self::Warned { .. }

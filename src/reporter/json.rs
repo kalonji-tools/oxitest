@@ -85,7 +85,7 @@ pub struct JsonReporter {
 }
 
 impl JsonReporter {
-    pub fn new(path: Utf8PathBuf) -> Self {
+    pub const fn new(path: Utf8PathBuf) -> Self {
         Self {
             path,
             tests: Vec::new(),

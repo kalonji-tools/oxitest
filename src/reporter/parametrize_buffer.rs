@@ -21,7 +21,7 @@ pub(crate) struct ParametrizeBuffer {
 }
 
 impl ParametrizeBuffer {
-    pub fn new(fn_name: Arc<str>) -> Self {
+    pub const fn new(fn_name: Arc<str>) -> Self {
         Self {
             fn_name,
             results: Vec::new(),
@@ -42,15 +42,15 @@ impl ParametrizeBuffer {
         self.results.push((item, outcome, ms));
     }
 
-    pub fn total_ms(&self) -> DurationMs {
+    pub const fn total_ms(&self) -> DurationMs {
         self.total_ms
     }
 
-    pub fn any_failed(&self) -> bool {
+    pub const fn any_failed(&self) -> bool {
         self.has_failure
     }
 
-    pub fn passed_count(&self) -> usize {
+    pub const fn passed_count(&self) -> usize {
         self.passed_count
     }
 }

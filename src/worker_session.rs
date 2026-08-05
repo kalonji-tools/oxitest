@@ -120,7 +120,7 @@ struct WorkerSession {
 }
 
 impl WorkerSession {
-    fn new(
+    const fn new(
         stdin: std::io::BufWriter<std::process::ChildStdin>,
         line_rx: crossbeam_channel::Receiver<String>,
         watchdog: std::time::Duration,

@@ -37,7 +37,7 @@ pub(crate) struct PoolGuard {
 }
 
 impl PoolGuard {
-    pub(crate) fn new(workers: Vec<PrewarmedWorker>) -> Self {
+    pub(crate) const fn new(workers: Vec<PrewarmedWorker>) -> Self {
         Self { workers }
     }
 

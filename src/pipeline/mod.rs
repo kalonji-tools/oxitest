@@ -183,7 +183,7 @@ enum PipelineCommand<'a> {
 }
 
 impl<'a> PipelineCommand<'a> {
-    fn from_command(command: &'a config::Command) -> Option<Self> {
+    const fn from_command(command: &'a config::Command) -> Option<Self> {
         match command {
             config::Command::Run(args) => Some(Self::Run(args)),
             config::Command::Debug(args) => Some(Self::Debug(args)),

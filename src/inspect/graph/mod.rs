@@ -26,7 +26,7 @@ pub(crate) enum NodeKind {
 
 impl NodeKind {
     /// Single-character sigil used as a visual prefix in the TUI tree.
-    pub(crate) fn sigil(self) -> char {
+    pub(crate) const fn sigil(self) -> char {
         match self {
             Self::Fixture => 'F',
             Self::Test => 'T',
@@ -37,7 +37,7 @@ impl NodeKind {
     }
 
     /// Lowercase label for this node kind, used in flash messages.
-    pub(crate) fn label(self) -> &'static str {
+    pub(crate) const fn label(self) -> &'static str {
         match self {
             Self::Fixture => "fixture",
             Self::Test => "test",
@@ -58,7 +58,7 @@ pub(crate) struct NodeRef {
 }
 
 impl NodeRef {
-    pub(crate) fn new(kind: NodeKind, index: usize) -> Self {
+    pub(crate) const fn new(kind: NodeKind, index: usize) -> Self {
         Self { kind, index }
     }
 }
@@ -134,7 +134,7 @@ impl InspectGraph {
     }
 
     /// Return the number of nodes of the given kind.
-    pub(crate) fn node_count(&self, kind: NodeKind) -> usize {
+    pub(crate) const fn node_count(&self, kind: NodeKind) -> usize {
         match kind {
             NodeKind::Fixture => self.fixtures.len(),
             NodeKind::Test => self.tests.len(),
@@ -145,7 +145,7 @@ impl InspectGraph {
     }
 
     /// Whether the graph contains zero nodes of all kinds.
-    pub(crate) fn is_empty(&self) -> bool {
+    pub(crate) const fn is_empty(&self) -> bool {
         self.fixtures.is_empty()
             && self.tests.is_empty()
             && self.marks.is_empty()

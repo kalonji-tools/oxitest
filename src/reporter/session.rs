@@ -27,11 +27,11 @@ impl ReporterSession {
         self.stats.record_timing(&item.node_id, duration_ms);
     }
 
-    pub(crate) fn record_strict_suite(&mut self) {
+    pub(crate) const fn record_strict_suite(&mut self) {
         self.stats.record_strict_suite(self.strict_suite_count);
     }
 
-    pub(crate) fn stats(&self) -> &RunStats {
+    pub(crate) const fn stats(&self) -> &RunStats {
         &self.stats
     }
 
