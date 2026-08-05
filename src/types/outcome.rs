@@ -281,7 +281,6 @@ impl From<&TestOutcome> for OutcomeKind {
 use super::test_support::{ErrorOutcomeBuilder, FailedOutcomeBuilder};
 
 #[cfg(test)]
-#[allow(dead_code)]
 impl TestOutcome {
     pub(crate) fn failed(msg: &str) -> FailedOutcomeBuilder {
         FailedOutcomeBuilder {

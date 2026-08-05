@@ -96,9 +96,7 @@ pub(crate) struct DiagnosticEntry {
     pub(crate) severity: DiagnosticSeverity,
     pub(crate) context: Arc<str>,
     pub(crate) message: String,
-    #[allow(dead_code)] // reserved for future location-aware rendering
     pub(crate) file: Option<camino::Utf8PathBuf>,
-    #[allow(dead_code)] // reserved for future location-aware rendering
     pub(crate) lineno: Option<crate::types::LineNo>,
 }
 

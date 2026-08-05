@@ -198,7 +198,7 @@ impl TtyReporter {
         }
     }
 
-    fn flush_param_group(&mut self, group: ParametrizeBuffer) {
+    fn flush_param_group(&self, group: ParametrizeBuffer) {
         let c = self.opts.use_color;
         let total_ms = group.total_ms();
         let total_ms_raw = total_ms.as_f64();
