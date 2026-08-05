@@ -286,8 +286,11 @@ def _activate_plugins(session: Any, plugins: Mapping[str, Any]) -> None:
     settings: dict[str, dict[str, object]] = dict(plugins.get("settings", {}))
 
     try:
+        # The assignment is the whole registration: FixtureSession.__setattr__
+        # re-registers plugin fixtures whenever _plugin_registry is replaced.
+        # Calling _register_plugin_fixtures() as well registers every provider
+        # a second time.
         session._plugin_registry = load_plugins(modules, settings)  # noqa: SLF001
-        session._register_plugin_fixtures()  # noqa: SLF001
     except BaseException as exc:  # noqa: BLE001 — must not kill the worker
         _emit(
             Diagnostic(
@@ -322,6 +325,11 @@ def _activate_plugins(session: Any, plugins: Mapping[str, Any]) -> None:
                 plugin_module=home.plugin_module,
                 namespace=home.namespace,
                 autouse_names=list(home.autouse),
+                # The coordinator already told the user how to enable a
+                # declared-but-disabled autouse fixture, and it runs before any
+                # worker spawns. Repeating it here multiplies the notice by the
+                # worker count, which reads as a property of `-n`.
+                emit_notices=False,
             )
         except BaseException as exc:  # noqa: BLE001 — must not kill the worker
             _emit(

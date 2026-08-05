@@ -153,13 +153,14 @@ def register_module_source_fixtures(
         raise UsageError("\n\n".join(violations))
 
 
-def register_plugin_source_fixtures(
+def register_plugin_source_fixtures(  # noqa: PLR0913 — five are the declaration's identity, the sixth is the caller's role
     registry: FixtureRegistry,
     fixture_module: ModuleType,
     *,
     plugin_module: str,
     namespace: str,
     autouse_names: tuple[str, ...],
+    emit_notices: bool = True,
 ) -> None:
     """Register an activated plugin's ``__fixtures__.py`` declarations (#1717).
 
@@ -175,6 +176,9 @@ def register_plugin_source_fixtures(
         namespace: The plugin's namespace — its module name unless overridden.
         autouse_names: Fixtures the **user** enabled for autouse. A plugin
             declaring ``autouse=True`` fires nothing until named here.
+        emit_notices: Whether to emit user-facing notices. Workers pass
+            ``False`` — the coordinator emits them once, before any worker
+            spawns, and repeating them multiplies each by the worker count.
 
     Raises:
         UsageError: one or more declarations are illegal for a plugin. All of
@@ -205,7 +209,7 @@ def register_plugin_source_fixtures(
         # Autouse is the user's call. The plugin declares the capability; the
         # user's pyproject decides whether it applies to their suite.
         enabled = marker.autouse and attr_name in autouse_names
-        if marker.autouse and not enabled:
+        if marker.autouse and not enabled and emit_notices:
             emit_diagnostic(
                 DiagnosticSeverity.NOTICE,
                 "plugin fixtures",

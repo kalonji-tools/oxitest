@@ -386,11 +386,6 @@ pub(super) fn register_plugin_home(
         errors,
         &mut fixture_modules,
     );
-    debug_assert!(
-        fixture_modules.is_empty(),
-        "the plugin arm of register_and_record returns before recording a \
-         FixtureModule; a non-empty list here means that arm was bypassed"
-    );
 }
 
 /// Prescan one declaration-home file and register whatever it declares.

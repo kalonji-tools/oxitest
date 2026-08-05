@@ -7,9 +7,11 @@ End-to-end behaviour lives in ``tests/integration/test_plugin_fixtures.py``.
 
 from __future__ import annotations
 
+import sys
 from types import ModuleType
+from typing import Any
 
-from oxitest import Fixture, TempDir, raises
+from oxitest import Fixture, TempDir, TestContext, raises
 from oxitest._bridge._errors import UsageError
 from oxitest._bridge._fixture_registry import (
     FixtureDef,
@@ -23,8 +25,11 @@ from oxitest._bridge._module_source_registrar import (
     register_plugin_source_fixtures,
 )
 from oxitest._bridge.fixture_lister import _origin_header, _origin_key
-from oxitest._bridge.plugin_loader import plugin_fixture_homes
+from oxitest._bridge.plugin_loader import PluginRegistry, plugin_fixture_homes
 from oxitest._bridge.result import Diagnostic
+from oxitest._bridge.worker import _activate_plugins
+from oxitest.plugin import Plugin
+from tests import helpers
 
 # ── plugin_fixture_homes: resolution ──────────────────────────────────────────
 
@@ -472,4 +477,125 @@ def test_plugin_fixture_is_attributed_to_its_plugin_in_the_listing() -> None:
         "the sort key groups a plugin's fixtures together and beside the "
         f"FixtureProvider plugins rather than under a path; got "
         f"{_origin_key(defn)!r}"
+    )
+
+
+# ── worker plugin activation ──────────────────────────────────────────────────
+
+
+class _Host:
+    """Binding type for the stand-in provider below."""
+
+
+class _HostProvider:
+    """A minimal FixtureProvider, as a real plugin would ship one."""
+
+    @property
+    def name(self) -> str:
+        return "host"
+
+    @property
+    def fixture_type(self) -> type:
+        return _Host
+
+    def create(self, **_: Any) -> object:
+        return _Host()
+
+    def teardown(self, **_: Any) -> None:
+        """No resources to release."""
+
+    @property
+    def scope(self) -> str:
+        return "each"
+
+    @property
+    def autouse(self) -> bool:
+        return False
+
+
+def test_assigning_the_plugin_registry_registers_providers_exactly_once() -> None:
+    """`_plugin_registry = ...` is the whole registration — do not repeat it.
+
+    ``FixtureSession.__setattr__`` re-registers plugin fixtures whenever
+    ``_plugin_registry`` is replaced, so one assignment must yield one def.
+    This pins the mechanism;
+    :func:`test_worker_activation_registers_each_provider_once` pins the caller
+    that got it wrong.
+    """
+    session = helpers.make_session()
+
+    session._plugin_registry = PluginRegistry(fixture_providers=(_HostProvider(),))  # noqa: SLF001
+
+    defs = session.registry.all_defs("host")
+    assert len(defs) == 1, (
+        "one provider must yield one FixtureDef; a duplicate is invisible to "
+        "resolution because both defs are identical, so it survives every "
+        f"behavioural test and only a count catches it — got {len(defs)}"
+    )
+
+
+def test_worker_activation_registers_each_provider_once(
+    ctx: Fixture[TestContext],
+) -> None:
+    """The worker's activation path itself must not double-register.
+
+    Pinning ``__setattr__`` alone does not cover this: the defect was an
+    *extra* call inside ``_activate_plugins``, and a test that never runs that
+    function cannot see it. Confirmed by mutation — restoring the extra call
+    leaves the ``__setattr__``-only test green and fails this one.
+    """
+    # The entry point is exec'd into the module's namespace rather than set as
+    # an attribute: ModuleType has no declared `oxitest_plugin`, and silencing
+    # that would mean suppressing ty rather than satisfying it.
+    module = ModuleType("_oxitest_fake_plugin")
+    module.__dict__.update({"Plugin": Plugin, "_HostProvider": _HostProvider})
+    exec(  # noqa: S102 - mirrors how the bridge loads a plugin entry point
+        compile(
+            "def oxitest_plugin(config=None):\n"
+            "    return Plugin(fixture_providers=(_HostProvider(),))\n",
+            "<fake_plugin>",
+            "exec",
+        ),
+        module.__dict__,
+    )
+    sys.modules["_oxitest_fake_plugin"] = module
+    ctx.addfinalizer(lambda: sys.modules.pop("_oxitest_fake_plugin", None))
+    session = helpers.make_session()
+
+    _activate_plugins(session, {"modules": ["_oxitest_fake_plugin"], "settings": {}})
+
+    defs = session.registry.all_defs("host")
+    assert len(defs) == 1, (
+        "assigning _plugin_registry already registers via __setattr__, so an "
+        "explicit _register_plugin_fixtures() on top registers every provider "
+        f"twice — invisible to resolution, so only a count catches it; got "
+        f"{len(defs)}"
+    )
+
+
+def test_notices_are_suppressed_for_workers(
+    diag_collector: Fixture[list[Diagnostic]],
+) -> None:
+    """`emit_notices=False` silences the autouse hint the coordinator emits."""
+    module = _plugin_fixture_module(
+        "import oxitest as oxi\n\n"
+        "@oxi.fixture(lifetime='module', autouse=True)\n"
+        "def tx() -> int:\n"
+        "    return 1\n"
+    )
+
+    register_plugin_source_fixtures(
+        FixtureRegistry(),
+        module,
+        plugin_module="my_plugin",
+        namespace="my_plugin",
+        autouse_names=(),
+        emit_notices=False,
+    )
+
+    notices = [d for d in diag_collector if d.context == "plugin fixtures"]
+    assert notices == [], (
+        "the coordinator emits this notice once before any worker spawns; "
+        "repeating it per worker makes its deduped count track -n rather than "
+        f"the number of misconfigurations; got {notices!r}"
     )

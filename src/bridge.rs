@@ -574,7 +574,20 @@ pub(crate) fn plugin_fixture_homes(
         .import("oxitest._bridge.plugin_loader")
         .map_err(py_collect_err)?;
 
-    let settings_json = serde_json::to_string(plugin_settings).unwrap_or_else(|_| "{}".to_owned());
+    // Warn rather than fail, matching `load_plugins`: an unserialisable
+    // settings table costs the plugin its config, and saying so beats a
+    // namespace silently reverting to the module name.
+    let settings_json = match serde_json::to_string(plugin_settings) {
+        Ok(json) => json,
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "failed to serialize plugin settings; plugin fixture homes will \
+                 resolve with default namespace and no autouse"
+            );
+            "{}".to_owned()
+        }
+    };
     let json_mod = py.import("json").map_err(py_collect_err)?;
     let settings = json_mod
         .call_method1("loads", (&settings_json,))
