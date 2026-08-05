@@ -6,7 +6,7 @@ use std::sync::Arc;
 /// The snapshot is taken lazily via [`concurrent_tests()`](Self::concurrent_tests)
 /// — only on the failure-reporting path.
 #[derive(Debug, Clone)]
-pub(crate) struct ParallelContext {
+pub struct ParallelContext {
     /// 1-indexed worker ID.
     pub worker_id: usize,
     /// Shared in-flight set — snapshot is deferred to the failure path.

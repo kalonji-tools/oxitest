@@ -14,7 +14,7 @@ use crate::query::resource::QueryEntry;
 /// Columns are padded to the widest value in each column plus a 2-space gap.
 /// The last column is never padded. An empty result produces `"no results\n"`.
 /// A footer `"\n{count} {result|results}\n"` is appended.
-pub(crate) fn format_columnar(entries: &[QueryEntry], columns: &[&str]) -> String {
+pub fn format_columnar(entries: &[QueryEntry], columns: &[&str]) -> String {
     if entries.is_empty() {
         return "no results\n".to_string();
     }
@@ -60,7 +60,7 @@ pub(crate) fn format_columnar(entries: &[QueryEntry], columns: &[&str]) -> Strin
 ///
 /// Each entry produces one line with column values joined by `\t`. No footer
 /// is appended, making the output suitable for piping into other tools.
-pub(crate) fn format_tab(entries: &[QueryEntry], columns: &[&str]) -> String {
+pub fn format_tab(entries: &[QueryEntry], columns: &[&str]) -> String {
     if entries.is_empty() {
         return "no results\n".to_string();
     }
@@ -82,7 +82,7 @@ pub(crate) fn format_tab(entries: &[QueryEntry], columns: &[&str]) -> String {
 ///
 /// Each entry's full field map is serialized as a JSON object. Callers can
 /// redirect this output to files or pipe it into `jq`.
-pub(crate) fn format_jsonl(entries: &[QueryEntry]) -> String {
+pub fn format_jsonl(entries: &[QueryEntry]) -> String {
     let mut out = String::new();
     for entry in entries {
         // Serialize via serde_json. Use BTreeMap ordering for determinism.

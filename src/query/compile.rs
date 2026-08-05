@@ -20,7 +20,7 @@ fn is_bare_word_char(c: char) -> bool {
 ///
 /// Returns [`DslError::UnterminatedString`] or [`DslError::UnterminatedRegex`]
 /// if a literal is not closed before end-of-input.
-pub(crate) fn lex(input: &str) -> Result<Vec<Token>, DslError> {
+pub fn lex(input: &str) -> Result<Vec<Token>, DslError> {
     let chars: Vec<char> = input.chars().collect();
     let len = chars.len();
     let mut pos = 0;
@@ -379,7 +379,7 @@ impl Parser {
 /// # Errors
 ///
 /// Returns a [`DslError`] if the token stream does not form a valid expression.
-pub(crate) fn parse(tokens: Vec<Token>) -> Result<Expr, DslError> {
+pub fn parse(tokens: Vec<Token>) -> Result<Expr, DslError> {
     if tokens.is_empty() {
         return Err(DslError::EmptyExpression);
     }

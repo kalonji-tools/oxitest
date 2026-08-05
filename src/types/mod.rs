@@ -6,11 +6,11 @@
 
 mod exit;
 mod item;
-pub(crate) mod node_id;
+pub mod node_id;
 mod outcome;
 
 #[cfg(test)]
-pub(crate) mod test_support;
+pub mod test_support;
 
 // Re-export all public types at the `types::` path so no external imports break.
 pub use exit::{ExitCode, TestTiming};
@@ -25,4 +25,4 @@ pub use outcome::{
 };
 
 // pub(crate) re-exports
-pub(crate) use exit::FailureAccumulator;
+pub use exit::FailureAccumulator;

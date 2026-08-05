@@ -35,7 +35,7 @@ const BOX: BoxChars = BoxChars {
 // fires for the test target and not for the lib target, and an `expect` that goes
 // unfulfilled in either configuration is itself a denied warning.
 #[allow(clippy::missing_const_for_fn)]
-pub(crate) fn sep_width() -> usize {
+pub fn sep_width() -> usize {
     #[cfg(test)]
     {
         80
@@ -54,12 +54,12 @@ pub(crate) fn sep_width() -> usize {
 ///
 /// Color mode gets a middle dot (`·`) for visual polish; plain mode gets a hyphen
 /// to stay safe in environments that don't support Unicode.
-pub(crate) const fn case_sep(use_color: bool) -> &'static str {
+pub const fn case_sep(use_color: bool) -> &'static str {
     if use_color { " · " } else { " - " }
 }
 
 /// Pad `s` to `width` visible columns, measuring with ANSI codes stripped.
-pub(crate) fn pad_to(s: &str, width: usize) -> String {
+pub fn pad_to(s: &str, width: usize) -> String {
     let visual = console::measure_text_width(s);
     if visual >= width {
         s.to_string()
@@ -253,7 +253,7 @@ fn render_closing(out: &mut String, message: &str, use_color: bool) {
 /// Narrative order: WHERE → WITH WHAT → WHAT → VALUES → TRACE → HINT → WHY.
 ///
 /// Returns an empty string for `TbStyle::No` and `TbStyle::Line`.
-pub(crate) fn fmt_diagnostic_block(
+pub fn fmt_diagnostic_block(
     item: &TestItem,
     outcome: &TestOutcome,
     tb: &TbStyle,

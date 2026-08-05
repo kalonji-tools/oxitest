@@ -6,40 +6,40 @@
 //! `JsonReporter` (CTRF format), and
 //! `PyPluginReporter` (user-supplied Python plugins).
 
-pub(crate) mod bridge;
+pub mod bridge;
 mod ci;
 mod composite;
 mod exit;
 mod format;
-pub(crate) mod json;
-pub(crate) mod junit;
+pub mod json;
+pub mod junit;
 mod options;
 mod outcome_fmt;
-pub(crate) mod plugin;
+pub mod plugin;
 mod print;
 mod session;
-pub(crate) use session::ReporterSession;
-pub(crate) mod parametrize_buffer;
-pub(crate) mod stats;
-pub(crate) mod tracing_writer;
+pub use session::ReporterSession;
+pub mod parametrize_buffer;
+pub mod stats;
+pub mod tracing_writer;
 mod traits;
 mod tty;
 
-pub(crate) use outcome_fmt::{ColorCategory, JunitCategory};
+pub use outcome_fmt::{ColorCategory, JunitCategory};
 
 #[cfg(test)]
-pub(crate) mod test_helpers;
+pub mod test_helpers;
 
 pub use ci::CiReporter;
-pub(crate) use composite::CompositeReporter;
+pub use composite::CompositeReporter;
 pub use options::{ReporterOpts, ReporterOptsBuilder};
-pub(crate) use print::{print_collected, print_strict_abort, print_strict_suite_section};
+pub use print::{print_collected, print_strict_abort, print_strict_suite_section};
 pub use traits::{ExitVote, Reporter};
-pub(crate) use traits::{StandardReporter, standard_finish};
+pub use traits::{StandardReporter, standard_finish};
 pub use tty::TtyReporter;
 
 // Re-export so ci.rs and tty.rs can reach it via `super::sep_width()`
-pub(crate) use format::sep_width;
+pub use format::sep_width;
 
 // ─── Deferred-failure dedup ──────────────────────────────────────────────────
 
@@ -49,7 +49,7 @@ pub(crate) use format::sep_width;
 /// must be pruned when a retry reveals a test was flaky.  The predicate
 /// `matches_node` lets each caller define how an element matches the node-id
 /// string (e.g. exact field match vs. `contains`).
-pub(crate) fn remove_if_flaky<T>(
+pub fn remove_if_flaky<T>(
     deferred: &mut Vec<T>,
     outcome: &crate::types::TestOutcome,
     item: &crate::types::TestItem,

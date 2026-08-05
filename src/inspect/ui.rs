@@ -98,7 +98,7 @@ pub(super) fn build_test_rows(
 
 /// Set up the terminal for TUI rendering: raw mode, alternate screen, mouse
 /// capture.
-pub(crate) fn setup_terminal()
+pub fn setup_terminal()
 -> Result<Terminal<CrosstermBackend<std::io::Stdout>>, Box<dyn std::error::Error>> {
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
@@ -114,7 +114,7 @@ pub(crate) fn setup_terminal()
 
 /// Restore the terminal to its original state: disable raw mode, leave
 /// alternate screen, disable mouse capture.
-pub(crate) fn restore_terminal(
+pub fn restore_terminal(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     disable_raw_mode()?;
@@ -161,7 +161,7 @@ pub(super) fn adaptive_layout(width: u16, preview_line_count: usize) -> (u16, u1
 
 /// Render the full TUI frame: breadcrumb header, main panes, footer, and any
 /// overlays.
-pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
+pub fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
     let size = frame.area();
 
     // Split into [breadcrumb, main area, footer].
@@ -314,7 +314,7 @@ fn build_left_pane(app: &InspectApp) -> (Vec<Line<'static>>, Option<usize>) {
 ///
 /// Called from the event loop before `draw()`, since `draw()` receives
 /// an immutable reference to `InspectApp`.
-pub(crate) fn update_scroll(app: &mut InspectApp, viewport_height: u16) {
+pub fn update_scroll(app: &mut InspectApp, viewport_height: u16) {
     let (_, cursor_line) = build_left_pane(app);
     let Some(cursor_line) = cursor_line else {
         return;

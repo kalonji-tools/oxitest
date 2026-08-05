@@ -6,7 +6,7 @@ use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef};
 
 use super::styles::{connection_line, field_line, preview_edges, section_header, sigil_style};
 
-pub(crate) fn render_mark<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
+pub fn render_mark<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
     let mark = &graph.marks[node_ref.index];
     let mut lines = vec![
         Line::from(vec![
@@ -29,7 +29,7 @@ pub(crate) fn render_mark<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<L
     lines
 }
 
-pub(crate) fn preview_mark<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
+pub fn preview_mark<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
     let mark = &graph.marks[node_ref.index];
     let mut lines = vec![
         Line::from(vec![
@@ -55,7 +55,7 @@ pub(crate) fn preview_mark<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<
     lines
 }
 
-pub(crate) fn collect_edges(graph: &InspectGraph, node: &NodeRef) -> Vec<NodeRef> {
+pub fn collect_edges(graph: &InspectGraph, node: &NodeRef) -> Vec<NodeRef> {
     graph.marks[node.index]
         .used_by
         .iter()

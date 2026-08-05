@@ -10,10 +10,7 @@ use super::graph::{InspectGraph, NodeKind, NodeRef};
 /// Extract the source file path and starting line for a node.
 ///
 /// Returns `None` for node kinds without source code (Mark, Plugin, Conftest).
-pub(crate) fn node_source_location(
-    graph: &InspectGraph,
-    node: &NodeRef,
-) -> Option<(String, usize)> {
+pub fn node_source_location(graph: &InspectGraph, node: &NodeRef) -> Option<(String, usize)> {
     match node.kind {
         NodeKind::Fixture => {
             let source = &graph.fixtures[node.index].source;
@@ -35,7 +32,7 @@ pub(crate) fn node_source_location(
 /// Read a source file and return it as styled ratatui lines with line numbers.
 ///
 /// On read error, returns a single error line describing the failure.
-pub(crate) fn read_source_lines(path: &str) -> Vec<Line<'static>> {
+pub fn read_source_lines(path: &str) -> Vec<Line<'static>> {
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
         Err(e) => return vec![Line::from(format!("  Error reading {path}: {e}"))],
@@ -62,7 +59,7 @@ pub(crate) fn read_source_lines(path: &str) -> Vec<Line<'static>> {
 ///
 /// Falls back to `vi` if neither environment variable is set.
 /// Returns an error string if the editor cannot be launched or exits non-zero.
-pub(crate) fn open_in_editor(path: &str, line: usize) -> Result<(), String> {
+pub fn open_in_editor(path: &str, line: usize) -> Result<(), String> {
     let editor = std::env::var("VISUAL")
         .or_else(|_| std::env::var("EDITOR"))
         .unwrap_or_else(|_| "vi".to_string());

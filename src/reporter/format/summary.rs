@@ -8,7 +8,7 @@ use crate::colors::{
 
 use super::diagnostic::sep_width;
 
-pub(crate) const fn plural(n: usize) -> &'static str {
+pub const fn plural(n: usize) -> &'static str {
     if n == 1 { "" } else { "s" }
 }
 
@@ -41,7 +41,7 @@ fn push_stat_plural(
     }
 }
 
-pub(crate) fn fmt_summary(stats: &RunStats, collect_err_count: usize, use_color: bool) -> String {
+pub fn fmt_summary(stats: &RunStats, collect_err_count: usize, use_color: bool) -> String {
     let sep = color_dim(&"═".repeat(sep_width()), use_color);
     let mut parts: Vec<String> = Vec::new();
     push_stat(
@@ -123,7 +123,7 @@ pub(crate) fn fmt_summary(stats: &RunStats, collect_err_count: usize, use_color:
     format!("{sep}\n  {middle}\n{sep}")
 }
 
-pub(crate) fn fmt_tip_block(
+pub fn fmt_tip_block(
     tip_lines: &[crate::reporter::stats::TipLine],
     show_tips: bool,
     use_color: bool,
@@ -153,7 +153,7 @@ pub(crate) fn fmt_tip_block(
     }
 }
 
-pub(crate) fn fmt_diagnostics_block(
+pub fn fmt_diagnostics_block(
     entries: &[crate::reporter::stats::DiagnosticEntry],
     show_diagnostics: bool,
     use_color: bool,

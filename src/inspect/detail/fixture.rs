@@ -9,7 +9,7 @@ use super::styles::{
     section_header, sigil_style,
 };
 
-pub(crate) fn render_fixture<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
+pub fn render_fixture<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
     let fixture = &graph.fixtures[node_ref.index];
     let mut lines = vec![
         Line::from(vec![
@@ -63,7 +63,7 @@ pub(crate) fn render_fixture<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Ve
     lines
 }
 
-pub(crate) fn preview_fixture<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
+pub fn preview_fixture<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
     let fixture = &graph.fixtures[node_ref.index];
     let mut lines = vec![
         Line::from(vec![
@@ -87,7 +87,7 @@ pub(crate) fn preview_fixture<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> V
     lines
 }
 
-pub(crate) fn collect_edges(graph: &InspectGraph, node: &NodeRef) -> Vec<NodeRef> {
+pub fn collect_edges(graph: &InspectGraph, node: &NodeRef) -> Vec<NodeRef> {
     use crate::inspect::graph::NodeKind;
 
     let f = &graph.fixtures[node.index];

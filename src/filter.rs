@@ -25,7 +25,7 @@ use crate::types::{CollectError, TestItem};
 ///
 /// Must stay in sync with `_BUILTIN_HANDLER_NAMES` in
 /// `python/oxitest/_bridge/_mark_registry.py`; enforced by `test_int_marker_sync.py`.
-pub(crate) const BUILTIN_MARKERS: &[&str] = &["skip", "xfail", "timeout", "inprocess"];
+pub const BUILTIN_MARKERS: &[&str] = &["skip", "xfail", "timeout", "inprocess"];
 
 /// Check that every marker name on every item is either a built-in or registered.
 ///
@@ -95,7 +95,7 @@ pub fn sort_failed_first(
 }
 
 /// Returns true if the string contains glob metacharacters (`*`, `?`, `[`).
-pub(crate) fn contains_glob_chars(s: &str) -> bool {
+pub fn contains_glob_chars(s: &str) -> bool {
     s.contains('*') || s.contains('?') || s.contains('[')
 }
 
@@ -371,11 +371,7 @@ fn prescan_item_to_query_entry(
 }
 
 /// Returns true if any prescan item in the file matches any of the given node IDs.
-pub(crate) fn file_matches_node_ids(
-    items: &[PrescanItem],
-    file_path: &str,
-    node_ids: &[String],
-) -> bool {
+pub fn file_matches_node_ids(items: &[PrescanItem], file_path: &str, node_ids: &[String]) -> bool {
     if node_ids.is_empty() {
         return true;
     }
@@ -391,7 +387,7 @@ pub(crate) fn file_matches_node_ids(
 ///
 /// When `module_marks` is provided, each item is temporarily augmented with
 /// those marks before evaluation. Treats `None` as an empty mark list.
-pub(crate) fn file_matches_expression(
+pub fn file_matches_expression(
     items: &[PrescanItem],
     file_path: &str,
     expression: &str,
@@ -413,7 +409,7 @@ pub(crate) fn file_matches_expression(
 }
 
 /// Returns true if any prescan item in the file is in the last-failed set.
-pub(crate) fn file_matches_last_failed(
+pub fn file_matches_last_failed(
     items: &[PrescanItem],
     file_path: &str,
     failed_ids: &std::collections::HashSet<String>,

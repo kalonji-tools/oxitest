@@ -16,7 +16,7 @@ use crate::config;
 /// preview and keybindings. Returns `Ok(())` when fzf exits (including
 /// user-cancelled), and `Err(msg)` on configuration or spawn errors.
 #[allow(unused_variables)] // use_color will be used in Task 3 (syntax highlighting)
-pub(crate) fn run_fzf(
+pub fn run_fzf(
     py: pyo3::Python<'_>,
     args: &config::QueryArgs,
     test_files: &[camino::Utf8PathBuf],

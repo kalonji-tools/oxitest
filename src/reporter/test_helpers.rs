@@ -4,7 +4,7 @@
 use crate::types::{DurationMs, NodeId, OutcomeKind, TestTiming};
 
 /// Build a zero-duration [`TestTiming`] for the given `node_id` string and `outcome`.
-pub(crate) fn make_timing(node_id: &str, outcome: OutcomeKind) -> TestTiming {
+pub fn make_timing(node_id: &str, outcome: OutcomeKind) -> TestTiming {
     TestTiming {
         node_id: NodeId::from_raw(node_id),
         duration_ms: DurationMs::ZERO,
@@ -16,7 +16,7 @@ pub(crate) fn make_timing(node_id: &str, outcome: OutcomeKind) -> TestTiming {
 ///
 /// Uses default config, no-op CLI flags, a missing-path cache (loads empty), and
 /// `is_tty = false` / `use_color = false`.
-pub(crate) fn make_pipeline(phase: crate::pipeline::PipelinePhase) -> crate::pipeline::Pipeline {
+pub fn make_pipeline(phase: crate::pipeline::PipelinePhase) -> crate::pipeline::Pipeline {
     let cfg = crate::config::Config::default();
     let command = crate::config::Command::Run(crate::config::RunArgs::default_for_test());
     let cache = crate::cache::TestCache::load(camino::Utf8Path::new("/nonexistent"));

@@ -24,7 +24,7 @@ pub(super) struct ExecutionContext<'a> {
 
 /// Debug and display options passed through the execution pipeline.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct DebugOptions<'a> {
+pub struct DebugOptions<'a> {
     pub debug_mode: Option<&'a str>,
     pub keep_tmp: &'a str,
     pub show_locals: bool,
@@ -76,7 +76,7 @@ fn resolve_timeout(
     }
 }
 
-pub(crate) fn run_timed(
+pub fn run_timed(
     py: Python<'_>,
     item: &types::TestItem,
     session: &bridge::FixtureSession,

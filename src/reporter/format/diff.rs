@@ -183,7 +183,7 @@ fn pretty_print_collection(s: &str) -> String {
 ///
 /// Each entry is `(field_name, left_repr, right_repr)`.
 /// Returns empty string if `field_diffs` is empty.
-pub(crate) fn fmt_field_diffs(
+pub fn fmt_field_diffs(
     field_diffs: &[crate::types::FieldDiff],
     left_repr: &str,
     use_color: bool,
@@ -230,7 +230,7 @@ pub(crate) fn fmt_field_diffs(
 /// - For multi-line values: renders a unified diff using `similar`.
 /// - For `==` comparisons with single-line values: appends a caret marker at the
 ///   first differing character position.
-pub(crate) fn fmt_diff(left: &str, right: &str, op: &str, use_color: bool) -> String {
+pub fn fmt_diff(left: &str, right: &str, op: &str, use_color: bool) -> String {
     if left.is_empty() && right.is_empty() {
         return String::new();
     }

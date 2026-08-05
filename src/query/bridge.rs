@@ -12,7 +12,7 @@ use pyo3::prelude::*;
 use crate::bridge::FixtureSession;
 
 /// Render fixture dependency tree as a formatted string for `--tree`.
-pub(crate) fn tree_fixtures(
+pub fn tree_fixtures(
     session: &FixtureSession,
     py: Python<'_>,
     verbosity: i32,
@@ -31,7 +31,7 @@ pub(crate) fn tree_fixtures(
 }
 
 /// Return fixture definitions as a list of field maps for the query engine.
-pub(crate) fn fixture_entries(
+pub fn fixture_entries(
     session: &FixtureSession,
     py: Python<'_>,
 ) -> PyResult<Vec<HashMap<String, String>>> {
@@ -43,7 +43,7 @@ pub(crate) fn fixture_entries(
 }
 
 /// Return plugin entries as a list of field maps for the query engine.
-pub(crate) fn plugin_entries(
+pub fn plugin_entries(
     session: &FixtureSession,
     py: Python<'_>,
 ) -> PyResult<Vec<HashMap<String, String>>> {
@@ -59,7 +59,7 @@ pub(crate) fn plugin_entries(
 /// Calls into Python's `collect_module` per test file, extracting
 /// `fixture_deps` from each collected item.  Each returned map has
 /// `test_node_id` and `fixture_names` (comma-separated) keys.
-pub(crate) fn test_fixture_deps(
+pub fn test_fixture_deps(
     session: &FixtureSession,
     py: Python<'_>,
     test_files: &[Utf8PathBuf],

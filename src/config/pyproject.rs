@@ -8,7 +8,7 @@ use serde::Deserialize;
 /// carrying oxitest-specific structural rejections — most notably legacy keys
 /// that were removed and now require migration.
 #[derive(Debug)]
-pub(crate) enum ConfigError {
+pub enum ConfigError {
     /// A key was removed and users must migrate to a replacement location.
     LegacyKey {
         key: &'static str,
@@ -49,7 +49,7 @@ impl From<toml::de::Error> for ConfigError {
 /// specific hint rather than the generic `unknown field 'X'` from
 /// `deny_unknown_fields`. Purely removed fields (no migration path) rely on
 /// the generic error. See ADR-0008.
-pub(crate) fn check_no_legacy_keys(raw: &str) -> Result<(), ConfigError> {
+pub fn check_no_legacy_keys(raw: &str) -> Result<(), ConfigError> {
     // Parse to a generic `toml::Value` — cheaper than reflecting on OxitestConfig
     // and independent of the field set we're actively evolving.
     let value: toml::Value = match toml::from_str(raw) {
@@ -79,7 +79,7 @@ pub(crate) fn check_no_legacy_keys(raw: &str) -> Result<(), ConfigError> {
 /// `Config::load` distinguish absent-subtable (silent defaults) from
 /// whole-file syntax error (warn + defaults). See ADR-0008.
 #[derive(Debug)]
-pub(crate) enum ParseOutcome {
+pub enum ParseOutcome {
     /// `[tool.oxitest]` parsed successfully. Boxed to keep enum size flat —
     /// `OxitestConfig` is ~448 bytes, dwarfing the other variants (per
     /// `clippy::large_enum_variant`).
@@ -104,7 +104,7 @@ pub(crate) enum ParseOutcome {
 ///   caller decides whether to warn.
 /// - `Err(ConfigError::Toml(_))` — `[tool.oxitest]` failed to deserialize
 ///   (unknown field via `deny_unknown_fields`, wrong type, malformed value).
-pub(crate) fn parse_oxitest_config(raw: &str) -> Result<ParseOutcome, ConfigError> {
+pub fn parse_oxitest_config(raw: &str) -> Result<ParseOutcome, ConfigError> {
     // Whole-file syntax errors: not our department. Return the error via
     // ParseOutcome so the caller can warn without our forcing an exit.
     let value: toml::Value = match toml::from_str(raw) {
@@ -242,7 +242,7 @@ impl<'de> serde::Deserialize<'de> for ScopeEntry {
 /// The `split_node_id_str` helper is non-validating — this function applies the
 /// strict-mode policy: empty segments rejected, 1-segment chain → Symbol,
 /// 2-segment chain → Member, 3+ segments rejected as too many.
-pub(crate) fn parse_scope_entry_str(raw: &str) -> Result<ScopeEntry, String> {
+pub fn parse_scope_entry_str(raw: &str) -> Result<ScopeEntry, String> {
     // Reject absolute paths and parent components up front — same for all forms.
     // Windows drive-letter form covers both `C:\path` (backslash, native) and
     // `C:/path` (forward slash, which many toolchains normalize into).
@@ -396,7 +396,7 @@ impl<'de> serde::Deserialize<'de> for WorkerCount {
 /// Format a `ScopeEntry` back into its TOML source form for use in diagnostics.
 ///
 /// Round-trips: `render_entry(parse_scope_entry_str(s).unwrap())` == `s`.
-pub(crate) fn render_entry(e: &ScopeEntry) -> String {
+pub fn render_entry(e: &ScopeEntry) -> String {
     match e {
         ScopeEntry::Prefix(p) => p.as_str().to_string(),
         ScopeEntry::File(f) => f.as_str().to_string(),

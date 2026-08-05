@@ -5,7 +5,7 @@ use crate::types::{CollectError, DurationMs, TestItem, TestOutcome};
 
 /// Wraps a Python plugin reporter object and forwards `Reporter` trait calls
 /// through PyO3. Acquires the GIL on each call.
-pub(crate) struct PyPluginReporter {
+pub struct PyPluginReporter {
     obj: Py<PyAny>,
 }
 

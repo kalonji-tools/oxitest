@@ -1,7 +1,7 @@
 /// Compute the Levenshtein edit distance between two strings.
 ///
 /// Uses the standard two-row dynamic programming approach with O(min(m, n)) space.
-pub(crate) fn edit_distance(a: &str, b: &str) -> usize {
+pub fn edit_distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
 
@@ -34,7 +34,7 @@ pub(crate) fn edit_distance(a: &str, b: &str) -> usize {
 ///
 /// Returns `None` if no candidate is within `max_distance` edit operations.
 /// When multiple candidates tie on distance, the first one encountered wins.
-pub(crate) fn closest_match<'a>(
+pub fn closest_match<'a>(
     name: &str,
     candidates: impl IntoIterator<Item = &'a str>,
     max_distance: usize,

@@ -58,7 +58,7 @@ pub enum Command {
 /// paths vector (deduped).
 ///
 /// An arg without `::` is a plain path.
-pub(crate) fn partition_positionals(
+pub fn partition_positionals(
     raw: Vec<Utf8PathBuf>,
 ) -> (Vec<Utf8PathBuf>, Vec<crate::types::NodeId>) {
     let mut paths: Vec<Utf8PathBuf> = Vec::new();

@@ -5,11 +5,11 @@ use crate::query::{ast::Expr, compile, eval};
 use super::graph::InspectGraph;
 
 // Re-export graph types so callers reference one set of types.
-pub(crate) use super::graph::NodeRef;
+pub use super::graph::NodeRef;
 
 /// The scope to search within.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum SearchScope {
+pub enum SearchScope {
     /// Search all nodes in the graph.
     Global,
     /// Search within a specific set of candidate nodes.
@@ -27,7 +27,7 @@ pub(crate) enum SearchScope {
 /// - If DSL parse succeeds, evaluate against nodes using `query::eval`.
 /// - If DSL parse fails or `query` has no `:`, fall back to
 ///   case-insensitive substring match on the node name.
-pub(crate) fn search(graph: &InspectGraph, query: &str, scope: SearchScope) -> Vec<NodeRef> {
+pub fn search(graph: &InspectGraph, query: &str, scope: SearchScope) -> Vec<NodeRef> {
     if query.is_empty() {
         return Vec::new();
     }

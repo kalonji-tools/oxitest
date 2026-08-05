@@ -4,7 +4,7 @@ use crate::types::{DurationMs, TestItem, TestOutcome};
 
 use super::stats::{self, RunStats};
 
-pub(crate) struct ReporterSession {
+pub struct ReporterSession {
     stats: RunStats,
     strict_suite_count: usize,
 }

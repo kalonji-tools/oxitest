@@ -4,7 +4,7 @@ use crate::types::{DurationMs, NodeId, OutcomeKind, TestItem, TestOutcome};
 
 /// Per-fixture cache hit/miss entry.
 #[derive(Clone, Debug)]
-pub(crate) struct FixtureCacheEntry {
+pub struct FixtureCacheEntry {
     pub(crate) name: String,
     pub(crate) hits: usize,
     pub(crate) misses: usize,
@@ -12,7 +12,7 @@ pub(crate) struct FixtureCacheEntry {
 
 /// Aggregate fixture cache statistics returned by the bridge.
 #[derive(Clone, Debug)]
-pub(crate) struct FixtureCacheStats {
+pub struct FixtureCacheStats {
     pub(crate) hits: usize,
     pub(crate) misses: usize,
     pub(crate) breakdown: Vec<FixtureCacheEntry>,
@@ -36,7 +36,7 @@ impl FixtureCacheStats {
 
 /// Per-fixture timing aggregate returned by the Python bridge.
 #[derive(Clone, Debug)]
-pub(crate) struct FixtureTimingEntry {
+pub struct FixtureTimingEntry {
     pub(crate) name: String,
     pub(crate) total_setup: DurationMs,
     pub(crate) setup_count: usize,
@@ -53,21 +53,21 @@ impl FixtureTimingEntry {
 
 /// Timing record for a single test execution.
 #[derive(Clone, Debug)]
-pub(crate) struct TimingEntry {
+pub struct TimingEntry {
     pub(crate) node_id: NodeId,
     pub(crate) duration_ms: DurationMs,
 }
 
 /// A `print()` call inside a passing test (potential debugging leftover).
 #[derive(Clone, Debug)]
-pub(crate) struct TipLine {
+pub struct TipLine {
     pub(crate) file: camino::Utf8PathBuf,
     pub(crate) lineno: crate::types::LineNo,
 }
 
 /// Severity of a diagnostic message from the Python bridge.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) enum DiagnosticSeverity {
+pub enum DiagnosticSeverity {
     Error,
     Warning,
     Notice,
@@ -92,7 +92,7 @@ impl DiagnosticSeverity {
 ///
 /// Replaces `WarningEntry` — carries severity for differentiated rendering.
 #[derive(Clone, Debug)]
-pub(crate) struct DiagnosticEntry {
+pub struct DiagnosticEntry {
     pub(crate) severity: DiagnosticSeverity,
     pub(crate) context: Arc<str>,
     pub(crate) message: String,
@@ -125,7 +125,7 @@ impl DiagnosticEntry {
 
 /// Outcome counters indexed by [`OutcomeKind`].
 #[derive(Clone, Debug)]
-pub(crate) struct OutcomeCounters {
+pub struct OutcomeCounters {
     pub(crate) by_kind: [usize; OutcomeKind::COUNT],
 }
 
@@ -141,7 +141,7 @@ impl Default for OutcomeCounters {
 /// are not test outcomes (`xpassed_strict` is a sub-count, `suite_violations`
 /// are collection-time violations).
 #[derive(Clone, Debug, Default)]
-pub(crate) struct StrictCounts {
+pub struct StrictCounts {
     /// Subset of `XPassed` where the xfail mark was strict.
     pub(crate) xpassed_strict: usize,
     /// Strict-mode suite violations (not test outcomes).
@@ -164,13 +164,13 @@ impl OutcomeCounters {
 
 /// Diagnostic data accumulated during a run.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct DiagnosticBag {
+pub struct DiagnosticBag {
     pub(crate) tip_lines: Vec<TipLine>,
     pub(crate) entries: Vec<DiagnosticEntry>,
 }
 
 #[derive(Clone)]
-pub(crate) struct RunStats {
+pub struct RunStats {
     pub(crate) counts: OutcomeCounters,
     pub(crate) strict: StrictCounts,
     pub(crate) diagnostics: DiagnosticBag,

@@ -16,7 +16,7 @@ use super::graph::{BrokenEdge, InspectGraph, NodeKind, NodeRef};
 /// Categorises a detected graph anomaly or pattern.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(dead_code)] // DeepChains and ScopeMismatches reserved for future passes
-pub(crate) enum SignalKind {
+pub enum SignalKind {
     /// One or more fixtures are defined but never consumed by any test or
     /// other fixture.
     UnusedFixtures,
@@ -43,7 +43,7 @@ pub(crate) enum SignalKind {
 
 /// A single diagnostic hint derived from the inspect graph.
 #[derive(Debug, Clone)]
-pub(crate) struct Signal {
+pub struct Signal {
     /// The category of the anomaly.
     #[allow(dead_code)] // consumed once signal detail view renders kind
     pub kind: SignalKind,
@@ -62,7 +62,7 @@ pub(crate) struct Signal {
 ///
 /// Detectors run in a fixed order so signals appear consistently in the
 /// overview panel regardless of graph construction order.
-pub(crate) fn detect_signals(graph: &InspectGraph) -> Vec<Signal> {
+pub fn detect_signals(graph: &InspectGraph) -> Vec<Signal> {
     if graph.fixtures.is_empty() {
         return Vec::new();
     }

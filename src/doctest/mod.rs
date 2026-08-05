@@ -5,8 +5,8 @@
 
 mod scanner;
 
-pub(crate) use scanner::scan_doctests;
+pub use scanner::scan_doctests;
 
-pub(crate) mod alias;
-pub(crate) mod coverage;
-pub(crate) mod subjects;
+pub mod alias;
+pub mod coverage;
+pub mod subjects;

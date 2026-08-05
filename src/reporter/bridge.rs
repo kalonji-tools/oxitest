@@ -34,10 +34,7 @@ struct BridgeFixtureTiming {
 }
 
 /// Fetch fixture cache hit/miss statistics across every cached tier.
-pub(crate) fn get_cache_stats(
-    session: &FixtureSession,
-    py: Python<'_>,
-) -> PyResult<FixtureCacheStats> {
+pub fn get_cache_stats(session: &FixtureSession, py: Python<'_>) -> PyResult<FixtureCacheStats> {
     let obj = session.as_py_object(py);
     let raw: BridgeCacheStats = obj.call_method0("get_cache_stats")?.extract()?;
     Ok(FixtureCacheStats {
@@ -56,7 +53,7 @@ pub(crate) fn get_cache_stats(
 }
 
 /// Fetch per-fixture setup/teardown timing aggregates.
-pub(crate) fn get_fixture_timings(
+pub fn get_fixture_timings(
     session: &FixtureSession,
     py: Python<'_>,
 ) -> PyResult<Vec<FixtureTimingEntry>> {

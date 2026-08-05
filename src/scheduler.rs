@@ -10,7 +10,7 @@ use crate::types::TestItem;
 ///
 /// Called *before* `Scheduler::new()` — the scheduler itself always
 /// processes groups in insertion order, so the ordering happens here.
-pub(crate) fn apply_schedule_strategy(
+pub fn apply_schedule_strategy(
     groups: &mut Vec<ModuleGroup>,
     strategy: ScheduleStrategy,
     cache: &TestCache,
@@ -38,7 +38,7 @@ pub(crate) fn apply_schedule_strategy(
 
 /// A batch of tests from one source file, dispatched as a unit to one worker.
 #[derive(Debug, Clone)]
-pub(crate) struct ModuleGroup {
+pub struct ModuleGroup {
     pub(crate) module_path: Utf8PathBuf,
     pub(crate) items: Vec<Arc<TestItem>>,
 }
@@ -56,7 +56,7 @@ impl ModuleGroup {
 /// so `build_task` is a 1:1 map. `group_by_package` (#1710) merges a declaring
 /// package's subtree into one of these; every other group stays a singleton.
 #[derive(Debug, Clone)]
-pub(crate) struct TaskGroup {
+pub struct TaskGroup {
     pub(crate) modules: Vec<ModuleGroup>,
     /// The declaring anchor directory whose subtree this group covers.
     ///
@@ -120,7 +120,7 @@ impl TaskGroup {
 /// Groups are dispatched in insertion order. Callers are responsible for
 /// pre-sorting groups (e.g., via `cache.sort_groups()`). Workers call `pop()`
 /// atomically to claim the next group.
-pub(crate) struct Scheduler {
+pub struct Scheduler {
     queue: parking_lot::Mutex<std::collections::VecDeque<TaskGroup>>,
 }
 

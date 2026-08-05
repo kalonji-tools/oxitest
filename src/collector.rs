@@ -22,7 +22,7 @@ fn normalize_path(path: &Utf8Path, _canonical_rootdir: &Utf8Path) -> Utf8PathBuf
     }
 }
 
-pub(crate) fn build_glob_set(patterns: &[String]) -> Result<GlobSet, globset::Error> {
+pub fn build_glob_set(patterns: &[String]) -> Result<GlobSet, globset::Error> {
     let mut builder = GlobSetBuilder::new();
     for pattern in patterns {
         builder.add(GlobBuilder::new(pattern).build()?);
@@ -90,7 +90,7 @@ pub fn collect_doctest_files(config: &Config) -> Result<Vec<Utf8PathBuf>, globse
 ///
 /// A conftest is an ancestor if its directory is a prefix of any matched
 /// module's directory. Results are sorted shallow-first (by component count).
-pub(crate) fn conftests_for_modules(
+pub fn conftests_for_modules(
     all_conftests: &[Utf8PathBuf],
     matched_modules: &[Utf8PathBuf],
 ) -> Vec<Utf8PathBuf> {
