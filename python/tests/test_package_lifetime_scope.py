@@ -196,11 +196,49 @@ def test_end_package_is_inert_for_an_unknown_anchor() -> None:
     # whole subtree, and no test in it need have asked for the fixture. Raising
     # there would abort a clean run.
     #
-    # This does NOT bless a permanent miss. Before #1839 every call landed here,
-    # because end_package was handed a module path against an anchor-keyed dict,
-    # and this test read as if that were the intended shape. What proves the hit
-    # happens is test_1839_package_boundary.py, end to end — a unit test that
-    # hands the anchor over by hand cannot see which value the caller chooses.
+    # A miss is normal here, not everywhere: that the *hit* happens is proved
+    # end to end by test_1839_package_boundary.py, since a unit test handing
+    # the anchor over cannot see which value the caller picks.
     assert session.get_cache_stats() is not None, (
         "end_package on an unused anchor must leave the session usable"
+    )
+
+
+def test_end_package_does_not_dispose_a_shared_name_prefix_sibling() -> None:
+    """``/proj/api`` ending must leave ``/proj/api2`` alone (#1839)."""
+    # Arrange — end_package drains the whole subtree beneath its anchor, so the
+    # containment test decides what "beneath" means. A string-prefix check
+    # would swallow this sibling, disposing a live package mid-run.
+    events: list[str] = []
+
+    def sibling_engine() -> Iterator[str]:
+        yield "sibling"
+        events.append("teardown")
+
+    sibling_anchor = f"{_ANCHOR}2"
+    session = _session_with(
+        _package_defn(
+            "sibling_engine",
+            sibling_engine,
+            anchor=sibling_anchor,
+            namespace="api2",
+        )
+    )
+    teardowns: list[Callable[[], None]] = []
+    session.get_fixture_in_namespace(
+        "sibling_engine",
+        "api2",
+        f"{sibling_anchor}/test_s.py",
+        teardowns,
+        test_is_async=True,
+    )
+
+    # Act
+    session.end_package(_ANCHOR)
+
+    # Assert
+    assert events == [], (
+        f"/proj/api2 is a sibling of /proj/api, not a descendant — disposing it "
+        f"at /proj/api's boundary tears down a package whose tests may not have "
+        f"run yet, events={events}"
     )

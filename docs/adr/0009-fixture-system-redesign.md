@@ -663,7 +663,7 @@ Rule 7's table reads as though each tier fires *at* its boundary. It does not. `
 
 The rate the table promises is correct. What it does not say is where the build happens, and that is user-visible in three ways: a setup failure is attributed to the first test rather than to the boundary, that test's timing carries the setup cost and feeds the scheduler's cache, and a boundary whose tests are all skipped or deselected never fires at all.
 
-The alternative was `begin_module`/`begin_package` firing hooks. Rejected: that seam is what [#1839](https://github.com/kalonji-tools/oxitest/issues/1839) is currently repairing — `end_package` is called with a module path while `_package_scopes` is keyed by an anchor directory, so the boundary drain never matches — and building autouse on a seam known to be broken would have coupled this slice to that fix.
+The alternative was `begin_module`/`begin_package` firing hooks. Rejected: that seam was broken at the time — [#1839](https://github.com/kalonji-tools/oxitest/issues/1839) later found `end_package` was called with a module path while `_package_scopes` is keyed by an anchor directory, so the boundary drain never matched — and building autouse on a seam known to be broken would have coupled this slice to that fix. #1839 has since repaired it: the task group carries its declaring anchor, and the boundary disposes that anchor and every declaring package beneath it, innermost first.
 
 #### 2. Firing order is widest-lifetime-first, and is now promised
 

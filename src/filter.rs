@@ -287,9 +287,8 @@ pub fn group_by_package(
         }
     }
 
-    // into_iter(), not into_values(): the key *is* the package boundary the
-    // group's teardowns are keyed by on the Python side, and dropping it here
-    // is what left `end_package` with nothing but a module path to pass (#1839).
+    // into_iter(), not into_values(): the key is the anchor `end_package`
+    // needs — see `TaskGroup::anchor` (#1839).
     out.extend(
         merged
             .into_iter()
@@ -577,19 +576,24 @@ mod tests {
         // Act
         let out = group_by_package(groups, &declaring);
 
-        // Assert — the anchor is the only value `end_package` may be called
-        // with: the Python side keys `_package_scopes` by it. Discarding it
-        // here left the caller with nothing but a module path, so the boundary
-        // drain never matched and teardown slid to the end of the run (#1839).
-        let anchors: Vec<Option<String>> = out
-            .iter()
-            .map(|group| group.anchor.as_ref().map(ToString::to_string))
-            .collect();
+        // Assert — located by content, not by position: which end of `out` a
+        // group lands on is an ordering detail this test does not speak for.
+        let anchor_of = |paths: Vec<&str>| -> Option<String> {
+            out.iter()
+                .find(|group| paths_of(group) == paths)
+                .and_then(|group| group.anchor.as_ref().map(ToString::to_string))
+        };
         assert_eq!(
-            anchors,
-            vec![None, Some("tests/api".to_string())],
-            "the merged group must carry its declaring anchor, and the \
-             undeclared sibling must carry none — it has no package boundary"
+            anchor_of(vec!["tests/api/a.py", "tests/api/v1/b.py"]),
+            Some("tests/api".to_string()),
+            "the merged group must carry its declaring anchor — it is the only \
+             value end_package can be called with"
+        );
+        assert_eq!(
+            anchor_of(vec!["tests/core/c.py"]),
+            None,
+            "a module no declaration covers must carry no anchor — it has no \
+             package boundary to fire"
         );
     }
 

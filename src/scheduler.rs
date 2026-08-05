@@ -102,9 +102,8 @@ impl TaskGroup {
 
     /// Label for diagnostics — the group's first module.
     ///
-    /// Diagnostics only. It is a *file* path, never a package boundary key —
-    /// passing it to `end_package` is #1839, and [`Self::anchor`] is the field
-    /// that answers that question.
+    /// Diagnostics only — a *file* path, never a boundary key. For that, see
+    /// [`Self::anchor`].
     ///
     /// Every constructor guarantees at least one module: [`Self::single`] takes
     /// one, and `group_by_package` only ever builds a group from a non-empty
@@ -172,10 +171,10 @@ mod tests {
     #[test]
     fn task_group_item_count_sums_every_module() {
         // Arrange
-        let group = TaskGroup::package(
-            Utf8PathBuf::from("pkg"),
-            vec![make_group("a.py", 3), make_group("b.py", 2)],
-        );
+        let group = TaskGroup {
+            modules: vec![make_group("a.py", 3), make_group("b.py", 2)],
+            anchor: None,
+        };
 
         // Act / Assert — the coordinator drains exactly this many result lines,
         // so a short count returns early and hangs the run on a watchdog that
@@ -190,10 +189,10 @@ mod tests {
     #[test]
     fn task_group_items_yields_every_module_in_order() {
         // Arrange
-        let group = TaskGroup::package(
-            Utf8PathBuf::from("pkg"),
-            vec![make_group("a.py", 2), make_group("b.py", 1)],
-        );
+        let group = TaskGroup {
+            modules: vec![make_group("a.py", 2), make_group("b.py", 1)],
+            anchor: None,
+        };
 
         // Act
         let paths: Vec<&str> = group.items().map(|i| i.module_path()).collect();

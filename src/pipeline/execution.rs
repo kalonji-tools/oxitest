@@ -301,10 +301,13 @@ impl<'a> ExecutionDispatch<'a> {
                             session.end_module(*py, module_path),
                         );
                     }
-                    // The anchor directory, not `label()`: `_package_scopes` is
-                    // keyed by the declaring anchor, so a module path can only
-                    // ever miss (#1839). A group with no anchor is covered by
-                    // no package declaration and has no boundary to fire.
+                    // The anchor, not `label()` — see `TaskGroup::anchor`
+                    // (#1839). No anchor means no package boundary to fire.
+                    //
+                    // `break 'run` above jumps past this, so a maxfail trip
+                    // leaves the current group's package scope to the
+                    // `end_task` backstop two statements down. Deliberate: the
+                    // run is being abandoned, and the backstop is immediate.
                     if let Some(anchor) = &group.anchor {
                         end_scope(
                             rep,
