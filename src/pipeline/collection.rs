@@ -187,9 +187,7 @@ fn rootdir_package(declared_dirs: &[camino::Utf8PathBuf]) -> Option<camino::Utf8
 /// A walk that finds nothing yields no directories, which folds to `None` — the
 /// same answer as an empty declared list, and the honest one.
 fn implied_declared_dirs(cfg: &config::Config) -> Vec<camino::Utf8PathBuf> {
-    let mut unnarrowed = cfg.clone();
-    unnarrowed.paths.testpaths = vec![cfg.rootdir.clone()];
-    match crate::collector::collect_files(&unnarrowed) {
+    match crate::collector::collect_files_in(std::slice::from_ref(&cfg.rootdir), cfg) {
         Ok((files, _)) => files
             .iter()
             .filter_map(|file| file.parent())
@@ -199,6 +197,53 @@ fn implied_declared_dirs(cfg: &config::Config) -> Vec<camino::Utf8PathBuf> {
         // report for real; falling back to the rootdir keeps Rule 4 answering
         // rather than adding a second diagnostic for one cause.
         Err(_) => vec![cfg.rootdir.clone()],
+    }
+}
+
+/// The declared test paths that actually hold test files, as directories.
+///
+/// A declared entry reaches [`rootdir_package`] only if the walk finds a test
+/// file under it. Without the filter a declared directory holding no tests —
+/// this project's own `python/oxitest`, declared so that doctest coverage
+/// audits it — drags the fold above the directory the tests live in, and Rule 4
+/// then rejects a `process` declaration sitting beside them (#1798).
+///
+/// **The filter refines between declared entries; it never demotes the
+/// declaration.** When no entry holds tests the unfiltered list is returned, so
+/// a project whose tests were all deleted keeps the rootdir package its config
+/// describes rather than losing it to `None` — which would make every `process`
+/// declaration illegal and leave the hint with no directory to name.
+///
+/// Membership is decided by `collect_files` itself rather than by a bespoke
+/// probe. `python_files`, `norecursedirs` and `use_gitignore` all bear on what
+/// counts as a test file, and a second mechanism obliged to re-honour them
+/// would be this issue's own defect one layer down.
+fn declared_dirs_holding_tests(cfg: &config::Config) -> Vec<camino::Utf8PathBuf> {
+    let declared: Vec<camino::Utf8PathBuf> = cfg
+        .paths
+        .declared_testpaths
+        .iter()
+        .map(|path| declared_dir(path))
+        .collect();
+
+    let holding: Vec<camino::Utf8PathBuf> = declared
+        .iter()
+        .filter(|dir| {
+            match crate::collector::collect_files_in(std::slice::from_ref(*dir), cfg) {
+                Ok((files, _)) => !files.is_empty(),
+                // A glob-set failure keeps the entry. Collection is about to
+                // report that same failure for real, and dropping a declaration
+                // on it would answer Rule 4 from a set the user never wrote.
+                Err(_) => true,
+            }
+        })
+        .cloned()
+        .collect();
+
+    if holding.is_empty() {
+        declared
+    } else {
+        holding
     }
 }
 
@@ -230,6 +275,32 @@ struct DeclarationHome<'a> {
     kind: HomeKind<'a>,
 }
 
+/// Where the rootdir package came from.
+///
+/// Carried into the Rule 4 diagnostic because the two derivations disagree by
+/// design: the declared fold is always an ancestor-or-equal of the layout one,
+/// so *adding* `testpaths` to a project can move the rootdir package up and
+/// reject a `process` declaration that was legal the day before, without
+/// changing which tests run. A derived value that flips a verdict names its
+/// source (#1798).
+#[derive(Clone, Copy)]
+enum RootProvenance {
+    /// Folded from `declared_testpaths`, filtered to the entries holding tests.
+    Declared,
+    /// Folded from the project's layout, because it declared no `testpaths`.
+    Layout,
+}
+
+impl RootProvenance {
+    /// The parenthetical that follows the directory named in the Rule 4 hint.
+    const fn hint_clause(self) -> &'static str {
+        match self {
+            Self::Declared => "the deepest directory covering your declared testpaths",
+            Self::Layout => "derived from your test layout — no testpaths declared",
+        }
+    }
+}
+
 /// Whether a declaration home sits in the user's test tree or in a plugin.
 ///
 /// A plugin home is *not* a user home with a synthesised tree root. Rule 4
@@ -247,6 +318,9 @@ enum HomeKind<'a> {
         /// home is a *rootdir package*, the only place `lifetime="process"`
         /// may be declared (ADR-0009 Rule 4).
         tree_root: Option<&'a camino::Utf8Path>,
+        /// Where `tree_root` came from, carried so the Rule 4 diagnostic can
+        /// say rather than re-derive it.
+        root_provenance: RootProvenance,
     },
     /// An activated plugin package. Ambient, B1-exempt, and outside every
     /// `testpath`, so Rule 4 does not apply and there is no subtree for the
@@ -298,7 +372,7 @@ fn register_and_record(
     // One `match` rather than an early-returning `if let` plus a second
     // destructure of the same value, which could only restate "the plugin arm
     // returned" as an `unreachable!()`.
-    let tree_root = match kind {
+    let (tree_root, root_provenance) = match kind {
         HomeKind::Plugin {
             plugin_module,
             namespace,
@@ -320,7 +394,10 @@ fn register_and_record(
             // scheduler has no subtree to co-locate.
             return;
         }
-        HomeKind::User { tree_root } => tree_root,
+        HomeKind::User {
+            tree_root,
+            root_provenance,
+        } => (tree_root, root_provenance),
     };
 
     // Keyed on `path`, not `anchor`: a directory may hold both a
@@ -358,14 +435,15 @@ fn register_and_record(
     // so two offending declarations produce two diagnostics.
     let is_rootdir_package = tree_root == Some(anchor);
     if !is_rootdir_package {
-        // Name the directory that *is* the root. "Move it to a rootdir package"
-        // is unactionable on its own: the root is derived from the collected
-        // tree, so the user cannot read it off their config. Absent only when
-        // nothing was collected, in which case this loop cannot produce a
-        // diagnostic anyway.
+        // Name the directory that *is* the root, and where it came from. "Move
+        // it to a rootdir package" is unactionable on its own, and the root is
+        // derived — from `testpaths` or from layout — so naming the directory
+        // alone still leaves the user unable to tell which edit would move it.
+        // Absent only when nothing is declared and the layout walk found
+        // nothing, in which case this loop cannot produce a diagnostic anyway.
         let root_hint = tree_root.map_or_else(
             || "the root of your test tree".to_owned(),
-            |root| root.to_string(),
+            |root| format!("{root} ({})", root_provenance.hint_clause()),
         );
         errors.extend(
             declarations
@@ -506,14 +584,10 @@ pub(super) fn collect_items(
     // Computed once rather than per directory: the rootdir package is a
     // property of the *project*, not of the run, and the per-file loop below
     // visits directories in collection order, not depth order.
-    let declared_dirs: Vec<camino::Utf8PathBuf> = if cfg.paths.declared_testpaths.is_empty() {
-        implied_declared_dirs(cfg)
+    let (declared_dirs, root_provenance) = if cfg.paths.declared_testpaths.is_empty() {
+        (implied_declared_dirs(cfg), RootProvenance::Layout)
     } else {
-        cfg.paths
-            .declared_testpaths
-            .iter()
-            .map(|p| declared_dir(p))
-            .collect()
+        (declared_dirs_holding_tests(cfg), RootProvenance::Declared)
     };
     let tree_root = rootdir_package(&declared_dirs);
 
@@ -605,6 +679,7 @@ pub(super) fn collect_items(
                             anchor: parent_dir,
                             kind: HomeKind::User {
                                 tree_root: tree_root.as_deref(),
+                                root_provenance,
                             },
                         },
                         &mut errors,
@@ -1225,6 +1300,75 @@ mod tests {
             root.is_none(),
             "with nothing declared there is no tree, so no directory can be the \
              rootdir package and no process declaration can sit inside one"
+        );
+    }
+
+    /// A project declaring both a test tree and a test-less directory, which is
+    /// this repository's own shape: `testpaths = ["python/tests",
+    /// "python/oxitest"]`, where the second holds the doctest-audit subject and
+    /// no test files.
+    fn declared_project(entries: &[(&str, &str)]) -> (assert_fs::TempDir, crate::config::Config) {
+        let dir = assert_fs::TempDir::new().unwrap();
+        for (path, _) in entries {
+            dir.child(path).touch().unwrap();
+        }
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_owned()).unwrap();
+        let declared_testpaths = entries
+            .iter()
+            .map(|(_, declared)| root.join(declared))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let cfg = crate::config::Config {
+            rootdir: root,
+            paths: crate::config::PathConfig {
+                declared_testpaths,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        (dir, cfg)
+    }
+
+    #[test]
+    fn a_declared_directory_holding_no_tests_does_not_move_the_root() {
+        // `srconly` is declared — a doctest-coverage subject — but holds no test
+        // file. Folding it in drags the root to the project root, above the
+        // directory the tests and their __fixtures__.py actually live in.
+        let (dir, cfg) = declared_project(&[
+            ("suite/test_a.py", "suite"),
+            ("srconly/module.py", "srconly"),
+        ]);
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_owned()).unwrap();
+
+        let held = declared_dirs_holding_tests(&cfg);
+
+        assert_eq!(
+            rootdir_package(&held),
+            Some(root.join("suite")),
+            "a declared directory with no test files must not move the rootdir \
+             package: declaring a source tree so doctest coverage audits it \
+             would otherwise outlaw every process fixture beside the tests"
+        );
+    }
+
+    #[test]
+    fn declared_directories_that_all_lack_tests_keep_the_unfiltered_fold() {
+        // The filter refines between declared entries. With no entry to prefer
+        // there is nothing to refine, and demoting the declaration to `None`
+        // would reject every process declaration with a hint naming no
+        // directory.
+        let (dir, cfg) = declared_project(&[("a/module.py", "a"), ("b/module.py", "b")]);
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_owned()).unwrap();
+
+        let held = declared_dirs_holding_tests(&cfg);
+
+        assert_eq!(
+            rootdir_package(&held),
+            Some(root),
+            "when no declared entry holds tests the unfiltered declaration is \
+             still the project's own statement of its test surface, and folding \
+             it keeps a directory to name in the Rule 4 hint"
         );
     }
 
@@ -2638,10 +2782,11 @@ mod tests {
             anchor: &anchor,
             kind: HomeKind::User {
                 tree_root: Some(&root),
+                root_provenance: RootProvenance::Declared,
             },
         };
 
-        let HomeKind::User { tree_root } = home.kind else {
+        let HomeKind::User { tree_root, .. } = home.kind else {
             panic!("a user home must stay a User home")
         };
         assert_eq!(
