@@ -71,9 +71,8 @@ pub(crate) struct SessionInputs<'a> {
 /// `cargo test` can enter it, so anything inlined there is untestable.
 fn serialize_fixture_modules(
     fixture_modules: &[types::FixtureModule],
-) -> std::sync::Arc<serde_json::value::RawValue> {
-    let json_str = serde_json::to_string(fixture_modules).expect("fixture modules serialize");
-    std::sync::Arc::from(serde_json::value::RawValue::from_string(json_str).expect("valid JSON"))
+) -> Result<std::sync::Arc<serde_json::value::RawValue>, serde_json::Error> {
+    to_shared_raw(fixture_modules)
 }
 
 /// Pre-serialize the plugin activation inputs, once for the whole run.
@@ -90,13 +89,26 @@ fn serialize_fixture_modules(
 fn serialize_plugin_inputs(
     plugins: &[String],
     plugin_settings: &std::collections::HashMap<String, toml::Value>,
-) -> std::sync::Arc<serde_json::value::RawValue> {
-    let payload = serde_json::json!({
+) -> Result<std::sync::Arc<serde_json::value::RawValue>, serde_json::Error> {
+    to_shared_raw(&serde_json::json!({
         "modules": plugins,
         "settings": plugin_settings,
-    });
-    let json_str = serde_json::to_string(&payload).expect("plugin inputs serialize");
-    std::sync::Arc::from(serde_json::value::RawValue::from_string(json_str).expect("valid JSON"))
+    }))
+}
+
+/// Serialize `value` into a raw JSON blob shared by reference across tasks.
+///
+/// One step where the three call sites each used two (`to_string` then
+/// `RawValue::from_string`), which also drops the intermediate `String`.
+///
+/// The `Result` is not decorative even though every current input is a
+/// `derive(Serialize)` struct with string-keyed maps: ADR-0011 bans stating
+/// that in an `expect()` message, because the message is not checked when a
+/// future field changes it.
+fn to_shared_raw<T: serde::Serialize + ?Sized>(
+    value: &T,
+) -> Result<std::sync::Arc<serde_json::value::RawValue>, serde_json::Error> {
+    serde_json::value::to_raw_value(value).map(std::sync::Arc::from)
 }
 
 pub(crate) fn run_phase_parallel(
@@ -129,15 +141,32 @@ pub(crate) fn run_phase_parallel(
         std::sync::Arc::new(parking_lot::Mutex::new(ahash::AHashSet::new()));
     let sched = Arc::new(scheduler::Scheduler::new(groups));
     let cancelled = Arc::new(AtomicBool::new(false));
-    let conftest_raw: std::sync::Arc<serde_json::value::RawValue> = {
-        let paths: Vec<&str> = conftest_paths.iter().map(|p| p.as_str()).collect();
-        let json_str = serde_json::to_string(&paths).expect("conftest paths serialize");
-        std::sync::Arc::from(
-            serde_json::value::RawValue::from_string(json_str).expect("valid JSON"),
-        )
+    // All three payloads or none: a worker missing any of them runs a session
+    // that silently differs from the coordinator's. Serialization has never
+    // failed here, but ADR-0011 forbids saying so in an `expect()` message —
+    // so the failure route reports and interrupts instead of aborting the
+    // user's run with a backtrace.
+    let shared_payloads = (|| {
+        let conftest_strs: Vec<&str> = conftest_paths.iter().map(|p| p.as_str()).collect();
+        Ok::<_, serde_json::Error>((
+            to_shared_raw(&conftest_strs)?,
+            serialize_fixture_modules(fixture_modules)?,
+            serialize_plugin_inputs(&cfg.features.plugins, &cfg.features.plugin_settings)?,
+        ))
+    })();
+    let (conftest_raw, fixture_modules_raw, plugins_raw) = match shared_payloads {
+        Ok(payloads) => payloads,
+        Err(err) => {
+            eprintln!(
+                "error: the shared worker payload could not be serialized ({err}) — \
+                 parallel execution cannot start"
+            );
+            return PhaseResult {
+                interrupted: true,
+                timings: Vec::new(),
+            };
+        }
     };
-    let fixture_modules_raw = serialize_fixture_modules(fixture_modules);
-    let plugins_raw = serialize_plugin_inputs(&cfg.features.plugins, &cfg.features.plugin_settings);
     let timeout_secs = cfg.exec.timeout_secs;
     let keep_tmp: Arc<str> = Arc::from(cfg.output.keep_tmp.as_str());
     let rootdir: Arc<str> = Arc::from(cfg.rootdir.as_str());
@@ -261,7 +290,7 @@ mod fixture_module_payload_tests {
             package_declarations: vec![],
         }];
 
-        let raw = serialize_fixture_modules(&modules);
+        let raw = serialize_fixture_modules(&modules).expect("FixtureModule serializes");
 
         assert_eq!(
             raw.get(),
@@ -275,7 +304,7 @@ mod fixture_module_payload_tests {
     /// empty array it can iterate, not `null`.
     #[test]
     fn empty_input_serializes_to_an_empty_array() {
-        let raw = serialize_fixture_modules(&[]);
+        let raw = serialize_fixture_modules(&[]).expect("an empty slice serializes");
 
         assert_eq!(
             raw.get(),
@@ -302,7 +331,7 @@ mod fixture_module_payload_tests {
             .expect("settings table builds"),
         );
 
-        let raw = serialize_plugin_inputs(&plugins, &settings);
+        let raw = serialize_plugin_inputs(&plugins, &settings).expect("plugin inputs serialize");
 
         assert_eq!(
             raw.get(),
@@ -316,7 +345,8 @@ mod fixture_module_payload_tests {
     /// emptiness, not `null`.
     #[test]
     fn no_plugins_serializes_to_empty_collections() {
-        let raw = serialize_plugin_inputs(&[], &std::collections::HashMap::new());
+        let raw = serialize_plugin_inputs(&[], &std::collections::HashMap::new())
+            .expect("empty plugin inputs serialize");
 
         assert_eq!(
             raw.get(),

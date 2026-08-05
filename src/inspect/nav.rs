@@ -40,59 +40,56 @@ pub(crate) enum Screen {
 
 /// A navigation trail for `oxitest inspect` (ADR-0003).
 ///
-/// Invariant: `screens[0]` is always `Screen::Overview { selected: 0 }`.
-/// This invariant is structural — `pop()` refuses to remove the root, so
-/// callers never need to handle an empty trail.
+/// The root screen is a field, not `screens[0]`. Splitting the root out of the
+/// vector is what makes [`current`](Self::current) and
+/// [`current_mut`](Self::current_mut) total — the trail cannot be empty because
+/// there is no representation of an empty trail. Both accessors previously read
+/// `self.screens.last().expect("Trail screens must be non-empty")`, which was a
+/// true claim that nothing checked; ADR-0011 is the rule that replaced it with
+/// this shape.
 #[derive(Debug)]
 pub(crate) struct Trail {
-    screens: Vec<Screen>,
+    /// Always the Overview screen. `pop()` cannot remove it.
+    root: Screen,
+    /// Screens pushed on top of the root, oldest first.
+    rest: Vec<Screen>,
 }
 
 impl Trail {
     /// Create a new trail starting at the Overview screen.
     pub(crate) fn new() -> Self {
         Self {
-            screens: vec![Screen::Overview { selected: 0 }],
+            root: Screen::Overview { selected: 0 },
+            rest: Vec::new(),
         }
     }
 
     /// Return the current (top-of-trail) screen.
     pub(crate) fn current(&self) -> &Screen {
-        // SAFETY: invariant guarantees screens is non-empty.
-        self.screens
-            .last()
-            .expect("Trail screens must be non-empty")
+        self.rest.last().unwrap_or(&self.root)
     }
 
     /// Return a mutable reference to the current screen.
     pub(crate) fn current_mut(&mut self) -> &mut Screen {
-        // SAFETY: invariant guarantees screens is non-empty.
-        self.screens
-            .last_mut()
-            .expect("Trail screens must be non-empty")
+        self.rest.last_mut().unwrap_or(&mut self.root)
     }
 
     /// Push a new screen onto the trail.
     pub(crate) fn push(&mut self, screen: Screen) {
-        self.screens.push(screen);
+        self.rest.push(screen);
     }
 
     /// Pop the top screen, unless it is the root Overview screen.
     ///
     /// Returns `true` if a screen was popped, `false` if already at root.
     pub(crate) fn pop(&mut self) -> bool {
-        if self.screens.len() <= 1 {
-            false
-        } else {
-            self.screens.pop();
-            true
-        }
+        self.rest.pop().is_some()
     }
 
     /// Return the depth of the trail (1 = Overview only).
     #[allow(dead_code)] // used in nav tests
     pub(crate) fn depth(&self) -> usize {
-        self.screens.len()
+        self.rest.len() + 1
     }
 
     /// Return a breadcrumb path as `(sigil, label)` pairs.
@@ -102,8 +99,8 @@ impl Trail {
     /// `Disambiguation` and `History` are skipped (no meaningful breadcrumb
     /// entry — they are transient overlay screens).
     pub(crate) fn breadcrumb<'a>(&'a self, graph: &'a InspectGraph) -> Vec<(char, &'a str)> {
-        self.screens
-            .iter()
+        std::iter::once(&self.root)
+            .chain(self.rest.iter())
             .filter_map(|screen| match screen {
                 Screen::Overview { .. } => Some(('○', "overview")),
                 Screen::NodeFocus { node, .. } => Some((node.kind.sigil(), graph.node_name(node))),
@@ -122,7 +119,7 @@ impl Trail {
 /// - N matches → Overview + Disambiguation screen (depth 2).
 pub(crate) fn resolve_direct_jump(graph: &InspectGraph, name: &str) -> Trail {
     let name_lower = name.to_lowercase();
-    let matches: Vec<NodeRef> = graph
+    let mut matches: Vec<NodeRef> = graph
         .all_node_refs()
         .into_iter()
         .filter(|r| graph.node_name(r).to_lowercase().contains(&name_lower))
@@ -130,23 +127,17 @@ pub(crate) fn resolve_direct_jump(graph: &InspectGraph, name: &str) -> Trail {
 
     let mut trail = Trail::new();
 
-    match matches.len() {
-        0 => {
-            // No matches — stay on Overview.
-        }
-        1 => {
-            trail.push(Screen::NodeFocus {
-                node: matches.into_iter().next().expect("len == 1"),
-                selected: 0,
-            });
-        }
-        _ => {
-            trail.push(Screen::Disambiguation {
-                query: name.to_string(),
-                matches,
-                selected: 0,
-            });
-        }
+    // Ordered so the single-match arm can *take* its node instead of asserting
+    // `len == 1` and unwrapping the iterator (ADR-0011). Zero matches falls out
+    // of `pop()` returning `None` and leaves the trail on Overview.
+    if matches.len() > 1 {
+        trail.push(Screen::Disambiguation {
+            query: name.to_string(),
+            matches,
+            selected: 0,
+        });
+    } else if let Some(node) = matches.pop() {
+        trail.push(Screen::NodeFocus { node, selected: 0 });
     }
 
     trail

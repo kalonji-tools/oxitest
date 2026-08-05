@@ -183,7 +183,13 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
     frame.render_widget(breadcrumb, breadcrumb_area);
 
     // ── Source view — full-screen, replaces the two-pane layout ─────────
-    if let Some(ref sv) = app.source_view {
+    // Both options are matched at once rather than the source view alone
+    // followed by `app.graph.as_ref().expect("source_view implies graph")`.
+    // `enter_source_view` returns early when `graph` is `None`, so the pair is
+    // always set together — and ADR-0011 wants that read off the match rather
+    // than restated in a message. If the pair ever came apart, the run falls
+    // through to the two-pane layout instead of aborting the TUI.
+    if let (Some(sv), Some(graph)) = (app.source_view.as_ref(), app.graph.as_ref()) {
         let title = format!(" {} ", sv.path);
         let source_block = Block::default().borders(Borders::ALL).title(title);
         let content = Paragraph::new(sv.lines.clone())
@@ -192,9 +198,6 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &InspectApp) {
         frame.render_widget(content, main_area);
 
         // Source footer
-        let graph = app.graph.as_ref().expect(
-            "source_view can only be Some when graph is Some — enter_source_view guards this",
-        );
         let node_label = format!(
             "{} {}",
             sv.node_ref.kind.sigil(),

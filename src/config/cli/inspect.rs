@@ -18,13 +18,11 @@ impl InspectArgs {
     #[expect(dead_code, reason = "test helper not yet exercised by any test")]
     pub fn default_for_test() -> Self {
         use clap::Parser;
-        super::OxitestCli::try_parse_from(["oxitest", "inspect"])
-            .expect("default InspectArgs must parse")
-            .command
-            .map(|cmd| match cmd {
-                super::Command::Inspect(args) => args,
-                _ => unreachable!(),
-            })
-            .unwrap()
+        let parsed = super::OxitestCli::try_parse_from(["oxitest", "inspect"])
+            .expect("default InspectArgs must parse");
+        match parsed.command {
+            Some(super::Command::Inspect(args)) => args,
+            other => panic!("`oxitest inspect` must parse as Command::Inspect, got {other:?}"),
+        }
     }
 }

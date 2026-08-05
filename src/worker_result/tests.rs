@@ -429,13 +429,17 @@ mod compact_and_error_tests {
             "another_extra": 42
         }"#;
         let r: WireResult = serde_json::from_str(json).expect("extra fields should be ignored");
-        assert!(matches!(r, WireResult::Passed { .. }));
-        match &r {
-            WireResult::Passed { duration_ms, .. } => {
-                assert!((*duration_ms - 0.5).abs() < 1e-9);
-            }
-            _ => unreachable!(),
-        }
+        let WireResult::Passed { duration_ms, .. } = &r else {
+            panic!(
+                "unknown wire fields must be dropped, not steer the parse to another variant; \
+                 got {r:?}"
+            )
+        };
+        assert!(
+            (*duration_ms - 0.5).abs() < 1e-9,
+            "the known fields must survive alongside the unknown ones — a worker on a newer \
+             protocol would otherwise report every duration as 0"
+        );
     }
 
     #[test]

@@ -144,7 +144,16 @@ impl OxitestCli {
                 let run_args: Vec<&str> = vec![&args[0], "run"];
                 // (no extra args to forward)
                 let cli = Self::try_parse_from(&run_args)?;
-                let mut cmd = cli.command.unwrap();
+                // `run` is in `run_args`, so clap yields `Some` — but ADR-0011
+                // bans unwrapping on that claim. A `None` is a usage error like
+                // any other, not a reason to abort the process.
+                let Some(mut cmd) = cli.command else {
+                    use clap::CommandFactory;
+                    return Err(Self::command().error(
+                        clap::error::ErrorKind::MissingSubcommand,
+                        "bare `oxitest` could not be resolved to `oxitest run`",
+                    ));
+                };
                 partition_command(&mut cmd);
                 Ok((cmd, use_gitignore))
             }
@@ -183,11 +192,16 @@ impl OxitestCli {
                         }
                     }
                     match Self::try_parse_from(&run_args) {
-                        Ok(cli) => {
-                            let mut cmd = cli.command.unwrap();
-                            partition_command(&mut cmd);
-                            Ok((cmd, !cli.no_use_gitignore))
-                        }
+                        // `None` cannot happen — `run_args` contains "run" —
+                        // but per ADR-0011 the claim is not worth an abort:
+                        // the original error is the better message anyway.
+                        Ok(cli) => match cli.command {
+                            Some(mut cmd) => {
+                                partition_command(&mut cmd);
+                                Ok((cmd, !cli.no_use_gitignore))
+                            }
+                            None => Err(e),
+                        },
                         Err(_) => Err(e), // Return the original error for better UX
                     }
                 } else {

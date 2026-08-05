@@ -606,8 +606,9 @@ impl Config {
             }
         };
 
-        // rootdir was moved into config; re-derive from pyproject_path
-        let rootdir = pyproject_path.parent().expect("pyproject_path has parent");
+        // `pyproject_path` is `rootdir.join("pyproject.toml")`, so its parent is
+        // the `rootdir` parameter — reuse it instead of round-tripping through
+        // the path and asserting the trip succeeded (ADR-0011).
         config.merge_toml(tc, Some(rootdir))
     }
 

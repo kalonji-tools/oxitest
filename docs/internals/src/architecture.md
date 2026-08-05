@@ -200,6 +200,8 @@ impl Pipeline {
 
 Phase ordering is enforced by convention and by the `unreachable!` guards -- calling a transition in the wrong phase panics at runtime rather than failing at compile time. The sequential call chain in each command function makes incorrect ordering easy to spot in code review.
 
+`clippy::unreachable` is denied crate-wide. These guards are the **only** exception -- E1 in [ADR-0011](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0011-no-unhandled-panic-routes.md), scoped by a module-level `#![allow]` in `src/pipeline/transitions/mod.rs`. The pattern does not travel: outside that module, an `unreachable!` fails the build, and a site inside it that guards on something other than the phase gets fixed rather than absorbed. The exception's stated real fix is restoring the compile-time `Pipeline<Ready>` typestate that [PR #1043](https://github.com/kalonji-tools/oxitest/pull/1043) replaced.
+
 ### The run chain
 
 The `run_command()` function in `src/pipeline/mod.rs` shows the full chain:

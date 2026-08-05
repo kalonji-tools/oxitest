@@ -189,14 +189,12 @@ impl RunArgs {
 impl RunArgs {
     pub fn default_for_test() -> Self {
         use clap::Parser;
-        super::OxitestCli::try_parse_from(["oxitest", "run"])
-            .expect("default RunArgs must parse")
-            .command
-            .map(|cmd| match cmd {
-                super::Command::Run(args) => args,
-                _ => unreachable!(),
-            })
-            .unwrap()
+        let parsed = super::OxitestCli::try_parse_from(["oxitest", "run"])
+            .expect("default RunArgs must parse");
+        match parsed.command {
+            Some(super::Command::Run(args)) => args,
+            other => panic!("`oxitest run` must parse as Command::Run, got {other:?}"),
+        }
     }
 }
 

@@ -13,42 +13,35 @@ impl Pipeline {
     // 5a. session from FilesCollected: FilesCollected -> SessionReady
     // 5b. session from MetadataFiltered: MetadataFiltered -> SessionReady
     pub(crate) fn session(self, py: Python<'_>) -> Result<Self, ExitCode> {
-        match self.phase {
-            PipelinePhase::FilesCollected => {
-                let (session, fixture_violations) =
-                    helpers::init_session(py, &self.shared.conftest_files, &self.cfg, || {
-                        self.make_error_reporter()
-                    })?;
-                let (shared, _) = self.into_parts();
-                Ok(Self {
-                    shared,
-                    phase: PipelinePhase::SessionReady {
-                        session,
-                        session_violations: fixture_violations,
-                    },
-                })
-            }
-            PipelinePhase::MetadataFiltered { .. } => {
-                let (session, fixture_violations) =
-                    helpers::init_session(py, &self.shared.conftest_files, &self.cfg, || {
-                        self.make_error_reporter()
-                    })?;
-                let (mut shared, phase) = self.into_parts();
-                let PipelinePhase::MetadataFiltered { modules_to_import } = phase else {
-                    unreachable!("phase was already matched as MetadataFiltered")
-                };
-                // Replace test_files with the filtered modules to import.
-                shared.test_files = modules_to_import;
-                Ok(Self {
-                    shared,
-                    phase: PipelinePhase::SessionReady {
-                        session,
-                        session_violations: fixture_violations,
-                    },
-                })
-            }
+        // The phase is consumed *before* the session is built, not after. The
+        // previous shape called `init_session` once per arm and then asked
+        // `into_parts()` for a variant it had already matched, which needed an
+        // `unreachable!()` that had nothing to do with the pipeline typestate
+        // this module is excepted for (ADR-0011, E1).
+        let (mut shared, phase) = self.into_parts();
+        let modules_to_import = match phase {
+            PipelinePhase::FilesCollected => None,
+            PipelinePhase::MetadataFiltered { modules_to_import } => Some(modules_to_import),
             _ => unreachable!("session called outside FilesCollected or MetadataFiltered phase"),
+        };
+
+        let (session, fixture_violations) =
+            helpers::init_session(py, &shared.conftest_files, &shared.cfg, || {
+                shared.make_error_reporter()
+            })?;
+
+        // Replace test_files with the filtered modules to import.
+        if let Some(modules) = modules_to_import {
+            shared.test_files = modules;
         }
+
+        Ok(Self {
+            shared,
+            phase: PipelinePhase::SessionReady {
+                session,
+                session_violations: fixture_violations,
+            },
+        })
     }
 
     // 6. collect: SessionReady -> Collected
@@ -150,8 +143,12 @@ impl Pipeline {
         let PipelinePhase::SessionReady { ref session, .. } = self.phase else {
             unreachable!("query called outside SessionReady phase")
         };
+        // Not covered by E1: this asks about the *command*, not the pipeline
+        // phase, so it is an ordinary dispatch error and gets an exit code
+        // rather than an abort (ADR-0011 — the carve-out is typestate-only).
         let config::Command::Query(ref args) = self.command else {
-            unreachable!("query only called for Query command");
+            eprintln!("error: internal dispatch error — query runs only for `oxitest query`");
+            return Ok(ExitCode::UsageError);
         };
 
         if args.tree {

@@ -376,12 +376,25 @@ static STDLIB_NAMES: OnceLock<std::collections::HashSet<String>> = OnceLock::new
 /// Safe to call multiple times — `OnceLock` ignores subsequent calls.
 pub(crate) fn init_stdlib_names(py: pyo3::Python<'_>) {
     STDLIB_NAMES.get_or_init(|| {
-        py.import("sys")
-            .expect("sys import")
-            .getattr("stdlib_module_names")
-            .expect("stdlib_module_names attr")
-            .extract::<std::collections::HashSet<String>>()
-            .expect("extract HashSet<String>")
+        let names = py
+            .import("sys")
+            .and_then(|sys| sys.getattr("stdlib_module_names"))
+            .and_then(|names| names.extract::<std::collections::HashSet<String>>());
+        match names {
+            Ok(names) => names,
+            Err(err) => {
+                // The empty set is the same state the doc comment above already
+                // describes for "uninitialized": every module reads as
+                // third-party, which forces eager collection. Degrading into a
+                // documented conservative mode beats aborting the user's run
+                // over an interpreter that lacks one attribute (ADR-0011).
+                tracing::warn!(
+                    error = %err,
+                    "sys.stdlib_module_names unavailable — lazy collection disabled for this run"
+                );
+                std::collections::HashSet::new()
+            }
+        }
     });
 }
 

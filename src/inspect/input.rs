@@ -864,7 +864,7 @@ mod tests {
             Screen::History { selected } => {
                 assert_eq!(*selected, 1, "j should move cursor down on History screen");
             }
-            other => unreachable!("expected History screen, got {:?}", other),
+            other => panic!("expected History screen, got {other:?}"),
         }
 
         handle_key(&mut app, key(KeyCode::Char('k')));
@@ -872,7 +872,7 @@ mod tests {
             Screen::History { selected } => {
                 assert_eq!(*selected, 0, "k should move cursor up on History screen");
             }
-            other => unreachable!("expected History screen, got {:?}", other),
+            other => panic!("expected History screen, got {other:?}"),
         }
     }
 

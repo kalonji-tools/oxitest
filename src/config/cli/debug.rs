@@ -78,14 +78,12 @@ impl DebugArgs {
 impl DebugArgs {
     pub fn default_for_test() -> Self {
         use clap::Parser;
-        super::OxitestCli::try_parse_from(["oxitest", "debug"])
-            .expect("default DebugArgs must parse")
-            .command
-            .map(|cmd| match cmd {
-                super::Command::Debug(args) => args,
-                _ => unreachable!(),
-            })
-            .unwrap()
+        let parsed = super::OxitestCli::try_parse_from(["oxitest", "debug"])
+            .expect("default DebugArgs must parse");
+        match parsed.command {
+            Some(super::Command::Debug(args)) => args,
+            other => panic!("`oxitest debug` must parse as Command::Debug, got {other:?}"),
+        }
     }
 }
 
