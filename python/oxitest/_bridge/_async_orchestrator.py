@@ -25,6 +25,7 @@ import inspect
 from collections.abc import Callable
 from contextlib import ExitStack
 from dataclasses import dataclass
+from pathlib import PurePath
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -300,6 +301,15 @@ class SharedAsyncManager:
         narrower = [
             b for b in self._teardowns if b not in (SESSION_BOUNDARY, PROCESS_BOUNDARY)
         ]
+        # Deepest path first, so this set honours narrower-before-wider the way
+        # the sentinels above already do. The keys are real paths — a module
+        # path or a package anchor — so depth *is* nesting. Insertion order got
+        # this right only by accident: a package fixture built before a module
+        # one inside it registered first and so drained first, disposing the
+        # value the inner teardown was about to touch. Only reachable on the
+        # worker path, where nothing calls `end_package` and this is the drain
+        # (#1839).
+        narrower.sort(key=lambda path: len(PurePath(path).parts), reverse=True)
         for boundary in narrower:
             self._drain_pairs(self._teardowns.pop(boundary), live_session)
         self._drain_pairs(self._teardowns.pop(SESSION_BOUNDARY, []), live_session)

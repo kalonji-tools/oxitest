@@ -2,4 +2,6 @@
 testpaths = ["package_boundary_nested_async"]
 python_files = ["test_*.py"]
 strict = "abort"
+# Same reason as the sync twin: arrangement would move these modules into a
+# different phase, and phases use different fixture sessions.
 auto_arrange = false

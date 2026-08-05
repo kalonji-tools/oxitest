@@ -1,16 +1,4 @@
-"""Two async package fixtures for pkg_b, one per registration route (#1839).
-
-The async half had its own root cause: the boundary a teardown is filed under
-is chosen when it is *registered*, and ``package`` was not one of the cases,
-so ``drain_boundary`` had nothing to find whatever key ``end_package`` used.
-
-There are two registration sites and they disagreed with each other, so both
-are declared here rather than one per package. Putting one route in each
-package would leave whichever package runs *last* unconstrained — its boundary
-and the end of the run are the same instant, which is the blind spot this
-whole issue is about. Declaring both in both packages means the first package
-to run constrains both routes, whichever one that turns out to be.
-"""
+"""pkg_b's async twin of pkg_a — same two registration routes, same reason."""
 
 from __future__ import annotations
 
