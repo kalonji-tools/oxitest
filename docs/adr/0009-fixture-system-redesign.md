@@ -148,7 +148,7 @@ The *restriction* to rootdir survives, and the rename **strengthens** its argume
 
 ### Rule 5 — Access via the `fx` proxy
 
-**Status:** shipped (#1708, #1713, #1714); amended by Amendments 2 and 3, and the `hlp` half is retracted by Amendment 5. The `namespace=` override this rule names is still unbuilt — `@oxi.fixture` accepts only `lifetime=` — and is [#1782](https://github.com/kalonji-tools/oxitest/issues/1782)'s question, not a helpers-only gap. For *plugin* namespaces the override shipped in Amendment 8 as a pyproject key rather than a decorator argument.
+**Status:** shipped (#1708, #1713, #1714); amended by Amendments 2 and 3, and the `hlp` half is retracted by Amendment 5. The `namespace=` override this rule names is still unbuilt — `@oxi.fixture` accepts `lifetime=` and `autouse=`, but no `namespace=` — and is [#1782](https://github.com/kalonji-tools/oxitest/issues/1782)'s question, not a helpers-only gap. For *plugin* namespaces the override shipped in Amendment 8 as a pyproject key rather than a decorator argument.
 
 Tests receive fixtures via a synthesized proxy parameter — the type annotation `Fixtures` reappears here as an access proxy (the old instance-registry meaning is retired, see Rule 8):
 
@@ -188,8 +188,9 @@ The constraint is about *reachability of both views*, not about object count. Th
 
 **Namespace derivation.** Default namespace = the anchor-package segment name; overridable via `namespace=` on the decorator. Use overrides sparingly.
 
-> **Not yet built** — the `namespace=` override. `@oxi.fixture` accepts only
-> `lifetime=` today (`python/oxitest/_bridge/_fixture_decorator.py:25`), and
+> **Not yet built** — the `namespace=` override. `@oxi.fixture` accepts
+> `lifetime=` and `autouse=` today (`_fixture_decorator.fixture`; `autouse`
+> shipped with #1716, recorded in Amendment 7) but no `namespace=`, and
 > whether the override should exist at all is [#1782](https://github.com/kalonji-tools/oxitest/issues/1782).
 > This marker originally attributed the gap to #1715 and listed the `hlp` proxy,
 > `HelpersProxy`, and the helper half of the naming-clash rule alongside it; those
@@ -212,15 +213,22 @@ Plugins that need to generate fixtures at runtime (5% case — e.g., one fixture
 > implementer (see Rule 8). The "mechanical migration" claim was already
 > corrected by Amendment 4, point (d) below.
 
-> **Not yet built** — #1717 (static path), #1718 (runtime hook). Four statements
+> **Retracted and shipped, in different halves — Amendment 9 (#1755, #1773).**
+> The runtime `register_fixtures` hook described in the two paragraphs above is
+> **retracted**: it will not be built, and #1718 is closed `wontfix`. The static
+> decorator path **shipped** with #1717 — read Amendment 8 for what was built.
+> Amendment 4's findings (a)–(d) below are kept as the record of what this rule
+> got wrong, not as pending work. Finding (c) reasons about the signature of a
+> hook that will now never exist; it is preserved because it explains why the
+> retraction cost nothing. Four statements
 > above are also **drifted**, corrected in Amendment 4. (a) "session-wide" mixes
 > two things that Amendment 1 separated. Plugin fixture *visibility* genuinely
-> **is** run-wide: plugin fixtures are ambient (`_fixture_registry.py:152`, whose
-> docstring cites this rule by name) and are registered into every worker session
-> (`_fixture_session.py:403`, called per session at `:343`). But *lifetime*
+> **is** run-wide: plugin fixtures are ambient (`FixtureDef`'s source variants,
+> whose docstring cites this rule by name) and are registered into every worker
+> session (registered per fixture session). But *lifetime*
 > `session` is one instance **per task group** — narrower still than the
 > per-worker reading Amendment 1 gave it, see Rule 2 and Amendment 4
-> (`python/oxitest/_bridge/worker.py:265`) — so the phrase cannot mean run-wide
+> (the worker's task-group loop) — so the phrase cannot mean run-wide
 > instantiation under either reading. **Read the sentence above as "ambient in
 > every fixture session"** — the rule's own wording is left as accepted, per this
 > sweep's convention of marking unshipped rules rather than rewriting text
@@ -357,6 +365,13 @@ The redesign retires the following surface. Each entry names what goes and why.
 > in `oxi-nixinfra`, which tracks oxitest `main` through an unpinned flake input, so
 > retirement breaks it the day it lands rather than at a version bump. `HelperProvider` has zero implementers
 > anywhere. The two protocols must therefore be sequenced separately, and only one needs a migration path.
+
+> **The convergence route named here is half retracted — Amendment 9 (#1755, #1773).**
+> The `FixtureProvider` / `HelperProvider` bullet says plugins converge *"via
+> `@oxi.fixture` + `register_fixtures` hook"*. Only the first half survives: the
+> static decorator path shipped (#1717, Amendment 8); the runtime hook is
+> retracted and #1718 is closed `wontfix`. `FixtureProvider`'s retirement is
+> unaffected and remains #1720's work.
 
 ### Reconciliation with prior ADRs
 
