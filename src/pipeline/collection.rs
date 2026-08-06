@@ -159,18 +159,48 @@ pub(super) struct CollectionOutput {
 /// parent, and that normalisation happens at the call site, where the
 /// filesystem is already being touched — this fold stays pure path arithmetic.
 ///
+/// **Clamped to `rootdir`** (#1921). `resolve_testpaths` joins each declared
+/// entry to the rootdir, but `join` returns an already-absolute entry
+/// unchanged, so a `testpaths` entry pointing outside the project drags the
+/// fold above it — far enough, on disjoint filesystem trees, to answer `/`.
+/// The rootdir package is the root of *this project's* declared test tree, so
+/// a value outside the project is not one, and the hint that names it is
+/// unactionable.
+///
+/// The clamp is conditional on some declared entry being **inside** `rootdir`.
+/// A project whose whole test surface sits outside itself
+/// (`testpaths = ["/elsewhere/suite"]`) has its rootdir package out there too,
+/// and clamping it to the project root would reject the declaration beside its
+/// own tests while pointing the user at a directory holding none — the very
+/// shape [`declared_dirs_holding_tests`] exists to avoid. Only a *mixture*
+/// widens to the project root, because only then is there an inside surface for
+/// the outside entry to drag the fold off.
+///
+/// Not reached: two absolute entries on disjoint trees that are *both* outside
+/// the project still fold to `/`. Narrower than the case above and left as a
+/// documented limitation rather than a third rule.
+///
 /// Returns `None` only when nothing is declared, in which case there is no tree
 /// and no declaration to place inside it.
-fn rootdir_package(declared_dirs: &[camino::Utf8PathBuf]) -> Option<camino::Utf8PathBuf> {
+fn rootdir_package(
+    declared_dirs: &[camino::Utf8PathBuf],
+    rootdir: &camino::Utf8Path,
+) -> Option<camino::Utf8PathBuf> {
     let mut dirs = declared_dirs.iter();
     let first = dirs.next()?;
-    Some(dirs.fold(first.to_owned(), |common, dir| {
+    let folded = dirs.fold(first.to_owned(), |common, dir| {
         common
             .ancestors()
             .find(|candidate| dir.starts_with(candidate))
             .unwrap_or(camino::Utf8Path::new(""))
             .to_owned()
-    }))
+    });
+    let any_inside = declared_dirs.iter().any(|dir| dir.starts_with(rootdir));
+    Some(if any_inside && !folded.starts_with(rootdir) {
+        rootdir.to_owned()
+    } else {
+        folded
+    })
 }
 
 /// The test surface a project implies by its layout, for use when it declares
@@ -707,7 +737,7 @@ pub(super) fn collect_items(
     } else {
         (declared_dirs_holding_tests(cfg), RootProvenance::Declared)
     };
-    let tree_root = rootdir_package(&declared_dirs);
+    let tree_root = rootdir_package(&declared_dirs, &cfg.rootdir);
 
     // Deduplicate fixture-module registrations: multiple test files in the
     // same directory all share the same __fixtures__.py. Register once per dir.
@@ -1423,19 +1453,25 @@ mod tests {
 
     // ── rootdir_package (#1711, re-based on the declared tree by #1798) ──────
 
+    /// Declared entries are spelled absolute here, because `Config::load`
+    /// resolves each one against the rootdir (`config::merge::resolve_testpaths`).
+    /// The relative form these fold tests used before #1921 is reachable only
+    /// through the test-only `Config::from_str`, so they exercised a shape no
+    /// real run takes. The `registration_chain` tests below stay relative: that
+    /// walk is pure path arithmetic whose inputs' absoluteness is immaterial.
     fn paths(entries: &[&str]) -> Vec<Utf8PathBuf> {
         entries.iter().map(Utf8PathBuf::from).collect()
     }
 
     #[test]
     fn rootdir_package_of_one_declared_directory_is_that_directory() {
-        let declared = paths(&["tests"]);
+        let declared = paths(&["/proj/tests"]);
 
-        let root = rootdir_package(&declared);
+        let root = rootdir_package(&declared, Utf8Path::new("/proj"));
 
         assert_eq!(
             root,
-            Some(Utf8PathBuf::from("tests")),
+            Some(Utf8PathBuf::from("/proj/tests")),
             "a project declaring one test directory makes it the rootdir \
              package — that is where a lifetime=\"process\" declaration is legal"
         );
@@ -1443,13 +1479,13 @@ mod tests {
 
     #[test]
     fn rootdir_package_climbs_to_the_common_ancestor_of_declared_siblings() {
-        let declared = paths(&["tests/api", "tests/db"]);
+        let declared = paths(&["/proj/tests/api", "/proj/tests/db"]);
 
-        let root = rootdir_package(&declared);
+        let root = rootdir_package(&declared, Utf8Path::new("/proj"));
 
         assert_eq!(
             root,
-            Some(Utf8PathBuf::from("tests")),
+            Some(Utf8PathBuf::from("/proj/tests")),
             "two declared siblings put the root at their parent, even though it \
              is not itself declared; declaring process in either sibling would \
              scope it below the project's own test surface"
@@ -1467,13 +1503,13 @@ mod tests {
         // The unit can only assert that the fold reads the declared set; that
         // the declared set survives merge is asserted end-to-end by
         // test_rule_4_verdict_does_not_depend_on_how_the_run_was_invoked.
-        let declared = paths(&["project/suite"]);
+        let declared = paths(&["/proj/project/suite"]);
 
-        let root = rootdir_package(&declared);
+        let root = rootdir_package(&declared, Utf8Path::new("/proj"));
 
         assert_eq!(
             root,
-            Some(Utf8PathBuf::from("project/suite")),
+            Some(Utf8PathBuf::from("/proj/project/suite")),
             "the root is the declared test tree, so no argv can move it; a \
              narrowed run must not be able to legalise a declaration the \
              project's own layout rejects"
@@ -1482,12 +1518,79 @@ mod tests {
 
     #[test]
     fn rootdir_package_of_nothing_declared_is_none() {
-        let root = rootdir_package(&[]);
+        let root = rootdir_package(&[], Utf8Path::new("/proj"));
 
         assert!(
             root.is_none(),
             "with nothing declared there is no tree, so no directory can be the \
              rootdir package and no process declaration can sit inside one"
+        );
+    }
+
+    #[test]
+    fn rootdir_package_never_escapes_the_project() {
+        // An absolute `testpaths` entry outside the project: `rootdir.join(s)`
+        // returns `s` unchanged when `s` is already absolute, so the fold has
+        // no in-project ancestor to land on and climbs above `rootdir` — the
+        // Rule 4 hint then tells the user to move their declaration to `/`.
+        let declared = vec![
+            Utf8PathBuf::from("/proj/tests"),
+            Utf8PathBuf::from("/elsewhere/suite"),
+        ];
+
+        let root = rootdir_package(&declared, Utf8Path::new("/proj"));
+
+        assert_eq!(
+            root,
+            Some(Utf8PathBuf::from("/proj")),
+            "the rootdir package is the root of THIS project's declared test \
+             tree, so a declared entry outside the project must widen it to the \
+             project root and no further — naming a directory the project does \
+             not own gives the user a hint they cannot act on"
+        );
+    }
+
+    #[test]
+    fn a_wholly_external_declaration_keeps_its_own_root() {
+        // The clamp must not fire when nothing is declared inside the project.
+        // Clamping here would reject a `process` declaration sitting beside the
+        // only tests there are, and point the user at the project root — which
+        // holds none. Measured before this guard existed: the same project went
+        // from `1 passed` to a collection error naming a test-less directory.
+        let declared = vec![Utf8PathBuf::from("/elsewhere/suite")];
+
+        let root = rootdir_package(&declared, Utf8Path::new("/proj"));
+
+        assert_eq!(
+            root,
+            Some(Utf8PathBuf::from("/elsewhere/suite")),
+            "a project declaring its whole test surface outside itself has its \
+             rootdir package out there too; the clamp exists to stop an outside \
+             entry dragging an *inside* surface upward, and there is no inside \
+             surface here to drag"
+        );
+    }
+
+    #[test]
+    fn rootdir_package_and_a_parent_relative_declaration() {
+        // `Utf8Path::starts_with` is component-wise and does not normalise, so
+        // `/proj/..` may compare as starting with `/proj`. This test records
+        // which way that falls rather than assuming it: the clamp is written
+        // against lexical containment, and a `..` entry is the one input where
+        // lexical and real containment can disagree.
+        let declared = vec![
+            Utf8PathBuf::from("/proj/../a"),
+            Utf8PathBuf::from("/proj/../b"),
+        ];
+
+        let root = rootdir_package(&declared, Utf8Path::new("/proj"));
+
+        assert_eq!(
+            root,
+            Some(Utf8PathBuf::from("/proj/..")),
+            "a testpaths entry escaping via `..` is lexically inside rootdir, so \
+             the clamp does not fire on it; this is a recorded limitation, not a \
+             guarantee — change this assertion only alongside a decision on #1921"
         );
     }
 
@@ -1586,7 +1689,7 @@ mod tests {
         let held = declared_dirs_holding_tests(&cfg);
 
         assert_eq!(
-            rootdir_package(&held),
+            rootdir_package(&held, &root),
             Some(root.join("suite")),
             "a declared directory with no test files must not move the rootdir \
              package: declaring a source tree so doctest coverage audits it \
@@ -1606,8 +1709,8 @@ mod tests {
         let held = declared_dirs_holding_tests(&cfg);
 
         assert_eq!(
-            rootdir_package(&held),
-            Some(root),
+            rootdir_package(&held, &root),
+            Some(root.clone()),
             "when no declared entry holds tests the unfiltered declaration is \
              still the project's own statement of its test surface, and folding \
              it keeps a directory to name in the Rule 4 hint"
