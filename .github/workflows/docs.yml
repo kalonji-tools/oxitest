@@ -38,6 +38,14 @@ jobs:
               - 'python/tests/docs/**'
               # this job compiles the extension via `maturin develop`
               - 'rust-toolchain.toml'
+              # the code the doc examples exercise — without these the job can
+              # only be triggered by editing its own tests, so every change
+              # that could break a documented example skipped it silently (#1925)
+              - 'src/**'
+              - 'python/oxitest/**'
+              - 'Cargo.*'
+              - 'pyproject.toml'
+              - '.github/workflows/docs.yml'
 
   build:
     name: Build docs
@@ -147,10 +155,15 @@ jobs:
       - name: Check build result
         shell: bash
         run: |
-          if [[ "${{ needs.build.result }}" == "failure" || "${{ needs.doc-tests.result }}" == "failure" ]]; then
-            echo "One or more docs jobs failed"
-            exit 1
-          fi
+          # Allowlist, not a failure-blocklist: a job that ends in anything
+          # other than success or skipped — cancelled, timed_out — used to pass
+          # this gate, because it only ever tested for "failure" (#1925).
+          for result in "${{ needs.build.result }}" "${{ needs.doc-tests.result }}"; do
+            case "$result" in
+              success|skipped) ;;
+              *) echo "A docs job ended in '$result'; only success or skipped may pass"; exit 1 ;;
+            esac
+          done
           echo "All docs jobs passed or were skipped"
 
   deploy:

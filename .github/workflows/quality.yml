@@ -74,8 +74,9 @@ jobs:
       - name: Check result
         shell: bash
         run: |
-          if [[ "${{ needs.code-quality.result }}" == "failure" ]]; then
-            echo "Quality checks failed"
-            exit 1
-          fi
+          # Allowlist, not a failure-blocklist — see docs.yml's `required` job (#1925).
+          case "${{ needs.code-quality.result }}" in
+            success|skipped) ;;
+            *) echo "Code Quality ended in '${{ needs.code-quality.result }}'; only success or skipped may pass"; exit 1 ;;
+          esac
           echo "Quality checks passed or were skipped"
