@@ -12,6 +12,11 @@ def validate_age(age: int) -> None:
         raise ValueError(msg)
 
 
+def load_api_key() -> str | None:
+    """Stub for docs — no key configured, so the skip example always skips."""
+    return None
+
+
 # fmt: off
 # --8<-- [start:raises-basic]
 def test_divide_by_zero():
@@ -53,6 +58,14 @@ def test_warning_message():
     with oxitest.warns(UserWarning, match="disk space"):
         warnings.warn("low disk space", UserWarning, stacklevel=1)
 # --8<-- [end:warns-match]
+
+# --8<-- [start:skip-runtime]
+def test_reads_optional_config():
+    api_key = load_api_key()          # str | None
+    if api_key is None:
+        oxitest.skip("no api_key configured")
+    assert api_key.startswith("sk-"), "api keys carry the sk- prefix"
+# --8<-- [end:skip-runtime]
 
 # --8<-- [start:importorskip-basic]
 def test_with_pandas():
