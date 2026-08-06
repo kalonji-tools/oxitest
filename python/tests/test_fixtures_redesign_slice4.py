@@ -301,13 +301,6 @@ def test_a_project_declaring_no_testpaths_keeps_its_process_fixture_legal() -> N
     )
 
 
-@oxi.mark.xfail(
-    strict=True,
-    reason="blocked on #1765 — an ancestor __fixtures__.py is never registered "
-    "when the run is narrowed below it, so the narrowed run fails with "
-    "'fixture not found' before Rule 4 is reached. Strict, so this test fails "
-    "loudly once #1765 lands and the marker must then be removed.",
-)
 def test_the_undeclared_rootdir_package_is_also_invocation_independent() -> None:
     """Narrowing must not move the rootdir package in the undeclared case either.
 
@@ -316,16 +309,11 @@ def test_the_undeclared_rootdir_package_is_also_invocation_independent() -> None
     which would put the declaration in `tests/` above the root and reject it.
     Folding an unnarrowed walk keeps both invocations on `tests/`.
 
-    **This asserts a property spanning two issues, and #1798 delivers only half
-    of it.** The rootdir package no longer moves — that half is done. But
-    declaration homes are registered per directory holding a *collected* test
-    file (`collection.rs`, `register_declaration_home`), so narrowing below
-    `tests/` means `tests/__fixtures__.py` is never scanned at all and the run
-    dies with `fixture 'engine' not found` before Rule 4 has an opinion. That is
-    #1765, the last link in this chain.
-
-    Kept rather than deleted because it is the acceptance test #1765 needs, and
-    a deleted test is a requirement nobody re-derives.
+    The property spans two issues. #1798 stopped the rootdir package moving;
+    #1765 made the narrowed run register `tests/__fixtures__.py` at all, by
+    walking the ancestor chain rather than only each collected file's own
+    directory. Before that second half the narrowed run died with
+    `fixture 'engine' not found` before Rule 4 had an opinion.
     """
     # Act
     full = helpers.run_oxitest(None, cwd=str(_UNDECLARED_PROJECT))

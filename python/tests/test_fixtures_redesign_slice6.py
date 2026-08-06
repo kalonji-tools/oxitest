@@ -40,12 +40,10 @@ _INJECTION = _DATA_ROOT / "slice6_injection_boundary"
 _TYPE_INDEX_GUARD = _DATA_ROOT / "b1_type_index_guard"
 _TYPE_INDEX_GUARD_ANCHOR = _TYPE_INDEX_GUARD / "b1_type_index_guard" / "vault"
 
-#: 1 in test_root.py + 2 in api/test_api.py + 2 in api/v1/test_v1.py
-#: + 1 in admin/v1/test_admin_v1.py. The rootdir one is not decoration:
-#: declaration homes are registered per directory that holds a test file, so
-#: without it the rootdir __fixtures__.py is never discovered and the ancestor
-#: lookup fails for a registration reason rather than a visibility one.
-_LEGAL_TESTS = 6
+#: 2 in api/test_api.py + 2 in api/v1/test_v1.py + 1 in admin/v1/test_admin_v1.py.
+#: The rootdir package holds no test of its own, which is the point: its
+#: __fixtures__.py must still be discovered by the tests below it (#1765).
+_LEGAL_TESTS = 5
 
 
 @dataclass(frozen=True)
