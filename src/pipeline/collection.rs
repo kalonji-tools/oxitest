@@ -143,6 +143,9 @@ pub(super) struct CollectionOutput {
     pub profile: Option<CollectionProfile>,
     /// `__fixtures__.py` files registered here, forwarded to workers (#1732).
     pub fixture_modules: Vec<types::FixtureModule>,
+    /// Non-fatal diagnostics raised while registering declaration homes, drained
+    /// into `SharedState::pending_diagnostics` by the `collect` transition.
+    pub diagnostics: Vec<crate::reporter::stats::DiagnosticEntry>,
 }
 
 /// ADR-0009's "rootdir package" — the deepest directory containing every
@@ -260,9 +263,68 @@ fn declared_dir(path: &camino::Utf8Path) -> camino::Utf8PathBuf {
     }
 }
 
+/// The directories whose declaration homes one collected test file can reach.
+///
+/// ADR-0009 Rule 3 makes a declaration visible to tests in its anchor package
+/// "or a descendant of it", so the homes reachable from a test file are the
+/// ones along its parent chain — not its own directory alone (#1765).
+///
+/// Bounded above by the rootdir package, **inclusive**: that is the top of the
+/// declared test tree, so a home there is reachable from every test below it,
+/// and it is the only site where `lifetime="process"` is legal.
+///
+/// A directory outside that bound gets itself alone. There is no chain to walk
+/// — the bound is not its ancestor, so `take_while` would never fire and the
+/// walk would climb to the filesystem root. A positional path argument reaches
+/// this case while `declared_testpaths` still names another tree.
+///
+/// Shallowest-first. Order cannot affect resolution — `_deepest_visible` ranks
+/// by anchor depth and uses registration index only for equal-depth ties, and
+/// no two directories on one chain share a depth — but a fixed order keeps
+/// diagnostics reproducible.
+fn registration_chain(
+    parent: &camino::Utf8Path,
+    tree_root: Option<&camino::Utf8Path>,
+) -> Vec<camino::Utf8PathBuf> {
+    let Some(root) = tree_root.filter(|root| parent.starts_with(root)) else {
+        return vec![parent.to_owned()];
+    };
+    let mut chain: Vec<camino::Utf8PathBuf> = parent
+        .ancestors()
+        .take_while(|dir| dir.starts_with(root))
+        .map(camino::Utf8Path::to_owned)
+        .collect();
+    chain.reverse();
+    chain
+}
+
+/// Which of the two declaration-home files this is.
+///
+/// They differ in exactly one place — what an unparsable file costs.
+/// `__fixtures__.py` is a reserved name whose only purpose is declarations, so
+/// failing to read it certainly loses fixtures and is a collection error.
+/// `__init__.py` is an ordinary package-init file that usually has nothing to
+/// do with fixtures, and the ancestor walk now reaches directories a run never
+/// used to read, so failing on unrelated breakage there is collateral (#1765).
+#[derive(Clone, Copy)]
+enum HomeFile {
+    Fixtures,
+    Init,
+}
+
+impl HomeFile {
+    /// The file name this kind is looked up under.
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Fixtures => "__fixtures__.py",
+            Self::Init => "__init__.py",
+        }
+    }
+}
+
 /// One declaration-home file and where it sits in the collected test tree.
 ///
-/// Grouped rather than passed loose: the three travel together and mean nothing
+/// Grouped rather than passed loose: the four travel together and mean nothing
 /// apart, and naming them at the call site is what keeps two `Utf8Path`s from
 /// being swappable by accident.
 struct DeclarationHome<'a> {
@@ -270,6 +332,9 @@ struct DeclarationHome<'a> {
     path: &'a camino::Utf8Path,
     /// The directory that owns it; the anchor of everything declared inside.
     anchor: &'a camino::Utf8Path,
+    /// Which of the two the `path` names. Read only when the file cannot be
+    /// parsed, which is the sole place the two kinds diverge.
+    file: HomeFile,
     /// Which regime this home belongs to. The two differ in three places and
     /// share everything else, prescan included.
     kind: HomeKind<'a>,
@@ -360,9 +425,15 @@ fn register_and_record(
     home: &DeclarationHome<'_>,
     ast_fallback: &[(String, String, u32)],
     errors: &mut Vec<types::CollectError>,
+    diagnostics: &mut Vec<crate::reporter::stats::DiagnosticEntry>,
     fixture_modules: &mut Vec<types::FixtureModule>,
 ) {
-    let DeclarationHome { path, anchor, kind } = *home;
+    let DeclarationHome {
+        path,
+        anchor,
+        file,
+        kind,
+    } = *home;
 
     let session_obj = session.as_py_object(py);
 
@@ -409,7 +480,30 @@ fn register_and_record(
     let declarations: Vec<(String, String, u32)> =
         match bridge::register_fixture_module_for_path(py, session_obj, path, anchor) {
             Err(e) => {
-                errors.push(e);
+                // Importing is how a declaration is found when prescan cannot
+                // rule one out (#1859), so this arm carries *user* code failing
+                // — not an oxitest fault. The ancestor walk reaches files a run
+                // never used to read, so the same asymmetry the parse failure
+                // uses applies here: fatal for a reserved declaration file,
+                // collateral for an ordinary package initialiser (#1765).
+                //
+                // Named either way. The bare exception text leaves the user
+                // with no way to tell which file failed.
+                match file {
+                    HomeFile::Fixtures => errors.push(e),
+                    HomeFile::Init => {
+                        diagnostics.push(crate::reporter::stats::DiagnosticEntry {
+                            severity: crate::reporter::stats::DiagnosticSeverity::Warning,
+                            context: std::sync::Arc::from("fixture registration"),
+                            message: format!(
+                                "{path} could not be imported, so any fixtures it \
+                                 declares are not registered: {e}"
+                            ),
+                            file: Some(path.to_owned()),
+                            lineno: None,
+                        });
+                    }
+                }
                 ast_fallback.to_vec()
             }
             Ok(()) => session
@@ -491,7 +585,7 @@ pub(super) fn register_plugin_home(
     home: &bridge::PluginFixtureHome,
     errors: &mut Vec<types::CollectError>,
 ) {
-    let path = home.anchor_dir.join("__fixtures__.py");
+    let path = home.anchor_dir.join(HomeFile::Fixtures.as_str());
     let mut fixture_modules = Vec::new();
     register_declaration_home(
         py,
@@ -499,6 +593,7 @@ pub(super) fn register_plugin_home(
         &DeclarationHome {
             path: &path,
             anchor: &home.anchor_dir,
+            file: HomeFile::Fixtures,
             kind: HomeKind::Plugin {
                 plugin_module: &home.plugin_module,
                 namespace: &home.namespace,
@@ -506,6 +601,9 @@ pub(super) fn register_plugin_home(
             },
         },
         errors,
+        // A plugin home is always `__fixtures__.py`, so both failure arms route
+        // to `errors`; this sink is unreachable by construction.
+        &mut Vec::new(),
         &mut fixture_modules,
     );
 }
@@ -523,6 +621,7 @@ fn register_declaration_home(
     session: &bridge::FixtureSession,
     home: &DeclarationHome<'_>,
     errors: &mut Vec<types::CollectError>,
+    diagnostics: &mut Vec<crate::reporter::stats::DiagnosticEntry>,
     fixture_modules: &mut Vec<types::FixtureModule>,
 ) {
     let path = home.path;
@@ -534,18 +633,37 @@ fn register_declaration_home(
                 home,
                 &ast_declarations(&payload),
                 errors,
+                diagnostics,
                 fixture_modules,
             );
         }
         crate::prescan::PrescanFixtureResult::Unavailable => {
             // The file exists but could not be parsed (syntax error, I/O error).
-            // Surface a clear collection error naming it, rather than a silent
+            // Surface it naming the file, rather than a silent
             // fixture-not-found at test time.
+            //
+            // Fatal for a reserved declaration file, collateral for an ordinary
+            // package-init file the ancestor walk merely passed through — see
+            // `HomeFile`. A warning cannot fail the run, because
+            // `compute_exit_code` never reads diagnostics, which is exactly the
+            // asymmetry wanted here (#1765).
             tracing::warn!(path = path.as_str(), "prescan: file could not be parsed");
-            errors.push(types::CollectError::PyError(format!(
+            let message = format!(
                 "{path} could not be parsed (syntax error or I/O error); \
                  fixtures in this file will not be registered",
-            )));
+            );
+            match home.file {
+                HomeFile::Fixtures => errors.push(types::CollectError::PyError(message)),
+                HomeFile::Init => {
+                    diagnostics.push(crate::reporter::stats::DiagnosticEntry {
+                        severity: crate::reporter::stats::DiagnosticSeverity::Warning,
+                        context: std::sync::Arc::from("fixture registration"),
+                        message,
+                        file: Some(path.to_owned()),
+                        lineno: None,
+                    });
+                }
+            }
         }
         crate::prescan::PrescanFixtureResult::NoFixtures(payload) => {
             // Prescan found no declaration it can name, but a decorated function
@@ -560,7 +678,7 @@ fn register_declaration_home(
                 // all. If registration fails here there is genuinely nothing to
                 // fall back to, and that is the honest answer rather than a
                 // guess.
-                register_and_record(py, session, home, &[], errors, fixture_modules);
+                register_and_record(py, session, home, &[], errors, diagnostics, fixture_modules);
             }
         }
     }
@@ -610,6 +728,10 @@ pub(super) fn collect_items(
     // registered here. Deriving it independently over there would mean two
     // places deciding what counts as a registrable fixture module.
     let mut fixture_modules: Vec<types::FixtureModule> = Vec::new();
+    // Non-fatal registration diagnostics. Separate from `errors` because the
+    // two decide different things: `compute_exit_code` reads errors and never
+    // reads diagnostics.
+    let mut diagnostics: Vec<crate::reporter::stats::DiagnosticEntry> = Vec::new();
 
     for file in test_files {
         // Pre-scan: skip files with no test functions.
@@ -651,43 +773,50 @@ pub(super) fn collect_items(
             }
         };
 
-        // Fixture-module registration: if this file's directory contains a
-        // __fixtures__.py whose prescan found @oxi.fixture declarations,
-        // register them into the session registry before collecting tests.
-        // One registration per directory (multiple test files share the same
-        // __fixtures__.py — the HashSet deduplicates).
+        // Fixture-module registration: register the declaration homes this file
+        // can reach — its own directory and every ancestor up to the rootdir
+        // package (#1765). One registration per directory; the HashSet
+        // deduplicates across the many files that share a chain.
         //
         // IMPORTANT: this must run BEFORE the cache-hit check below. On warm
         // cache runs the per-file `continue` fires before any code below it,
         // so any registration placed after the cache check is silently skipped
         // for cached modules (HIGH-1 fix).
-        if let Some(parent_dir) = file.parent()
-            && !registered_fixture_dirs.contains(parent_dir)
-        {
-            // Both declaration homes for this directory, per ADR-0009's
-            // file-convention table. `__fixtures__.py` is reserved and holds any
-            // lifetime; `__init__.py` is an ordinary package-init file that may
-            // also host declarations (package lifetime is the recommended use).
-            for name in ["__fixtures__.py", "__init__.py"] {
-                let path = parent_dir.join(name);
-                if path.exists() {
-                    register_declaration_home(
-                        py,
-                        session,
-                        &DeclarationHome {
-                            path: &path,
-                            anchor: parent_dir,
-                            kind: HomeKind::User {
-                                tree_root: tree_root.as_deref(),
-                                root_provenance,
-                            },
-                        },
-                        &mut errors,
-                        &mut fixture_modules,
-                    );
+        if let Some(parent_dir) = file.parent() {
+            for dir in registration_chain(parent_dir, tree_root.as_deref()) {
+                // `continue`, not `break`: the set is seeded with plugin anchor
+                // directories, and a vendored plugin sitting mid-chain must not
+                // stop the walk reaching the user homes above it.
+                if registered_fixture_dirs.contains(&dir) {
+                    continue;
                 }
+                // Both declaration homes for this directory, per ADR-0009's
+                // file-convention table. `__fixtures__.py` is reserved and holds any
+                // lifetime; `__init__.py` is an ordinary package-init file that may
+                // also host declarations (package lifetime is the recommended use).
+                for file_kind in [HomeFile::Fixtures, HomeFile::Init] {
+                    let path = dir.join(file_kind.as_str());
+                    if path.exists() {
+                        register_declaration_home(
+                            py,
+                            session,
+                            &DeclarationHome {
+                                path: &path,
+                                anchor: &dir,
+                                file: file_kind,
+                                kind: HomeKind::User {
+                                    tree_root: tree_root.as_deref(),
+                                    root_provenance,
+                                },
+                            },
+                            &mut errors,
+                            &mut diagnostics,
+                            &mut fixture_modules,
+                        );
+                    }
+                }
+                registered_fixture_dirs.insert(dir);
             }
-            registered_fixture_dirs.insert(parent_dir.to_owned());
         }
 
         let mtime = file_mtime_secs(file);
@@ -801,6 +930,7 @@ pub(super) fn collect_items(
         raw_violations,
         profile,
         fixture_modules,
+        diagnostics,
     }
 }
 
@@ -1358,6 +1488,60 @@ mod tests {
             root.is_none(),
             "with nothing declared there is no tree, so no directory can be the \
              rootdir package and no process declaration can sit inside one"
+        );
+    }
+
+    // ── registration_chain (#1765) ──────────────────────────────────────────
+
+    #[test]
+    fn chain_from_below_the_root_includes_every_directory_up_to_it() {
+        let chain = registration_chain(Utf8Path::new("tests/api/v1"), Some(Utf8Path::new("tests")));
+
+        assert_eq!(
+            chain,
+            paths(&["tests", "tests/api", "tests/api/v1"]),
+            "ADR-0009 Rule 3 makes a declaration visible to descendants, so \
+             every directory between the test and the rootdir package can hold \
+             a home the test must see; shallowest-first keeps diagnostics \
+             reproducible"
+        );
+    }
+
+    #[test]
+    fn chain_of_the_rootdir_package_itself_is_just_that_directory() {
+        let chain = registration_chain(Utf8Path::new("tests"), Some(Utf8Path::new("tests")));
+
+        assert_eq!(
+            chain,
+            paths(&["tests"]),
+            "the bound is inclusive — a home at the rootdir package is \
+             reachable from every test under it, and is the only legal site \
+             for lifetime=\"process\""
+        );
+    }
+
+    #[test]
+    fn chain_of_a_directory_outside_the_root_is_only_itself() {
+        let chain = registration_chain(Utf8Path::new("other"), Some(Utf8Path::new("tests")));
+
+        assert_eq!(
+            chain,
+            paths(&["other"]),
+            "a positional path argument can collect a file outside the \
+             declared tree; the bound is not its ancestor, so walking would run \
+             to the filesystem root instead of stopping"
+        );
+    }
+
+    #[test]
+    fn chain_without_a_rootdir_package_is_only_the_directory() {
+        let chain = registration_chain(Utf8Path::new("tests/api"), None);
+
+        assert_eq!(
+            chain,
+            paths(&["tests/api"]),
+            "with no declared tree there is no bound to walk to, so \
+             registration stays where it is today rather than guessing one"
         );
     }
 
@@ -2944,6 +3128,7 @@ mod tests {
         let home = DeclarationHome {
             path: &path,
             anchor: &anchor,
+            file: HomeFile::Fixtures,
             kind: HomeKind::Plugin {
                 plugin_module: "oxi_pg",
                 namespace: "postgres",
@@ -2969,6 +3154,7 @@ mod tests {
         let home = DeclarationHome {
             path: &path,
             anchor: &anchor,
+            file: HomeFile::Fixtures,
             kind: HomeKind::User {
                 tree_root: Some(&root),
                 root_provenance: RootProvenance::Declared,
