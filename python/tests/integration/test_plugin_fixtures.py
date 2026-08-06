@@ -436,3 +436,58 @@ def test_plugin_inside_testpaths_registers_once(tmp: TempDir) -> None:
     out, _, rc = helpers.run_oxitest(tmp, cwd=".")
 
     integ.assert_passed(out, rc, count=1)
+
+
+def test_a_plugin_anchor_mid_chain_does_not_stop_the_walk(tmp: TempDir) -> None:
+    """A user declaration home below a plugin anchor must still register (#1934).
+
+    `collect_items` seeds `registered_fixture_dirs` with the activated plugins'
+    anchor directories so a vendored plugin is not registered twice (#1717), and
+    the ancestor walk uses `continue` rather than `break` on a seeded directory.
+    Here the plugin package *is* the declared test root `suite/`, so its anchor
+    sits mid-chain between the rootdir package and the test — a `break` would
+    stop there and never register the user's `suite/api/__fixtures__.py`.
+
+    The package is named `suite` rather than `tests` because the subprocess runs
+    with the oxitest repo as its cwd, where `tests` already resolves to
+    oxitest's own package and the plugin import finds the wrong one.
+
+    `test_plugin_inside_testpaths_registers_once` cannot cover this: its plugin
+    anchor is a sibling of the tests, so it never appears in a test's ancestor
+    chain.
+    """
+    # Arrange
+    integ.write_project(
+        tmp,
+        tests={},
+        pyproject="[tool.oxitest]\ntestpaths = ['suite']\nplugins = ['suite']\n",
+        extra_files={
+            "suite/__init__.py": _PLUGIN_ENTRY,
+            "suite/__fixtures__.py": (
+                "import oxitest as oxi\n\n\n"
+                "@oxi.fixture(lifetime='module')\n"
+                "def from_plugin() -> str:\n"
+                "    return 'plugin-value'\n"
+            ),
+            "suite/api/__fixtures__.py": (
+                "import oxitest as oxi\n\n\n"
+                "@oxi.fixture(lifetime='module')\n"
+                "def from_user() -> str:\n"
+                "    return 'user-value'\n"
+            ),
+            "suite/api/test_mid.py": (
+                "from oxitest import Fixtures\n\n\n"
+                "def test_user_home_below_plugin_anchor(fx: Fixtures) -> None:\n"
+                "    assert fx.from_user == 'user-value', (\n"
+                "        'the plugin anchor sits mid-chain above this test; a "
+                "walk that stops there never registers this home'\n"
+                "    )\n"
+            ),
+        },
+    )
+
+    # Act
+    out, _, rc = helpers.run_oxitest(tmp, cwd=".")
+
+    # Assert
+    integ.assert_passed(out, rc, count=1)

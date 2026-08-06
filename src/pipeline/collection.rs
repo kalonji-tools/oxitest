@@ -814,9 +814,13 @@ pub(super) fn collect_items(
         // for cached modules (HIGH-1 fix).
         if let Some(parent_dir) = file.parent() {
             for dir in registration_chain(parent_dir, tree_root.as_deref()) {
-                // `continue`, not `break`: the set is seeded with plugin anchor
-                // directories, and a vendored plugin sitting mid-chain must not
-                // stop the walk reaching the user homes above it.
+                // `continue`, not `break`. The set accumulates every directory
+                // a previously walked file registered, so `break` would stop
+                // the second file in a package at the already-registered root
+                // and never reach its own directory; and the seed means a
+                // vendored plugin mid-chain must not stop the walk reaching the
+                // user homes below it. The second is pinned by
+                // test_a_plugin_anchor_mid_chain_does_not_stop_the_walk (#1934).
                 if registered_fixture_dirs.contains(&dir) {
                     continue;
                 }
