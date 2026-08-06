@@ -779,3 +779,48 @@ This repaired a pre-existing defect in the shipped `FixtureProvider` path that h
 #### What did not change
 
 The runtime `register_fixtures` hook stays retracted — [#1773](https://github.com/kalonji-tools/oxitest/issues/1773), recorded in [#1755](https://github.com/kalonji-tools/oxitest/issues/1755)'s amendment. `FixtureProvider`'s retirement is untouched and remains Rule 8's problem; it now has a documented blocker, since a static declaration has no route to plugin config and `create(*, ctx)` documents `ctx` as always `None`.
+
+### Amendment 9 — the rootdir package is defined, and Rule 6's hook is retracted (2026-08-06)
+
+**Issue:** [#1755](https://github.com/kalonji-tools/oxitest/issues/1755). Amends Rules 4, 5, 6 and 8, and resolves Amendment 8's forward reference.
+
+Two unrelated debts on one document, batched into one edit because [#1782](https://github.com/kalonji-tools/oxitest/issues/1782) asks that this ADR not be opened twice.
+
+#### 1. Rule 4 gains a definition
+
+Rule 4 restricted `lifetime="process"` to *"the rootdir package (`tests/`)"* and never said how that directory was determined; `tests/` was an illustration. Three different rules have been shipped for it — [#1711](https://github.com/kalonji-tools/oxitest/issues/1711)'s, [#1798](https://github.com/kalonji-tools/oxitest/issues/1798)'s, and the filter added by PR #1920 — and none was written down. The definition now lives in Rule 4's body.
+
+**What was rejected, and why it matters more than what was chosen.** Two readings were specified and implemented before being found wrong, so a future reader may reach for either:
+
+| Source | Argv-merged? | Verdict |
+|---|---|---|
+| `testpaths` | **yes** — a positional path argument overrides it | rejected |
+| `declared_testpaths` | **no** — the argv merge is deliberately absent from its writer list | shipped |
+| the collected file set | narrowed by argv | rejected — this was #1711's rule |
+
+The distinction is not cosmetic: a consumer wanting the project's own declaration silently received the run set and answered differently depending on how the run was started. `PathConfig::declared_testpaths` carries the invariant, and it is worth restating because it is the kind that survives its own test suite: **a new `merge_*` method assigning that field silently reinstates #1798 with every existing test still passing.**
+
+**The undeclared branch exists because the declared-only version regressed every zero-config project from `exit 0` to `exit 3`.** Every data project in this repository declares `testpaths`, so the documented default — `testpaths` defaults to empty — had no test coverage at all until #1798 was built. Materialising that default to the project root put the rootdir package *above* the directory the tests lived in, rejecting a `process` declaration sitting beside them.
+
+**The filter is a third step, not a detail of the fold.** A declared entry reaches the fold only if a walk finds a test file under it — because this repository declares `python/oxitest` so that doctest coverage audits it, that directory holds no `test_*.py`, and without the filter it dragged the fold from `python/tests` up to `python/`. Silently, with everything green.
+
+**Naming.** `Config.rootdir` is the directory holding `pyproject.toml`. It is not the rootdir package, and the bare word must not be reused for the derived value; they coincide only when a project declares nothing and its tests sit at the root.
+
+#### 2. Rule 6's runtime registration hook is retracted
+
+Decided on [#1773](https://github.com/kalonji-tools/oxitest/issues/1773); slice 11 ([#1718](https://github.com/kalonji-tools/oxitest/issues/1718)) is closed `wontfix`. Only the static decorator path ships.
+
+The hook served dynamically-generated fixtures and the ecosystem has zero demand for it: the only known `FixtureProvider` implementer, `HostProvider` in oxi-nixinfra, registers one type-matched fixture through the existing `fixture_providers=(…)` tuple. Adding the hook later is backward-compatible; carrying an unimplemented promise is not.
+
+One claim in that rule was never true and should not be re-derived: dynamically-registered fixtures would **not** have behaved "identically" to AST-scanned ones. Only the module-anchored source variant is B1-anchored — everything else is ambient and B1-exempt — so semantics are keyed on the source variant rather than inherited, and the hook's signature would have had to say which variant it was creating.
+
+Marked at its live sites: Rule 6's body, and Rule 8's retirement list. **Consequences item 12** (`register_fixtures` runtime hook + `FixtureRegistry.add()` API) is void — recorded here rather than annotated in place, per that enumeration's own standing rule that per-item status is not maintained.
+
+#### 3. Two corrections made in passing, recorded so they are not silent
+
+- **Rule 5** claimed `@oxi.fixture` accepts only `lifetime=`. It has accepted `autouse=` since [#1716](https://github.com/kalonji-tools/oxitest/issues/1716), which Amendment 7 records — so this document contradicted itself. Corrected in **two** places: the rule's status line and the `namespace=` marker below it, which said the same thing independently. Whether `namespace=` should exist remains [#1782](https://github.com/kalonji-tools/oxitest/issues/1782)'s question, untouched here.
+- **This ADR cites code by line number in roughly forty places, and those citations have drifted unevenly** — some still resolve, some point at unrelated code. Three inside Rule 6's marker were dead and were removed with it. The rest are not swept here; new text in this amendment names symbols instead, which survive refactors and can be grepped.
+
+#### What did not change
+
+`FixtureProvider`'s retirement, which remains Rule 8's and #1720's problem. The two rootdir-package defects that read to users as `FixtureNotFoundError` rather than as Rule 4 diagnostics — the undeclared-ancestor case ([#1765](https://github.com/kalonji-tools/oxitest/issues/1765)) and the disjoint-roots fold ([#1921](https://github.com/kalonji-tools/oxitest/issues/1921)) — are described here and fixed there.
