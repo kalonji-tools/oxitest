@@ -120,15 +120,16 @@ Assignment is **folded into `gh pr create`** (`fold-in`) — there is no separat
 
 **6. Plan before implementing.** Use the `superpowers:writing-plans` skill. Multiple issues can be grouped into one plan if they are tightly coupled or logically sequential. The plan MUST be posted as a comment on the PR — never on individual issues.
 
-**The plan opens with a premise ledger** (`fold-in` — the plan format begins with it, so there is no separate step to skip). Three sections:
+**The plan opens with a premise ledger** (`fold-in` — the plan format begins with it, so there is no separate step to skip). Four sections:
 
 | Section | Contains |
 |---|---|
 | **Rests on** | premises the acceptance criteria depend on |
 | **Narrowed by** | premises that removed an acceptance criterion, a gate, or a task |
 | **Sequenced on** | steps whose predecessor must leave a buildable tree — empty is a legitimate answer, and asserts that every step stands alone |
+| **Not reached by** | the case none of the premises above cover — empty is a legitimate answer, and asserts you looked |
 
-`Narrowed by` exists because a premise that *deletes* an acceptance criterion is invisible to a ledger scoped by acceptance criteria, and that is the shape of the worst defect in the series.
+`Narrowed by` exists because a premise that *deletes* an acceptance criterion is invisible to a ledger scoped by acceptance criteria, and that is the shape of the worst defect in the series. `Not reached by` exists because the other three are each scoped to claims that **exist**, and nothing else evaluates the set for coverage — one branch's seven `Rests on` rows were each verified, each still true afterwards, and the change regressed every project in the one case none of them reached.
 
 **Every row carries evidence of the same kind as its claim.** Never a bare verdict — `Verified ✅` is free to write, `0/6` is not.
 
@@ -154,7 +155,7 @@ When you dispatch, `docs/agents/dispatch-protocol.md` defines what a dispatched 
 - **`ponytail:ponytail-review`** on the branch diff — hunt over-engineering, dead code, and unnecessary complexity. May be skipped on a single-commit PR touching no public surface, **provided the skip and its reason are recorded in the PR checklist** (`artifact`). No size threshold is set: the yield data is currently too thin to justify removing a gate, and the recorded skips are how that data gets collected.
 - **`/improve branch`** — audit the branch changes for correctness, security, test coverage gaps, and tech debt.
 - **Cross-reference the two passes before acting — for ordering, not just for overlap.** Findings that look unrelated can be sequenced: one pass once flagged four duplicated test harnesses while the other flagged a missing test, and the missing test would have been a *fifth* copy of the harness, so the deduplication had to land first. Neither pass can see that from inside itself.
-- **Explore findings before acting.** Present findings to the user. For each finding, explore the cited code to verify it's real and determine if the fix is safe. Only fix after exploration confirms the finding is actionable. Never blindly apply review suggestions.
+- **Explore findings before acting.** Present findings to the user. For each finding, explore the cited code to verify it's real and determine if the fix is safe. Only fix after exploration confirms the finding is actionable. Never blindly apply review suggestions. **Every finding gets a recorded disposition — fixed, deferred with a reason, or refuted — and the count in the PR matches the count the pass produced.** The obligation is on the pass today, not on its findings, and one of three findings once vanished between the pass and the PR table while the only mention of that pass in the PR was a stale "not run" line.
 - **Docs evaluation.** Check whether the changes affect user-facing documentation. Scan `docs/user/`, `docs/internals/`, `CONTEXT.md`, and error references for stale content. If docs need updating, fix them in the same PR — don't let stale docs ship.
 
 **9. Merge rules.**
@@ -201,7 +202,7 @@ git diff --quiet backup/<slug> HEAD       # 2. empty ⇒ nothing lost or gained
 3. push; wait for CI green;
 4. `gh pr merge --rebase`.
 
-**"CI green" means the required contexts, not every check.** The required set is defined by branch protection — query it (`gh api repos/{owner}/{repo}/branches/main/protection`) rather than trusting a remembered list, because a copy here would drift. A red **non-required** check is not a merge blocker; say so in the debrief and move on. Do not make a coverage check green by measuring less — widening an `ignore:` list over untested code is the recorded anti-pattern, not a fix.
+**"CI green" means the required contexts, not every check.** The required set is defined by branch protection — query it (`gh api repos/{owner}/{repo}/branches/main/protection`) rather than trusting a remembered list, because a copy here would drift. A red **non-required** check is not a merge blocker — and is not thereby uninteresting. Say so in the debrief, and say what it was pointing at: across five recorded instances it was pointing at something real four times. Do not make a coverage check green by measuring less — widening an `ignore:` list over untested code is the recorded anti-pattern, not a fix.
 
 **An instruction that arrives mid-gate wins — and you report what the gate had reached.** Do what you are asked, and in the same reply state exactly what had and had not been verified when you stopped: which checks completed, which never ran. The failure this prevents is not disobedience, it is silently converting an instruction into a claim that the gate passed.
 
@@ -250,7 +251,9 @@ The default disposition for a stale-*looking* issue is correct it, not close it.
 
 Only `close` lists its premises. `re-scope` and `re-word` are recoverable — `close` is the one this file already calls *silent and permanent*, and the one whose verdict has been reached on evidence that measured a different thing.
 
-Re-labelling and re-prioritising need no evidence (prose).
+Re-prioritising needs no evidence — `priority:` and `size:` are judgements (prose).
+
+**The triage-state label is different (`artifact`).** It is the pipeline's routing decision, so a flip to `ready-for-agent` must show that each blocker its triage named has cleared. One issue was `ready-for-human` for two stated reasons; the first cleared, the label was flipped with no comment, and the second — an undecided consumer-visible shape — was silently implied to have cleared with it.
 
 ### Evidence for analysis outputs (`artifact`)
 
@@ -266,12 +269,14 @@ The pipeline gates code. This gates *conclusions*.
 
 **Direction is the common case, not the rule.** The rule is *consequence*, and a claim that becomes an input to a decision is load-bearing whichever column it falls in. Three kinds slip through the table above: a claim that **specifies the verification itself** (which mutant, which command, which assert fails) — get it wrong and the test it prescribes is vacuous while reading as coverage; a claim that merely **characterises current behaviour** and then becomes spec input; and a claim **inherited** from an issue or spec written days earlier — that last one is what stage 4's claims audit exists to catch.
 
+**A fourth kind hedges instead of asserting** — a risk, a caveat, a "may". It adds no work and subtracts none, so the table above never fires on it, and no ledger section reaches it either. Its obligation scales with where it lands: a risk in a session's prose is disposable, but one written into an issue body or a PR description is a premise for the next reader and must carry either the command that established it or an explicit `unverified` marker. A false risk once reached a spec, an issue body and a PR description; by the time it was falsified two of the three were uncorrectable, because PR descriptions freeze at merge and the issue body is the spec of record.
+
 **A premise is any claim a later stage will rest on.** Whatever produced it — triage brief, spec, plan, review finding, debrief — its premises are bound by this rule. Deliberately not a list of stages: an earlier version of this section named stage 4 and missed stage 3, where the worst defect in the series was authored. Premises are checked where the work is: at **stage 4** in the spec's claims audit for the issue's own claims, at **stage 6** in the plan's ledger for everything the plan rests on, and at the disposition comment for a Track B `close`. Those are checkpoints, not the rule's scope — the rule binds every premise wherever it was authored, which is why it is not written as a list of stages.
 
 A subtracting claim MUST carry:
 
 1. the **exact command** re-run, and its output;
-2. evidence the command is **the one the claim is about** — one real verdict cited `just check` against an issue whose reproduction used a different clippy invocation, and so measured a different thing. That particular gap was later closed in #1815; the lesson is the mismatch, not the command;
+2. evidence the command is **the one the claim is about** — one real verdict cited `just check` against an issue whose reproduction used a different clippy invocation, and so measured a different thing. That particular gap was later closed in #1815; the lesson is the mismatch, not the command. The command must also be **scoped so it cannot match your own scratch** — an unscoped `grep` over the worktree finds the spec asserting the claim and confirms it;
 3. evidence the run **executed** rather than replaying a cache — a cached `cargo clippy` once returned 0 where a forced rebuild found 11. "Green" and "ran" are different claims.
 
 This is `artifact` tier: it binds when someone reads the comment. Its value is that the omission becomes visible — a missing quote is the tell — where today there is nothing to look for.
@@ -430,6 +435,7 @@ Parameters annotated with `Fixture[T]` are injected; unannotated parameters are 
 
   This is a recipe rather than a sentence because the sentence did not work: it was escalated in prose to *"Run it; do not intend to."* and the rule was then violated four times, once by a run that had **quoted it in its own plan** and once by a plan that ordered mutate-before-commit while quoting it. **A plan step that applies a mutant may not follow an uncommitted edit to the same file** — sequence the commit first.
 - **A mutant that passes is a finding until explained.** If the test does not fail, one of two things is true: the test is weaker than it looks, or the mutation is not the inverse of the behaviour you think you changed. Both are worth knowing and neither is "write a better mutant and move on". The worst bug found in this repo's fixture work — a scope cache that was never cleared, leaking a temp directory after every worker's first task group — surfaced because a mutant *passed* and the pass was investigated.
+- **A kill must be the failure you predicted.** A mutant that fails for some other reason has tested nothing, and it reads exactly like a kill. One exited 101 on a parse error, so the lint it was probing never ran at all; its mirror exited 0 because the parameter had been renamed `_app` and the site sat outside the gate the branch was installing. State which assertion you expect to fail, then check that it is the one that did.
 - **Re-run the mutation set after any later change to the same code.** A mutant that *stops* failing is an unintended semantic change, and a review pass late in a branch is exactly when that happens.
 
 ### Testing guidelines
