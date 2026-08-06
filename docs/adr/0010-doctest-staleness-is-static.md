@@ -1,6 +1,6 @@
 # ADR-0010: Doctest staleness is a static property, not a run outcome
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-08-06 — see [Amendments](#amendments))
 **Date:** 2026-08-01
 
 The doctest coverage guard reports a scope or skip entry as *stale* when it looks like a typo, so a mistyped path (`src/mod.py` vs `src/mods.py`) cannot silently bypass coverage enforcement. Three successive predicates shipped for this guard and all three were wrong (#1796, attempts 1–3), each fixing the previous hole and opening a new one.
@@ -36,17 +36,18 @@ The "entry exists but yielded no coverage subjects" signal is dropped entirely �
 
 ## Consequences
 
-- **Three classes of unmatchable entry are knowingly not reported.** Each looks like a bug and is not; closing any of them without reading this ADR risks a fourth wrong predicate.
+- **Three classes of unmatchable entry are knowingly not reported**, and one that was has since been closed. Each of the three looks like a bug and is not; closing any of them without reading this ADR risks a fourth wrong predicate. The closed row is kept rather than deleted, because *why* it was accepted is what dates the ones that remain.
 
   | Blind spot | Why accepted |
   |---|---|
-  | Entry exists but sits outside the declared test tree | Detecting it needs the *declared* `testpaths`, which `merge_paths` destroys — see **#1798**. Patching around it in the guard would add machinery #1798 deletes |
+  | Entry exists but sits outside the declared test tree | **CLOSED by [Amendment 1](#amendment-1--the-first-blind-spot-closes-2026-08-06) (2026-08-06).** Originally accepted because "Detecting it needs the *declared* `testpaths`, which `merge_paths` destroys — see **#1798**. Patching around it in the guard would add machinery #1798 deletes". #1798 shipped that field, so the machinery is no longer a workaround |
   | `Symbol`/`Member` entry whose file the scan never attempts to read — the entry abstains, whatever the reason the file was withheld. The current withholding reasons, and which of them an explicit `scope` entry can override, live in `run_coverage_check` (`src/doctest/coverage.rs`); enumerating them here is how this row drifted the first time (#1799). A file the scan attempts but cannot parse left this blind spot in #1800: the entry reports the parse failure (`doctest.coverage.parse-error`) instead of abstaining | A file the scan never read carries no evidence about the symbols inside it (#1796). Detecting these entries would couple staleness to the exclusion set, which **#1790** is actively deciding whether to change |
-  | Entry exists and is reachable but yields no coverage subjects | Not evidence of anything. This is the signal all three attempts mistook for a typo |
+  | Entry exists and is reachable but yields no coverage subjects *for a reason the run discovered* | Not evidence of anything. This is the signal all three attempts mistook for a typo |
+  | Entry names a file the built-in filters exclude — a `python_files` match, `conftest.py`, or a path under `norecursedirs` | Knowingly not reported, and **not** the row above: this one is provably futile from config alone. Split out by [Amendment 1](#amendment-1--the-first-blind-spot-closes-2026-08-06), which also records why only half of it is answerable — `File`/`Symbol`/`Member` entries name a filename the filters can be tested against, `Prefix` entries do not, and "every file under this prefix is excluded" is a hit-based question this ADR forbids |
 
-- **#1798 is this ADR's expiry condition for the first blind spot.** Once `paths.testpaths` stops conflating the declared test tree with the effective run set, reachability becomes statically answerable and this ADR should be amended rather than worked around.
+- **#1798 was this ADR's expiry condition for the first blind spot, and it fired on 2026-08-06.** `paths.testpaths` stopped conflating the declared test tree with the effective run set, reachability became statically answerable, and the ADR was amended rather than worked around — see [Amendment 1](#amendment-1--the-first-blind-spot-closes-2026-08-06). The condition is spent; there is no second expiry hiding behind it.
 
-- **Two diagnostic messages, one per rule.** The static rule reports `'<entry>' names a path that does not exist`; the hit-based rule reports `'<entry>' matched no coverage subjects`. The old single message described neither accurately — a missing path never got as far as matching, and "fix the path" is wrong advice for a missing symbol. The `context` strings (`doctest.coverage.stale-scope` / `stale-skip`) are unchanged, so hard-fail classification is unaffected.
+- **One diagnostic message per rule** — two as of this ADR, three since [Amendment 1](#amendment-1--the-first-blind-spot-closes-2026-08-06). The static rule reports `'<entry>' names a path that does not exist`; the hit-based rule reports `'<entry>' matched no coverage subjects`; the reachability rule reports `'<entry>' is outside the declared test tree, so it can never match`. The old single message described none of them accurately — a missing path never got as far as matching, and "fix the path" is wrong advice for a missing symbol. The `context` strings (`doctest.coverage.stale-scope` / `stale-skip`) are unchanged throughout, so hard-fail classification is unaffected.
 
 - **Runs that were green can turn red, and this ships as `fix:` anyway.** `oxitest --affected` with a mistyped entry went from exit 0 to exit 3. Unlike [ADR-0008](0008-config-fail-closed-narrow-scope.md), which introduced a new hard-fail class and shipped `feat!:`, this introduces nothing: stale entries have always been hard-fails under `strict = "abort"`. A false negative in an existing documented check is a bug fix, and the new message is self-diagnosing. `cliff.toml` sets `breaking_always_bump_major`, so marking it breaking would ship a major version for a guard fix.
 
@@ -55,3 +56,59 @@ The "entry exists but yielded no coverage subjects" signal is dropped entirely �
 - **The unit family must kill mutants, not merely pass.** Hardwiring the predicate to `true` previously left 10 of 12 stale unit tests passing, and every integration test exercised a single invocation shape (a full run) — which is how three wrong predicates shipped green. `cfg_for_stale` is rebuilt on real files, and the invocation-shape matrix lives in the Python integration suite where shape can actually be expressed.
 
 - **The principle generalises, but is decided only here.** *A user-named path that does not exist is a defect in the naming, not a fact about the run.* [#1797](https://github.com/kalonji-tools/oxitest/issues/1797) is the same principle on the CLI-argument surface, including the same split between a missing path (statically answerable) and a missing node ID (not). It is deliberately left to its own grilling — exit-code choice and filter carve-outs have no analogue in the config surface.
+
+## Amendments
+
+### Amendment 1 — the first blind spot closes (2026-08-06)
+
+[#1798](https://github.com/kalonji-tools/oxitest/issues/1798) split the declared
+test tree out of `paths.testpaths`, then removed the last route by which the
+coverage walk could see positional CLI paths. Both halves were needed. The field
+alone left a project that declares no `testpaths` falling back to the
+argv-overwritten one, so `oxitest tests/` audited only `tests/` — the original
+defect surviving one layer down, in the branch no test reached, while
+`docs/user/how-to/use-doctests.md` promised the opposite.
+
+**The new verdict.** A `scope` or `skip` entry that exists on disk but is
+disjoint from every declared root is now reported as stale:
+
+```
+unreachable ⟺ ∀d ∈ D: !E.starts_with(d) && !d.starts_with(E)
+```
+
+Symmetric, not containment. An entry that *contains* a declared root — `src/`
+against `testpaths = ["src/pkg"]` — matches every subject under it, so
+containment alone would report a working config stale. That is the same
+"correct entry reported stale" shape that reopened #1796 on attempt 3, and it is
+pinned by `stale_prefix_entry_containing_the_declared_tree_is_never_stale`.
+
+The check is ordered **after** the existence check, so an entry that is both
+mistyped and disjoint reports as a typo — existence is the more fundamental and
+more certain fact, and "add it to testpaths" is wrong advice for a filename that
+will still be wrong afterwards. It applies to `scope` and `skip` alike: the
+private-module abstention is not a precedent, because that one exists where the
+scan never *read* the file, whereas reachability holds either way.
+
+**Why the invariant survives.** The guard now consults a third input,
+`declared_testpaths`, via `collector::coverage_roots`. That is legal only
+because no coverage path can reach `paths.testpaths` any more — the invariant
+became a property of the call graph rather than a rule review must uphold. It
+rests on one fact: **`src/config/merge.rs:120` is the sole writer of
+`declared_testpaths`.** Anything that starts writing it from argv reopens #1796,
+and no test can express that — which is why it is written here.
+
+The same reasoning is why the diagnostic reuses `doctest.coverage.stale-scope` /
+`stale-skip` rather than minting a context of its own. This ADR already reserves
+those two for "entries that can never match", which is exactly what an
+unreachable entry is; and `split_coverage_diagnostics` hard-fails on a
+hardcoded list of five context strings, so a sixth that nobody adds there
+degrades silently to a pending warning under `abort`.
+
+**What was not built.** The built-in-filter class, now split out as its own row
+above. A `File`/`Symbol`/`Member` entry naming a `test_*.py`, a `conftest.py`,
+or a path under `norecursedirs` is provably unmatchable from config alone — but
+the `Prefix` equivalent is not, and shipping only the answerable half would
+report `scope = ["tests/test_one.py"]` while staying silent on
+`scope = ["tests/"]`. An asymmetry users would read as a bug, with no
+principled defence. If it is ever built it needs its own grilling, not a fourth
+predicate written from this paragraph.

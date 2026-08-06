@@ -34,6 +34,8 @@ Coverage severity is controlled by the global `[tool.oxitest].strict` mode — t
 
 The default `scope = "public"` scans every public subject under the `testpaths` your project **declares** — not under the paths a particular run happens to walk. `oxitest tests/` audits the same subjects as a bare `oxitest`, because coverage is a property of the project rather than of the invocation. Narrowing a run still narrows which doctests *execute*; it does not narrow what gets audited.
 
+A project that declares no `testpaths` has declared *nothing*, not "whatever this run walks" — the audit falls back to the project root, so `oxitest tests/` still audits everything under it.
+
 For a targeted subset, pass a **list of entries** instead:
 
 ```toml
@@ -84,6 +86,7 @@ A **stale entry** is a scope entry — in either `scope` or `skip` — that can 
 
 - A `Prefix` (`dir/`) or `File` (`f.py`) entry is stale only when its path does not exist on disk. Matching zero coverage subjects is not, by itself, stale — private-only modules, `test_*.py` files, and `conftest.py` all legitimately yield none, and that is never treated as a typo.
 - A `Symbol` (`f.py::name`) or `Member` (`f.py::Cls::name`) entry is *additionally* stale when its file was scanned but the named symbol produced no coverage subject.
+- Any entry — whatever its shape — is stale when its path exists but lies **outside the test tree your project declares**, because no invocation can bring it into scope. This is the one whose remedy is not obvious: coverage audits what the project declares, so a source tree is audited only once it appears in `testpaths`. `scope = ["src/mypkg/"]` with `testpaths = ["tests"]` silently covered nothing before this was reported; add `src/mypkg` to `testpaths` if you want it audited, or drop the entry. An entry that is *both* mistyped and outside the tree reports as a missing path — fix the spelling first.
 
 Stale entries surface via the global `strict` dial:
 
