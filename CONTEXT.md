@@ -16,6 +16,25 @@
 
 **Execution** — The phase where test items are run and produce outcomes.
 
+## API Kinds
+
+The public surface contains four kinds of thing. They are spelled alike — `oxitest.approx` and `oxitest.skip` are both lowercase callables four entries apart in `__all__` — so the kind is not visible at the call site, and naming them is what keeps a new addition from being filed as the wrong one.
+
+**The discriminating question is "does this mean anything with no runner listening?"**
+
+- **No** → **Signal**.
+- **Yes**, and the framework must schedule its setup and disposal → **Fixture**.
+- **Yes**, and it is read at import time, before any test runs → **Declaration**.
+- **Yes**, none of the above → **Library**.
+
+**Library** — Works unchanged in a plain script; the framework never learns it was called. `oxi.raises()`, `oxi.warns()`, `oxi.approx()`. Their modules import only stdlib. A stateless test utility is one of these, reached by `import` — there is no separate "helper" concept (#1700).
+
+**Fixture** — A value whose lifetime the framework owns: it decides when the value is built and disposed, and the test declares only what it needs. `TempDir`, `StdCapture`, and user `@oxi.fixture` declarations. When mediation is justified at all, and what shape a narrower block-scoped form takes, are ADR-0009 and ADR-0012's — not restated here.
+
+**Signal** — Changes the test's *outcome* rather than returning a value, and is meaningless with no runner to react. `oxi.skip()` raises `unittest.SkipTest`, which the runner maps to a skipped result; the test never catches it. Annotated `NoReturn`, because it does not come back. `oxi.importorskip()` is a **hybrid** — Library on the success path, where it returns the module, and Signal on the failure path.
+
+**Declaration** — Read at import time, before any test runs, to attach metadata. `mark.skip`, `mark.xfail`, `@oxi.parametrize`, and the `@oxi.fixture` decorator itself. Distinct from Signal by *when*: `mark.skip` decides before setup, `oxi.skip()` decides after setup has already begun.
+
 ## Parametrize
 
 **Parametrize** — Mechanism for running one test function against multiple named input cases. Each case produces a distinct test item.
