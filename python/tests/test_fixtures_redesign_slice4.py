@@ -430,3 +430,35 @@ def test_the_rule_4_hint_says_when_the_root_was_implied_by_layout() -> None:
         f"one would send them after a setting that does not exist; got:\n"
         f"{output}"
     )
+
+
+_DISJOINT_PROJECT = _DATA_ROOT / "rootdir_disjoint_declared"
+
+
+def test_disjoint_declared_roots_make_the_project_root_the_rootdir_package() -> None:
+    """Two declared trees with no shared ancestor put the root at the top (#1921).
+
+    `testpaths = ["tests", "docs"]` share no ancestor below the project root, so
+    the fold lands on the root itself and that becomes the one legal site for
+    `lifetime="process"`. This is derived from the user's own declaration rather
+    than invented in its absence, which is what distinguishes it from the
+    undeclared case `PathConfig::declared_testpaths` argues against.
+
+    Nothing pinned this before. The original #1921 filing asserted the opposite
+    — that the fold yields an empty path and outlaws `process` everywhere — and
+    was measured false against a real run.
+    """
+    # Act
+    stdout, stderr, rc = helpers.run_oxitest(None, cwd=str(_DISJOINT_PROJECT))
+
+    # Assert
+    assert rc == 0, (
+        f"a process fixture at the rootdir package of a disjoint declaration "
+        f"must resolve for tests in every declared tree; rc={rc}\n"
+        f"{stdout}{stderr}"
+    )
+    assert "2 passed" in stdout, (
+        f"both declared trees must reach the root-anchored fixture — one tree "
+        f"passing is consistent with a root that covers only that tree\n"
+        f"{stdout}{stderr}"
+    )
