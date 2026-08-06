@@ -2145,11 +2145,12 @@ mod tests {
         cfg
     }
 
-    /// The stale diagnostics' messages, not merely their count.
+    /// The stale diagnostics' messages, in order.
     ///
-    /// [`stale_count`] cannot tell `MissingPath` from `Unreachable` — both are
-    /// one diagnostic under the same context — so the ordering test needs the
-    /// text.
+    /// The primitive both stale helpers are built on: [`stale_count`] is this
+    /// list's length. A count cannot tell `MissingPath` from `Unreachable` —
+    /// both are one diagnostic under the same context — so any test about
+    /// *which* verdict fired, or about its wording, asserts on the text.
     fn stale_messages(cfg: &crate::config::Config, doctest_files: &[Utf8PathBuf]) -> Vec<String> {
         collect_coverage_diagnostics(doctest_files, cfg)
             .iter()
@@ -2164,10 +2165,7 @@ mod tests {
     /// `rootdir` from them to build the scanned set. Pass an empty slice to
     /// model "nothing scanned".
     fn stale_count(cfg: &crate::config::Config, doctest_files: &[Utf8PathBuf]) -> usize {
-        collect_coverage_diagnostics(doctest_files, cfg)
-            .iter()
-            .filter(|d| d.context.as_ref().starts_with("doctest.coverage.stale-"))
-            .count()
+        stale_messages(cfg, doctest_files).len()
     }
 
     #[test]
@@ -2188,6 +2186,42 @@ mod tests {
             "a scope entry outside the declared tree can never match under any \
              invocation, so leaving it silent tells the user their API is \
              audited when nothing ever reads it",
+        );
+    }
+
+    #[test]
+    fn stale_skip_entry_disjoint_from_the_declared_tree_is_stale() {
+        // Parity with the scope side is a decision, not a side-effect, so it
+        // needs its own test. Skip's failure is the quieter of the two -- the
+        // diagnostic the user tried to silence still fires, so they find out --
+        // which makes exempting it defensible enough that someone may try.
+        // Nothing in the shared classifier would fail if they did.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        std::fs::create_dir_all(rootdir.join("src")).expect("create src");
+        std::fs::write(rootdir.join("src/mod.py"), "def f():\n    pass\n").expect("write");
+        std::fs::create_dir_all(rootdir.join("tests")).expect("create tests");
+        let cfg = cfg_for_stale_declared(rootdir, "src/mod.py", false, &["tests"]);
+        let messages = stale_messages(&cfg, &[]);
+        assert_eq!(
+            messages.len(),
+            1,
+            "an unreachable skip entry is as unmatchable as an unreachable \
+             scope entry -- the private-module abstention is not a precedent \
+             for it, because that one exists where the scan never read the file",
+        );
+        assert!(
+            messages[0].starts_with("skip entry"),
+            "the diagnostic must name which list the entry came from, or the \
+             user cannot find it in pyproject.toml; got: {}",
+            messages[0],
+        );
+        assert!(
+            messages[0].contains("outside the declared test tree"),
+            "skip must reach the same verdict as scope with the same wording -- \
+             a second phrasing for one predicate is how the two drift apart; \
+             got: {}",
+            messages[0],
         );
     }
 
