@@ -113,6 +113,35 @@ fn collect_doctest_files_in(
     Ok(files)
 }
 
+/// The roots the doctest coverage audit walks — the project's *declared*
+/// auditable surface, never the effective run set.
+///
+/// Falls back to `rootdir` when the project declared nothing, rather than to
+/// [`crate::config::PathConfig::testpaths`]: that field is overwritten by
+/// positional CLI paths (`merge_paths`), so falling back to it made
+/// `oxitest tests/` audit only `tests/` in a zero-config project — the #1798
+/// defect surviving in the undeclared branch, where no test reached.
+///
+/// The default lives here rather than in the field because
+/// [`crate::config::PathConfig::declared_testpaths`] documents "empty means the
+/// project declared nothing", which ADR-0009 Rule 4's rootdir package depends
+/// on. Materialising it there would move that rootdir for every zero-config
+/// project.
+///
+/// Two callers, and they must stay the same call:
+/// [`collect_declared_doctest_files`] walks these roots, and
+/// `StalenessInputs::is_unreachable` (`src/pipeline/collection.rs`) judges
+/// scope/skip entries against them. If the two ever compute their roots
+/// separately they can disagree silently, and the disagreement surfaces as a
+/// correct entry reported stale — the shape that reopened #1796 three times.
+pub fn coverage_roots(config: &Config) -> &[Utf8PathBuf] {
+    if config.paths.declared_testpaths.is_empty() {
+        std::slice::from_ref(&config.rootdir)
+    } else {
+        &config.paths.declared_testpaths
+    }
+}
+
 /// Collect the `.py` files of the **declared** test tree, for the doctest
 /// coverage audit.
 ///
@@ -130,15 +159,10 @@ fn collect_doctest_files_in(
 /// The *item* walk stays on `testpaths`. Pointing both at the declared tree
 /// would make `oxitest tests/test_one.py` execute every doctest in the project.
 ///
-/// Falls back to `testpaths` when nothing is declared: there the two are the
-/// same walk, and `Config::load` has already materialised the rootdir default.
+/// Roots come from [`coverage_roots`], which is also what the staleness guard
+/// judges scope/skip entries against.
 pub fn collect_declared_doctest_files(config: &Config) -> Result<Vec<Utf8PathBuf>, globset::Error> {
-    let roots = if config.paths.declared_testpaths.is_empty() {
-        &config.paths.testpaths
-    } else {
-        &config.paths.declared_testpaths
-    };
-    collect_doctest_files_in(roots, config)
+    collect_doctest_files_in(coverage_roots(config), config)
 }
 
 /// Return only conftests that are ancestors of any matched test module.
