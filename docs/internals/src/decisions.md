@@ -65,3 +65,4 @@ requirement is that the _why_ is captured before the _how_ is merged.
 | [0009](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0009-fixture-system-redesign.md) | Fixture system redesign | Accepted |
 | [0010](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0010-doctest-staleness-is-static.md) | Doctest staleness is static | Accepted |
 | [0011](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0011-no-unhandled-panic-routes.md) | No unhandled panic routes | Accepted |
+| [0012](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0012-block-scoped-forms-belong-on-the-object.md) | Block-scoped forms belong on the object | Accepted |

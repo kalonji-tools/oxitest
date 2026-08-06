@@ -4,6 +4,8 @@
 
 **Immutable by Default** — All Python-side interfaces are immutable unless explicitly proven mutable. Dataclasses are `frozen=True, slots=True`. Public attributes are read-only (`@property`, no setter). Collection accessors return immutable views (`tuple`, `MappingProxyType`). Parameters are never mutated. Classes that need mutability are listed as `&mut` exceptions in ADR-0005 — the single source of truth. Mirrors Rust's `let` vs `let mut` convention.
 
+**Block-Scoped Forms Belong on the Object** — An object with a lifetime boundary exposes any narrower, block-scoped form as a method or classmethod on itself (`StdCapture.disabled()`, `LogCapture.at_level()`), never as a second concept or a separate registration. A `classmethod` when the form must be reachable without injecting the fixture, an instance method when it narrows an object already in hand. Not every such object needs one — `TempDir` and `TestContext` correctly have none. Conversely, a lifetime boundary is not by itself a reason to *be* a fixture: `with` has one too, so mediation is justified only when the boundary must open before the test body, or teardown needs the test's outcome/name/config, or the boundary is wider than one test, or the value is framework state. Built-ins are partitioned and gated in `python/tests/test_builtin_shape_rule.py`; ADR-0012 is the single source of truth. Why a separate concept is not an option: ADR-0009 Amendment 5.
+
 ## Core Concepts
 
 **Test Item** — A single runnable test. Identified by a node ID. May be a standalone function or a parametrized variant of one.

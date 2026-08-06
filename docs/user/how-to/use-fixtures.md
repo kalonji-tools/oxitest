@@ -12,6 +12,51 @@ tests that use them. An older route — a `Fixtures()` instance in `conftest.py`
 [Legacy: `Fixtures()` in `conftest.py`](#legacy-fixtures-in-conftestpy) at the
 bottom of this page.
 
+## Decide whether you need a fixture
+
+Not every piece of setup should be one. A fixture hands the framework control
+over *when* your value is built and thrown away; a plain function or a `with`
+block keeps that control in the test. Both have setup and teardown, so
+"it needs cleaning up" is not the deciding factor.
+
+Reach for a fixture when at least one of these is true:
+
+| | Ask | Example |
+|---|---|---|
+| 1 | Must setup happen **before the test body starts**? | capturing everything a test prints — a `with` block can only see what happens after it opens |
+| 2 | Does teardown need **something only the runner knows** — whether the test failed, its name, a CLI flag? | keeping a temp directory only on failure |
+| 3 | Must the value **outlive a single test**? | one database container shared by a whole package |
+| 4 | Is the value **the running test itself**? | `TestContext` — its name, params, finalizers |
+
+If none of them holds, you do not need a fixture, and reaching for one costs
+you something real: a plain function is easier to read, easier to call from
+other code, and its arguments are type-checked at the call site.
+
+Shared setup that is *just a function* is just a function — put it in a module
+beside your tests and import it:
+
+```python
+# tests/factories.py — not a fixture: nothing above applies.
+def make_user(name: str) -> User:
+    return User(name=name, role="member")
+
+
+# tests/test_greeting.py
+from tests.factories import make_user
+
+
+def test_greeting() -> None:
+    user = make_user("alice")
+    assert greet(user) == "Hello alice", "greeting should address the user by name"
+```
+
+Written as a fixture instead, that gains a declaration file, a lifetime you had
+to choose, and a parameter — and loses the ability to take an argument.
+
+The reasoning behind the four questions is in
+[ADR-0012](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0012-block-scoped-forms-belong-on-the-object.md)
+Rule 4.
+
 ## Declare a fixture
 
 Put a `__fixtures__.py` in the package that holds the tests, import oxitest,
@@ -334,6 +379,37 @@ The test asks only for the outer fixture; the chain resolves behind it:
     ```python
     --8<-- "python/tests/docs/how-to/fixtures/conftest.py:imperative-teardown"
     ```
+
+## Narrow a fixture to a block
+
+A fixture's lifetime is chosen by its declaration, and teardown happens at that
+boundary. Sometimes a test wants less than the whole window — set something up
+for three lines, tear it down, then assert the un-set-up behaviour, all inside
+one test.
+
+**That narrower window is a method on the fixture's own object, not a second
+fixture.** Two built-ins already work this way:
+
+```python
+--8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:stdcapture-disabled"
+```
+
+`StdCapture` captures for the whole test; `cap.disabled()` opens a hole in that
+window. `LogCapture.at_level()` is the same shape — it narrows the capture
+level for a block rather than for the test.
+
+When you write your own fixture, follow it: if the value you hand back needs a
+narrower window, put a context manager on that value. Declaring a second
+fixture beside the first, or a module-level helper that builds another copy,
+splits one capability across two names — and each half then looks like the
+wrong choice from the other's documentation.
+
+Use a `classmethod` when the block-scoped form should work *without* injecting
+the fixture at all, and an instance method when it narrows an object the test
+already has.
+
+The reasoning, and the audit of which built-ins need this, is in
+[ADR-0012](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0012-block-scoped-forms-belong-on-the-object.md).
 
 ## Access built-in fixtures via `fx.oxi`
 
