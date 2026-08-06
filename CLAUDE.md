@@ -92,7 +92,11 @@ At creation, apply exactly one **category** label, **one or more** `area:` label
 
 **3. Triage issues.** Every issue gets a **state label** reflecting its triage status. See `docs/agents/triage-labels.md` for the state vocabulary. Triage is also where `priority:` and `size:` are applied — they are judgements, not facts known at filing time, and a guessed `size: M` is worse than no label at all.
 
-**4. Spec every issue.** By the time a PR is created, every issue in that PR MUST have a design spec. If no issue exists yet for the work being specced, create one first — every spec needs a home issue. Specs can be written when the issue is picked up or ahead of time — but never skipped. Use the `superpowers:brainstorming` skill for spec design. Post each issue's spec section as a comment on that issue. When issues share a grouped spec, post only the section relevant to each issue — not the entire spec on every issue.
+**4. Spec every issue.** By the time a PR is created, every issue in that PR MUST have a design spec — written when the issue is picked up or ahead of time, but never skipped. If no issue exists yet for the work being specced, create one first: every spec needs a home issue. Use the `superpowers:brainstorming` skill for spec design. Post each issue's spec section as a comment on that issue. When issues share a grouped spec, post only the section relevant to each issue — not the entire spec on every issue.
+
+**The spec opens with a claims audit** (`artifact` — the spec format begins with it, so there is no separate step to skip). Before writing the spec, re-verify the issue's own factual claims against the tree, and record them as a table: the claim, the verdict, and evidence of the kind the claim demands. An issue's framing is a premise, and this is the first stage that rests on it.
+
+Stage 4, rather than earlier, because it already produces a required comment — the audit rides an artifact that exists. In the batch that produced this clause, **three of three issues carried a false or overstated premise, each written days earlier by the same author now implementing them**, and four commands found all three before any design question was asked.
 
 **5. Create a draft PR.** Open the draft PR *before* any implementation, so the approach can be reviewed early. GitHub requires at least one commit, so scaffold with an empty one and fold it away later:
 
@@ -169,7 +173,12 @@ Three different operations in this stage get called "rebase" in ordinary speech.
 
 *Not* at merge trigger, which is too late — by then the throwaway history is pushed and CI has run on it, and one branch paid a full squash → preflight → push → wait-for-CI → merge cycle to undo that. The step leaves a mark because it has been skipped silently, reported as done when it was not, and argued against with a false claim that the tooling made it impossible.
 
-"Coherent" is a judgement, so it carries one checkable clause: **no commit that a `Sequenced on` row declared non-buildable may survive into merged history.**
+"Coherent" is a judgement, so it carries two checkable clauses:
+
+1. **No commit that a `Sequenced on` row declared non-buildable may survive into merged history.**
+2. **The branch emits one changelog entry per change.** Only `feat:`/`fix:`/`perf:` reach the changelog — `cliff.toml` skips five types explicitly and `filter_commits = true` drops every type it does not name at all, `build:` among them. Count those commits: two entries for one change means the grouping is wrong however coherent each commit reads on its own. One branch was emitting two `fix:` entries for a single change; 4 commits → 2 made it one.
+
+Clause 2 exists because clause 1 cannot fail in the case that keeps recurring — a history whose every commit is individually coherent and whose *count against the unit of work* is still wrong. **It does not reach a branch that emits nothing**, which is most of them: across a recent 40-commit window only 14 were `feat`/`fix`/`perf`. On such a branch clause 2 is silent by construction and judgement is all you have, so say so rather than reading its silence as a pass.
 
 The tooling is available, contrary to that claim:
 
@@ -255,9 +264,9 @@ The pipeline gates code. This gates *conclusions*.
 | Wrong ⇒ someone investigates and finds nothing. Self-correcting. | Wrong ⇒ information is destroyed and nothing looks again. Silent and permanent. |
 | **no citation needed** | **citation required** |
 
-**Direction is the common case, not the rule.** The rule is *consequence*, and a claim that becomes an input to a decision is load-bearing whichever column it falls in. Three kinds slip through the table above: a claim that **specifies the verification itself** (which mutant, which command, which assert fails) — get it wrong and the test it prescribes is vacuous while reading as coverage; a claim that merely **characterises current behaviour** and then becomes spec input; and a claim **inherited** from an issue or spec written days earlier.
+**Direction is the common case, not the rule.** The rule is *consequence*, and a claim that becomes an input to a decision is load-bearing whichever column it falls in. Three kinds slip through the table above: a claim that **specifies the verification itself** (which mutant, which command, which assert fails) — get it wrong and the test it prescribes is vacuous while reading as coverage; a claim that merely **characterises current behaviour** and then becomes spec input; and a claim **inherited** from an issue or spec written days earlier — that last one is what stage 4's claims audit exists to catch.
 
-**A premise is any claim a later stage will rest on.** Whatever produced it — triage brief, spec, plan, review finding, debrief — its premises are bound by this rule. Deliberately not a list of stages: an earlier version of this section named stage 4 and missed stage 3, where the worst defect in the series was authored. Premises are checked where the work is: at stage 6 in the plan's ledger for Track A, and at the disposition comment for a Track B `close`.
+**A premise is any claim a later stage will rest on.** Whatever produced it — triage brief, spec, plan, review finding, debrief — its premises are bound by this rule. Deliberately not a list of stages: an earlier version of this section named stage 4 and missed stage 3, where the worst defect in the series was authored. Premises are checked where the work is: at **stage 4** in the spec's claims audit for the issue's own claims, at **stage 6** in the plan's ledger for everything the plan rests on, and at the disposition comment for a Track B `close`. Those are checkpoints, not the rule's scope — the rule binds every premise wherever it was authored, which is why it is not written as a list of stages.
 
 A subtracting claim MUST carry:
 
@@ -266,6 +275,8 @@ A subtracting claim MUST carry:
 3. evidence the run **executed** rather than replaying a cache — a cached `cargo clippy` once returned 0 where a forced rebuild found 11. "Green" and "ran" are different claims.
 
 This is `artifact` tier: it binds when someone reads the comment. Its value is that the omission becomes visible — a missing quote is the tell — where today there is nothing to look for.
+
+**A citation must survive the merge it describes.** Issue comments are this repo's home for specs and research, so its most durable records carry its weakest referential integrity: a bare `path:line` rots the moment the branch it describes lands. One issue's own merge broke the citations in its comments: a cited `drain.rs:42-44` had become `));`/`}`. Cite a **symbol**, or `path:line@commit`, or quote the excerpt inline so the citation carries its own evidence.
 
 ### Believing a verdict (`artifact`)
 
