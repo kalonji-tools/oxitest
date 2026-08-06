@@ -136,8 +136,11 @@ jobs:
       - name: Check results
         shell: bash
         run: |
-          if [[ "${{ needs.rust-tests.result }}" == "failure" || "${{ needs.python-tests.result }}" == "failure" ]]; then
-            echo "One or more jobs failed"
-            exit 1
-          fi
+          # Allowlist, not a failure-blocklist — see docs.yml's `required` job (#1925).
+          for result in "${{ needs.rust-tests.result }}" "${{ needs.python-tests.result }}"; do
+            case "$result" in
+              success|skipped) ;;
+              *) echo "A test job ended in '$result'; only success or skipped may pass"; exit 1 ;;
+            esac
+          done
           echo "All jobs passed or were skipped"
