@@ -6,18 +6,20 @@ import unittest
 from collections.abc import Callable
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, TypeVar
+from typing import Any, NoReturn, TypeVar
 
 from oxitest._bridge._fn_metadata import _update, get_or_create
 
 _F = TypeVar("_F", bound=Callable[..., Any])
 
 
-def skip(reason: str = "") -> None:
+def skip(reason: str = "") -> NoReturn:
     """Unconditionally skip the current test.
 
     Equivalent to ``@mark.skip`` but callable from inside the test body to
     skip at runtime after setup has already begun.
+
+    The call never completes, so nothing after it in the test body runs.
 
     Args:
         reason: Human-readable explanation shown in the test report.

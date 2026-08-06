@@ -57,6 +57,33 @@ Use `oxitest.warns()` to assert that a block emits a specific warning:
 `match` behaves the same as in `raises` — a regex pattern that oxitest checks against
 the warning message string.
 
+## Skip a test at runtime
+
+Use `oxitest.skip()` to abandon a test once it is already running — when a
+precondition can only be checked after setup has happened:
+
+```python
+--8<-- "python/tests/docs/how-to/test_raises_warns.py:skip-runtime"
+```
+
+**`skip()` does not return.** It raises immediately, so nothing after it in the
+test body executes — the assertion above never runs when no key is configured.
+There is no need to guard the rest of the test with an `else`.
+
+Your type checker knows that. `load_api_key()` returns `str | None`, and after
+the `skip()` the value is a plain `str` — so `.startswith()` needs no cast and
+no `assert is not None`.
+
+Prefer `@mark.skip` when the condition is known before the test runs:
+
+| | Decided | Setup runs first? |
+|---|---|---|
+| `@mark.skip(reason=...)` | at collection | no — the test never starts |
+| `oxitest.skip(reason)` | during the test | **yes** — fixtures have already been built |
+
+That difference is the reason the runtime form exists. Reach for the decorator
+when you can, because skipping before setup is cheaper and reports earlier.
+
 ## Skip when a dependency is missing
 
 Use `oxitest.importorskip()` to skip a test if an optional package is not
@@ -83,4 +110,4 @@ it without a second import.
 ## See also
 
 - [Use built-in fixtures](use-builtin-fixtures.md) — `WarnCapture` for capturing all warnings in a test
-- [Utilities reference](../reference/python-api/utilities.md) — API docs for `raises`, `warns`, `importorskip`
+- [Utilities reference](../reference/python-api/utilities.md) — API docs for `raises`, `warns`, `skip`, `importorskip`
