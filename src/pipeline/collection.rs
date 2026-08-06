@@ -967,6 +967,7 @@ pub(super) fn collect_coverage_diagnostics(
     };
     let inputs = StalenessInputs {
         rootdir: &config.rootdir,
+        coverage_roots: crate::collector::coverage_roots(config),
         scanned: &scanned_files.parsed,
         parse_failed: &scanned_files.parse_failed,
     };
@@ -998,6 +999,18 @@ pub(super) fn collect_coverage_diagnostics(
 /// predicates violated it and each one reopened #1796 in a new shape.
 struct StalenessInputs<'a> {
     rootdir: &'a Utf8Path,
+    /// The project's declared auditable surface, from
+    /// [`crate::collector::coverage_roots`] — the same call the coverage walk
+    /// uses, so the walk and the verdict cannot disagree about what is in
+    /// scope.
+    ///
+    /// This is the guard's third input, and the reason it is legal: after
+    /// #1798, `coverage_roots` cannot observe positional CLI paths, so ADR-0010's
+    /// invariant still holds. It rests on one fact —
+    /// `src/config/merge.rs:120` is the sole writer of `declared_testpaths`.
+    /// Anything that starts writing it from argv reopens #1796, and no test
+    /// can express that.
+    coverage_roots: &'a [Utf8PathBuf],
     /// Files the coverage scanner actually opened and parsed, relative to
     /// `rootdir` -- what `run_coverage_check` reports back, not what it was
     /// offered.
@@ -1024,6 +1037,10 @@ struct StalenessInputs<'a> {
 enum Staleness {
     /// The entry names a path that is not on disk.
     MissingPath,
+    /// The entry exists but is disjoint from the declared test tree, so no
+    /// invocation can bring it into scope (#1798). Closes ADR-0010's first
+    /// blind spot, whose expiry condition was this issue.
+    Unreachable,
     /// The file was scanned, but the named symbol produced no coverage subject.
     NoSubjects,
     /// The scan attempted the entry's file and could not parse it (#1800).
@@ -1036,13 +1053,36 @@ enum Staleness {
 }
 
 impl StalenessInputs<'_> {
+    /// Whether `rel` is disjoint from every declared root.
+    ///
+    /// Symmetric: an entry is reachable if it sits under a declared root **or**
+    /// contains one. `scope = ["src/"]` against `testpaths = ["src/pkg"]` is the
+    /// second case, and it matches every subject under `src/pkg` today —
+    /// containment alone would report a working config stale, which is the
+    /// shape that reopened #1796 on attempt 3.
+    ///
+    /// Both sides go through `rootdir.join` because `declared_testpaths` is
+    /// absolute under `Config::load` and relative under `Config::from_str`,
+    /// while entries are always rootdir-relative; `join` returns an absolute
+    /// path unchanged, so one expression is correct in both. Comparison is
+    /// component-wise, so a `Prefix` entry's trailing `/` is immaterial here —
+    /// the `ENOTDIR` behaviour it drives lives in the `exists()` check above.
+    fn is_unreachable(&self, rel: &Utf8Path) -> bool {
+        let entry = self.rootdir.join(rel);
+        !self.coverage_roots.iter().any(|declared| {
+            let declared = self.rootdir.join(declared);
+            entry.starts_with(&declared) || declared.starts_with(&entry)
+        })
+    }
+
     /// Classify *entry*, given whether it matched a coverage subject this run.
     ///
-    /// Two questions, kept apart because a run can only answer one of them:
+    /// Three questions, kept apart because a run can only answer one of them:
     ///
     /// 1. **Does the path exist?** Static and run-independent (`src/mod.py` vs
     ///    `src/mods.py`).
-    /// 2. **Does the named symbol exist?** Only the scan knows, so it stays
+    /// 2. **Can any run reach it?** Also static — see [`Self::is_unreachable`].
+    /// 3. **Does the named symbol exist?** Only the scan knows, so it stays
     ///    hit-based, gated on exact membership in the scanned set.
     fn classify(&self, entry: &crate::config::ScopeEntry, hit: bool) -> Staleness {
         use crate::config::ScopeEntry;
@@ -1057,6 +1097,13 @@ impl StalenessInputs<'_> {
         // `stale_prefix_entry_naming_a_regular_file_is_stale`.
         if !self.rootdir.join(rel).exists() {
             return Staleness::MissingPath;
+        }
+        // After existence, before the shape dispatch: all four shapes get it
+        // (`Prefix`/`File` are unconditionally Fresh below once they exist),
+        // and an entry that is both mistyped and disjoint reports as the typo
+        // it is rather than sending the user to `testpaths`.
+        if self.is_unreachable(rel) {
+            return Staleness::Unreachable;
         }
         match entry {
             // A Prefix/File entry whose path exists is not a typo. Zero hits
@@ -1125,6 +1172,17 @@ fn stale_diagnostics(
                 Staleness::MissingPath => (
                     context,
                     "names a path that does not exist (remove the entry or fix the path)",
+                ),
+                // Same `context` as a missing path: ADR-0010 reserves
+                // stale-scope/stale-skip for "entries that can never match",
+                // which is exactly what this is. A new context string would
+                // also have to be added to `split_coverage_diagnostics`'
+                // hard-fail list, and a miss there degrades silently to a
+                // pending warning under `abort`.
+                Staleness::Unreachable => (
+                    context,
+                    "is outside the declared test tree, so it can never match \
+                     (add it to testpaths, or remove the entry)",
                 ),
                 Staleness::NoSubjects => (
                     context,
@@ -2068,6 +2126,38 @@ mod tests {
         cfg
     }
 
+    /// [`cfg_for_stale`], plus an explicit declared test tree.
+    ///
+    /// `cfg_for_stale` leaves `declared_testpaths` empty, which
+    /// `collector::coverage_roots` reads as "declared nothing" and answers with
+    /// `[rootdir]` — under which every entry that exists is reachable.
+    /// Reachability tests therefore need this variant; the plain one stays
+    /// correct for every other staleness axis, which is why its six call sites
+    /// are untouched.
+    fn cfg_for_stale_declared(
+        rootdir: &Utf8Path,
+        entry_path: &str,
+        as_scope: bool,
+        declared: &[&str],
+    ) -> crate::config::Config {
+        let mut cfg = cfg_for_stale(rootdir, entry_path, as_scope);
+        cfg.paths.declared_testpaths = declared.iter().map(Utf8PathBuf::from).collect();
+        cfg
+    }
+
+    /// The stale diagnostics' messages, not merely their count.
+    ///
+    /// [`stale_count`] cannot tell `MissingPath` from `Unreachable` — both are
+    /// one diagnostic under the same context — so the ordering test needs the
+    /// text.
+    fn stale_messages(cfg: &crate::config::Config, doctest_files: &[Utf8PathBuf]) -> Vec<String> {
+        collect_coverage_diagnostics(doctest_files, cfg)
+            .iter()
+            .filter(|d| d.context.as_ref().starts_with("doctest.coverage.stale-"))
+            .map(|d| d.message.clone())
+            .collect()
+    }
+
     /// Count stale diagnostics of either kind for `cfg`, scanning `doctest_files`.
     ///
     /// `doctest_files` are absolute paths; `collect_coverage_diagnostics` strips
@@ -2078,6 +2168,71 @@ mod tests {
             .iter()
             .filter(|d| d.context.as_ref().starts_with("doctest.coverage.stale-"))
             .count()
+    }
+
+    #[test]
+    fn stale_scope_entry_disjoint_from_the_declared_tree_is_stale() {
+        // The silent false green this arm exists for: the entry exists, so the
+        // path check passes it, and it is a File entry, so the old code called
+        // it Fresh -- while the coverage walk never reaches its directory, so
+        // the subject inside is never audited and the run exits 0.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        std::fs::create_dir_all(rootdir.join("src")).expect("create src");
+        std::fs::write(rootdir.join("src/mod.py"), "def f():\n    pass\n").expect("write");
+        std::fs::create_dir_all(rootdir.join("tests")).expect("create tests");
+        let cfg = cfg_for_stale_declared(rootdir, "src/mod.py", true, &["tests"]);
+        assert_eq!(
+            stale_count(&cfg, &[]),
+            1,
+            "a scope entry outside the declared tree can never match under any \
+             invocation, so leaving it silent tells the user their API is \
+             audited when nothing ever reads it",
+        );
+    }
+
+    #[test]
+    fn stale_prefix_entry_containing_the_declared_tree_is_never_stale() {
+        // The direction containment-only gets wrong. `src/` sits ABOVE the
+        // declared root, so every file under `src/pkg` does start_with `src/`
+        // and the entry matches -- reporting it stale is the "correct entry
+        // reported stale" shape that reopened #1796 on attempt 3.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        std::fs::create_dir_all(rootdir.join("src/pkg")).expect("create src/pkg");
+        let cfg = cfg_for_stale_declared(rootdir, "src/", true, &["src/pkg"]);
+        assert_eq!(
+            stale_count(&cfg, &[]),
+            0,
+            "a Prefix entry that CONTAINS the declared tree overlaps it and \
+             matches every subject inside it -- only a symmetric test sees \
+             this, and containment alone would fail a working config",
+        );
+    }
+
+    #[test]
+    fn stale_entry_both_missing_and_disjoint_reports_the_missing_path() {
+        // Ordering. Both arms fire; the user must be sent to the filename,
+        // which is the more fundamental and more certain fact, not to
+        // testpaths -- otherwise they go hunting in the wrong file.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        std::fs::create_dir_all(rootdir.join("tests")).expect("create tests");
+        // `src/nope.py` is neither on disk nor under the declared tree.
+        let cfg = cfg_for_stale_declared(rootdir, "src/nope.py", true, &["tests"]);
+        let messages = stale_messages(&cfg, &[]);
+        assert_eq!(
+            messages.len(),
+            1,
+            "one entry must yield one verdict, not one per failing axis",
+        );
+        assert!(
+            messages[0].contains("names a path that does not exist"),
+            "a mistyped path that is also outside the tree is a typo first -- \
+             telling the user to add it to testpaths sends them to fix a \
+             filename that will still be wrong afterwards; got: {}",
+            messages[0],
+        );
     }
 
     #[test]
