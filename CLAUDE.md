@@ -42,8 +42,12 @@ just check
 # Format code and fix typos
 just fmt
 
-# Full pre-push gate (clean + check + test-rust + build + test-python + doc tests)
+# Full pre-push gate — the `preflight` recipe in the justfile defines its
+# phases; `just --list` shows only descriptions, not dependencies
 just preflight
+
+# Refuse a dirty tree before applying a mutant
+just mutation-guard
 
 # Clean build artifacts
 just clean
@@ -213,7 +217,7 @@ git -C <primary-worktree> pull --ff-only
 wt remove <branch> -D --foreground --yes
 ```
 
-`--yes` is not optional here: `wt` prompts for approval, and without it the command fails outright in a non-interactive session — in the very block offered as the workaround for a known trap. The same applies to `wt switch --create`.
+`--yes` is not optional here: `wt` prompts for approval, and without it the command fails outright in a non-interactive session — in the very block offered as the workaround for a known trap.
 
 **10. Post-merge debrief.** After a PR is merged, if the implementation diverged from the plan, add a debrief comment to the closed PR explaining how, where, and why it diverged. Apply the `diverged-from-plan` label to the PR. This label is only applied to closed/merged PRs.
 
@@ -271,7 +275,7 @@ Before believing any verdict:
 
 1. **Capture the exit status directly**, never through a pipe. `cmd | tail -30` reports *tail's* status, which is how a `command not found` once read as a passing gate.
 2. **Pin an asynchronously-fetched verdict to its subject** before reading it. Resolve the head SHA first (`gh pr view "$PR" --json headRefOid`) and refuse any answer that is not about that SHA: an **empty** CI rollup reads as "nothing pending", and after a force-push a **complete green tally belonging to the previous head** reads as success.
-3. **Treat an implausible duration as "did not run".** `just preflight` costs 150–300 s here; four branches once reported a failing preflight in 0–4 s because a `sed` had rewritten the recipe name. Wall-clock caught what the exit code did not.
+3. **Decide "did it run?" on the terminal marker, not the clock.** A complete `just preflight` ends with `→ Preflight passed`; a run without that line did not finish, whatever it cost. Most phases announce themselves with a `→ ` line too, but not all — `mdbook` and `cargo doc` are silent — so count the marker, not the lines. Four branches once reported a failing preflight in 0–4 s because a `sed` had rewritten the recipe name; the tell was that no phase line appeared at all, not the duration. **A non-zero exit voids the heuristic entirely**: read the log. Wall-clock alone has misfired in both directions, and complete green runs have measured 108–140 s.
 4. **State the run count.** N clean runs is not evidence of absence. Say how many times you ran it and capture the output — a flake and a fix are indistinguishable from a single green.
 
 ### Gate coverage (`artifact`)
@@ -298,7 +302,7 @@ All branch management uses Worktrunk. Never use raw `git checkout` or `git branc
 
 ```bash
 # Create a new worktree for a feature branch
-wt switch --create <branch>
+wt switch --create <branch> --yes
 
 # Switch to an existing worktree
 wt switch <branch>
@@ -411,7 +415,9 @@ Parameters annotated with `Fixture[T]` are injected; unannotated parameters are 
 - **Python integration tests** (`just test-python`): Run real commands. Tests use oxitest itself as the runner (`strict = "abort"`).
 - **CI**: GitHub Actions. Two parallel jobs: `check` (static analysis via `just check`) and `test` (`just test-rust`, `just build`, `just test-python`). Uses `astral-sh/setup-uv` and `Swatinem/rust-cache` — no devenv in CI. The Rust toolchain is not one of CI's choices: `rust-toolchain.toml` names it and both sides install from that file, CI via `rustup toolchain install` and devenv via `languages.rust.toolchainFile` (#1792).
 - **Every `assert` MUST have a message.** oxitest runs with `strict = "abort"` — bare asserts are violations. The message explains *why* the assertion matters — oxitest already shows the where, when, and what (expected vs actual). The message gives the developer the *why* so they can debug the *how*. Bad: `"expected 4 methods, got 3"` (oxitest already shows that). Good: `"FixtureProvider protocol added a method — HostProvider needs to implement it to avoid runtime TypeError"`.
-- **Mutation checks need a clean baseline.** A test proves nothing until a mutation makes it fail — but applying a mutant to a file that also holds uncommitted work, then reverting with `git checkout -- <file>`, destroys that work along with the mutant. **`git status --porcelain` must print nothing before you apply a mutant**, and again show only the mutant gone after you revert. Run it; do not intend to. This has now bitten three times, and the run that lost the most had **quoted this rule in its own plan** while violating it — which is why the obligation is a command rather than a sentence.
+- **Mutation checks need a clean baseline.** A test proves nothing until a mutation makes it fail — but applying a mutant to a file that also holds uncommitted work, then reverting with `git checkout -- <file>`, destroys that work along with the mutant. **Run `just mutation-guard` before you apply a mutant**; it refuses a dirty tree and prints the baseline tree hash. After reverting, `git status --porcelain` must show only the mutant gone. The *check* is a `gate`; **remembering to run it is still prose** — no recipe depends on it, so skipping it fails nothing.
+
+  This is a recipe rather than a sentence because the sentence did not work: it was escalated in prose to *"Run it; do not intend to."* and the rule was then violated four times, once by a run that had **quoted it in its own plan** and once by a plan that ordered mutate-before-commit while quoting it. **A plan step that applies a mutant may not follow an uncommitted edit to the same file** — sequence the commit first.
 - **A mutant that passes is a finding until explained.** If the test does not fail, one of two things is true: the test is weaker than it looks, or the mutation is not the inverse of the behaviour you think you changed. Both are worth knowing and neither is "write a better mutant and move on". The worst bug found in this repo's fixture work — a scope cache that was never cleared, leaking a temp directory after every worker's first task group — surfaced because a mutant *passed* and the pass was investigated.
 - **Re-run the mutation set after any later change to the same code.** A mutant that *stops* failing is an unintended semantic change, and a review pass late in a branch is exactly when that happens.
 

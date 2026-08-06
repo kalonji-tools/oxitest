@@ -61,6 +61,20 @@ check-locks: (_log _blue "Checking lock files...")
     uv lock --check
     cargo metadata --locked --format-version 1 --quiet > /dev/null
 
+# A mutant applied over uncommitted work is destroyed with that work by the
+# `git checkout -- <file>` that reverts it. Gitignored scratch is invisible to
+# `git status --porcelain`, so specs under docs/superpowers/ do not trip it.
+#
+# Only the line directly above a recipe becomes its `just --list` description.
+# Refuse a dirty tree before applying a mutant (#1925)
+mutation-guard:
+    @if [ -n "$(git status --porcelain)" ]; then \
+        just _log {{ _red }} "Dirty tree — a mutant applied now dies with the work it sits on:"; \
+        git status --porcelain; \
+        exit 1; \
+    fi; \
+    just _log {{ _green }} "Clean baseline @ $(git rev-parse HEAD^{tree})"
+
 # Full pre-push gate: clean, check, test everything
 preflight: clean check-locks check test-rust build test-python
     @just _log {{_blue}} "Running doc example tests..."
