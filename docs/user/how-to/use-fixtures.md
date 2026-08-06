@@ -54,13 +54,16 @@ A fixture placed in any other file — `helpers.py`, `utils.py` — is invisible
 oxitest by design. It is never scanned, so the fixture is dead code rather than
 a silent half-registration.
 
-!!! warning "A declaration home needs a test file beside it"
-    oxitest registers a `__fixtures__.py` once per directory that holds a
-    collected test file. A `__fixtures__.py` in a package whose tests all live
-    in *sub*directories is never discovered, and its fixtures fail to resolve.
-    Keep at least one test module in the declaring package, or move the
-    declarations down. Tracked as
-    [#1765](https://github.com/kalonji-tools/oxitest/issues/1765).
+A declaration home does not need a test file beside it. Every directory from a
+test up to the rootdir package is scanned, so a package holding shared fixtures
+and no tests of its own is found by the tests in its subdirectories:
+
+```
+tests/
+    __fixtures__.py        # shared declarations, no tests here
+    api/
+        test_api.py        # sees them
+```
 
 ## Access a fixture
 
