@@ -244,6 +244,13 @@ pub struct PathConfig {
     /// `testpaths = ["."]`, a deliberate declaration that the whole project is
     /// the test surface, distinguishable from declaring nothing.
     ///
+    /// This forbids *inventing* the rootdir when nothing was declared. It does
+    /// not forbid the fold *arriving* there: a project declaring two disjoint
+    /// trees (`["tests", "docs"]`) has the project root as their genuine common
+    /// ancestor, and Rule 4 makes it the one legal `process` site (#1921). That
+    /// root is derived from the user's own declaration, which is exactly the
+    /// distinction this paragraph draws — same directory, opposite provenance.
+    ///
     /// Stored unreduced: collapsing a multi-entry declaration to one root here
     /// would foreclose #1755's decision about how a list of declared roots
     /// reduces to a single rootdir package.

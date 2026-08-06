@@ -93,6 +93,13 @@ declaring `["tests/api", "tests/db"]` makes it `tests/` — and adding
 legal before may need to move with it. The error message names the rootdir
 package and how it was derived.
 
+Two declared trees that share no ancestor below your project root — say
+`["tests", "docs"]` — make the **project root** the rootdir package, since that
+is their common ancestor. It never rises above your project: an absolute
+`testpaths` entry pointing somewhere else cannot drag it out of the project, so
+long as something you declared is inside. A project that declares its whole test
+surface outside itself keeps its rootdir package out there with the tests.
+
 ## Autouse
 
 `autouse=True` makes a declaration run for every test in its
