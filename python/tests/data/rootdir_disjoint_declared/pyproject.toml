@@ -1,0 +1,11 @@
+# Two declared test trees with no common ancestor below the project root. The
+# fold therefore lands on the project root itself, which makes a process
+# declaration legal *there* and nowhere else (#1921).
+#
+# Both entries are relative on purpose: `resolve_testpaths` joins them to the
+# rootdir, so they share it as an ancestor. An absolute entry outside the
+# project is the other half of #1921 and is covered by a Rust unit test.
+[tool.oxitest]
+testpaths = ["tests", "docs"]
+python_files = ["test_*.py"]
+strict = "abort"
