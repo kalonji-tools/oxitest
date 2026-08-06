@@ -123,14 +123,13 @@ Declared `lifetime` cannot exceed the declaration site's boundary.
 
 Anything else is a **declaration error at prescan time** with three legal-exit hints (move to `__fixtures__.py` at package level; drop to `module` lifetime; restructure as a rootdir fixture).
 
-**What the rootdir package is.** The rootdir package is the deepest common ancestor of the directories the project **declares** as its test surface, counting only those that actually contain test files. A project that declares nothing gets the surface implied by an unnarrowed walk from the project root. It is *derived*, and two properties of that derivation are load-bearing:
+**What the rootdir package is.** The rootdir package is the deepest common ancestor of the directories the project **declares** as its test surface, counting only those that actually contain test files. A project that declares nothing gets the surface implied by an unnarrowed walk from the project root. It is *derived*, and three properties of that derivation are load-bearing:
 
 - **The filter refines between declared entries; it never demotes the declaration.** When no declared entry holds tests, the unfiltered set is folded rather than yielding no root at all — otherwise a suite whose tests were all deleted would make every `process` declaration illegal, with the diagnostic unable to name any directory to move them to.
 - **The reduction may name a directory the project never declared.** `testpaths = ["tests/api", "tests/db"]` yields `tests/`, which is not itself a declared entry. So the only place `process` is legal can be a directory nobody wrote down — and, until [#1765](https://github.com/kalonji-tools/oxitest/issues/1765) is fixed, one that fixture discovery cannot see. A project declaring disjoint roots (`["tests", "docs"]`) is a further edge, tracked by [#1921](https://github.com/kalonji-tools/oxitest/issues/1921).
+- **Adding configuration can move it.** When the declaration covers every directory holding tests, the declared fold is an ancestor-or-equal of the layout one — so adding `testpaths` can move the rootdir package *up* and reject a `process` declaration that was legal the day before, without changing which tests run. Declare a narrower subset and the fold moves down instead, but then collection changes too. Either way the declaration error names not just the rootdir package but which derivation produced it.
 
 The derivation is deliberately **not** taken from `testpaths` or from the collected file set; both are narrowed by a positional path argument, which would make the same declaration legal or illegal depending on how the run was invoked. [Amendment 9](#amendment-9--the-rootdir-package-is-defined-and-rule-6s-hook-is-retracted-2026-08-06) records why, and what was tried first.
-
-**Because it is derived, adding configuration can move it.** The declared fold is always an ancestor-or-equal of the layout one, so a project that adds `testpaths` may find a `process` declaration that was legal the day before now rejected — with no change to which tests run. The declaration error therefore names not just the rootdir package but which derivation produced it.
 
 `Config.rootdir` — the directory holding `pyproject.toml` — is a **different value** and is not ADR-0009's rootdir package. They coincide only when a project declares nothing and its tests sit at the root.
 
@@ -804,7 +803,7 @@ The distinction is not cosmetic: a consumer wanting the project's own declaratio
 
 **The filter is a third step, not a detail of the fold.** A declared entry reaches the fold only if a walk finds a test file under it — because this repository declares `python/oxitest` so that doctest coverage audits it, that directory holds no `test_*.py`, and without the filter it dragged the fold from `python/tests` up to `python/`. Silently, with everything green.
 
-**Naming.** `Config.rootdir` is the directory holding `pyproject.toml`. It is not the rootdir package, and the bare word must not be reused for the derived value; they coincide only when a project declares nothing and its tests sit at the root.
+**Naming.** Rule 4 distinguishes `Config.rootdir` from the rootdir package; the bare word must not be reused for the derived value.
 
 #### 2. Rule 6's runtime registration hook is retracted
 
