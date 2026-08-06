@@ -87,7 +87,7 @@ in `testpaths` that holds tests. If you declare no `testpaths`, it is the
 deepest directory containing every test oxitest finds when it walks your
 project. In a conventional layout that is `tests/`.
 
-Two consequences are worth knowing. It can be a directory you never listed —
+It can be a directory you never listed —
 declaring `["tests/api", "tests/db"]` makes it `tests/` — and adding
 `testpaths` to a project can move it, so a `"process"` declaration that was
 legal before may need to move with it. The error message names the rootdir
