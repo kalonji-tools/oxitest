@@ -893,7 +893,7 @@ def test_logcapture_injected_via_session() -> None:
 
 
 @oxitest.mark.inprocess
-def test_logcapture_includes_plugin_backends(ctx: TestContext) -> None:
+def test_logcapture_includes_plugin_backends() -> None:
     """Plugin-provided log backends are installed alongside StdlibLogBackend."""
 
     class FakePluginBackend:
@@ -917,7 +917,7 @@ def test_logcapture_includes_plugin_backends(ctx: TestContext) -> None:
         "fake_log_plugin",
         lambda **_: Plugin(log_backends=(fake_backend,)),
     )
-    helpers.install_module(ctx, "fake_log_plugin", mod)
+    helpers.install_module("fake_log_plugin", mod)
 
     registry = load_plugins(["fake_log_plugin"], {})
     backends = [StdlibLogBackend(), *registry.log_backends]

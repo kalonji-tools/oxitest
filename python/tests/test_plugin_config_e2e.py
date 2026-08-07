@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Annotated
 
 import oxitest
-from oxitest import Both, Cli, CliExtension, Conf, Plugin, TestContext
+from oxitest import Both, Cli, CliExtension, Conf, Plugin
 from oxitest._bridge._plugin_config import introspect_config, merge_config
 from oxitest._bridge.plugin_loader import _activate_plugin, load_plugins
 from tests import helpers
@@ -44,7 +44,7 @@ def test_full_flow_introspect_merge_construct() -> None:
 
 
 @oxitest.mark.inprocess
-def test_plugin_loader_discovers_and_activates_typed_config(ctx: TestContext) -> None:
+def test_plugin_loader_discovers_and_activates_typed_config() -> None:
     """load_plugins + activate_plugin should construct a fully-merged typed config."""
     received_configs: list[TestConfig] = []
 
@@ -57,7 +57,7 @@ def test_plugin_loader_discovers_and_activates_typed_config(ctx: TestContext) ->
         oxitest_plugin,
         oxitest_cli_extension=CliExtension(prefix="e2e", config_type=TestConfig),
     )
-    helpers.install_module(ctx, "e2e_plugin", mod)
+    helpers.install_module("e2e_plugin", mod)
 
     registry = load_plugins(["e2e_plugin"], {"e2e_plugin": {"path": "/from/pyproject"}})
     assert "e2e_plugin" in registry.cli_extensions, (

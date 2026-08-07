@@ -43,7 +43,7 @@ def diag_collector() -> Yields[list[Diagnostic]]:
 def _clean_sys_modules() -> Yields[None]:
     """Snapshot-restore sys.modules — cleans up transitive imports a test triggers.
 
-    Prefer ``helpers.install_module(ctx, name, module)`` for cleanup of a
+    Prefer ``helpers.install_module(name, module)`` for cleanup of a
     specific fake module a test installs by name. This fixture complements it
     by also cleaning up modules loaded transitively (e.g. through
     ``spec.loader.exec_module``).
