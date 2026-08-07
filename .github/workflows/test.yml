@@ -231,7 +231,13 @@ jobs:
 
   required:
     name: Tests (required)
-    needs: [rust-tests, python-tests]
+    # macos-arm and macos-intel are deliberately absent: they are advisory
+    # until #1957 lands. Their Python suites fail on one named mechanism —
+    # every spawned subprocess inherits a working directory that no longer
+    # exists — and promotion is an acceptance criterion on that issue, not
+    # this one. Promotion is per-platform so a deferred bug on one target
+    # does not hold the others out of the gate (#1944).
+    needs: [rust-tests, python-tests, linux-arm]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -240,7 +246,10 @@ jobs:
         shell: bash
         run: |
           # Allowlist, not a failure-blocklist — see docs.yml's `required` job (#1925).
-          for result in "${{ needs.rust-tests.result }}" "${{ needs.python-tests.result }}"; do
+          # Every job in `needs:` above must appear here: one that is waited on
+          # but never checked is a silent hole (#1944).
+          for result in "${{ needs.rust-tests.result }}" "${{ needs.python-tests.result }}" \
+                        "${{ needs.linux-arm.result }}"; do
             case "$result" in
               success|skipped) ;;
               *) echo "A test job ended in '$result'; only success or skipped may pass"; exit 1 ;;
