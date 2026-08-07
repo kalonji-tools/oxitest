@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Any, assert_never
 
 from oxitest._bridge._async_session_guard import acquire_session_guarded
 from oxitest._bridge._boundary import safe_teardown
+from oxitest._bridge._cwd_guard import report_and_repair
 from oxitest._bridge._debugger import _NULL_DEBUGGER, DebuggerBackend, _PdbBackend
 from oxitest._bridge._doctest_runner import run_doctest
 from oxitest._bridge._errors import (
@@ -92,7 +93,7 @@ from oxitest._bridge._runners import (
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge._timeout import parse_timeout
 from oxitest._bridge.parametrize import ParametrizeError, resolve_parametrize
-from oxitest._bridge.result import TestResult, _error_result
+from oxitest._bridge.result import StatusKind, TestResult, _error_result
 
 if TYPE_CHECKING:
     from oxitest._bridge._async_backend import AsyncBackend, AsyncSession
@@ -568,6 +569,36 @@ def _run_arrange_phase(
 
 
 def run_test(
+    meta: TestMeta,
+    session: _SessionProtocol | None = None,
+    default_timeout: int | None = None,
+    keep_tmp: str = "cleanup",
+    *,
+    debug: DebugContext = NO_DEBUG,
+) -> TestResult:
+    """Run one test, then verify it left the worker's working directory alive.
+
+    Tests in a worker share a process and ``os.chdir`` is global, so a test
+    that leaves the working directory inside a deleted directory kills every
+    subprocess spawned afterwards. The check runs after ``_run_test_impl``'s
+    teardowns, which is where the deletion happens (#1957).
+
+    A wrapper rather than a check inside that function's ``finally``: the
+    ``try`` there has several return points, and returning from ``finally``
+    would swallow exceptions.
+    """
+    result = _run_test_impl(meta, session, default_timeout, keep_tmp, debug=debug)
+    msg = report_and_repair(meta.node_id)
+    if msg is None:
+        return result
+    # Never downgrade an already-loud result: replacing a FailedResult would
+    # discard the real failure message the author needs.
+    if result.status in (StatusKind.FAILED, StatusKind.ERROR, StatusKind.TIMEOUT):
+        return result
+    return _error_result(msg)
+
+
+def _run_test_impl(
     meta: TestMeta,
     session: _SessionProtocol | None = None,
     default_timeout: int | None = None,
