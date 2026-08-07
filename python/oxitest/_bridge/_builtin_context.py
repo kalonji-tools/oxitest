@@ -64,8 +64,13 @@ class TestContext:
     :attr:`name`, :attr:`node_id`, :attr:`marks` and :attr:`param_id` raise
     ``TestIdentityUnavailableError`` (#1874) rather than reporting the
     fixture's own name as if it were the test's. :meth:`addfinalizer`,
-    :meth:`on_teardown` and :attr:`module_path` work exactly as they do on a
-    test — they are what ``ctx`` is for in a fixture.
+    :meth:`on_teardown` and :attr:`module_path` remain available — they are
+    what ``ctx`` is for in a fixture — but *"exactly as on a test"* is the
+    wrong reading of the first two: a callback registered here runs at **this
+    fixture's** boundary, which above ``function`` lifetime is not the end of
+    any one test but the end of the module, package or process the fixture
+    belongs to (#1958). That is the point of registering it here; a cleanup
+    that belongs to the test is the test's to register.
 
     See Also:
         - :class:`Patcher` — for scoped attribute / env / cwd overrides
@@ -238,12 +243,16 @@ class TestContext:
     def addfinalizer(self, fn: Callable[[], None]) -> None:
         """Register a cleanup function to run after this test or fixture completes.
 
+        The callback runs at the boundary of whatever registered it: the test,
+        for a ``ctx`` injected into a test; the fixture, for a ``ctx`` injected
+        into one. Above ``function`` lifetime that boundary outlives every
+        individual test the fixture serves (#1958).
+
         Registering from inside a *running* teardown is accepted and then never
-        run, so it warns. The mechanism differs by lifetime — at function
-        lifetime the loop is mid-iteration over the very list being appended
-        to; at module lifetime and wider the callback lands on the constructing
-        test's list, which drained earlier (#1958) — so the message names the
-        outcome rather than either mechanism.
+        run, so it warns. The mechanism is now the same at every lifetime — the
+        drain loop is mid-iteration over the very list being appended to, and a
+        callback landing behind its cursor is skipped and then cleared. The
+        message names the outcome rather than the mechanism.
 
         The callback is still appended. This makes the loss audible; it does
         not change what the list holds.

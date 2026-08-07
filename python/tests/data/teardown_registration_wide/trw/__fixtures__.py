@@ -34,7 +34,11 @@ def wide(ctx: TestContext) -> Iterator[str]:
     _record("WIDE SETUP")
     yield "wide-value"
     _record("WIDE TEARDOWN START")
-    # Dropped: this ctx binds the constructing test's fn_teardowns, which
-    # drained long ago (#1958). The point here is that it must not be silent.
+    # Dropped: since #1958 this ctx binds the *process* scope's teardown list —
+    # the very list being drained around this call — so the append lands behind
+    # the drain loop's reversed() cursor and is then cleared. Before #1958 it
+    # bound the constructing test's fn_teardowns, which had drained long ago;
+    # different mechanism, same outcome. The point here is that it must not be
+    # silent.
     ctx.on_teardown(lambda: _record("WIDE LATE FINALIZER RAN"))
     _record("WIDE TEARDOWN END")

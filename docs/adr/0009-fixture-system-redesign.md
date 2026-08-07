@@ -824,3 +824,51 @@ Marked at its live sites: Rule 6's body, and Rule 8's retirement list. **Consequ
 #### What did not change
 
 `FixtureProvider`'s retirement, which remains Rule 8's and #1720's problem. The two rootdir-package defects that read to users as `FixtureNotFoundError` rather than as Rule 4 diagnostics — the undeclared-ancestor case ([#1765](https://github.com/kalonji-tools/oxitest/issues/1765)) and the disjoint-roots fold ([#1921](https://github.com/kalonji-tools/oxitest/issues/1921)) — are described here and fixed there.
+
+### Amendment 10 — a dependency disposes at its owner's boundary, and Amendment 6 is narrowed (2026-08-07)
+
+**Issue:** [#1958](https://github.com/kalonji-tools/oxitest/issues/1958). Narrows Amendment 6.
+
+#### The rule
+
+**A fixture resolved as another fixture's dependency registers its cleanup on that fixture's scope, not on the constructing test's.** This holds at every tier and for both unanchored source variants — `BuiltinSource` and `PluginSource`. It is what `lifetime=` already meant for the *value*; it now means the same for the *disposal*.
+
+Until this amendment the two disagreed. `_ResolutionContext.owner_scope` named the owning fixture's tier — Amendment 6 added it — but nothing carried the owning fixture's teardown list, so `resolve_by_source` bound `ctx.fn_teardowns` unconditionally. A `module`-lifetime fixture declaring `tmp: TempDir` therefore had its directory removed after whichever test first built it, while the fixture stayed cached and kept handing out the path.
+
+Measured, `--serial`, exit 0, `2 passed`, `fixture cache: 1/2 hits` in each case:
+
+| The fixture declares | first test | second test |
+|---|---|---|
+| `tmp: TempDir` | `marker_exists=True` | `marker_exists=False` |
+| `patch: Patcher` | `VALUE=patched` | `VALUE=original` |
+| `Fixture[Conn]` from a plugin `FixtureProvider` | `alive=True` | `alive=False` |
+
+None of these reported anything. The `Patcher` row is the one to remember: a wide fixture's patch was silently reverted mid-tier, so every later test in the module ran against un-patched state and passed.
+
+#### Amendment 6 is narrowed, not retracted
+
+Amendment 6 identified this defect class — *wider-depends-on-narrower* — and fixed one instance of it: a session-scoped builtin resolved for a `process`-lifetime fixture caches in the process scope. It closes with
+
+> a session-scoped builtin resolved *for* a process-lifetime fixture now caches in the process scope, so the pair shares a stack again and LIFO protects it.
+
+That is true, and true **only of `_TempDirFactoryFixture`** — the one builtin declaring `scope = "session"`, which reaches `inject_builtin`'s session-scoped early return and binds `effective_session_scope.teardowns`. The other six builtins declare the default `scope = "function"`, take the other branch, and did not share a stack with their owner at all. Verified by the same probe shape: a `module`-lifetime fixture taking `factory: TempDirFactory` reports `marker_exists=True` in its second test, where every non-session builtin reported `False`.
+
+Amendment 6 also inherits a claim from [#1762](https://github.com/kalonji-tools/oxitest/issues/1762) — that its acceptance criteria *"exempt builtins outright, on the correct observation that they were safe at every tier"* — and says that its own amendment "is what makes that observation false". The observation was false a second time, in a way neither document reached: not only at the `process`/`session` seam, but at every tier, for six builtins and for every plugin-provided fixture.
+
+#### Consequence for `_Scope.drain`
+
+`ctx.addfinalizer` inside a wide-lifetime fixture now appends to that fixture's scope list. When called from inside that scope's own teardown, the append lands behind `drain`'s `reversed()` cursor and is cleared with the rest — so the callback is dropped, exactly as at `function` lifetime, and [#1952](https://github.com/kalonji-tools/oxitest/issues/1952)'s `_in_teardown` warning fires. The observable behaviour is unchanged; the mechanism is not, and `drain`'s comment previously asserted that no public API could reach that list.
+
+Leaving the loop unguarded is a decision. Guarding only the wider tiers would make the `process` tier behave differently from the `function` tier for the identical user mistake, and #1952 settled the semantics: the loss is made audible, the list is not changed.
+
+#### An open question this raises but does not answer
+
+[ADR-0012](0012-block-scoped-forms-belong-on-the-object.md) retires `ctx: TestContext` injection at v4:
+
+> **Retirement.** Two spellings predate `current()` and both keep working under semver: `ctx: TestContext` injection, and `fx.oxi.ctx`. Both are legacy as of #1949 and are retired at v4. Neither is documented as a peer of `current()`.
+
+That retirement is not scoped to tests, and `TestContext.current()` refuses inside a fixture body by design ([#1874](https://github.com/kalonji-tools/oxitest/issues/1874)). Taken together, at v4 a fixture would have **no route to `TestContext` at all**, and `yield` would be its only cleanup mechanism. Neither [#1949](https://github.com/kalonji-tools/oxitest/issues/1949)'s grilling nor ADR-0012 §5.4 weighed that — both argue about tests and about plain functions reached by `import`; "fixture body" appears only as the position `current()` refuses. Recorded here for the v4 conversation that already gates [#1720](https://github.com/kalonji-tools/oxitest/issues/1720), not decided.
+
+#### What did not change
+
+The `function` tier, whose scope teardown list *is* the per-test `fn_teardowns` — excluded explicitly rather than incidentally, so the tier is provably untouched. `inject_builtin`'s session-scoped branch, including Amendment 6's process routing. And the scope **ladder**: `_SCOPE_RANK` orders the tiers for autouse only, and nothing validates that a fixture's dependencies are no narrower than itself — that remains [#1580](https://github.com/kalonji-tools/oxitest/issues/1580)'s and [#1750](https://github.com/kalonji-tools/oxitest/issues/1750)'s.

@@ -193,13 +193,23 @@ class _Scope:
         #
         # The list itself has the same live-append shape as
         # executor._run_teardowns, and is deliberately left unguarded against
-        # it: a callback appended during this loop is skipped and then cleared,
-        # but no public API can append here. ctx.addfinalizer always targets an
-        # fn_teardowns list, and `fx` is not injectable into a fixture, so the
-        # only remaining route would be instantiating a fixture mid-drain —
-        # and dependencies resolve at setup, before any drain begins. That last
-        # step is reasoned, not measured. A guard nothing can trigger is dead
-        # code; if a route is ever found, fix it then rather than preemptively.
+        # it: a callback appended during this loop is skipped and then cleared.
+        #
+        # A public route to this list now exists, which it did not when this
+        # comment was written. #1958 binds a wide-lifetime fixture's
+        # dependencies to its own scope, so `ctx.addfinalizer` called from
+        # inside such a fixture's teardown appends *here* rather than to an
+        # fn_teardowns list. (`fx` is still not injectable into a fixture —
+        # measured, not assumed: it raises "missing 1 required positional
+        # argument".)
+        #
+        # This comment previously said to fix that the moment a route was
+        # found. Keeping warn-and-drop instead is a decision, not an oversight:
+        # #1952 settled the semantics — the loss is made audible and the list
+        # is not changed — and guarding only the wider tiers would make the
+        # process tier behave differently from the function tier for the
+        # identical user mistake. The `_in_teardown` token below is what makes
+        # the loss audible, and it covers every tier by construction.
         token = _in_teardown.set(True)
         try:
             for fn in reversed(self.teardowns):
