@@ -62,15 +62,17 @@ check-locks: (_log _blue "Checking lock files...")
     cargo metadata --locked --format-version 1 --quiet > /dev/null
 
 # A mutant applied over uncommitted work is destroyed with that work by the
-# `git checkout -- <file>` that reverts it. Gitignored scratch is invisible to
-# `git status --porcelain`, so specs under docs/superpowers/ do not trip it.
+# `git checkout -- <file>` that reverts it. That revert cannot touch untracked
+# files, so untracked content is not a reason to refuse — refusing on it made
+# this gate's verdict depend on which worktree you stood in (#1939). Gitignored
+# scratch was already invisible to `git status --porcelain`.
 #
 # Only the line directly above a recipe becomes its `just --list` description.
-# Refuse a dirty tree before applying a mutant (#1925)
+# Refuse uncommitted tracked changes before applying a mutant (#1925, #1939)
 mutation-guard:
-    @if [ -n "$(git status --porcelain)" ]; then \
+    @if [ -n "$(git status --porcelain --untracked-files=no)" ]; then \
         just _log {{ _red }} "Dirty tree — a mutant applied now dies with the work it sits on:"; \
-        git status --porcelain; \
+        git status --porcelain --untracked-files=no; \
         exit 1; \
     fi; \
     just _log {{ _green }} "Clean baseline @ $(git rev-parse HEAD^{tree})"
