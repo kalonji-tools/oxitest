@@ -740,7 +740,15 @@ mod tests {
     #[test]
     fn test_find_rootdir_finds_pyproject() {
         let dir = TempDir::new().unwrap();
-        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
+        // find_rootdir canonicalizes its start (see :580), so the expectation
+        // must be canonical too. On Linux /tmp is a real directory and this is
+        // a no-op; on macOS TempDir allocates under /var/folders/… which
+        // canonicalizes to /private/var/… — comparing against the raw path
+        // asserts a Linux-only coincidence (#1944).
+        let utf8_dir = Utf8Path::from_path(dir.path())
+            .unwrap()
+            .canonicalize_utf8()
+            .unwrap();
         std::fs::write(dir.path().join("pyproject.toml"), "").unwrap();
         let subdir = utf8_dir.join("tests");
         std::fs::create_dir(&subdir).unwrap();
@@ -751,8 +759,12 @@ mod tests {
     #[test]
     fn test_find_rootdir_falls_back_to_start() {
         let dir = TempDir::new().unwrap();
-        let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
-        let rootdir = find_rootdir(Some(utf8_dir));
+        // Canonical expectation — see test_find_rootdir_finds_pyproject (#1944).
+        let utf8_dir = Utf8Path::from_path(dir.path())
+            .unwrap()
+            .canonicalize_utf8()
+            .unwrap();
+        let rootdir = find_rootdir(Some(&utf8_dir));
         assert_eq!(rootdir, utf8_dir);
     }
 
