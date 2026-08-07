@@ -29,6 +29,11 @@ jobs:
             code:
               - 'src/**'
               - 'python/**'
+              # `just check` lints scripts/ too, and without this the job that
+              # runs it cannot be triggered by editing them — a lint gate that
+              # only ever runs locally reads as CI coverage it does not have
+              # (#1939)
+              - 'scripts/**'
               - 'Cargo.*'
               - 'rust-toolchain.toml'
               - 'pyproject.toml'
