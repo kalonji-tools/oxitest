@@ -23,13 +23,30 @@ async def test_alpha(aengine: Fixture[str]) -> None:
     _record(f"HELPER {_util.whoami().rsplit('::', 1)[-1]}")
 
     def _in_teardown() -> None:
-        # The teardown position. current() must return here rather than raise —
-        # the teardown loop swallows exceptions — but it must also emit a
-        # diagnostic, because a finalizer registered from here is dropped.
+        # Bare acquisition. current() must return here rather than raise — the
+        # teardown loop swallows exceptions — and must NOT warn: reading
+        # identity during teardown is legitimate and loses nothing. This
+        # position is the pin for that (#1952).
         TestContext.current()
         _record("TEARDOWN reached")
 
-    TestContext.current().on_teardown(_in_teardown)
+    def _registers_ambiently() -> None:
+        # Registration from inside a teardown, ambient route. The callback is
+        # accepted and never run, so it must warn.
+        oxi.current_test().on_teardown(lambda: _record("NEVER RUNS ambient"))
+        _record("AMBIENT REGISTRAR reached")
+
+    def _registers_via_captured() -> None:
+        # Same, through a context captured before teardown began. This route
+        # never passes through current(), so a guard living there cannot see
+        # it — which is the case #1952 was filed for.
+        captured.on_teardown(lambda: _record("NEVER RUNS captured"))
+        _record("CAPTURED REGISTRAR reached")
+
+    captured = TestContext.current()
+    captured.on_teardown(_in_teardown)
+    captured.on_teardown(_registers_ambiently)
+    captured.on_teardown(_registers_via_captured)
 
     # Registered through the module-level alias instead. current_test() builds
     # a fresh TestContext per call, so this only runs if the alias hands back

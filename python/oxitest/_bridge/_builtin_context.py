@@ -12,8 +12,8 @@ from oxitest._bridge._errors import (
     TestIdentityUnavailableError,
 )
 from oxitest._bridge._fixture_context import (
-    _current_teardown_node_id,
     _fixture_context,
+    _in_teardown,
     _test_run_context,
 )
 from oxitest._bridge._fixture_type import injectable
@@ -164,19 +164,6 @@ class TestContext:
         if _fixture_context.get() is not None:
             msg = "inside a fixture body"
             raise TestContextUnavailableError(msg)
-        if _current_teardown_node_id.get():
-            # A diagnostic, not a raise. _run_teardowns iterates the *live*
-            # list inside contextlib.suppress(Exception), so a finalizer
-            # appended here is never visited and an exception raised to object
-            # is swallowed. The diagnostic channel is the only signal that
-            # survives this position.
-            emit_diagnostic(
-                DiagnosticSeverity.WARNING,
-                "TestContext.current",
-                "called during teardown — a finalizer registered here is "
-                "silently dropped, because the teardown loop is already "
-                "iterating the list it would be appended to",
-            )
         return cls(run_ctx.meta, run_ctx.fn_teardowns)
 
     def _require_test_identity(self, accessed: str) -> None:
@@ -249,7 +236,27 @@ class TestContext:
         return self._param
 
     def addfinalizer(self, fn: Callable[[], None]) -> None:
-        """Register a cleanup function to run after this test or fixture completes."""
+        """Register a cleanup function to run after this test or fixture completes.
+
+        Registering from inside a *running* teardown is accepted and then never
+        run, so it warns. The mechanism differs by lifetime — at function
+        lifetime the loop is mid-iteration over the very list being appended
+        to; at module lifetime and wider the callback lands on the constructing
+        test's list, which drained earlier (#1958) — so the message names the
+        outcome rather than either mechanism.
+
+        The callback is still appended. This makes the loss audible; it does
+        not change what the list holds.
+        """
+        if _in_teardown.get():
+            emit_diagnostic(
+                DiagnosticSeverity.WARNING,
+                "teardown registration",
+                "a callback registered from inside a running teardown is "
+                "never run — the loop that would have run it has already "
+                "passed this point. Do this cleanup inline in the current "
+                "teardown instead.",
+            )
         self._teardown_stack.append(fn)
 
     #: Beginner-friendly alias for addfinalizer.
