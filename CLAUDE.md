@@ -46,8 +46,10 @@ just fmt
 # phases; `just --list` shows only descriptions, not dependencies
 just preflight
 
-# Refuse a dirty tree before applying a mutant
-just mutation-guard
+# Run one mutant end to end: apply, build, test, revert. Anchors are file
+# paths, not inline text. Each terminal state has its own exit code — the
+# justfile is authoritative for which.
+just mutate <path> <old-anchor-file> <new-anchor-file> [test-cmd...]
 
 # Clean build artifacts
 just clean
@@ -431,9 +433,11 @@ Parameters annotated with `Fixture[T]` are injected; unannotated parameters are 
 - **Python integration tests** (`just test-python`): Run real commands. Tests use oxitest itself as the runner (`strict = "abort"`).
 - **CI**: GitHub Actions. Two parallel jobs: `check` (static analysis via `just check`) and `test` (`just test-rust`, `just build`, `just test-python`). Uses `astral-sh/setup-uv` and `Swatinem/rust-cache` — no devenv in CI. The Rust toolchain is not one of CI's choices: `rust-toolchain.toml` names it and both sides install from that file, CI via `rustup toolchain install` and devenv via `languages.rust.toolchainFile` (#1792).
 - **Every `assert` MUST have a message.** oxitest runs with `strict = "abort"` — bare asserts are violations. The message explains *why* the assertion matters — oxitest already shows the where, when, and what (expected vs actual). The message gives the developer the *why* so they can debug the *how*. Bad: `"expected 4 methods, got 3"` (oxitest already shows that). Good: `"FixtureProvider protocol added a method — HostProvider needs to implement it to avoid runtime TypeError"`.
-- **Mutation checks need a clean baseline.** A test proves nothing until a mutation makes it fail — but applying a mutant to a file that also holds uncommitted work, then reverting with `git checkout -- <file>`, destroys that work along with the mutant. **Run `just mutation-guard` before you apply a mutant**; it refuses a dirty tree and prints the baseline tree hash. After reverting, `git status --porcelain` must show only the mutant gone. The *check* is a `gate`; **remembering to run it is still prose** — no recipe depends on it, so skipping it fails nothing.
+- **Run a mutant with `just mutate`, never by hand** (`fold-in`). A test proves nothing until a mutation makes it fail, and every step between those two facts has produced a silent void result at least once. The recipe owns all of them: it depends on `mutation-guard`, so the clean-baseline check is no longer something to remember; it asserts the anchor matched exactly once; it refuses to report a test result when the build failed; it reverts scoped to the mutated path; and it rebuilds afterwards, so the compiled extension cannot outlive the mutant. Each terminal state has its own exit code — the justfile is authoritative for which, and for what the recipe does.
 
-  This is a recipe rather than a sentence because the sentence did not work: it was escalated in prose to *"Run it; do not intend to."* and the rule was then violated four times, once by a run that had **quoted it in its own plan** and once by a plan that ordered mutate-before-commit while quoting it. **A plan step that applies a mutant may not follow an uncommitted edit to the same file** — sequence the commit first.
+  This is a recipe rather than a sentence because the sentence did not work. It was escalated in prose to *"Run it; do not intend to."* and then violated four times, once by a run that had **quoted it in its own plan**. **A plan step that applies a mutant may not follow an uncommitted edit to the same file** — that is now enforced rather than remembered, and it has a consequence worth knowing: a change to the mutation tooling itself cannot be exercised until it is committed, because the recipe's own file is part of the tree its guard inspects.
+
+  **Untracked files do not refuse.** `git checkout -- <file>` cannot destroy them, so refusing on them was a false positive by the guard's own rationale — and it made the verdict depend on which worktree you stood in, which a plan then encoded as universal (#1939).
 - **A mutant that passes is a finding until explained.** If the test does not fail, one of two things is true: the test is weaker than it looks, or the mutation is not the inverse of the behaviour you think you changed. Both are worth knowing and neither is "write a better mutant and move on". The worst bug found in this repo's fixture work — a scope cache that was never cleared, leaking a temp directory after every worker's first task group — surfaced because a mutant *passed* and the pass was investigated.
 - **A kill must be the failure you predicted.** A mutant that fails for some other reason has tested nothing, and it reads exactly like a kill. One exited 101 on a parse error, so the lint it was probing never ran at all; its mirror exited 0 because the parameter had been renamed `_app` and the site sat outside the gate the branch was installing. State which assertion you expect to fail, then check that it is the one that did.
 - **Re-run the mutation set after any later change to the same code.** A mutant that *stops* failing is an unintended semantic change, and a review pass late in a branch is exactly when that happens.
