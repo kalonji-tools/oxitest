@@ -84,10 +84,19 @@ mod prewarm_tests {
     #[test]
     fn kill_pool_terminates_all_processes() {
         let pool = super::prewarm_workers("cat", 3);
+        #[cfg(target_os = "linux")]
         let pids: Vec<u32> = pool.iter().map(|(c, _, _)| c.id()).collect();
         super::kill_pool(pool);
         // After kill_pool, wait() has been called on each child.
         // On Linux /proc/<pid> disappears once the process is waited.
+        //
+        // Linux-only, binding included: macOS has no /proc, so `!exists()`
+        // there is unconditionally true and this would pass vacuously — a
+        // green check proving nothing, which is not the same as a skip. The
+        // binding carries the same gate because `pids` has no other use site,
+        // and `warnings = "deny"` would turn the unused one into a build
+        // failure on exactly the platforms this exists to test (#1944).
+        #[cfg(target_os = "linux")]
         for pid in pids {
             let proc_path = format!("/proc/{pid}");
             assert!(
@@ -105,11 +114,14 @@ mod prewarm_tests {
     #[test]
     fn pool_guard_kills_on_drop() {
         let workers = super::prewarm_workers("cat", 2);
+        #[cfg(target_os = "linux")]
         let pids: Vec<u32> = workers.iter().map(|(c, _, _)| c.id()).collect();
         {
             let _guard = super::PoolGuard::new(workers);
             // guard drops here
         }
+        // Linux-only — see kill_pool_terminates_all_processes (#1944).
+        #[cfg(target_os = "linux")]
         for pid in pids {
             let proc_path = format!("/proc/{pid}");
             assert!(
@@ -122,6 +134,7 @@ mod prewarm_tests {
     #[test]
     fn pool_guard_take_prevents_kill_on_drop() {
         let workers = super::prewarm_workers("cat", 2);
+        #[cfg(target_os = "linux")]
         let pids: Vec<u32> = workers.iter().map(|(c, _, _)| c.id()).collect();
         let taken = {
             let mut guard = super::PoolGuard::new(workers);
@@ -132,6 +145,8 @@ mod prewarm_tests {
         // Workers must still be alive (or at least not waited) after guard drop.
         // Kill them manually now.
         super::kill_pool(taken);
+        // Linux-only — see kill_pool_terminates_all_processes (#1944).
+        #[cfg(target_os = "linux")]
         for pid in pids {
             let proc_path = format!("/proc/{pid}");
             assert!(
