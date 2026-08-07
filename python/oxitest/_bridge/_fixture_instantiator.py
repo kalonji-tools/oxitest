@@ -104,12 +104,33 @@ class DispatchContext:
         owner_scope: tier of the fixture whose dependencies are being
             resolved, or None at test level. Only ``PROCESS`` changes
             anything — see ``resolve_by_source`` (#1777).
+        owner_teardowns: teardown list of that same fixture, or None at test
+            level. ``owner_scope`` named the tier but nothing carried the
+            list, so the cache followed the owner while the teardown stayed
+            on the constructing test (#1958).
     """
 
     meta: TestMeta
     fn_teardowns: list[Callable[[], None]]
     resolve_user_fixture: Callable[[str], Any]
     owner_scope: FixtureScope | None = None
+    owner_teardowns: list[Callable[[], None]] | None = None
+
+    @property
+    def teardown_target(self) -> list[Callable[[], None]]:
+        """Where a dependency resolved under this context registers cleanup.
+
+        ``is None``, never ``or``: a freshly created ``_Scope`` has an empty
+        teardown list, which is falsy, so ``owner_teardowns or fn_teardowns``
+        would bind the *test's* list for exactly the fixture that has
+        registered nothing yet — which is every fixture at the moment its first
+        dependency resolves. That spelling reintroduces #1958 in the common
+        case while passing any test whose fixture registers a teardown before
+        resolving a dependency.
+        """
+        if self.owner_teardowns is None:
+            return self.fn_teardowns
+        return self.owner_teardowns
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +154,13 @@ class _ResolutionContext:
     #: underneath it can follow that tier's teardown boundary (#1777). None at
     #: test level, where the builtin keeps its own scope.
     owner_scope: FixtureScope | None = None
+    #: Teardown list of the fixture currently being instantiated, so a
+    #: dependency resolved underneath it disposes at that fixture's boundary
+    #: rather than the constructing test's (#1958). ``owner_scope`` named the
+    #: tier but nothing carried the list, so the cache followed the owner while
+    #: the teardown did not. None at test level and at function tier, where the
+    #: constructing test's list already *is* the right boundary.
+    owner_teardowns: list[Callable[[], None]] | None = None
 
 
 def _cache_key(defn: FixtureDef[Any]) -> str:
@@ -257,6 +285,7 @@ def _resolve_deps(
                 fn_teardowns=ctx.fn_teardowns,
                 resolve_user_fixture=resolve_user,
                 owner_scope=ctx.owner_scope,
+                owner_teardowns=ctx.owner_teardowns,
             ),
         )
         if resolved:
@@ -440,7 +469,9 @@ class FixtureInstantiator:
                 return ctx.resolve_user_fixture(defn.name)
             case PluginSource(provider=provider):
                 value = provider.create(ctx=None)
-                ctx.fn_teardowns.append(lambda v=value, p=provider: p.teardown(value=v))
+                ctx.teardown_target.append(
+                    lambda v=value, p=provider: p.teardown(value=v)
+                )
                 return value
             case BuiltinSource(impl_cls=impl_cls):
                 # A session-scoped builtin normally caches in the session
@@ -459,7 +490,7 @@ class FixtureInstantiator:
                     impl_cls,
                     ctx.meta,
                     "function",
-                    ctx.fn_teardowns,
+                    ctx.teardown_target,
                     session_scope=self._process_scope if owner_is_process else None,
                 )
 
@@ -522,6 +553,14 @@ class FixtureInstantiator:
             ctx, boundary_path=_boundary_for(defn, ctx), owner_scope=defn.scope
         )
         scope_refs = ctx.scope_callback(defn, ctx.module_path)
+        # Placed before every branch below, so the async route inherits it too:
+        # _resolve_shared_async reaches _resolve_deps without passing through
+        # _instantiate, and a second assignment there would be a second thing
+        # to keep in step (#1958). The per_test tier is excluded deliberately
+        # rather than incidentally — its teardowns list *is* fn_teardowns, so
+        # binding it would be a no-op that reads like a behaviour change.
+        if scope_refs is not None and not scope_refs.per_test:
+            ctx = replace(ctx, owner_teardowns=scope_refs.teardowns)
 
         if scope_refs is not None and scope_refs.per_test:
             return self._resolve_per_test(defn, ctx, scope_refs)
