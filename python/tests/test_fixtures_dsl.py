@@ -6,7 +6,7 @@ import unittest
 from typing import Any
 
 import oxitest
-from oxitest import Fixture, Fixtures, TestContext, raises
+from oxitest import Fixture, Fixtures, raises
 from oxitest._bridge._builtin_context import TestContext as OxiTestContext
 from oxitest._bridge._errors import (
     FixtureNotFoundError,
@@ -505,7 +505,7 @@ def test_fixtures_namespace_name() -> None:
 
 
 @oxitest.mark.inprocess
-def test_plugin_fixture_provider_injected(ctx: TestContext) -> None:
+def test_plugin_fixture_provider_injected() -> None:
     """A plugin-provided FixtureProvider is resolved via Fixture[T] annotation."""
 
     class FakeDatabase:
@@ -544,7 +544,7 @@ def test_plugin_fixture_provider_injected(ctx: TestContext) -> None:
         "db_plugin",
         lambda **_: Plugin(fixture_providers=(provider,)),
     )
-    helpers.install_module(ctx, "db_plugin", mod)
+    helpers.install_module("db_plugin", mod)
 
     registry = load_plugins(["db_plugin"], {})
     assert len(registry.fixture_providers) == 1, (

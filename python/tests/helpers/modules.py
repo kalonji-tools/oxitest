@@ -51,14 +51,18 @@ def make_plugin_module(
 
 
 def install_module(
-    ctx: TestContext,
     name: str,
     module: types.ModuleType,
 ) -> None:
-    """Install ``module`` under ``name`` in ``sys.modules``; auto-remove on teardown."""
+    """Install ``module`` under ``name`` in ``sys.modules``; auto-remove on teardown.
+
+    Reaches the running test's context itself rather than taking ``ctx``. The
+    parameter existed for exactly one line — the ``on_teardown`` below — and
+    threading it through 31 call sites to reach it is what #1949 removed.
+    """
 
     def cleanup() -> None:
         sys.modules.pop(name, None)
 
     sys.modules[name] = module
-    ctx.on_teardown(cleanup)
+    TestContext.current().on_teardown(cleanup)
