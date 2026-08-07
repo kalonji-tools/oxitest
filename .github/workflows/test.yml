@@ -141,6 +141,8 @@ jobs:
   # (snapshot hygiene is repo-wide and Linux gates it), no `llvm-cov` or
   # Codecov upload (three more uploads would double-count the same flags),
   # no artifact upload (`extension-3.12` would collide).
+  #
+  # Their shared steps live in `.github/actions/platform-test` (#1959).
   macos-arm:
     name: Test (macOS arm64)
     needs: changes
@@ -149,29 +151,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-
-      # Toolchain comes from rust-toolchain.toml — see that file (#1792).
-      - run: rustup toolchain install
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: test
-
-      # Must precede cargo: the crate is `crate-type = ["cdylib"]` with pyo3
-      # and no `extension-module` feature, so the `cargo test` harness links
-      # libpython and needs an interpreter on disk first (#1944).
-      - uses: ./.github/actions/setup-python
-        with:
-          uv-sync-args: --group test
-
-      - name: Rust tests
-        run: cargo test
-
-      - name: Build extension
-        run: uv run maturin develop
-
-      - name: Python tests
-        run: uv run python -m oxitest
+      - uses: ./.github/actions/platform-test
 
   macos-intel:
     name: Test (macOS x86_64)
@@ -181,25 +161,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-
-      - run: rustup toolchain install
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: test
-
-      - uses: ./.github/actions/setup-python
-        with:
-          uv-sync-args: --group test
-
-      - name: Rust tests
-        run: cargo test
-
-      - name: Build extension
-        run: uv run maturin develop
-
-      - name: Python tests
-        run: uv run python -m oxitest
+      - uses: ./.github/actions/platform-test
 
   linux-arm:
     name: Test (Linux arm64)
@@ -209,25 +171,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-
-      - run: rustup toolchain install
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: test
-
-      - uses: ./.github/actions/setup-python
-        with:
-          uv-sync-args: --group test
-
-      - name: Rust tests
-        run: cargo test
-
-      - name: Build extension
-        run: uv run maturin develop
-
-      - name: Python tests
-        run: uv run python -m oxitest
+      - uses: ./.github/actions/platform-test
 
   required:
     name: Tests (required)

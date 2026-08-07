@@ -1,0 +1,50 @@
+name: Platform test
+description: >
+  The standard Rust + Python test sequence for a secondary platform job.
+  The caller must run actions/checkout first — this file isn't on disk
+  until it does.
+
+runs:
+  using: composite
+  steps:
+    # Every step below appears in CI nested under one
+    # `Run ./.github/actions/platform-test` entry rather than as a top-level
+    # step — expand it to see which one failed. The same collapse aggregates
+    # the nested actions' post-runs into a single `Post` entry; the caches
+    # still save.
+
+    # Toolchain comes from rust-toolchain.toml — see that file (#1792).
+    - run: rustup toolchain install
+      shell: bash
+
+    # Dependabot can't see .github/actions/** (dependabot.yml uses
+    # `directory: "/"`). Bump this by hand when a Dependabot PR moves
+    # test.yml's copies. Repo-wide fix: #1974.
+    - uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: test
+
+    # Precedes cargo by convention, matching rust-tests and python-tests in
+    # test.yml — not by necessity for `cargo test`. #1944 / PR #1956 row R5
+    # claimed the harness cannot link without an interpreter first; #1959
+    # measured that false, green on all three runners:
+    # https://github.com/kalonji-tools/oxitest/actions/runs/31213080961
+    #
+    # Over-generalised rather than baseless: it holds for `cargo llvm-cov`
+    # (changelog: "Add setup-uv to rust-coverage so PyO3 can find libpython
+    # for linking"). Untested here — do not reorder that job on this note.
+    - uses: ./.github/actions/setup-python
+      with:
+        uv-sync-args: --group test
+
+    - name: Rust tests
+      run: cargo test
+      shell: bash
+
+    - name: Build extension
+      run: uv run maturin develop
+      shell: bash
+
+    - name: Python tests
+      run: uv run python -m oxitest
+      shell: bash
