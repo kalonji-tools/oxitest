@@ -21,7 +21,10 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from oxitest._bridge._test_meta import TestMeta
 
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge.result import DiagnosticSeverity
@@ -37,10 +40,18 @@ _current_teardown_node_id: ContextVar[str] = ContextVar(
 
 @dataclass(frozen=True, slots=True)
 class TestRunContext:
-    """Per-test transient state, set by executor around run_test."""
+    """Per-test transient state, set by executor around run_test.
+
+    ``meta`` and ``fn_teardowns`` exist so ``TestContext.current()`` can build
+    a context without injection (#1949). ``meta is None`` is precisely what
+    "outside a test" means — the default instance carries no identity, so
+    import-time and post-reset positions are distinguishable for free.
+    """
 
     keep_tmp: str = "cleanup"
     result_cell: list[Any] = field(default_factory=list)
+    meta: TestMeta | None = None
+    fn_teardowns: list[Callable[[], None]] = field(default_factory=list)
 
 
 _DEFAULT_TEST_RUN_CONTEXT: TestRunContext = TestRunContext()

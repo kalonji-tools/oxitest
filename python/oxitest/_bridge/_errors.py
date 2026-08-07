@@ -27,6 +27,7 @@ __all__ = [
     "OxitestTimeoutError",
     "ParametrizeError",
     "SharedFixtureMutationError",
+    "TestContextUnavailableError",
     "TestIdentityUnavailableError",
     "UnannotatedFixtureParamError",
     "UsageError",
@@ -208,6 +209,36 @@ class FixtureSetupError(FixtureError):
             f"If using a yield fixture, the error is in setup (before yield)."
         )
         self.fixture_name = name
+
+
+class TestContextUnavailableError(FixtureError):
+    """Raised when ``TestContext.current()`` is called outside a test body (#1949).
+
+    ``current()`` reads ambient state, so it has to refuse rather than guess.
+    The position is named because the illegal positions need different fixes: a
+    fixture body should declare ``ctx: TestContext``, import-time code has no
+    test to describe at all, and a wider-lifetime teardown runs after the test
+    it might have meant is already over.
+
+    Public so that a helper which must work both inside and outside a test can
+    catch it — refusing is only usable if the refusal has a name callers can
+    name.
+
+    Examples:
+        >>> from oxitest import TestContextUnavailableError, raises
+        >>> with raises(TestContextUnavailableError):
+        ...     raise TestContextUnavailableError("inside a fixture body")
+
+    """
+
+    def __init__(self, position: str) -> None:
+        super().__init__(
+            f"TestContext.current() is not available {position}.\n"
+            f"  It is legal only from the body of a running test, and from "
+            f"plain functions that body calls.\n"
+            f"  Inside a fixture, declare `ctx: TestContext` as a parameter "
+            f"instead — that context supports teardown registration."
+        )
 
 
 class TestIdentityUnavailableError(FixtureError):

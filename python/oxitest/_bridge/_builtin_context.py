@@ -1,13 +1,23 @@
 from __future__ import annotations
 
-__all__ = ["TestContext", "_BuiltinContext"]
+__all__ = ["TestContext", "_BuiltinContext", "current_test"]
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from oxitest._bridge._errors import TestIdentityUnavailableError
+from oxitest._bridge._diagnostic_collector import emit_diagnostic
+from oxitest._bridge._errors import (
+    TestContextUnavailableError,
+    TestIdentityUnavailableError,
+)
+from oxitest._bridge._fixture_context import (
+    _current_teardown_node_id,
+    _fixture_context,
+    _test_run_context,
+)
 from oxitest._bridge._fixture_type import injectable
+from oxitest._bridge.result import DiagnosticSeverity
 
 if TYPE_CHECKING:
     from oxitest._bridge._test_meta import TestMeta
@@ -104,6 +114,71 @@ class TestContext:
         self._param: Any = None
         self._teardown_stack = teardown_stack
 
+    @classmethod
+    def current(cls) -> TestContext:
+        """The running test's context, without injection.
+
+        Legal from a test body, and from any plain function that body calls —
+        which is the point: a shared utility reached by ``import`` is not a
+        test, so nothing injects into it, and threading ``ctx`` through every
+        call was the only alternative.
+
+        Every other position refuses rather than guessing, following #1874: a
+        plausible-but-wrong context is worse than an error, because it is
+        well-formed and silent. The one exception is the function-teardown
+        window, which reports a diagnostic instead — see below.
+
+        A thread the test spawns does **not** inherit the context —
+        :mod:`threading` starts each thread with a fresh one — so a call from
+        there raises too. Read the context on the test's own thread and pass
+        what you need across.
+
+        Raises:
+            TestContextUnavailableError: Called at import or collection time,
+                from inside a fixture body, from a wider-than-function
+                fixture's teardown, or from a spawned thread. The message
+                names which.
+
+        Examples:
+            Reached from a plain function the test calls::
+
+                from oxitest import TestContext
+
+                def install(name: str) -> None:
+                    TestContext.current().on_teardown(lambda: remove(name))
+
+                def test_example() -> None:
+                    install("thing")
+
+        """
+        run_ctx = _test_run_context.get()
+        if run_ctx.meta is None:
+            # Covers two positions that read identically: import/collection,
+            # and a wider-lifetime fixture teardown, which fires after
+            # run_test's finally has already reset the ContextVar.
+            msg = (
+                "outside a test (import, collection, a wider fixture's "
+                "teardown, or a thread the test spawned)"
+            )
+            raise TestContextUnavailableError(msg)
+        if _fixture_context.get() is not None:
+            msg = "inside a fixture body"
+            raise TestContextUnavailableError(msg)
+        if _current_teardown_node_id.get():
+            # A diagnostic, not a raise. _run_teardowns iterates the *live*
+            # list inside contextlib.suppress(Exception), so a finalizer
+            # appended here is never visited and an exception raised to object
+            # is swallowed. The diagnostic channel is the only signal that
+            # survives this position.
+            emit_diagnostic(
+                DiagnosticSeverity.WARNING,
+                "TestContext.current",
+                "called during teardown — a finalizer registered here is "
+                "silently dropped, because the teardown loop is already "
+                "iterating the list it would be appended to",
+            )
+        return cls(run_ctx.meta, run_ctx.fn_teardowns)
+
     def _require_test_identity(self, accessed: str) -> None:
         """Refuse an identity read on a context that describes no test (#1874).
 
@@ -179,3 +254,45 @@ class TestContext:
 
     #: Beginner-friendly alias for addfinalizer.
     on_teardown = addfinalizer
+
+
+def current_test() -> TestContext:
+    """The running test's context — module-level alias for :meth:`TestContext.current`.
+
+    Same call, shorter reach: code that wants the ambient context usually
+    wants nothing else from :class:`TestContext`, so importing the class to
+    call one classmethod on it is a step with no payoff. This sits with the
+    other module-level helpers (``oxi.raises``, ``oxi.warns``, ``oxi.skip``)
+    where someone looks for it.
+
+    It delegates rather than reimplements — there is exactly one position
+    rule, in :meth:`TestContext.current`, and this cannot drift from it.
+
+    Typical use is registering cleanup from a plain helper the test calls —
+    ``oxi.current_test().on_teardown(...)``.
+
+    Raises:
+        TestContextUnavailableError: Whatever :meth:`TestContext.current`
+            raises, unchanged — see there for the positions and why each
+            refuses.
+
+    See Also:
+        - :meth:`TestContext.current` — the canonical form, and where the
+          position rule is documented. Deliberately not repeated here: two
+          copies of one rule is what this API set exists to avoid.
+
+    Examples:
+        Outside a running test it refuses, naming the position — catch
+        :class:`TestContextUnavailableError` if the same helper must work
+        both inside and outside a test::
+
+        >>> from oxitest import (
+        ...     TestContextUnavailableError,
+        ...     current_test,
+        ...     raises,
+        ... )
+        >>> with raises(TestContextUnavailableError):
+        ...     current_test()
+
+    """
+    return TestContext.current()

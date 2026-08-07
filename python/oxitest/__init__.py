@@ -32,8 +32,13 @@ partial     — Create a partial case for parametrize composition:
 mark       — Decorator namespace: mark.skip, mark.xfail, mark.timeout,
              and any custom mark registered in pyproject.toml.
 
-TestContext — Injected bare (`ctx: TestContext`); provides addfinalizer /
-              on_teardown for imperative cleanup.
+TestContext — The running test's identity and imperative cleanup. Reach it
+              with `oxi.current_test()` (or `TestContext.current()`), which
+              works from plain functions the test calls. The injected form
+              (`ctx: TestContext`) is legacy, retired at v4.
+
+current_test — `oxi.current_test()` → the running test's TestContext. Alias
+               for TestContext.current(); raises outside a test body.
 
 TempDir        — Injected bare (`tmp: TempDir`); unique temp dir deleted after test.
 TempDirFactory — Session-scoped factory; `factory.mktemp("label")` → TempDir.
@@ -120,6 +125,7 @@ from oxitest._bridge._builtins import (
     TempDirFactory as TempDirFactory,
     TestContext as TestContext,
     WarnCapture as WarnCapture,
+    current_test as current_test,
 )
 from oxitest._bridge._coverage import (
     CovReportFormat as CovReportFormat,
@@ -132,6 +138,7 @@ from oxitest._bridge._errors import (
     AutouseRegistrationError as AutouseRegistrationError,
     BoundaryError as BoundaryError,
     SharedFixtureMutationError as SharedFixtureMutationError,
+    TestContextUnavailableError as TestContextUnavailableError,
 )
 from oxitest._bridge._fixture_decorator import fixture as fixture
 from oxitest._bridge._fixture_type import (
@@ -197,11 +204,13 @@ __all__ = [
     "TempDir",
     "TempDirFactory",
     "TestContext",
+    "TestContextUnavailableError",
     "TestResult",
     "WarnCapture",
     "Yields",
     "approx",
     "arrange",
+    "current_test",
     "fixture",
     "fixtures",
     "importorskip",

@@ -25,6 +25,7 @@ from __future__ import annotations
 from oxitest._bridge._builtin_context import (
     TestContext,
     _BuiltinContext,
+    current_test as current_test,
 )
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._builtins._capture import (
@@ -75,4 +76,5 @@ __all__ = [
     "TestContext",
     "WarnCapture",
     "_BuiltinContext",
+    "current_test",
 ]
