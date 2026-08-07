@@ -170,7 +170,7 @@ class FixtureValidator:
 
     def _lookup_test_function(self, module_path: str, fn_part: str) -> Any | None:
         """Resolve a test function from module cache, handling class::method syntax."""
-        mod = self._module_cache.get(module_path)
+        mod = self._module_cache.get(module_path, kind="test")
         if mod is None:
             return None
         # Handle class::method syntax

@@ -225,7 +225,7 @@ def test_arrange_ambiguous_type_reports_error(tmp: TempDir) -> None:
         ),
     )
     # Seed the cache so the executor loads the same module we pre-loaded.
-    session.module_cache.set(path, preloaded)
+    session.module_cache.set(path, preloaded, kind="test")
 
     result = helpers.run_test(path, "test_ambiguous", session=session)
 

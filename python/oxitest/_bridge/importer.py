@@ -456,7 +456,7 @@ def _import_test_module(
     if session is not None:
         cache = getattr(session, "module_cache", None)
         if cache is not None:
-            cache.set(path, module)
+            cache.set(path, module, kind="test")
 
     return module
 
