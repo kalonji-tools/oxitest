@@ -31,6 +31,7 @@ from oxitest._bridge._errors import (
 from oxitest._bridge._fixture_context import (
     _current_teardown_node_id,
     _fixture_scope,
+    _in_teardown,
     _warn_teardown,
 )
 from oxitest._bridge._fixture_instantiator import (
@@ -184,8 +185,26 @@ class _Scope:
         ``hits``/``misses`` deliberately survive: they are cumulative counters
         that ``get_cache_stats`` reports, not scope contents.
         """
-        for fn in reversed(self.teardowns):
-            safe_teardown(fn, warn=_warn_teardown)
+        # This one loop is the drain for every tier wider than function —
+        # module, package, shared, session and process — so marking the
+        # teardown window here covers all of them, and covers any tier added
+        # later by construction (#1952).
+        #
+        # The list itself has the same live-append shape as
+        # executor._run_teardowns, and is deliberately left unguarded against
+        # it: a callback appended during this loop is skipped and then cleared,
+        # but no public API can append here. ctx.addfinalizer always targets an
+        # fn_teardowns list, and `fx` is not injectable into a fixture, so the
+        # only remaining route would be instantiating a fixture mid-drain —
+        # and dependencies resolve at setup, before any drain begins. That last
+        # step is reasoned, not measured. A guard nothing can trigger is dead
+        # code; if a route is ever found, fix it then rather than preemptively.
+        token = _in_teardown.set(True)
+        try:
+            for fn in reversed(self.teardowns):
+                safe_teardown(fn, warn=_warn_teardown)
+        finally:
+            _in_teardown.reset(token)
         self.teardowns.clear()
         self.cache.clear()
 

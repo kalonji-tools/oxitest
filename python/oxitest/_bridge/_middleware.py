@@ -230,6 +230,10 @@ async def _teardown_async_generators(
     async_teardowns: list[tuple[str, Any]],
 ) -> None:
     """Phase 3: teardown async generators in reverse order."""
+    # Same live-list shape as executor._run_teardowns, deliberately left
+    # unguarded (#1952). This list is fed only by async_teardown_sink during
+    # fixture resolution, never by ctx.addfinalizer, so a user callback cannot
+    # land here at all.
     for name, gen in reversed(async_teardowns):
 
         async def _drain(generator: Any = gen) -> None:

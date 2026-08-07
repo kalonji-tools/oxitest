@@ -14,6 +14,7 @@ __all__ = [
     "_current_teardown_node_id",
     "_fixture_context",
     "_fixture_scope",
+    "_in_teardown",
     "_test_run_context",
     "_warn_teardown",
 ]
@@ -34,6 +35,19 @@ from oxitest._bridge.result import DiagnosticSeverity
 _current_teardown_node_id: ContextVar[str] = ContextVar(
     "_current_teardown_node_id", default=""
 )
+
+# ── Teardown window ──────────────────────────────────────────────────────────
+
+#: True while *any* teardown loop is running, at any lifetime tier.
+#:
+#: Deliberately separate from ``_current_teardown_node_id`` above, which answers
+#: a different question — *which node's* teardown is running — and exists for
+#: error attribution (#618). The two coincide at the function, module and
+#: package tiers and diverge at the process, shared and session tiers, where
+#: nothing sets a node id because no single node owns the boundary. Keying "am
+#: I inside a teardown?" off the node id therefore reads False for three whole
+#: tiers, which is measurably wrong (#1952) rather than merely imprecise.
+_in_teardown: ContextVar[bool] = ContextVar("_in_teardown", default=False)
 
 # ── Per-test transient state ─────────────────────────────────────────────────
 

@@ -23,6 +23,11 @@ from tests import helpers
 _PROJECT = Path(__file__).parent / "data" / "testcontext_current"
 _LEAK_PROJECT = Path(__file__).parent / "data" / "testcontext_leak"
 
+#: The multiplication sign the reporter uses in its dedup suffix, e.g.
+#: "teardown registration (x2)". Spelled with chr() to keep the source
+#: ASCII: the literal trips RUF001 and this use of it is deliberate.
+_TIMES = chr(0xD7)
+
 
 def test_run_context_carries_the_test_identity() -> None:
     """TestRunContext holds the meta and teardown list current() reads."""
@@ -119,18 +124,33 @@ def test_every_position_behaves_under_wide_async_promotion(tmp: TempDir) -> None
         "back the run's shared teardown list — a private one would make "
         f"finalizers registered through the alias vanish; got {run.events}"
     )
-    assert "silently dropped" in run.stdout, (
-        "calling current() from a teardown must emit a diagnostic — a raise "
-        "there is swallowed by the teardown loop, so the diagnostic channel "
-        f"is the only signal that survives; stdout:\n{run.stdout}"
+    # The count rides the reporter's dedup suffix: identical diagnostics
+    # collapse to a single line, so counting occurrences of the message text
+    # reads 1 however many fired.
+    assert f"teardown registration ({_TIMES}2)" in run.stdout, (
+        "exactly two positions register during teardown (ambient and injected) "
+        "and each must warn; one would mean a route is unguarded. This is also "
+        "the positive control for the absence assertion below — it proves the "
+        f"diagnostic channel is open in this run; stdout:\n{run.stdout}"
+    )
+    assert "TestContext.current" not in run.stdout, (
+        "bare acquisition during teardown must emit nothing. #1949 warned here "
+        "on the act of *acquiring* the context, which loses nothing — reading "
+        "ctx.name in a teardown is legitimate — and #1952 moved the guard to "
+        "the registration that actually drops. A diagnostic under this context "
+        "means the over-warning came back. The assertion above is the control: "
+        f"a closed channel would fail it first; stdout:\n{run.stdout}"
     )
 
 
 def test_every_position_behaves_in_worker_subprocesses(tmp: TempDir) -> None:
     """A worker is a separate process; the identity must be set there too."""
     # Arrange / Act
+    # --warnings is load-bearing here for the same reason as in the serial
+    # test: without it the diagnostic collapses to a count and the assertion
+    # below would pass vacuously.
     run = helpers.run_with_event_log(
-        _PROJECT, tmp, "TCC_LOG", "-n", "2", log_name="parallel.log"
+        _PROJECT, tmp, "TCC_LOG", "-n", "2", "--warnings", log_name="parallel.log"
     )
 
     # Assert
@@ -140,6 +160,12 @@ def test_every_position_behaves_in_worker_subprocesses(tmp: TempDir) -> None:
     assert "BODY test_alpha" in run.events, (
         "a worker is a separate process that re-registers fixtures — the "
         f"identity must be set there too, not only in the parent; got {run.events}"
+    )
+    assert f"teardown registration ({_TIMES}2)" in run.stdout, (
+        "the diagnostic must survive the worker's LDJSON wire and the drain "
+        "loop that consumes it — a guard that fires only in-process is inert "
+        "for every parallel run, which is how most suites run, and every "
+        f"in-process assertion would stay green regardless; stdout:\n{run.stdout}"
     )
 
 

@@ -43,6 +43,7 @@ from oxitest._bridge._errors import (
 from oxitest._bridge._fixture_context import (
     TestRunContext,
     _current_teardown_node_id,
+    _in_teardown,
     _test_run_context,
     _warn_teardown,
 )
@@ -337,11 +338,16 @@ def _evaluate_marks_phase(
 def _run_teardowns(fn_teardowns: list[Callable[[], None]], node_id: str) -> None:
     """Run function-scope teardowns in reverse order, suppressing errors."""
     token = _current_teardown_node_id.set(node_id)
+    # The function tier's half of the teardown window; _Scope.drain marks every
+    # wider tier. Separate from the node id above because that one names *which*
+    # node is tearing down and has no answer at the process tier (#1952).
+    in_td = _in_teardown.set(True)
     try:
         for td in reversed(fn_teardowns):
             with contextlib.suppress(Exception):
                 td()
     finally:
+        _in_teardown.reset(in_td)
         _current_teardown_node_id.reset(token)
 
 
