@@ -14,6 +14,36 @@ use super::{WorkerMessage, WorkerResult};
 /// or grow the reporter's diagnostic bag without bound (#1840).
 const MAX_TAIL_LINES: usize = 1024;
 
+/// Slack allowed above a watchdog before a test calls it "never fired".
+///
+/// Absolute rather than a multiple of the watchdog: a multiple shrinks the
+/// tolerance precisely when the watchdog is small, so the faster the test the
+/// tighter its margin. That is backwards, and it is what turned the required
+/// jobs red with no code change — 5x of a 30ms watchdog is 150ms, against
+/// 163.5ms actually observed on a loaded runner (#1962).
+#[cfg(test)]
+const JITTER_SLACK: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// How long a simulated wedged worker keeps spamming.
+///
+/// Must exceed any ceiling asserted against it, or the test cannot tell "the
+/// watchdog fired" from "the spammer ran out". Costs nothing on a passing run:
+/// the sender breaks as soon as the receiver drops at end of test (#1962).
+#[cfg(test)]
+const SPAM_WINDOW: std::time::Duration = std::time::Duration::from_secs(10);
+
+// The relationship above is what makes the spammer tests mean anything: if the
+// window ever drops below the ceiling they assert, they pass because the
+// spammer ran out rather than because the watchdog fired, and nothing says so.
+// A test that silently stops testing its own name is the defect #1962 exists to
+// fix, so this invariant is checked rather than described.
+#[cfg(test)]
+const _: () = assert!(
+    SPAM_WINDOW.as_millis() > JITTER_SLACK.as_millis(),
+    "SPAM_WINDOW must outlast any ceiling asserted against it, or the spammer \
+     tests pass vacuously"
+);
+
 /// Forward one test outcome to the coordinator's consumer loop.
 ///
 /// Exists so the call sites read as sending a result rather than as wrapping
@@ -552,12 +582,21 @@ mod drain_tests {
     }
 
     // ── Test 1 ──────────────────────────────────────────────────────────────
-    // Empty lines must NOT reset the deadline.
-    // Setup: send 50 empty lines then close the sender (disconnect).
-    // Watchdog = 50ms. The disconnect must arrive within ~50ms of the first
-    // empty line, not 50ms × 50 = 2500ms.
+    // Empty lines are consumed without counting as results, and a disconnect
+    // after them is reported as a disconnect.
+    //
+    // This test does NOT pin "empty lines do not reset the deadline", despite
+    // the name it used to carry. Every line is queued and the sender dropped
+    // before the call, so `recv_timeout` never waits and the drain ends in
+    // ~0ms whether the deadline resets or not — the old comment's "50ms × 50 =
+    // 2500ms" hang was not reachable through a pre-queued channel.
+    //
+    // Measured, not reasoned: mutating the empty-line branch to reset the
+    // deadline leaves this test green and fails exactly one test,
+    // `bug44_empty_lines_spin_without_progress`, which is the real pin for
+    // that rule (#1962).
     #[test]
-    fn empty_lines_do_not_reset_deadline() {
+    fn empty_lines_are_skipped_and_disconnect_is_reported() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
         let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
 
@@ -572,10 +611,13 @@ mod drain_tests {
         let (outcome, received) = drain_worker_results(&line_rx, 1, watchdog, &result_tx, 0);
         let elapsed = start.elapsed();
 
-        // Should disconnect quickly (50 sends are instant), not hang for 50 × 50ms.
+        // A hang guard, not a deadline assertion: with every line queued up
+        // front and the sender already dropped, this completes in ~0ms, so the
+        // ceiling only catches a drain that stops making progress altogether.
         assert!(
-            elapsed < Duration::from_millis(200),
-            "drain took {elapsed:?}; empty lines must not inflate total wait time"
+            elapsed < JITTER_SLACK,
+            "drain took {elapsed:?}; a queued, already-disconnected channel \
+             must never block"
         );
         assert_eq!(received, 0, "no real results were sent");
         assert!(
@@ -586,27 +628,53 @@ mod drain_tests {
 
     // ── Test 2 ──────────────────────────────────────────────────────────────
     // Valid results reset the deadline so a slow-but-alive worker isn't killed.
+    //
+    // Both properties this test needs come from its shape (#1962):
+    //
+    //   pass — every gap (400ms) is under the watchdog (800ms), leaving 400ms
+    //          of slack for runner jitter;
+    //   kill — the run outlives a deadline that never resets, because the last
+    //          result lands at 1200ms against a fixed 800ms deadline.
+    //
+    // One gap cannot give both: "every gap < watchdog" and "total > watchdog"
+    // are contradictory at n=1, which is why the earlier two-result version of
+    // this test still passed with the reset deleted.
     #[test]
     fn valid_result_resets_deadline() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
         let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
 
-        let watchdog = Duration::from_millis(100);
+        let watchdog = Duration::from_millis(800);
+        let gap = watchdog / 2;
 
-        // Spawn a thread that sends two results with 60ms between them.
-        // Each result resets the 100ms deadline, so neither should time out.
+        // The gaps go between sends, never after the last one: a trailing
+        // sleep would add `gap` to the join below and prove nothing.
         let handle = std::thread::spawn(move || {
             line_tx.send(valid_json("t::a")).unwrap();
-            std::thread::sleep(Duration::from_millis(60));
-            line_tx.send(valid_json("t::b")).unwrap();
+            for node_id in ["t::b", "t::c", "t::d"] {
+                std::thread::sleep(gap);
+                line_tx.send(valid_json(node_id)).unwrap();
+            }
         });
 
-        let (outcome, received) = drain_worker_results(&line_rx, 2, watchdog, &result_tx, 0);
+        let (outcome, received) = drain_worker_results(&line_rx, 4, watchdog, &result_tx, 0);
         handle.join().unwrap();
 
-        assert_eq!(outcome, DrainOutcome::Complete, "expected Complete");
-        assert_eq!(received, 2);
-        assert_eq!(result_rx.len(), 2, "both results must have been forwarded");
+        assert_eq!(
+            outcome,
+            DrainOutcome::Complete,
+            "every gap is under the watchdog, so each result must reset the \
+             deadline and the worker must never be declared timed out"
+        );
+        assert_eq!(
+            received, 4,
+            "all four results were sent before any deadline"
+        );
+        assert_eq!(
+            result_rx.len(),
+            4,
+            "all four results must have been forwarded"
+        );
     }
 
     // ── Test 3 ──────────────────────────────────────────────────────────────
@@ -693,7 +761,7 @@ mod drain_tests {
         // Should fire close to watchdog duration, not sooner or much later.
         assert!(elapsed >= watchdog, "fired too early: {elapsed:?}");
         assert!(
-            elapsed < watchdog * 5,
+            elapsed < watchdog + JITTER_SLACK,
             "fired too late ({elapsed:?}); watchdog is {watchdog:?}"
         );
     }
@@ -934,7 +1002,7 @@ mod drain_tests {
             "giving up before the deadline would truncate a slow teardown"
         );
         assert!(
-            elapsed < watchdog * 5,
+            elapsed < watchdog + JITTER_SLACK,
             "a worker holding stdout open must not hold the whole run open"
         );
     }
@@ -947,7 +1015,7 @@ mod drain_tests {
         let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
 
         std::thread::spawn(move || {
-            let stop = std::time::Instant::now() + Duration::from_millis(400);
+            let stop = std::time::Instant::now() + SPAM_WINDOW;
             while std::time::Instant::now() < stop {
                 if line_tx.send("\n".to_string()).is_err() {
                     break;
@@ -955,11 +1023,12 @@ mod drain_tests {
             }
         });
 
+        let watchdog = Duration::from_millis(50);
         let start = std::time::Instant::now();
-        drain_until_eof(&line_rx, Duration::from_millis(50), &result_tx, 0);
+        drain_until_eof(&line_rx, watchdog, &result_tx, 0);
 
         assert!(
-            start.elapsed() <= Duration::from_millis(200),
+            start.elapsed() <= watchdog + JITTER_SLACK,
             "blank output must not reset the deadline, or a spamming worker \
              keeps the coordinator reading forever"
         );
@@ -1141,17 +1210,18 @@ mod repro_tests {
     /// `drain_worker_results()` fixes this by tracking a `result_deadline` that is
     /// only reset when a real result line is received.
     ///
-    /// Expected (bug present):  loop spins for ~300ms (spammer duration).
+    /// Expected (bug present):  loop spins for the whole spam window.
     /// Expected (bug fixed):    `drain_worker_results` exits via `TimedOut` within ~50ms.
     #[test]
     fn bug44_empty_lines_spin_without_progress() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
         let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
 
-        // Thread that sends empty lines for 300ms — simulates a panicked
-        // Python subprocess continuously flushing its stdout buffer.
+        // Thread that sends empty lines — simulates a panicked Python
+        // subprocess continuously flushing its stdout buffer. It stops on its
+        // own when the receiver drops at end of test.
         std::thread::spawn(move || {
-            let stop = Instant::now() + Duration::from_millis(300);
+            let stop = Instant::now() + SPAM_WINDOW;
             while Instant::now() < stop {
                 if line_tx.send("\n".to_string()).is_err() {
                     break;
@@ -1170,11 +1240,13 @@ mod repro_tests {
             matches!(outcome, DrainOutcome::TimedOut),
             "expected TimedOut, got {outcome:?}"
         );
-        // Fails with the bug (elapsed ≈ 300ms); passes after the fix (elapsed ≈ 50ms).
+        // Fails with the bug (elapsed ≈ the spam window); passes after the fix
+        // (elapsed ≈ the watchdog).
         assert!(
-            elapsed <= Duration::from_millis(100),
-            "BUG #44: watchdog did not fire within 100ms; elapsed={elapsed:?}. \
-             Empty lines are resetting the recv_timeout timer."
+            elapsed <= watchdog + JITTER_SLACK,
+            "BUG #44: watchdog did not fire within {:?}; elapsed={elapsed:?}. \
+             Empty lines are resetting the recv_timeout timer.",
+            watchdog + JITTER_SLACK
         );
     }
 }
