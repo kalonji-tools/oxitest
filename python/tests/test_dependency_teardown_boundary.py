@@ -260,6 +260,39 @@ async def workspace(tmp: TempDir) -> AsyncIterator[str]:
 )
 
 
+# ── P6: a function-lifetime fixture nested under a wide one ─────────────────
+
+_FIXTURES_NESTED = (
+    _LOG_HEADER
+    + """
+from collections.abc import Iterator
+
+import oxitest as oxi
+from oxitest import Fixture, TempDir
+
+
+@oxi.fixture(lifetime="function")
+def inner(tmp: TempDir) -> Iterator[str]:
+    marker = Path(str(tmp.path)) / "marker.txt"
+    marker.write_text("alive")
+    yield str(marker)
+
+
+@oxi.fixture(lifetime="module")
+def workspace(inner: Fixture[str]) -> Iterator[str]:
+    _record("MOD SETUP")
+    yield inner
+    _record("MOD TEARDOWN")
+"""
+)
+
+
+_PROBE_RC_MSG = (
+    "the probe project must pass; a non-zero rc means the probe itself is "
+    "broken, not the behaviour under test"
+)
+
+
 def _scaffold(
     root: Path,
     *,
@@ -303,10 +336,7 @@ def test_tempdir_survives_the_first_test(tmp: TempDir) -> None:
     _, _, rc = _run(root, log)
 
     # Assert
-    assert rc == 0, (
-        "the probe project must pass; a non-zero rc means the probe itself is "
-        "broken, not the behaviour under test"
-    )
+    assert rc == 0, _PROBE_RC_MSG
     assert "B exists=True" in _events(log), (
         "a TempDir resolved for a module-lifetime fixture must live as long as "
         "that fixture; disposing it after the first test hands every later "
@@ -326,10 +356,7 @@ def test_addfinalizer_runs_at_the_owning_fixtures_boundary(tmp: TempDir) -> None
     events = _events(log)
 
     # Assert
-    assert rc == 0, (
-        "the probe project must pass; a non-zero rc means the probe itself is "
-        "broken, not the behaviour under test"
-    )
+    assert rc == 0, _PROBE_RC_MSG
     assert "FINALIZER" in events, (
         "the finalizer must run at all; if it never fires the ordering "
         "assertion below would raise ValueError instead of failing usefully"
@@ -358,10 +385,7 @@ def test_plugin_fixture_survives_the_first_test(tmp: TempDir) -> None:
     _, _, rc = _run(root, log)
 
     # Assert
-    assert rc == 0, (
-        "the probe project must pass; a non-zero rc means the probe itself is "
-        "broken, not the behaviour under test"
-    )
+    assert rc == 0, _PROBE_RC_MSG
     assert "B alive=True" in _events(log), (
         "provider.teardown() is a disposal hook; firing it after the first "
         "test leaves a module-lifetime fixture handing out a disposed value "
@@ -385,10 +409,7 @@ def test_function_lifetime_still_disposes_per_test(tmp: TempDir) -> None:
     ]
 
     # Assert
-    assert rc == 0, (
-        "the probe project must pass; a non-zero rc means the probe itself is "
-        "broken, not the behaviour under test"
-    )
+    assert rc == 0, _PROBE_RC_MSG
     assert len(paths) == 2, (
         "both tests must have recorded a path, otherwise the comparison below "
         "is vacuous"
@@ -415,12 +436,31 @@ def test_async_wide_fixture_survives_the_first_test(tmp: TempDir) -> None:
     _, _, rc = _run(root, log)
 
     # Assert
-    assert rc == 0, (
-        "the probe project must pass; a non-zero rc means the probe itself is "
-        "broken, not the behaviour under test"
-    )
+    assert rc == 0, _PROBE_RC_MSG
     assert "B exists=True" in _events(log), (
         "the async resolution route reaches _resolve_deps without passing "
         "through _instantiate, so it needs the same owner binding as the sync "
         "route (#1958)"
+    )
+
+
+def test_nested_function_fixture_follows_the_wide_owner(tmp: TempDir) -> None:
+    """A builtin under a function fixture nested in a wide one binds the wide scope."""
+    # Arrange
+    root = Path(str(tmp.path))
+    log = root / "events.log"
+    _scaffold(root, fixtures=_FIXTURES_NESTED, tests=_TEST_TMPDIR)
+
+    # Act
+    _, _, rc = _run(root, log)
+
+    # Assert
+    assert rc == 0, _PROBE_RC_MSG
+    assert "B exists=True" in _events(log), (
+        "a function-lifetime fixture nested under a module-lifetime one is "
+        "built once and cached inside it, so it is effectively wide; its "
+        "TempDir must follow the nearest *wide* owner. Binding it to the "
+        "constructing test's list — which is what setting owner_teardowns "
+        "unconditionally instead of skipping the per_test tier would do — "
+        "hands the cached module fixture a deleted directory (#1958)"
     )

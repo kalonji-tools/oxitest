@@ -6,6 +6,18 @@
 All built-in fixtures are injected by annotating a parameter with the bare type
 (no `Fixture[T]` wrapper needed). Import the type from `oxitest`.
 
+!!! note "\"After the test\" means after whatever asked for it"
+    The cleanup descriptions below — the temp directory removed, the patches
+    reverted, the capture closed — assume the built-in was requested **by a
+    test**, which is the common case.
+
+    Request one from inside a [fixture declaration](use-fixtures.md) instead
+    and it is cleaned up at *that fixture's* boundary. For a fixture at
+    `lifetime="module"` or wider that boundary is not the end of any single
+    test, so the resource stays alive for every test the fixture serves. That
+    is what makes it usable there at all: a temp directory disposed after the
+    first test would leave the fixture handing out a deleted path.
+
 ## TempDir — temporary directories
 
 `TempDir` provides a unique temporary directory that is deleted after the test.
