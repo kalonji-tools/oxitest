@@ -158,6 +158,14 @@ def test_example() -> None:
     assert oxi.current_test().name == "test_example"
 ```
 
+!!! warning "Do not register cleanup from inside a teardown"
+
+    Calling `addfinalizer()` / `on_teardown()` from a callback that is itself
+    running as a teardown registers the callback and then never runs it.
+    oxitest reports this — see
+    [teardown registration](../errors.md) in the error reference. Do the
+    cleanup inline in the teardown you are already inside.
+
 Use `TestContext.current()` where you already have the class in hand. The two
 are the same call — there is one position rule, and the alias delegates to it.
 
@@ -175,8 +183,9 @@ def node_id_if_running() -> str | None:
 
 It is legal from a test body and from any plain function that body calls.
 Everywhere else it raises `TestContextUnavailableError` naming the position,
-with one exception: during teardown it emits a warning diagnostic, because a
-finalizer registered there is silently dropped by the teardown loop.
+with one exception: during teardown it returns normally, because reading the
+running test's identity there is legitimate. What is refused in that position
+is *registering* new cleanup — see the warning below.
 
 Inside a **fixture** body, declare `ctx: TestContext` as a parameter — that
 context supports `on_teardown` and `module_path`, though not the test's
