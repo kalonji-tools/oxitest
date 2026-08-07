@@ -13,6 +13,7 @@ These surfaces will not change in backward-incompatible ways without a major ver
 - `mark.skip`, `mark.xfail`, `mark.timeout`, custom marks
 - Built-in fixtures: `TempDir`, `TempDirFactory`, `StdCapture`, `FdCapture`, `Patcher`, `LogCapture`, `WarnCapture`, `TestContext`
 - `oxi.raises()`, `oxi.warns()`, `oxi.approx()`, `oxi.importorskip()`
+- `oxi.current_test()` and `TestContextUnavailableError`
 - `Plugin` dataclass and protocol interfaces
 - `ExitCode` enum values (0–4)
 
@@ -31,6 +32,21 @@ These surfaces will not change in backward-incompatible ways without a major ver
   single wheel, so a bump ships in a normal minor or patch release; see
   `src/worker_result/wire.rs` for when to bump.
 - Cache format version (`CACHE_VERSION`)
+
+## Deprecated
+
+Still covered by the stability guarantee until the version named. They keep
+working; they are no longer the documented way.
+
+| Surface | Replacement | Retired at |
+|---|---|---|
+| `ctx: TestContext` parameter injection | `oxi.current_test()` | v4 |
+| `fx.oxi.ctx` | `oxi.current_test()` | v4 |
+
+Both spellings reach the same object. `oxi.current_test()` — and
+`TestContext.current()`, the classmethod it aliases — replace them because
+they are also reachable from a plain function the test calls, code that no
+injection mechanism can see (#1949).
 
 ## Experimental
 

@@ -129,6 +129,7 @@ keep_tmp = "failed"
       show_root_toc_entry: false
       heading_level: 3
       members:
+        - current
         - name
         - module_path
         - node_id
@@ -137,6 +138,54 @@ keep_tmp = "failed"
         - param
         - addfinalizer
         - on_teardown
+
+### Reaching the context
+
+`oxi.current_test()` is the way to reach the running test's context. It is a
+module-level alias for `TestContext.current()` — same call, and the shorter
+reach is usually what you want, since code asking for the context rarely needs
+anything else off the class:
+
+```python
+import oxitest as oxi
+
+def install(name: str) -> None:
+    # A plain function. Nothing injects into it — current_test() still works.
+    oxi.current_test().on_teardown(lambda: uninstall(name))
+
+def test_example() -> None:
+    install("thing")
+    assert oxi.current_test().name == "test_example"
+```
+
+Use `TestContext.current()` where you already have the class in hand. The two
+are the same call — there is one position rule, and the alias delegates to it.
+
+A helper that must work both inside and outside a test can catch the refusal:
+
+```python
+import oxitest as oxi
+
+def node_id_if_running() -> str | None:
+    try:
+        return oxi.current_test().node_id
+    except oxi.TestContextUnavailableError:
+        return None
+```
+
+It is legal from a test body and from any plain function that body calls.
+Everywhere else it raises `TestContextUnavailableError` naming the position,
+with one exception: during teardown it emits a warning diagnostic, because a
+finalizer registered there is silently dropped by the teardown loop.
+
+Inside a **fixture** body, declare `ctx: TestContext` as a parameter — that
+context supports `on_teardown` and `module_path`, though not the test's
+identity (#1874).
+
+!!! warning "Legacy spellings"
+    `ctx: TestContext` parameter injection on a **test**, and `fx.oxi.ctx`,
+    both still work and remain semver-protected until v4. Prefer
+    `TestContext.current()` in new code.
 
 ### Usage for Fixture Authors
 

@@ -241,6 +241,30 @@ Fixture errors occur during fixture resolution or teardown.
 ---
 
 ```text
+TestContext.current() is not available inside a fixture body.
+  It is legal only from the body of a running test, and from plain functions that body calls.
+  Inside a fixture, declare `ctx: TestContext` as a parameter instead — that context supports teardown registration.
+```
+
+**Cause:** `TestContext.current()` reads ambient state, so it refuses rather
+than guessing when there is no running test to describe. The message names the
+position it fired in — a fixture body, import or collection time, a
+wider-than-function fixture's teardown (which runs after the test it might
+have meant is already over), or a thread the test spawned. `threading` starts
+each thread with a fresh context, so the identity does not cross that boundary.
+
+The refusal follows the same reasoning as `TestIdentityUnavailableError`: a
+plausible-but-wrong context is worse than an error, because it is well-formed
+and silent.
+
+**Fix:** Inside a fixture, declare `ctx: TestContext` as a parameter — that
+context supports `on_teardown` and `module_path`. At import or collection
+time, move the call into a test. In a wide fixture's teardown there is no
+current test by construction, so capture what you need during setup instead.
+
+---
+
+```text
 ArrangeError: cannot arrange async fixture(s) on a sync test — 1 illegal entry.
   Arranged at:  test_foo.py:42
   Test kind:    sync (`def test_...`)
