@@ -27,6 +27,22 @@ exclude = [{ path = "rust-toolchain.toml", format = "sdist" }]
 target-version = "py311"
 line-length = 88
 
+# The linted surface is declared here rather than as path arguments in the
+# justfile, so one file defines it. `just check` invokes ruff with no paths.
+#
+# `include` REPLACES ruff's defaults (`*.py`, `*.pyi`, `**/pyproject.toml`)
+# rather than extending them, so the last two entries are load-bearing: a
+# first attempt listing only `**/*.py` dropped `python/oxitest/_oxitest.pyi`
+# and 55 test-data `pyproject.toml` files, and every gate stayed green while
+# covering 56 fewer files. Verify with `ruff check --show-files` after editing.
+include = [
+    "python/**/*.py",
+    "python/**/*.pyi",
+    "scripts/**/*.py",
+    "benchmarks/**/*.py",
+    "**/pyproject.toml",
+]
+
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [

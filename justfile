@@ -49,9 +49,9 @@ test-rust *args: (_log _blue "Running Rust tests...")
 
 # Run all static checks (format, lint, clippy, spelling)
 check: (_log _blue "Running static checks...")
-    ruff format --check python/
+    ruff format --check
     cargo fmt --check
-    ruff check python/
+    ruff check
     ty check
     cargo clippy --all-targets -- -D warnings
     codespell --toml pyproject.toml
@@ -76,6 +76,78 @@ mutation-guard:
         exit 1; \
     fi; \
     just _log {{ _green }} "Clean baseline @ $(git rev-parse HEAD^{tree})"
+
+# The applier lives in scripts/apply_mutant.py, which documents the anchor
+# contract and the exit codes this recipe maps. Every terminal state below
+# exits explicitly: a mid-recipe failure does not propagate on its own
+# (measured — `false` followed by an `echo` exits 0), which is how a void run
+# reads as a pass.
+#
+# Only the line directly above a recipe becomes its `just --list` description.
+# Run one mutant end to end: apply, build, test, revert (#1939)
+mutate path old new *test_cmd: mutation-guard
+    #!/usr/bin/env bash
+    set -uo pipefail
+
+    if ! git ls-files --error-unmatch '{{ path }}' > /dev/null 2>&1; then
+        just _log {{ _red }} "MUTANT NOT APPLIED — {{ path }} is not tracked, so the revert would have nothing to restore"
+        exit 1
+    fi
+
+    python3 scripts/apply_mutant.py '{{ path }}' '{{ old }}' '{{ new }}'
+    applied=$?
+
+    # 9 is the applier's own "this mutant cannot be applied"; anything else
+    # non-zero is the applier failing for a reason of its own, which is void.
+    if [ "$applied" -eq 9 ]; then
+        just _log {{ _red }} "MUTANT NOT APPLIED — tree untouched"
+        exit 1
+    elif [ "$applied" -ne 0 ]; then
+        just _log {{ _red }} "VOID: scripts/apply_mutant.py failed (exit $applied) — 127 means python3 is not on PATH, so run inside the devenv shell; 2 means it could not read an anchor, and <old>/<new> are file paths rather than inline text. The docstring in that script documents the rest."
+        exit 2
+    fi
+
+    just _log {{ _blue }} "Mutant applied:"
+    git --no-pager diff -- '{{ path }}'
+
+    just build
+    built=$?
+    if [ "$built" -ne 0 ]; then
+        # No rebuild here: a failed build installed nothing, so the extension on
+        # disk is still the pre-mutant one.
+        git checkout -- '{{ path }}'
+        just _log {{ _red }} "VOID: BUILD FAILED (exit $built) — no test result can be read from a stale binary; mutant reverted"
+        exit 2
+    fi
+
+    test_cmd='{{ test_cmd }}'
+    [ -z "$test_cmd" ] && test_cmd='just test-python'
+    just _log {{ _blue }} "Testing the mutant with: $test_cmd"
+    eval "$test_cmd"
+    tested=$?
+
+    git checkout -- '{{ path }}'
+    if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+        just _log {{ _red }} "REVERT INCOMPLETE — tracked changes remain after reverting {{ path }}:"
+        git status --porcelain --untracked-files=no
+        exit 4
+    fi
+
+    # The source is honest again but the built extension still holds the mutant,
+    # so a later bare test run would fail with no cause anywhere in the tree.
+    just build
+    rebuilt=$?
+    if [ "$rebuilt" -ne 0 ]; then
+        just _log {{ _red }} "BINARY STILL MUTATED — source reverted but the rebuild failed (exit $rebuilt); run 'just build' before trusting any later test run"
+        exit 5
+    fi
+
+    if [ "$tested" -ne 0 ]; then
+        just _log {{ _green }} "KILLED (test command exit $tested) — confirm it is the failure you predicted"
+        exit 0
+    fi
+    just _log {{ _yellow }} "SURVIVED — the suite passed with the mutant applied. This is a finding, not a pass."
+    exit 3
 
 # Full pre-push gate: clean, check, test everything
 preflight: clean check-locks check test-rust build test-python
