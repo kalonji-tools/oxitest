@@ -666,6 +666,63 @@ hanging test.
 
 ---
 
+```text
+<node id> left the worker's working directory deleted. Restored to <path>.
+Tests in a worker share one process, so this would have killed every
+subprocess spawned afterwards.
+```
+
+**Cause:** The test changed the process working directory — usually with
+`patch.chdir()` or a bare `os.chdir()` — into a directory that was then
+deleted, most often the test's own `tmp` directory when its teardown ran.
+
+Tests within a worker share one process, and the working directory is
+process-global. Once it points at a deleted directory, every subprocess
+started afterwards in that worker dies during interpreter startup, before any
+of its own code runs. The failures surface on unrelated tests, so the cause is
+not where the symptoms are.
+
+oxitest restores the directory and reports the test that left it deleted. The
+run continues; the reported test is marked as an error even if its own
+assertions passed, because a test that silently breaks the rest of the worker
+is not a passing test.
+
+**Fix:** Restore the directory in the test, or avoid changing it at all:
+
+```python
+def test_reads_from_a_directory(tmp: TempDir, patch: Patcher) -> None:
+    patch.chdir(tmp)  # restored automatically at teardown
+    ...
+```
+
+If a test spawns subprocesses, pass an explicit working directory rather than
+relying on inheritance:
+
+```python
+subprocess.run([sys.executable, "-c", "..."], cwd=str(tmp), check=False)
+```
+
+Note that `patch.chdir()` only restores if the test reaches its teardown. An
+assertion that fails *before* the restore leaves the directory changed.
+
+---
+
+```text
+a fixture teardown at a lifetime wider than function left the worker's
+working directory deleted. Restored to <path>. No single test owns this
+boundary, so the run continues with the directory repaired.
+```
+
+**Cause:** The same situation, but caused by the teardown of a fixture at
+`module`, `package`, `process` or `session` lifetime. Those teardowns run at a
+scope boundary rather than inside any one test, so no individual test can be
+blamed and none is marked as an error.
+
+**Fix:** As above — restore the working directory inside the fixture before it
+deletes anything, or do not change it.
+
+---
+
 ## Strict mode violations
 
 Strict mode violations are reported when running with `--strict=abort` and
