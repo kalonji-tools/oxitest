@@ -151,7 +151,11 @@ class TempDirFactory:
             A new `TempDir` pointing at the created directory.
 
         """
-        d = Path(tempfile.mkdtemp(prefix=f"{label}_"))
+        # Resolved so the path handed to users equals what Path.cwd() and the
+        # Rust collector both report. On macOS TMPDIR sits under /var, which is
+        # a symlink to /private/var, and the unresolved spelling never compares
+        # equal to either (#1957).
+        d = Path(tempfile.mkdtemp(prefix=f"{label}_")).resolve()
         self._dirs.append(d)
         return TempDir(d)
 
@@ -164,7 +168,7 @@ class TempDirFactory:
 class _TempDirFixture(BuiltinFixture, fixture_type=TempDir):
     def create(self, *, ctx: _BuiltinContext) -> TempDir:
         prefix = f"{ctx.fn_name}_" if ctx.fn_name else None
-        d = Path(tempfile.mkdtemp(prefix=prefix))
+        d = Path(tempfile.mkdtemp(prefix=prefix)).resolve()  # see mktemp (#1957)
         tmp = TempDir(d)
 
         if ctx.keep_tmp == "cleanup":
