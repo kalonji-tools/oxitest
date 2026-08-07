@@ -12,6 +12,8 @@ from pathlib import Path
 
 import oxitest._bridge._loader as _loader_module
 from oxitest import TempDir, TestContext, parametrize
+from oxitest._bridge._builtins import _tempdir
+from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._doctest_runner import _doctest_module_name, _import_doctest_module
 from oxitest._bridge._loader import ModuleCache
 from oxitest._bridge.result import ErrorResult
@@ -282,4 +284,30 @@ def test_import_doctest_module_cleans_up_sys_modules_on_exec_failure(
         "a half-executed module left behind under its synthetic name can be "
         "found by a later lookup that assumes a successful import, surfacing "
         "a confusing failure far from the real cause"
+    )
+
+
+def test_loading_a_builtin_module_for_doctests_adds_no_registry_duplicates() -> None:
+    """The doctest route must not re-register a built-in module's classes.
+
+    Loading a ``_builtins/*`` module under a second identity re-runs every
+    class body in it, re-firing ``BuiltinFixture.__init_subclass__`` into a
+    registry that is never evicted. This drives that load directly rather
+    than waiting to observe it: doctest items are always scheduled after
+    regular tests, so an observational assertion here can never see the
+    condition it exists to catch (#1962).
+    """
+    before = sorted(t.__name__ for t in BuiltinFixture.registered_types())
+
+    result = _import_doctest_module(str(Path(_tempdir.__file__)), ModuleCache())
+
+    assert not isinstance(result, ErrorResult), (
+        "the arrange step is void if the module failed to load — the "
+        "assertion below would then pass without exercising anything"
+    )
+    after = sorted(t.__name__ for t in BuiltinFixture.registered_types())
+    assert after == before, (
+        "loading a built-in module through the doctest route registered its "
+        "classes again; BuiltinFixture.for_type() resolves by class identity, "
+        "so which object a caller gets would depend on which route loaded it"
     )
