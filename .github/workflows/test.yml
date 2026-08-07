@@ -126,6 +126,109 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
+  # Three discrete jobs rather than one matrix. A matrix reports a single
+  # aggregate `needs.<job>.result` — see how `python-tests` above, four legs,
+  # reaches the rollup below as one string — so per-platform promotion into
+  # `needs:` would be impossible. The duplication buys that granularity, and
+  # collapsing these back into a matrix silently reverts it (#1944).
+  #
+  # These test the wheel slices `publish.yml` already ships but has never run:
+  # both halves of the macOS `universal2` wheel and the cross-built Linux
+  # `aarch64` manylinux wheel. Python 3.12 only — version and platform are
+  # orthogonal axes, and four versions are already covered on Linux.
+  #
+  # Deliberately lighter than the Linux jobs: no `insta --unreferenced`
+  # (snapshot hygiene is repo-wide and Linux gates it), no `llvm-cov` or
+  # Codecov upload (three more uploads would double-count the same flags),
+  # no artifact upload (`extension-3.12` would collide).
+  macos-arm:
+    name: Test (macOS arm64)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      # Toolchain comes from rust-toolchain.toml — see that file (#1792).
+      - run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: test
+
+      # Must precede cargo: the crate is `crate-type = ["cdylib"]` with pyo3
+      # and no `extension-module` feature, so the `cargo test` harness links
+      # libpython and needs an interpreter on disk first (#1944).
+      - uses: ./.github/actions/setup-python
+        with:
+          uv-sync-args: --group test
+
+      - name: Rust tests
+        run: cargo test
+
+      - name: Build extension
+        run: uv run maturin develop
+
+      - name: Python tests
+        run: uv run python -m oxitest
+
+  macos-intel:
+    name: Test (macOS x86_64)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: test
+
+      - uses: ./.github/actions/setup-python
+        with:
+          uv-sync-args: --group test
+
+      - name: Rust tests
+        run: cargo test
+
+      - name: Build extension
+        run: uv run maturin develop
+
+      - name: Python tests
+        run: uv run python -m oxitest
+
+  linux-arm:
+    name: Test (Linux arm64)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: test
+
+      - uses: ./.github/actions/setup-python
+        with:
+          uv-sync-args: --group test
+
+      - name: Rust tests
+        run: cargo test
+
+      - name: Build extension
+        run: uv run maturin develop
+
+      - name: Python tests
+        run: uv run python -m oxitest
+
   required:
     name: Tests (required)
     needs: [rust-tests, python-tests]
