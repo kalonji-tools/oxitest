@@ -602,6 +602,7 @@ def run_test(
     _run_ctx = TestRunContext(
         keep_tmp=keep_tmp,
         result_cell=[None] if keep_tmp != "cleanup" else [],
+        meta=meta,
     )
     _run_ctx_token = _test_run_context.set(_run_ctx)
     backend = _resolve_debugger_backend(effective_session, debug.mode)
@@ -610,9 +611,20 @@ def run_test(
     unique_name = _exec_unique_name(meta.module_path)
     resolved = _load_and_resolve(meta, effective_session, unique_name)
     if not isinstance(resolved, _ResolvedTest):
+        # The one return that escapes the try/finally below. Without this
+        # reset the failed test's identity outlives run_test, and a later
+        # TestContext.current() — in a wider fixture's teardown, say — hands
+        # back a context for a test that never ran (#1949).
+        _test_run_context.reset(_run_ctx_token)
         return resolved
     fn_raw = resolved.fn_raw
     fn_teardowns = resolved.fn_teardowns
+    # resolve_for_test builds the teardown list, so the set above could not
+    # carry it — keep_tmp is read *during* fixture setup, so that set cannot
+    # move later either. Re-set now that resolution is done (#1949).
+    _run_ctx_token2 = _test_run_context.set(
+        replace(_run_ctx, fn_teardowns=fn_teardowns)
+    )
 
     try:
         marks = get_marks(fn_raw)
@@ -657,4 +669,5 @@ def run_test(
     finally:
         sys.modules.pop(unique_name, None)
         _run_teardowns(fn_teardowns, meta.node_id)
+        _test_run_context.reset(_run_ctx_token2)
         _test_run_context.reset(_run_ctx_token)

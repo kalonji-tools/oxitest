@@ -1,0 +1,3 @@
+[tool.oxitest]
+testpaths = ["tcl"]
+python_files = ["test_*.py"]

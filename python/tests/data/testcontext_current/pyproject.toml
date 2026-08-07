@@ -1,0 +1,6 @@
+[tool.oxitest]
+testpaths = ["testcontext_current"]
+python_files = ["test_*.py"]
+strict = "abort"
+auto_arrange = false
+min_parallel_tests = 1
