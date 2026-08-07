@@ -192,7 +192,7 @@ def _load_and_resolve(
     Returns _ResolvedTest on success, or TestResult on module/fn/resolve errors.
     """
     _cache = session.module_cache
-    _cached = _cache.get(meta.module_path)
+    _cached = _cache.get(meta.module_path, kind="test")
     if _cached is not None:
         module = _cached
         sys.modules[unique_name] = module
@@ -201,7 +201,7 @@ def _load_and_resolve(
             module = _load_module(meta.module_path, unique_name)
         except _LoadError as e:
             return e.result
-        _cache.set(meta.module_path, module)
+        _cache.set(meta.module_path, module, kind="test")
     try:
         fn_raw, fn = _resolve_fn(module, meta.fn_name, meta.module_path)
     except _LoadError as e:

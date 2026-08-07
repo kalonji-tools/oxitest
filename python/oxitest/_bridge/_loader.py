@@ -5,7 +5,7 @@ import sys
 import traceback
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from oxitest._bridge._assert_error import (
     _OXITEST_NO_RHS,
@@ -15,28 +15,42 @@ from oxitest._bridge._errors import LoadError as _LoadError
 from oxitest._bridge.result import _error_result
 from oxitest._oxitest import rewrite_asserts
 
-__all__ = ["ModuleCache", "_LoadError", "_load_module", "_resolve_fn"]
+__all__ = ["LoadKind", "ModuleCache", "_LoadError", "_load_module", "_resolve_fn"]
+
+LoadKind = Literal["test", "doctest"]
 
 
 class ModuleCache:
     """Cache of loaded+rewritten modules for the duration of a module group.
 
-    Keyed by absolute module path string. Owned by FixtureSession.
+    Keyed by ``(absolute module path, load kind)``. Owned by FixtureSession.
     Evicted by end_module — providing pytest-level isolation (module state
     shared within a group, cleared between groups).
+
+    The kind is load-bearing (#1962). The test route AST-rewrites asserts and
+    injects ``_OxitestAssertionError`` into module globals; the doctest route
+    executes the source as written. A shared key would let one route serve the
+    other's module, and nothing would raise — the unrewritten module's failures
+    surface as plain ``AssertionError`` and lose their operand detail.
+
+    ``strict = "abort"`` is **not** a backstop here: bare-assert detection
+    parses the source file in Rust at collection time (``src/bare_asserts.rs``)
+    and never inspects the module object this cache serves.
     """
 
     def __init__(self) -> None:
-        self._modules: dict[str, Any] = {}
+        self._modules: dict[tuple[str, LoadKind], Any] = {}
 
-    def get(self, module_path: str) -> Any | None:
-        return self._modules.get(module_path)
+    def get(self, module_path: str, *, kind: LoadKind) -> Any | None:
+        return self._modules.get((module_path, kind))
 
-    def set(self, module_path: str, module: Any) -> None:
-        self._modules[module_path] = module
+    def set(self, module_path: str, module: Any, *, kind: LoadKind) -> None:
+        self._modules[(module_path, kind)] = module
 
     def evict(self, module_path: str) -> None:
-        self._modules.pop(module_path, None)
+        """Drop every kind for *module_path*."""
+        for key in [k for k in self._modules if k[0] == module_path]:
+            del self._modules[key]
 
 
 def _load_module(module_path: str, unique_name: str) -> Any:
