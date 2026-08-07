@@ -628,14 +628,16 @@ def _run_test_impl(
         ``"xpassed"``.
 
     """
-    # Doctest dispatch — bypass normal fixture/mark pipeline
-    if meta.fn_name.startswith("<doctest>"):
-        doctest_name = meta.fn_name.removeprefix("<doctest>")
-        return run_doctest(meta.module_path, doctest_name)
-
     effective_session: _SessionProtocol = (
         session if session is not None else _NULL_SESSION
     )
+    # Doctest dispatch — bypass normal fixture/mark pipeline
+    if meta.fn_name.startswith("<doctest>"):
+        doctest_name = meta.fn_name.removeprefix("<doctest>")
+        return run_doctest(
+            meta.module_path, doctest_name, effective_session.module_cache
+        )
+
     _run_ctx = TestRunContext(
         keep_tmp=keep_tmp,
         result_cell=[None] if keep_tmp != "cleanup" else [],
