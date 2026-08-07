@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -639,10 +640,25 @@ def test_durations_shows_fixture_timings(tmp: TempDir) -> None:
 
 
 def test_capture_environment_prints_versions() -> None:
-    """`env` subcommand prints Python and oxitest versions and exits 0."""
+    """`env` subcommand prints Python, oxitest, and OS versions and exits 0."""
     out, _, rc = helpers.run_oxitest_subcmd(None, "env")
     integ.assert_passed(out, rc)
     integ.assert_contains(out.lower(), "python:", "oxitest:")
+    # The os: line is the only output reaching os_info()'s per-platform
+    # branches, and a failed probe degrades to "unknown" instead of erroring —
+    # so without the two asserts below the macOS branch could be broken and
+    # still pass. Not lowercased: the darwin check is case-sensitive (#1944).
+    os_lines = [line for line in out.splitlines() if line.startswith("os:")]
+    assert len(os_lines) == 1, (
+        f"env output must carry exactly one os: line for the platform "
+        f"assertions below to mean anything; got {len(os_lines)} in:\n{out}"
+    )
+    integ.assert_excludes(os_lines[0], "unknown")
+    if sys.platform == "darwin":
+        assert os_lines[0].startswith("os: macOS "), (
+            f"os_info()'s macOS branch must report a real sw_vers product "
+            f"version, not a fallback; got {os_lines[0]!r}"
+        )
     # Should NOT run tests
     integ.assert_excludes(out, "passed")
 
