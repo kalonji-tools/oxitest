@@ -65,7 +65,8 @@ So the sufficient condition is narrower. Framework mediation is justified when *
 1. **The boundary must open before the test body.** A block can only cover what happens after it opens.
 2. **Teardown needs knowledge only the framework has** — the test's outcome, its name, or a CLI setting.
 3. **The boundary is wider than one test.** No in-body construct spans tests.
-4. **The value is framework state.** There is nothing to construct; the object *is* the running test's context.
+
+A fourth condition — *"the value is framework state"* — was retracted by [#1949](https://github.com/kalonji-tools/oxitest/issues/1949); see the amendment below.
 
 Each is load-bearing for at least one built-in, and none is decorative:
 
@@ -74,13 +75,22 @@ Each is load-bearing for at least one built-in, and none is decorative:
 | 1 — opens before the body | `StdCapture`, `FdCapture`, `LogCapture`, `WarnCapture` | A probe test whose *other* fixture printed during setup read that output back from `cap.readouterr()` inside the body. An in-body `with` cannot see it — it had not opened yet |
 | 2 — framework-only knowledge | `TempDir` | Its teardown consults the test's result and `--keep-tmp` (`_builtins/_tempdir.py:170`–`:185`, *"mode == `failed`: preserve only on failure"*) and prefixes the directory with the test's name. `tempfile.TemporaryDirectory()` knows none of that |
 | 3 — wider than one test | `TempDirFactory` | `scope = "session"` (`_builtins/_tempdir.py:191`) |
-| 4 — is framework state | `TestContext` | Carries the running test's metadata and *holds* the teardown stack rather than pushing onto it |
 
-**`Patcher` satisfies none of the four.** Patching is inherently something a test does during its body; the undo needs no outcome, no test name, no width beyond the block; and the object is not framework state. That is a better account of the 41-to-0 result than "it lacks a block-scoped form": adopters did not overlook the fixture, they correctly declined a mediation that buys nothing. Its block-scoped form is therefore the **primary** form, not a companion to the injected one — which is exactly what Rule 2 concluded from the usage evidence, reached here from the design side instead.
+**Amendment (#1949) — condition 4 is retracted.** It read *"The value **is** framework state. There is nothing to construct; the object *is* the running test's context,"* and `TestContext` was its only member.
+
+The condition was derived from the built-in inventory rather than from the principle, and that inventory contains `TestContext` as a fixture only because injection was the sole delivery mechanism available when it was written. Read forwards, the condition argues the opposite of what it claimed: **"there is nothing to construct" is a reason *not* to mediate.** Mediation schedules a lifetime, and ambient state has no lifetime to schedule. This is Amendment 5's *"symmetry is not a justification"* reaching a condition of this ADR's own.
+
+`TestContext` therefore leaves this rule's inventory. It is reachable without injection via `TestContext.current()`, which is Rule 2's shape and Rule 2's justification — the form must be reachable by code that cannot be injected into. Rule 3 is unaffected: `TestContext` still needs no block-scoped form, for the reason already given there.
+
+The runtime built-in registry is deliberately **not** changed. `TestContext` stays in `BuiltinFixture._registry` because that registry is what makes `ctx: TestContext` resolve, and that spelling is semver-protected. Deregistering it was prototyped and measured: it breaks injection outright (`fixture 'ctx' not found`, exit code 3), costs five production special-cases, and silently drops `TestContext` from `oxitest --fixtures`. This rule governs *justification*, not registration.
+
+**Retirement.** Two spellings predate `current()` and both keep working under semver: `ctx: TestContext` injection, and `fx.oxi.ctx`. Both are legacy as of #1949 and are retired at v4. Neither is documented as a peer of `current()`.
+
+**`Patcher` satisfies none of them.** Patching is inherently something a test does during its body; the undo needs no outcome, no test name, and no width beyond the block. That is a better account of the 41-to-0 result than "it lacks a block-scoped form": adopters did not overlook the fixture, they correctly declined a mediation that buys nothing. Its block-scoped form is therefore the **primary** form, not a companion to the injected one — which is exactly what Rule 2 concluded from the usage evidence, reached here from the design side instead.
 
 This rule refines ADR-0009's line rather than contradicting it. Amendment 5 was separating lifecycle from *visibility*, and settled that correctly. It did not ask which lifecycles need mediating, because in that argument no lifecycle was in question. That is the gap this rule closes.
 
-**It is deliberately not a gate.** Conditions 1–4 are judgements about intent, and a test cannot ask why an object exists. What is gated is the narrower, checkable question in Rule 5.
+**It is deliberately not a gate.** Conditions 1–3 are judgements about intent, and a test cannot ask why an object exists. What is gated is the narrower, checkable question in Rule 5.
 
 ### Rule 5 — The decision is recorded, not remembered
 
@@ -123,7 +133,7 @@ There is also a textual bar. Amendment 5 set its own boundary explicitly — *"I
 - **Adding a built-in now has a required step.** Classify it in `test_builtin_shape_rule.py`. Choosing "needs none" is a legitimate outcome and costs one line; what is no longer available is not choosing.
 - **`Patcher` is recorded as a known gap, not as a violation.** It is registered in the gate's `KNOWN_GAP` bucket citing [#1696](https://github.com/kalonji-tools/oxitest/issues/1696), which will add `Patcher.context()`. That bucket entry deletes itself when the gap closes — if `Patcher` gains the form while still listed as a gap, the partition still passes, but the member assertion in [#1696](https://github.com/kalonji-tools/oxitest/issues/1696)'s own change will move it to the first bucket.
 - **`Patcher` is semver-protected** (`docs/user/reference/stability.md:14`), so the fix for that gap is additive — a new member beside the existing fixture — and does **not** wait on a major release.
-- **`Patcher`'s fixture form is left standing without an independent justification.** Rule 4 finds it satisfies none of the four conditions, so once `Patcher.context()` exists the injected form is a vestige rather than a peer. This ADR does **not** retire it: `stability.md:14` protects it, so removal is a major-version conversation on the same v4.0.0 gate as [#1720](https://github.com/kalonji-tools/oxitest/issues/1720), and nothing is gained by breaking it early. Recorded here so that a later reader does not mistake its survival for an endorsement, and so the question is already framed if that release comes.
-- **The other seven built-ins are re-confirmed as fixtures, on stated grounds rather than by inheritance.** Before Rule 4 the only recorded justification was "has a lifetime boundary", which is satisfied by any `with` statement and so justified nothing. Each now names the condition it meets.
+- **`Patcher`'s fixture form is left standing without an independent justification.** Rule 4 finds it satisfies none of its conditions, so once `Patcher.context()` exists the injected form is a vestige rather than a peer. This ADR does **not** retire it: `stability.md:14` protects it, so removal is a major-version conversation on the same v4.0.0 gate as [#1720](https://github.com/kalonji-tools/oxitest/issues/1720), and nothing is gained by breaking it early. Recorded here so that a later reader does not mistake its survival for an endorsement, and so the question is already framed if that release comes.
+- **Six built-ins are re-confirmed as fixtures, on stated grounds rather than by inheritance.** Before Rule 4 the only recorded justification was "has a lifetime boundary", which is satisfied by any `with` statement and so justified nothing. Each now names the condition it meets. Two of the eight do not: `Patcher`, as above, and — since #1949 retracted condition 4 — `TestContext`, whose ambient accessor is now the justified route. Both stay registered under semver until v4.
 - **This ADR has no structural gate.** `docs/adr/` sits outside `mkdocs.yml`'s `docs_dir` (`docs/user`), so `mkdocs --strict` never validates its links, and no other check reads it. Its cross-references are maintained by reading, and a reader who finds one stale should treat that as expected maintenance rather than as evidence the decision moved.
 - **The user-facing statement lives in `docs/user/how-to/use-fixtures.md`**, where someone writing a fixture will meet it, and cites this ADR by absolute GitHub URL because `docs/adr/` is not published on the documentation site.
