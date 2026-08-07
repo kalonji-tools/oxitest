@@ -544,6 +544,22 @@ assigned because setup failed.
 ---
 
 ```text
+[warning] teardown registration — a callback registered from inside a running teardown is never run — the loop that would have run it has already passed this point. Do this cleanup inline in the current teardown instead.
+```
+
+**Cause:** `ctx.addfinalizer()` or its alias `ctx.on_teardown()` was called
+from inside a callback that is itself running as a teardown. The callback is
+registered and then never invoked. This is a **diagnostic**, not an error — the
+test result is not affected, and the registration is not rejected, only
+reported.
+
+**Fix:** Do the cleanup inline in the teardown you are already inside. If the
+cleanup belongs to a fixture rather than to a test, express it with a `yield`
+fixture, which runs its teardown at the right boundary by construction.
+
+---
+
+```text
 [notice] fixture registration — fixture '<name>' in <shadower> shadows definition in <shadowed>
 [notice] fixture registration — fixture '<name>' in <shadower> shadows definition in <shadowed> within <anchor>
 [notice] fixture registration — fixture '<name>' in <shadower> shadows definition in <shadowed> within <anchor>; the shadowed fixture is autouse, so it no longer fires there
