@@ -18,6 +18,7 @@ from oxitest._bridge._async_backend import AsyncioBackend
 from oxitest._bridge._async_orchestrator import SharedAsyncManager
 from oxitest._bridge._boundary import safe_teardown
 from oxitest._bridge._builtins._base import BuiltinFixture
+from oxitest._bridge._cwd_guard import report_and_repair
 from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge._errors import (
     AsyncFixtureAccessError,
@@ -203,6 +204,10 @@ class _Scope:
         try:
             for fn in reversed(self.teardowns):
                 safe_teardown(fn, warn=_warn_teardown)
+            # No per-test result exists at this boundary — the drain belongs to
+            # a scope, not to any one test — so this reports and repairs but
+            # cannot fail anything, unlike the function tier's check (#1957).
+            report_and_repair("a fixture teardown at a lifetime wider than function")
         finally:
             _in_teardown.reset(token)
         self.teardowns.clear()
