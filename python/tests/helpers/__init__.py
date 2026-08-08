@@ -15,6 +15,7 @@ __all__ = [
     "EventLogRun",
     "RecordingDebugger",
     "assert_result",
+    "clear_event_log",
     "exec_inline",
     "install_module",
     "make_exc",
@@ -33,7 +34,12 @@ __all__ = [
     "write_test_module",
 ]
 
-from tests.helpers.event_logs import EventLogRun, read_event_log, run_with_event_log
+from tests.helpers.event_logs import (
+    EventLogRun,
+    clear_event_log,
+    read_event_log,
+    run_with_event_log,
+)
 from tests.helpers.factories import (
     make_exc,
     make_fixture_def,
