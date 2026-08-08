@@ -98,8 +98,29 @@ pub(super) fn build_test_rows(
 
 /// Set up the terminal for TUI rendering: raw mode, alternate screen, mouse
 /// capture.
+///
+/// Refuses up front when stdout is not a terminal. Until #1989 this relied on
+/// `enable_raw_mode()` failing instead, which is a POSIX assumption: there it
+/// calls `tcgetattr` on the terminal and gets `ENOTTY` through a pipe, but on
+/// Windows crossterm sets raw mode on the console *input* handle, which still
+/// exists when stdout is redirected. So the call succeeded, the TUI entered its
+/// event loop, and `oxitest inspect | cat` hung until something killed it —
+/// measured as four 60-second timeouts on the Windows runner.
 pub fn setup_terminal()
 -> Result<Terminal<CrosstermBackend<std::io::Stdout>>, Box<dyn std::error::Error>> {
+    use std::io::IsTerminal;
+
+    if !std::io::stdout().is_terminal() {
+        // Wording matters: the tests around this assert that a *usable*
+        // expression never produces "invalid" and that a known argument never
+        // produces "unrecognized". Neither word belongs in a TTY diagnostic.
+        return Err(
+            "oxitest inspect needs an interactive terminal, but stdout is redirected. \
+             Run it directly in a terminal, or use `oxitest query` for output you can pipe."
+                .into(),
+        );
+    }
+
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
     execute!(
