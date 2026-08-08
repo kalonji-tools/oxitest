@@ -80,7 +80,13 @@ _MODULES = ("a", "b", "c", "d")
 #: Long enough that the signal lands while tests are still running, short
 #: enough that a missed signal fails the test rather than hanging CI.
 _TEST_SLEEP_SECONDS = 3
-_USE_POLL_TIMEOUT_SECONDS = 60
+#: Must stay **under** the suite's own ``timeout`` (30 s, ``pyproject.toml``),
+#: or this deadline is unreachable and the assertion it guards can never fire.
+#: At 60 s it was: a run where a worker never reached its test body died of the
+#: test timeout and reported nothing about how many workers had been observed,
+#: which is the one thing the caller needs to know. Measured under a mutant that
+#: starved the poll — two bare timeouts where two named assertions were owed.
+_USE_POLL_TIMEOUT_SECONDS = 20
 #: Both workers must be in the fixture before signalling, or the test observes
 #: one worker and proves nothing about the other.
 _WORKERS = 2
