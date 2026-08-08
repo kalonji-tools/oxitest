@@ -131,6 +131,20 @@ pass_filenames = false
 files = "^\\.github/workflows/.*\\.ya?ml$"
 
 [[repos.hooks]]
+id = "subprocess-encoding"
+name = "subprocess encoding"
+language = "system"
+# A text-mode subprocess call with no `encoding=` decodes with the locale
+# codec, which is cp1252 on Windows — and oxitest's own separator rule
+# contains a byte it cannot decode. 292 red tests, 0 assertion failures
+# (#1951, #1986). Ruff has no rule for this as of 0.15.16.
+#
+# No `stages:` key, so it also runs in CI.
+entry = "python scripts/check_subprocess_encoding.py"
+pass_filenames = false
+files = "^(python|scripts)/.*\\.py$"
+
+[[repos.hooks]]
 id = "affected-tests"
 name = "affected tests"
 language = "system"
