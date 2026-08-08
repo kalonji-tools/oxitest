@@ -52,6 +52,7 @@ from pathlib import Path
 
 import oxitest as oxi
 from oxitest import TempDir
+from tests import helpers
 
 # Both tests below signal a *process group*, which Windows does not have:
 # `os.killpg` and `os.getpgid` are absent there, and `start_new_session` is a
@@ -93,7 +94,8 @@ import oxitest as oxi
 
 
 def _record(event: str) -> None:
-    with Path(os.environ["INTERRUPT_LOG"]).open("a") as fh:
+    shard = Path(f"{os.environ['INTERRUPT_LOG']}.{os.getpid()}")
+    with shard.open("a", encoding="utf-8") as fh:
         fh.write(event + "\\n")
 
 
@@ -113,7 +115,8 @@ import oxitest as oxi
 
 
 def _record(event: str) -> None:
-    with Path(os.environ["INTERRUPT_LOG"]).open("a") as fh:
+    shard = Path(f"{os.environ['INTERRUPT_LOG']}.{os.getpid()}")
+    with shard.open("a", encoding="utf-8") as fh:
         fh.write(event + "\\n")
 
 
@@ -133,7 +136,8 @@ from oxitest import Fixture
 
 
 def _record(event: str) -> None:
-    with Path(os.environ["INTERRUPT_LOG"]).open("a") as fh:
+    shard = Path(f"{os.environ['INTERRUPT_LOG']}.{os.getpid()}")
+    with shard.open("a", encoding="utf-8") as fh:
         fh.write(event + "\\n")
 
 
@@ -152,7 +156,8 @@ from oxitest import Fixture
 
 
 def _record(event: str) -> None:
-    with Path(os.environ["INTERRUPT_LOG"]).open("a") as fh:
+    shard = Path(f"{os.environ['INTERRUPT_LOG']}.{os.getpid()}")
+    with shard.open("a", encoding="utf-8") as fh:
         fh.write(event + "\\n")
 
 
@@ -185,12 +190,19 @@ def _write_project(root: Path, fixtures: str, test_template: str) -> None:
 
 
 def _pids(log: Path, prefix: str) -> set[str]:
-    """Distinct PIDs that have written *prefix* so far."""
-    try:
-        lines = log.read_text(encoding="utf-8").splitlines()
-    except FileNotFoundError:
-        return set()
-    return {line.split()[1] for line in lines if line.startswith(prefix)}
+    """Distinct PIDs that have written *prefix* so far.
+
+    Polled mid-run by :func:`_wait_for_use`, so it reads while workers are
+    still appending. A shard appears as soon as its worker writes anything —
+    ``SETUP``, before the fixture yields — so a worker can own a shard well
+    before it reaches ``USE``. The prefix filter is what makes the answer
+    right; the shard's existence proves nothing on its own.
+    """
+    return {
+        line.split()[1]
+        for line in helpers.read_event_log(log)
+        if line.startswith(prefix)
+    }
 
 
 def _wait_for_use(log: Path) -> bool:
