@@ -23,6 +23,7 @@ def test_color_always_emits_ansi_codes(tmp: TempDir) -> None:
         ],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
         check=False,
     )

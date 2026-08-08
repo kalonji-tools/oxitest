@@ -192,6 +192,7 @@ def _run_worker(task: dict[str, Any]) -> subprocess.CompletedProcess[str]:
         input=json.dumps(task),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
         env=env,
         timeout=30,

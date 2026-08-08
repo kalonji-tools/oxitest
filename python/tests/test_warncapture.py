@@ -105,6 +105,7 @@ def test_captured_warnings_not_in_report(tmp: TempDir) -> None:
         [sys.executable, "-m", "oxitest", str(tmp), "--serial", "--warnings"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
         check=False,
     )

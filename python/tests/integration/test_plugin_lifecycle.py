@@ -58,6 +58,7 @@ def _run_top_flag(
         [sys.executable, "-m", "oxitest", flag],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
         cwd=str(tmp),
         env=base_env,

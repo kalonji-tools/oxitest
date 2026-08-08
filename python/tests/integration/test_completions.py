@@ -15,6 +15,7 @@ def _run_completions(shell: str) -> tuple[str, str, int]:
         [sys.executable, "-m", "oxitest", "completions", shell],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
         check=False,
     )

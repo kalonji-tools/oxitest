@@ -20,7 +20,13 @@ def run_oxitest(tmp_path, *extra_args, cwd=None):
         cmd.append(str(path))
     cmd.extend(["--color", "never", *extra_args])
     result = subprocess.run(
-        cmd, capture_output=True, text=True, timeout=60, cwd=cwd, check=False
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
+        cwd=cwd,
+        check=False,
     )
     return result.stdout, result.stderr, result.returncode
 

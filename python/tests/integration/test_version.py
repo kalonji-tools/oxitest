@@ -15,6 +15,7 @@ def _run_version_flag(*args: str) -> tuple[str, str, int]:
         [sys.executable, "-m", "oxitest", *args],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
         check=False,
     )

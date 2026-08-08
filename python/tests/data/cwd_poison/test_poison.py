@@ -30,6 +30,7 @@ def test_bbb_victim() -> None:
         [sys.executable, "-c", "import coverage"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, (

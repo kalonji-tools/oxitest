@@ -373,6 +373,7 @@ def test_script_exits_1_on_a_mock_layout_with_a_mismatch(tmp: TempDir) -> None:
         [sys.executable, str(_SCRIPT_PATH), "--root", str(tmp)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
 
@@ -400,6 +401,7 @@ def test_script_exits_0_on_this_repo() -> None:
         [sys.executable, str(_SCRIPT_PATH), "--root", str(_REPO_ROOT)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
 
