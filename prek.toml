@@ -118,6 +118,19 @@ pass_filenames = false
 files = "(bridge\\.rs|worker_result\\.rs|result\\.py|worker\\.py)$"
 
 [[repos.hooks]]
+id = "rollup-agreement"
+name = "rollup agreement"
+language = "system"
+# The direction actionlint cannot see: it types the `needs` context *from* the
+# `needs:` list, so it owns referenced-but-undeclared and is silent on
+# declared-but-unreferenced. Mutation-tested both ways (#1974).
+#
+# No `stages:` key, so it also runs in CI — see the actionlint repo below.
+entry = "python scripts/check_rollup_agreement.py"
+pass_filenames = false
+files = "^\\.github/workflows/.*\\.ya?ml$"
+
+[[repos.hooks]]
 id = "affected-tests"
 name = "affected tests"
 language = "system"
@@ -125,16 +138,15 @@ entry = "bash -c 'PYTHONPATH=python uv run python -m oxitest --affected'"
 pass_filenames = false
 stages = ["pre-push"]
 
-# actionlint is fetched by prek rather than taken from `devenv.nix`, because the
-# CI job that runs prek installs prek and nothing else — a `language = "system"`
-# hook would find no binary there. Upstream's manifest already scopes itself to
-# `^\.github/workflows/`, which is what keeps it away from `.github/actions/`:
-# pointed at a composite `action.yml` it reports five spurious syntax errors,
-# because it parses one as a workflow missing its `jobs` and `on` sections.
+# Fetched by prek, not taken from `devenv.nix`: the CI job that runs prek installs
+# prek and nothing else, so a `language = "system"` hook would find no binary.
+# Upstream's manifest scopes itself to `^\.github/workflows/`, which is what keeps
+# it off `.github/actions/` — it reads a composite as a workflow and reports five
+# spurious syntax errors (#1974).
 #
-# No `stages:` key: a hook declaring none runs at every stage, so this gets local
-# pre-commit coverage *and* both of quality.yml's prek invocations, which sidesteps
-# the inert local pre-push tier (#1823).
+# A hook declaring no `stages:` runs at every stage, so both hooks here get local
+# pre-commit coverage *and* both of quality.yml's prek steps, sidestepping the
+# inert local pre-push tier (#1823).
 [[repos]]
 repo = "https://github.com/rhysd/actionlint"
 rev = "v1.7.12"
