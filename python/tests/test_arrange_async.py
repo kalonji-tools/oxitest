@@ -7,7 +7,7 @@ no-op at _fixture_instantiator.py:138-151).
 """
 
 from oxitest import TempDir
-from oxitest._bridge._fixture_instantiator import _unpack_sync
+from oxitest._bridge._fixture_instantiator import NoTeardown, _unpack_sync
 from tests import helpers
 
 
@@ -161,6 +161,11 @@ def test_unpack_sync_passes_coroutine_through() -> None:
     coro_obj = coro()
     try:
         outcome = _unpack_sync(coro_obj, "leaky_fixture")
+        assert isinstance(outcome, NoTeardown), (
+            f"a coroutine is not a generator, so it must classify as NoTeardown "
+            f"and be passed through for the middleware to await; got "
+            f"{type(outcome).__name__}"
+        )
         assert outcome.value is coro_obj, (
             "_unpack_sync must return the coroutine unchanged so the async "
             "middleware can await it on the test's loop"
