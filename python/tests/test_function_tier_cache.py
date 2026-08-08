@@ -61,10 +61,10 @@ def _counting_fixtures_module(log: Path) -> str:
         '@oxi.fixture(lifetime="function")\n'
         "def tracked() -> Iterator[Token]:\n"
         "    token = Token(next(_COUNTER))\n"
-        "    with LOG.open('a') as fh:\n"
+        "    with LOG.open('a', encoding='utf-8') as fh:\n"
         "        fh.write(f'SETUP {token.seq}\\n')\n"
         "    yield token\n"
-        "    with LOG.open('a') as fh:\n"
+        "    with LOG.open('a', encoding='utf-8') as fh:\n"
         "        fh.write(f'TEARDOWN {token.seq}\\n')\n"
     )
 
@@ -88,10 +88,10 @@ def _async_counting_fixtures_module(log: Path) -> str:
         '@oxi.fixture(lifetime="function")\n'
         "async def channel() -> AsyncIterator[Token]:\n"
         "    token = Token(next(_COUNTER))\n"
-        "    with LOG.open('a') as fh:\n"
+        "    with LOG.open('a', encoding='utf-8') as fh:\n"
         "        fh.write(f'SETUP {token.seq}\\n')\n"
         "    yield token\n"
-        "    with LOG.open('a') as fh:\n"
+        "    with LOG.open('a', encoding='utf-8') as fh:\n"
         "        fh.write(f'TEARDOWN {token.seq}\\n')\n"
     )
 
@@ -135,7 +135,7 @@ def test_param_and_proxy_share_one_build(tmp: TempDir) -> None:
                 '@oxi.fixture(lifetime="function")\n'
                 "def marker() -> Token:\n"
                 "    token = Token(next(_COUNTER))\n"
-                "    with LOG.open('a') as fh:\n"
+                "    with LOG.open('a', encoding='utf-8') as fh:\n"
                 "        fh.write(f'SETUP {token.seq}\\n')\n"
                 "    return token\n"
             ),
@@ -198,7 +198,7 @@ def test_autouse_instance_is_what_the_test_observes(tmp: TempDir) -> None:
         "@fixtures.fixture(autouse=True)\n"
         "def stamp() -> Stamp:\n"
         "    instance = Stamp(next(_COUNTER))\n"
-        "    with LOG.open('a') as fh:\n"
+        "    with LOG.open('a', encoding='utf-8') as fh:\n"
         "        fh.write(f'SETUP {instance.seq}\\n')\n"
         "    return instance\n",
         encoding="utf-8",
@@ -210,7 +210,7 @@ def test_autouse_instance_is_what_the_test_observes(tmp: TempDir) -> None:
         f"LOG = pathlib.Path({str(log)!r})\n\n\n"
         "def test_observes_autouse_instance(fx: Fixtures) -> None:\n"
         "    observed = fx.stamp\n"
-        "    with LOG.open('a') as fh:\n"
+        "    with LOG.open('a', encoding='utf-8') as fh:\n"
         "        fh.write(f'USE {observed.seq}\\n')\n"
         "    assert observed.seq is not None, (\n"
         "        'the stamp must carry its build number so the outer test can "
@@ -383,7 +383,7 @@ def test_wider_tiers_keep_their_build_counts(tmp: TempDir) -> None:
         "from suite._kinds import ModRes, PkgRes, SessRes\n\n"
         f"LOG = pathlib.Path({str(log)!r})\n\n\n"
         "def _record(event: str) -> None:\n"
-        "    with LOG.open('a') as fh:\n"
+        "    with LOG.open('a', encoding='utf-8') as fh:\n"
         "        fh.write(f'{event}\\n')\n\n\n"
         '@oxi.fixture(lifetime="module")\n'
         "def mod_res() -> ModRes:\n"
@@ -406,7 +406,7 @@ def test_wider_tiers_keep_their_build_counts(tmp: TempDir) -> None:
         f"LOG = pathlib.Path({str(log)!r})\n\n\n"
         "@fixtures.fixture(shared=True)\n"
         "def shared_res() -> str:\n"
-        "    with LOG.open('a') as fh:\n"
+        "    with LOG.open('a', encoding='utf-8') as fh:\n"
         "        fh.write('SHARED-SETUP\\n')\n"
         "    return 'shared'\n"
     )

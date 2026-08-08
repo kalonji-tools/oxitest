@@ -159,10 +159,10 @@ def test_exitfirst_still_disposes(tmp: TempDir) -> None:
         f"LOG = pathlib.Path({str(log)!r})\n\n\n"
         '@oxi.fixture(lifetime="module")\n'
         "def resource() -> Iterator[str]:\n"
-        "    with LOG.open('a') as fh:\n"
+        "    with LOG.open('a', encoding='utf-8') as fh:\n"
         "        fh.write('SETUP\\n')\n"
         "    yield 'res'\n"
-        "    with LOG.open('a') as fh:\n"
+        "    with LOG.open('a', encoding='utf-8') as fh:\n"
         "        fh.write('TEARDOWN\\n')\n",
         encoding="utf-8",
     )
@@ -210,10 +210,10 @@ def test_old_shared_fixture_api_unaffected(tmp: TempDir) -> None:
         f"LOG = pathlib.Path({str(log)!r})\n\n\n"
         "@fx.fixture(shared=True)\n"
         "def resource() -> Iterator[str]:\n"
-        "    with LOG.open('a') as fh:\n"
+        "    with LOG.open('a', encoding='utf-8') as fh:\n"
         "        fh.write('SETUP\\n')\n"
         "    yield 'res'\n"
-        "    with LOG.open('a') as fh:\n"
+        "    with LOG.open('a', encoding='utf-8') as fh:\n"
         "        fh.write('TEARDOWN\\n')\n",
         encoding="utf-8",
     )

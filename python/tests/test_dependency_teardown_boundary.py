@@ -35,7 +35,7 @@ LOG = Path(os.environ["PROBE_LOG"])
 
 
 def _record(msg: str) -> None:
-    with LOG.open("a") as fh:
+    with LOG.open("a", encoding="utf-8") as fh:
         fh.write(msg + "\\n")
 """
 
@@ -123,7 +123,7 @@ LOG = Path(os.environ["PROBE_LOG"])
 
 
 def _record(msg: str) -> None:
-    with LOG.open("a") as fh:
+    with LOG.open("a", encoding="utf-8") as fh:
         fh.write(msg + "\\n")
 
 
