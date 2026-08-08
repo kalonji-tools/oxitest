@@ -30,7 +30,11 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, assert_never
 
 from oxitest._bridge._async_session_guard import acquire_session_guarded
-from oxitest._bridge._boundary import safe_teardown
+from oxitest._bridge._boundary import (
+    advance_async_gen,
+    safe_teardown,
+    setup_completed,
+)
 from oxitest._bridge._cwd_guard import report_and_repair
 from oxitest._bridge._debugger import _NULL_DEBUGGER, DebuggerBackend, _PdbBackend
 from oxitest._bridge._doctest_runner import run_doctest
@@ -393,12 +397,15 @@ def _drive_arrange_async_each(
         agen = value
 
         async def _first() -> Any:
-            return await agen.__anext__()
-
-        session.run(_first())
+            return await advance_async_gen(agen)
 
         def _teardown(agen_ref: Any = agen, name: str = fixture_name) -> None:
             async def _drain() -> None:
+                # Registered before the first advance (#1962), so this can be
+                # reached for a fixture whose setup never completed; advancing
+                # it here would run that setup during teardown.
+                if not setup_completed(agen_ref):
+                    return
                 with contextlib.suppress(StopAsyncIteration):
                     await agen_ref.__anext__()
 
@@ -408,7 +415,11 @@ def _drive_arrange_async_each(
                 warn=_warn_teardown,
             )
 
+        # Registered BEFORE the advance. This was the widest of the six windows
+        # — the whole closure above was built between the advance and this
+        # append, with no `try`/`except` anywhere around it (#1962).
         fn_teardowns.append(_teardown)
+        session.run(_first())
         return
     # coroutine — await it; no teardown for plain coroutine fixtures
     session.run(value)

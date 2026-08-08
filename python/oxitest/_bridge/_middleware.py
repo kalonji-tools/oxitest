@@ -21,7 +21,11 @@ from typing import TYPE_CHECKING, Any, Protocol, assert_never
 from oxitest._bridge._async_backend import AsyncBackend, AsyncSession
 from oxitest._bridge._async_fixture_handle import async_teardown_sink
 from oxitest._bridge._async_session_guard import acquire_session_guarded
-from oxitest._bridge._boundary import async_safe_call
+from oxitest._bridge._boundary import (
+    advance_async_gen,
+    async_safe_call,
+    setup_completed,
+)
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import FixtureSetupError
 from oxitest._bridge._runners import run_base_async
@@ -194,8 +198,11 @@ async def _unpack_async_fixtures(
     for k, v in kwargs.items():
         if inspect.isasyncgen(v):
             try:
-                resolved[k] = await anext(v)
+                # Appended before the advance (#1962). `await anext(v)`
+                # suspends to the loop, and an interrupt delivered there would
+                # otherwise leave the fixture set up with no teardown queued.
                 async_teardowns.append((k, v))
+                resolved[k] = await advance_async_gen(v)
             except Exception as exc:  # noqa: BLE001 — async fixture setup runs user code
                 return _error_result(str(FixtureSetupError(k, exc)))
         elif inspect.iscoroutine(v):
@@ -237,6 +244,11 @@ async def _teardown_async_generators(
     for name, gen in reversed(async_teardowns):
 
         async def _drain(generator: Any = gen) -> None:
+            # The list is populated before each generator is advanced (#1962),
+            # so it can hold one whose setup never completed. Advancing that
+            # would run its setup here, during teardown.
+            if not setup_completed(generator):
+                return
             with contextlib.suppress(StopAsyncIteration):
                 await anext(generator)
 

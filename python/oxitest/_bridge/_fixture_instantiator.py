@@ -37,7 +37,11 @@ from oxitest._bridge._async_orchestrator import (
     _reject_async_in_sync,
     _reject_nonshared_async,
 )
-from oxitest._bridge._boundary import safe_teardown
+from oxitest._bridge._boundary import (
+    advance_async_gen,
+    safe_teardown,
+    setup_completed,
+)
 from oxitest._bridge._builtin_context import _BuiltinContext
 from oxitest._bridge._errors import (
     FixtureCycleError,
@@ -295,10 +299,34 @@ def _resolve_deps(
 
 @dataclass(frozen=True, slots=True)
 class HasTeardown:
-    """Fixture unpacking produced a value plus a teardown callable."""
+    """A generator fixture, not yet started, plus the teardown that disposes it.
 
-    value: Any
+    Carries the **generator** rather than a value because at this point no
+    value exists: the caller registers ``teardown`` and only then calls
+    :meth:`start`. Doing it the other way round leaves a window in which an
+    interrupt strands a set-up fixture with nothing registered to dispose it
+    (#1962).
+    """
+
+    generator: Any
     teardown: Callable[[], None]
+
+    def start(self, register: Callable[[Callable[[], None]], None]) -> Any:
+        """Register the teardown, then run the body to its first ``yield``.
+
+        *register* is taken as an argument rather than left to the caller so
+        the ordering cannot be got wrong: there is no way to reach the advance
+        that does not pass through the registration first.
+
+        An earlier version of this fix documented the ordering and left the two
+        statements adjacent at the call site. Mutation testing then swapped
+        them and **no test failed** — the two orders are indistinguishable
+        except under an interrupt, which no test can inject at that point. The
+        invariant has to be carried by the type rather than by a comment
+        (ADR-0011, #1962).
+        """
+        register(self.teardown)
+        return next(self.generator)
 
 
 @dataclass(frozen=True, slots=True)
@@ -311,8 +339,34 @@ class NoTeardown:
 FixtureOutcome = HasTeardown | NoTeardown
 
 
+def _sync_teardown(gen: Any, name: str) -> Callable[[], None]:
+    """Build a generator's teardown closure **without advancing it** (#1962).
+
+    Separated from the advance so a caller can register the teardown first.
+    The guard is what makes that safe: a generator registered before it is
+    started may be drained having never reached its ``yield``, and ``next()``
+    on an unstarted generator would *run the setup* during teardown.
+    """
+
+    def teardown() -> None:
+        def _drain() -> None:
+            if not setup_completed(gen):
+                return
+            with contextlib.suppress(StopIteration):
+                next(gen)
+
+        safe_teardown(_drain, name, warn=_warn_teardown)
+
+    return teardown
+
+
 def _unpack_sync(result: Any, name: str) -> FixtureOutcome:
-    """Unpack a sync fixture call: plain value or generator.
+    """Classify a sync fixture call **without advancing it**.
+
+    Returns :class:`HasTeardown` carrying the un-started generator and its
+    teardown, or :class:`NoTeardown` carrying a plain value. The caller
+    registers the teardown and then calls ``start()`` — this function
+    deliberately does neither, because the ordering is the whole point (#1962).
 
     Coroutines and async generators are passed through as-is: the async
     execution middleware (`_unpack_async_fixtures`) awaits/advances them
@@ -320,16 +374,7 @@ def _unpack_sync(result: Any, name: str) -> FixtureOutcome:
     and `executor._drive_arrange_async_each` handles the arrange path.
     """
     if inspect.isgenerator(result):
-        value = next(result)
-
-        def teardown(gen: Any = result, fixture_name: str = name) -> None:
-            def _drain() -> None:
-                with contextlib.suppress(StopIteration):
-                    next(gen)
-
-            safe_teardown(_drain, fixture_name, warn=_warn_teardown)
-
-        return HasTeardown(value=value, teardown=teardown)
+        return HasTeardown(generator=result, teardown=_sync_teardown(result, name))
     return NoTeardown(value=result)
 
 
@@ -706,8 +751,12 @@ class FixtureInstantiator:
             try:
                 raw = defn.func(**deps)
                 if inspect.isasyncgen(raw):
-                    value = await raw.__anext__()
+                    # Queued BEFORE the advance (#1962). The advance suspends to
+                    # the event loop, which is exactly where a pending signal
+                    # is delivered, so the reverse order loses the teardown far
+                    # more often here than on the sync path.
                     self._queue_async_teardown(defn, ctx, scope_refs, raw)
+                    value = await advance_async_gen(raw)
                 elif inspect.iscoroutine(raw):
                     value = await raw
                 else:
@@ -765,8 +814,9 @@ class FixtureInstantiator:
             if inspect.iscoroutine(dep_val):
                 deps[dep_name] = await dep_val
             elif inspect.isasyncgen(dep_val):
-                deps[dep_name] = await dep_val.__anext__()
+                # Queued before the advance, as above (#1962).
                 self._queue_async_teardown(defn, ctx, scope_refs, dep_val)
+                deps[dep_name] = await advance_async_gen(dep_val)
         return deps
 
     def _queue_async_teardown(
@@ -822,31 +872,45 @@ class FixtureInstantiator:
                 _start = time.monotonic()
                 result = defn.func(**deps)
                 outcome = _unpack_sync(result, defn.name)
+                match outcome:
+                    case HasTeardown(generator=generator, teardown=teardown_fn):
+
+                        def _timed_teardown(
+                            _orig: Callable[[], None] = teardown_fn,
+                            _gen: Any = generator,
+                            _name: str = _cache_key(defn),
+                        ) -> None:
+                            # Reachable for a fixture whose setup never
+                            # completed, because registration now precedes the
+                            # advance. Nothing ran, so nothing is timed — a
+                            # 0 ms entry would read as "torn down instantly"
+                            # in the timing report (#1962).
+                            if not setup_completed(_gen):
+                                return
+                            _td_start = time.monotonic()
+                            _orig()
+                            self._teardown_times[_name].append(
+                                (time.monotonic() - _td_start) * 1000.0
+                            )
+
+                        # `start` performs the registration itself, so the
+                        # advance cannot be reached without it (#1962). The
+                        # raw teardown is discarded: what gets registered is
+                        # the timed wrapper around it.
+                        value = outcome.start(
+                            lambda _raw: scope_teardowns.append(_timed_teardown)
+                        )
+                    case NoTeardown(value=plain_value):
+                        value = plain_value
+                    case _:
+                        assert_never(outcome)
                 self._setup_times[_cache_key(defn)].append(
                     (time.monotonic() - _start) * 1000.0
                 )
             except Exception as exc:
                 raise FixtureSetupError(defn.name, exc) from exc
 
-        match outcome:
-            case HasTeardown(value=value, teardown=teardown_fn):
-
-                def _timed_teardown(
-                    _orig: Callable[[], None] = teardown_fn,
-                    _name: str = _cache_key(defn),
-                ) -> None:
-                    _td_start = time.monotonic()
-                    _orig()
-                    self._teardown_times[_name].append(
-                        (time.monotonic() - _td_start) * 1000.0
-                    )
-
-                scope_teardowns.append(_timed_teardown)
-                return value
-            case NoTeardown(value=value):
-                return value
-            case _:
-                assert_never(outcome)
+        return value
 
     # ── Built-in injection ───────────────────────────────────────────────
 

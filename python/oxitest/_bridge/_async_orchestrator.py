@@ -33,7 +33,11 @@ if TYPE_CHECKING:
         AsyncBackend,
         AsyncSession,
     )
-from oxitest._bridge._boundary import safe_teardown
+from oxitest._bridge._boundary import (
+    advance_async_gen,
+    safe_teardown,
+    setup_completed,
+)
 from oxitest._bridge._errors import FixtureSetupError
 from oxitest._bridge._fixture_context import _warn_teardown
 
@@ -157,6 +161,11 @@ class SharedAsyncManager:
         for name, gen in reversed(pairs):
 
             def _drain(session: Any = live_session, generator: Any = gen) -> None:
+                # Registration precedes the advance (#1962), so a pair here may
+                # name a generator whose setup never completed. Resuming an
+                # unstarted one would run its setup during teardown.
+                if not setup_completed(generator):
+                    return
                 with contextlib.suppress(StopAsyncIteration):
                     session.run(anext(generator))
 
@@ -266,10 +275,13 @@ class SharedAsyncManager:
         try:
             result = func(**deps)
             if inspect.isasyncgen(result):
-                value = live_session.run(anext(result))
+                # Registered before the advance (#1962): the advance runs the
+                # body on the loop, and an interrupt landing there would leave
+                # a set-up fixture with nothing registered to dispose it.
                 self.register_teardown(
                     getattr(func, "__name__", ""), result, boundary=boundary
                 )
+                value = live_session.run(advance_async_gen(result))
             elif inspect.iscoroutine(result):
                 value = live_session.run(result)
             else:
