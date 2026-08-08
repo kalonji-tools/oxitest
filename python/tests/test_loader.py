@@ -19,7 +19,7 @@ def _unique_name(path: str) -> str:
 def test_load_module_returns_module_with_function(tmp: TempDir) -> None:
     """_load_module returns a module object containing the defined test function."""
     f = tmp / "test_sample.py"
-    f.write_text("def test_foo(): pass\n")
+    f.write_text("def test_foo(): pass\n", encoding="utf-8")
     unique = _unique_name(str(f))
     module = _load_module(str(f), unique)
     assert hasattr(module, "test_foo"), (
@@ -41,7 +41,7 @@ def test_load_module_raises_load_error_on_bad_path() -> None:
 def test_load_module_raises_load_error_on_syntax_error(tmp: TempDir) -> None:
     """_load_module should raise _LoadError when the file contains a syntax error."""
     f = tmp / "test_broken.py"
-    f.write_text("def test_foo(: pass\n")
+    f.write_text("def test_foo(: pass\n", encoding="utf-8")
     unique = _unique_name(str(f))
     with raises(_LoadError):
         _load_module(str(f), unique)
@@ -52,7 +52,7 @@ def test_load_module_raises_load_error_on_syntax_error(tmp: TempDir) -> None:
 def test_resolve_fn_returns_callable(tmp: TempDir) -> None:
     """_resolve_fn returns a (module, callable) tuple for a valid function name."""
     f = tmp / "mod.py"
-    f.write_text("def test_bar(): return 42\n")
+    f.write_text("def test_bar(): return 42\n", encoding="utf-8")
     spec = importlib.util.spec_from_file_location("_test_mod_tmp", f)
     assert spec is not None, "spec_from_file_location should return a spec"
     assert spec.loader is not None, "spec should have a loader"
@@ -72,7 +72,7 @@ def test_resolve_fn_returns_callable(tmp: TempDir) -> None:
 def test_resolve_fn_raises_load_error_on_missing_function(tmp: TempDir) -> None:
     """_resolve_fn raises _LoadError with status='error' when the function is absent."""
     f = tmp / "mod.py"
-    f.write_text("def test_bar(): pass\n")
+    f.write_text("def test_bar(): pass\n", encoding="utf-8")
     spec = importlib.util.spec_from_file_location("_test_mod_tmp2", f)
     assert spec is not None, "spec_from_file_location should return a spec"
     assert spec.loader is not None, "spec should have a loader"
@@ -97,7 +97,9 @@ def test_resolve_fn_raises_load_error_on_missing_function(tmp: TempDir) -> None:
 def test_resolve_fn_handles_class_method(tmp: TempDir) -> None:
     """_resolve_fn should resolve 'ClassName::method_name' to the unbound method."""
     f = tmp / "mod.py"
-    f.write_text("class TestFoo:\n    def test_method(self): return 'ok'\n")
+    f.write_text(
+        "class TestFoo:\n    def test_method(self): return 'ok'\n", encoding="utf-8"
+    )
     spec = importlib.util.spec_from_file_location("_test_mod_tmp3", f)
     assert spec is not None, "spec_from_file_location should return a spec"
     assert spec.loader is not None, "spec should have a loader"

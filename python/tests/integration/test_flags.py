@@ -20,7 +20,8 @@ def test_list_prints_node_ids_and_exits_zero(tmp: TempDir) -> None:
     (tmp / "test_nodes.py").write_text(
         "def test_alpha(): assert True\n"
         "def test_beta(): assert True\n"
-        "def test_gamma(): assert True\n"
+        "def test_gamma(): assert True\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest_subcmd(tmp, "query", "tests")
     integ.assert_passed(out, rc)
@@ -35,12 +36,14 @@ def test_list_detailed_shows_marks_and_fixtures(tmp: TempDir) -> None:
         "fx = Fixtures()\n\n"
         "@fx.fixture\n"
         "def my_db() -> str:\n"
-        "    return 'connected'\n"
+        "    return 'connected'\n",
+        encoding="utf-8",
     )
     (tmp / "test_table.py").write_text(
         "from oxitest._bridge._fixture_type import Fixture\n"
         "def test_one(): assert True\n"
-        "def test_two(my_db: Fixture[str]): assert True\n"
+        "def test_two(my_db: Fixture[str]): assert True\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest_subcmd(tmp, "query", "tests")
     integ.assert_passed(out, rc)
@@ -50,7 +53,8 @@ def test_list_detailed_shows_marks_and_fixtures(tmp: TempDir) -> None:
 def test_expression_filter(tmp: TempDir) -> None:
     """Only tests matching the -E expression should run."""
     (tmp / "test_kw.py").write_text(
-        "def test_alpha(): assert True\ndef test_beta(): assert False\n"
+        "def test_alpha(): assert True\ndef test_beta(): assert False\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp, "-E", "name(alpha)")
     integ.assert_passed(out, rc, count=1)
@@ -59,7 +63,7 @@ def test_expression_filter(tmp: TempDir) -> None:
 def test_serial_flag(tmp: TempDir) -> None:
     """--serial flag runs tests without parallel workers."""
     (tmp / "test_serial.py").write_text(
-        "def test_a(): assert True\ndef test_b(): assert True\n"
+        "def test_a(): assert True\ndef test_b(): assert True\n", encoding="utf-8"
     )
     out, _, rc = helpers.run_oxitest(tmp, "--serial")
     integ.assert_passed(out, rc)
@@ -68,13 +72,13 @@ def test_serial_flag(tmp: TempDir) -> None:
 def test_json_output(tmp: TempDir) -> None:
     """--json writes a valid CTRF JSON file with summary.passed >= 2."""
     (tmp / "test_js.py").write_text(
-        "def test_one(): assert True\ndef test_two(): assert True\n"
+        "def test_one(): assert True\ndef test_two(): assert True\n", encoding="utf-8"
     )
     json_path = Path(tmp) / "results.json"
     out, _, rc = helpers.run_oxitest(tmp, "--json", str(json_path))
     integ.assert_passed(out, rc)
     assert json_path.exists(), "--json should create the output file"
-    data = json.loads(json_path.read_text())
+    data = json.loads(json_path.read_text(encoding="utf-8"))
     passed = data["results"]["summary"]["passed"]
     assert passed >= 2, f"summary.passed should be >= 2, got {passed}"
 
@@ -106,7 +110,7 @@ def test_json_written_on_collection_failure(tmp: TempDir) -> None:
         "--json promises the file exists after the run; a collection failure "
         "that writes nothing looks identical to a job that never started"
     )
-    data = json.loads(json_path.read_text())
+    data = json.loads(json_path.read_text(encoding="utf-8"))
     summary = data["results"]["summary"]
     assert summary["failed"] >= 1, (
         "the collection error must be counted as failed — summary.failed == 0 "
@@ -151,7 +155,7 @@ def test_json_written_on_strict_abort(tmp: TempDir) -> None:
         "strict=abort exits before any reporter is constructed, so it is the "
         "route most likely to silently drop the --json artifact"
     )
-    data = json.loads(json_path.read_text())
+    data = json.loads(json_path.read_text(encoding="utf-8"))
     assert data["results"]["summary"]["failed"] >= 1, (
         "an aborted run must not serialise as a clean run, or CI treats a "
         "suite that never executed as green"
@@ -209,7 +213,7 @@ def test_junit_written_on_collection_failure(tmp: TempDir) -> None:
         f"errors=0 makes every JUnit consumer render it green; got "
         f"tests={tests} failures={failures} errors={errors}"
     )
-    assert "test_bad_import" in xml_path.read_text(), (
+    assert "test_bad_import" in xml_path.read_text(encoding="utf-8"), (
         "the artifact must name the file that failed to import, or a dashboard "
         "cannot point at the cause"
     )
@@ -285,7 +289,9 @@ def test_junit_and_json_agree_on_an_aborted_run(tmp: TempDir) -> None:
         "passing both must produce both artifacts"
     )
     _, failures, errors = _junit_counts(xml_path)
-    ctrf_failed = json.loads(json_path.read_text())["results"]["summary"]["failed"]
+    ctrf_failed = json.loads(json_path.read_text(encoding="utf-8"))["results"][
+        "summary"
+    ]["failed"]
     assert failures + errors >= 1 and ctrf_failed >= 1, (
         "the two artifacts describe one run and must not disagree about whether "
         f"it aborted; junit failures+errors={failures + errors}, "
@@ -296,13 +302,14 @@ def test_junit_and_json_agree_on_an_aborted_run(tmp: TempDir) -> None:
 def test_junit_xml_output(tmp: TempDir) -> None:
     """--junit-xml writes a valid JUnit XML file with expected structure."""
     (tmp / "test_jx.py").write_text(
-        "def test_first(): assert True\ndef test_second(): assert True\n"
+        "def test_first(): assert True\ndef test_second(): assert True\n",
+        encoding="utf-8",
     )
     xml_path = Path(tmp) / "results.xml"
     out, _, rc = helpers.run_oxitest(tmp, "--junit-xml", str(xml_path))
     integ.assert_passed(out, rc)
     assert xml_path.exists(), "--junit-xml should create the output file"
-    xml_content = xml_path.read_text()
+    xml_content = xml_path.read_text(encoding="utf-8")
     integ.assert_contains(xml_content, "<testsuites", "test_first", "test_second")
 
 
@@ -312,17 +319,20 @@ def test_expression_marker_filter(tmp: TempDir) -> None:
         "import oxitest\n\n"
         "@oxitest.mark.slow\n"
         "def test_slow_one(): assert True\n\n"
-        "def test_fast_one(): assert True\n"
+        "def test_fast_one(): assert True\n",
+        encoding="utf-8",
     )
     pyproject = Path(tmp) / "pyproject.toml"
-    pyproject.write_text('[tool.oxitest]\nmarkers = ["slow: slow tests"]\n')
+    pyproject.write_text(
+        '[tool.oxitest]\nmarkers = ["slow: slow tests"]\n', encoding="utf-8"
+    )
     out, _, rc = helpers.run_oxitest(tmp, "-E", "mark(slow)")
     integ.assert_passed(out, rc, count=1)
 
 
 def test_exitfirst_conflicts_with_maxfail(tmp: TempDir) -> None:
     """Flag conflict: -x and --maxfail are mutually exclusive."""
-    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
+    (tmp / "test_a.py").write_text("def test_ok(): pass\n", encoding="utf-8")
     _, stderr, rc = helpers.run_oxitest(tmp, "-x", "--maxfail", "5")
     assert rc == 4, f"-x/--maxfail conflict should exit 4, got {rc}"
     integ.assert_contains(stderr, "-x", "--maxfail")
@@ -330,7 +340,7 @@ def test_exitfirst_conflicts_with_maxfail(tmp: TempDir) -> None:
 
 def test_v_with_quiet_is_valid(tmp: TempDir) -> None:
     """-v -q is valid: quiet trumps verbose."""
-    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
+    (tmp / "test_a.py").write_text("def test_ok(): pass\n", encoding="utf-8")
     out, _, rc = helpers.run_oxitest(tmp, "-v", "-q")
     # Quiet trumps, so this runs silently with exit 0
     integ.assert_passed(out, rc)
@@ -338,7 +348,7 @@ def test_v_with_quiet_is_valid(tmp: TempDir) -> None:
 
 def test_schedule_conflicts_with_serial(tmp: TempDir) -> None:
     """Flag conflict: --schedule has no effect in serial mode."""
-    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
+    (tmp / "test_a.py").write_text("def test_ok(): pass\n", encoding="utf-8")
     _, stderr, rc = helpers.run_oxitest(tmp, "--schedule", "random", "--serial")
     assert rc == 4, f"--schedule/--serial conflict should exit 4, got {rc}"
     integ.assert_contains(stderr, "--schedule", "--serial")
@@ -346,7 +356,9 @@ def test_schedule_conflicts_with_serial(tmp: TempDir) -> None:
 
 def test_debug_with_passing_test_exits_0(tmp: TempDir) -> None:
     """`debug` subcommand on a passing test exits 0 (no pdb triggered)."""
-    (tmp / "test_ok.py").write_text("def test_pass():\n    assert True\n")
+    (tmp / "test_ok.py").write_text(
+        "def test_pass():\n    assert True\n", encoding="utf-8"
+    )
     out, _, rc = helpers.run_oxitest_subcmd(tmp, "debug")
     integ.assert_passed(out, rc)
 
@@ -358,7 +370,7 @@ def test_debug_always_is_accepted(tmp: TempDir) -> None:
     launches pdb before every test, it hangs in CI without a TTY, so we
     use a short timeout and treat TimeoutExpired as success (pdb started).
     """
-    (tmp / "test_a.py").write_text("def test_ok(): pass\n")
+    (tmp / "test_a.py").write_text("def test_ok(): pass\n", encoding="utf-8")
     try:
         _, stderr, rc = helpers.run_oxitest_subcmd(
             tmp,
@@ -387,17 +399,21 @@ def test_debug_always_with_plugin_backend(tmp: TempDir) -> None:
         "    def post_mortem(self, tb):\n"
         "        pass\n\n"
         "def oxitest_plugin(config=None):\n"
-        '    return Plugin(debugger_backend=MarkerDebugger(config["marker_path"]))\n'
+        '    return Plugin(debugger_backend=MarkerDebugger(config["marker_path"]))\n',
+        encoding="utf-8",
     )
 
-    (tmp / "test_ok.py").write_text("def test_pass():\n    assert True\n")
+    (tmp / "test_ok.py").write_text(
+        "def test_pass():\n    assert True\n", encoding="utf-8"
+    )
 
     marker_file = Path(tmp) / "debug_marker.txt"
     (tmp / "pyproject.toml").write_text(
         "[tool.oxitest]\n"
         'plugins = ["marker_debugger"]\n\n'
         "[tool.oxitest.plugin_settings.marker_debugger]\n"
-        f'marker_path = "{marker_file}"\n'
+        f'marker_path = "{marker_file.as_posix()}"\n',
+        encoding="utf-8",
     )
 
     plugin_env = {
@@ -416,8 +432,8 @@ def test_debug_always_with_plugin_backend(tmp: TempDir) -> None:
         f"marker file should exist (plugin trace() was called)\n"
         f"stdout: {out!r}\nstderr: {err!r}"
     )
-    assert marker_file.read_text() == "traced", (
-        f"marker file content wrong: {marker_file.read_text()!r}"
+    assert marker_file.read_text(encoding="utf-8") == "traced", (
+        f"marker file content wrong: {marker_file.read_text(encoding='utf-8')!r}"
     )
 
 
@@ -486,7 +502,8 @@ def test_query_tests_shows_parametrized_function(tmp: TempDir) -> None:
         "    expected: int\n\n"
         "@oxi.parametrize(pos=Case(1, 1), neg=Case(-1, 1))\n"
         "def test_abs(case: Case) -> None:\n"
-        "    assert abs(case.x) == case.expected, 'mismatch'\n"
+        "    assert abs(case.x) == case.expected, 'mismatch'\n",
+        encoding="utf-8",
     )
     out, _stderr, rc = helpers.run_oxitest_subcmd(tmp, "query", "tests")
     integ.assert_passed(out, rc)
@@ -509,12 +526,12 @@ def test_affected_filters_to_changed_tests(git_repo: Fixture[Path]) -> None:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
 
     # Create and commit a baseline test file (on top of git_repo's init commit)
-    (tmp / "test_old.py").write_text("def test_old(): assert True\n")
+    (tmp / "test_old.py").write_text("def test_old(): assert True\n", encoding="utf-8")
     run(*git, "add", ".")
     run(*git, "commit", "-m", "baseline")
 
     # Add a new test file and stage it (git diff HEAD sees staged changes)
-    (tmp / "test_new.py").write_text("def test_new(): assert True\n")
+    (tmp / "test_new.py").write_text("def test_new(): assert True\n", encoding="utf-8")
     run(*git, "add", "test_new.py")
 
     # Act — use clean env so oxitest doesn't see prek's GIT_* vars
@@ -543,12 +560,16 @@ def test_affected_with_subdirectory_path(git_repo: Fixture[Path]) -> None:
     # Create a subdirectory with a test file and commit
     subdir = tmp / "tests"
     subdir.mkdir()
-    (subdir / "test_one.py").write_text("def test_one(): assert True\n")
+    (subdir / "test_one.py").write_text(
+        "def test_one(): assert True\n", encoding="utf-8"
+    )
     run(*git, "add", ".")
     run(*git, "commit", "-m", "baseline")
 
     # Add a second test file and stage it
-    (subdir / "test_two.py").write_text("def test_two(): assert True\n")
+    (subdir / "test_two.py").write_text(
+        "def test_two(): assert True\n", encoding="utf-8"
+    )
     run(*git, "add", "tests/test_two.py")
 
     # Act — pass the subdirectory as the path (this triggered the bug)
@@ -567,7 +588,7 @@ def test_affected_with_subdirectory_path(git_repo: Fixture[Path]) -> None:
 def test_tb_line_shows_compact_failure(tmp: TempDir) -> None:
     """--tb line shows file:line but no full diagnostic block."""
     (tmp / "test_fail.py").write_text(
-        "def test_boom():\n    assert 1 == 2, 'one is not two'\n"
+        "def test_boom():\n    assert 1 == 2, 'one is not two'\n", encoding="utf-8"
     )
     out, _, rc = helpers.run_oxitest(tmp, "--tb", "line")
     integ.assert_failed(out, rc)
@@ -580,7 +601,8 @@ def test_tb_line_shows_compact_failure(tmp: TempDir) -> None:
 def test_tb_no_suppresses_traceback(tmp: TempDir) -> None:
     """--tb no reports failure but shows no traceback or diagnostic block."""
     (tmp / "test_fail.py").write_text(
-        "def test_kaboom():\n    assert False, 'should not see traceback'\n"
+        "def test_kaboom():\n    assert False, 'should not see traceback'\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp, "--tb", "no")
     integ.assert_failed(out, rc, count=1)
@@ -591,7 +613,7 @@ def test_tb_no_suppresses_traceback(tmp: TempDir) -> None:
 def test_timeout_cli_flag(tmp: TempDir) -> None:
     """--timeout applies a session-wide timeout to tests without @mark.timeout."""
     (tmp / "test_slow.py").write_text(
-        "import time\n\ndef test_hangs():\n    time.sleep(30)\n"
+        "import time\n\ndef test_hangs():\n    time.sleep(30)\n", encoding="utf-8"
     )
     out, _, rc = helpers.run_oxitest(tmp, "--timeout", "1")
     integ.assert_failed(out, rc)
@@ -606,7 +628,8 @@ def test_durations_shows_slowest_tests(tmp: TempDir) -> None:
         "import time\n\n"
         "def test_fast(): pass\n\n"
         "def test_slow():\n"
-        "    time.sleep(0.05)\n"
+        "    time.sleep(0.05)\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp, "--durations", "1")
     integ.assert_passed(out, rc)
@@ -623,12 +646,14 @@ def test_durations_shows_fixture_timings(tmp: TempDir) -> None:
         "@fx.fixture\n"
         "def slow_setup() -> int:\n"
         "    time.sleep(0.05)\n"
-        "    return 42\n"
+        "    return 42\n",
+        encoding="utf-8",
     )
     (tmp / "test_fx_timing.py").write_text(
         "import oxitest as oxi\n\n"
         "def test_uses_slow(slow_setup: oxi.Fixture[int]):\n"
-        '    assert slow_setup == 42, "fixture should return 42"\n'
+        '    assert slow_setup == 42, "fixture should return 42"\n',
+        encoding="utf-8",
     )
     out, err, rc = helpers.run_oxitest(tmp, "--durations", "5")
     assert rc == 0, (
@@ -670,9 +695,12 @@ def test_inprocess_mark_runs_on_main_process(tmp: TempDir) -> None:
         "import oxitest\n\n"
         "@oxitest.mark.inprocess\n"
         "def test_main_process():\n"
-        "    assert True\n"
+        "    assert True\n",
+        encoding="utf-8",
     )
-    (tmp / "test_normal.py").write_text("def test_worker():\n    assert True\n")
+    (tmp / "test_normal.py").write_text(
+        "def test_worker():\n    assert True\n", encoding="utf-8"
+    )
     out, _, rc = helpers.run_oxitest(tmp, "--workers", "2")
     integ.assert_passed(out, rc, count=2)
 
@@ -785,17 +813,19 @@ def test_nested_conftest_reexport(tmp: TempDir) -> None:
         "def db() -> str:\n"
         "    return 'root_db'\n"
     )
-    (root / "conftest.py").write_text(root_conftest)
+    (root / "conftest.py").write_text(root_conftest, encoding="utf-8")
 
     sub = root / "sub"
     sub.mkdir()
     (sub / "conftest.py").write_text(
-        "from conftest import fx  # noqa: F401 — re-export parent fixtures\n"
+        "from conftest import fx  # noqa: F401 — re-export parent fixtures\n",
+        encoding="utf-8",
     )
     (sub / "test_reexport.py").write_text(
         "from oxitest import Fixture\n\n"
         "def test_uses_parent_fixture(db: Fixture[str]) -> None:\n"
-        "    assert db == 'root_db', 'should resolve parent fixture'\n"
+        "    assert db == 'root_db', 'should resolve parent fixture'\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_passed(out, rc, count=1)

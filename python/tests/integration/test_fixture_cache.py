@@ -12,12 +12,14 @@ def test_no_shared_fixtures_no_cache_stats(tmp: TempDir) -> None:
         "fx = Fixtures()\n\n"
         "@fx.fixture\n"
         "def db() -> str:\n"
-        "    return 'conn'\n"
+        "    return 'conn'\n",
+        encoding="utf-8",
     )
     (tmp / "test_a.py").write_text(
         "from oxitest import Fixture\n\n"
         "def test_one(db: Fixture[str]):\n"
-        "    assert db == 'conn', 'db should be conn'\n"
+        "    assert db == 'conn', 'db should be conn'\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_passed(out, rc)
@@ -31,14 +33,16 @@ def test_shared_fixture_shows_cache_stats(tmp: TempDir) -> None:
         "fx = Fixtures()\n\n"
         "@fx.fixture(shared=True)\n"
         "def db() -> str:\n"
-        "    return 'conn'\n"
+        "    return 'conn'\n",
+        encoding="utf-8",
     )
     (tmp / "test_a.py").write_text(
         "from oxitest import Fixture\n\n"
         "def test_one(db: Fixture[str]):\n"
         "    assert db == 'conn', 'db should be conn'\n\n"
         "def test_two(db: Fixture[str]):\n"
-        "    assert db == 'conn', 'db should be conn'\n"
+        "    assert db == 'conn', 'db should be conn'\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_passed(out, rc)
@@ -50,15 +54,17 @@ def _write_module_lifetime_project(tmp: TempDir, *, tests: int) -> None:
     pkg = tmp / "pkg"
     pkg.mkdir()
     (tmp / "pyproject.toml").write_text(
-        '[tool.oxitest]\ntestpaths = ["pkg"]\npython_files = ["test_*.py"]\n'
+        '[tool.oxitest]\ntestpaths = ["pkg"]\npython_files = ["test_*.py"]\n',
+        encoding="utf-8",
     )
-    (pkg / "__init__.py").write_text("")
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
     (pkg / "__fixtures__.py").write_text(
         "from __future__ import annotations\n"
         "import oxitest as oxi\n\n\n"
         '@oxi.fixture(lifetime="module")\n'
         "def db() -> str:\n"
-        "    return 'conn'\n"
+        "    return 'conn'\n",
+        encoding="utf-8",
     )
     body = ["from oxitest import Fixtures", "", ""]
     for i in range(tests):
@@ -67,7 +73,7 @@ def _write_module_lifetime_project(tmp: TempDir, *, tests: int) -> None:
             "    assert fx.pkg.db == 'conn', 'module fixture should be conn'",
             "",
         ]
-    (pkg / "test_a.py").write_text("\n".join(body))
+    (pkg / "test_a.py").write_text("\n".join(body), encoding="utf-8")
 
 
 def test_module_lifetime_fixture_shows_cache_stats(tmp: TempDir) -> None:
@@ -104,14 +110,16 @@ def test_verbose_shows_per_fixture_breakdown(tmp: TempDir) -> None:
         "fx = Fixtures()\n\n"
         "@fx.fixture(shared=True)\n"
         "def db() -> str:\n"
-        "    return 'conn'\n"
+        "    return 'conn'\n",
+        encoding="utf-8",
     )
     (tmp / "test_a.py").write_text(
         "from oxitest import Fixture\n\n"
         "def test_one(db: Fixture[str]):\n"
         "    assert db == 'conn', 'db should be conn'\n\n"
         "def test_two(db: Fixture[str]):\n"
-        "    assert db == 'conn', 'db should be conn'\n"
+        "    assert db == 'conn', 'db should be conn'\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp, "-v")
     integ.assert_passed(out, rc)

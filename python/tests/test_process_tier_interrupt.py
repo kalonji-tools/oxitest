@@ -175,17 +175,19 @@ def _write_project(root: Path, fixtures: str, test_template: str) -> None:
     """Four slow modules, so the signal lands mid-run rather than after it."""
     pkg = root / "interrupted"
     pkg.mkdir(parents=True)
-    (pkg / "__fixtures__.py").write_text(fixtures)
+    (pkg / "__fixtures__.py").write_text(fixtures, encoding="utf-8")
     body = test_template.replace("SLEEP", str(_TEST_SLEEP_SECONDS))
     for name in _MODULES:
-        (pkg / f"test_{name}.py").write_text(body.replace("NAME", name))
-    (root / "pyproject.toml").write_text(_PYPROJECT)
+        (pkg / f"test_{name}.py").write_text(
+            body.replace("NAME", name), encoding="utf-8"
+        )
+    (root / "pyproject.toml").write_text(_PYPROJECT, encoding="utf-8")
 
 
 def _pids(log: Path, prefix: str) -> set[str]:
     """Distinct PIDs that have written *prefix* so far."""
     try:
-        lines = log.read_text().splitlines()
+        lines = log.read_text(encoding="utf-8").splitlines()
     except FileNotFoundError:
         return set()
     return {line.split()[1] for line in lines if line.startswith(prefix)}

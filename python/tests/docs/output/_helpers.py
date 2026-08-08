@@ -34,12 +34,16 @@ def run_oxitest(tmp_path, *extra_args, cwd=None):
 def write_project(tmp, *, tests=None, conftest=None, pyproject=None):
     """Scaffold a minimal oxitest project in a TempDir."""
     if pyproject:
-        (tmp.path / "pyproject.toml").write_text(textwrap.dedent(pyproject))
+        (tmp.path / "pyproject.toml").write_text(
+            textwrap.dedent(pyproject), encoding="utf-8"
+        )
     if conftest:
-        (tmp.path / "conftest.py").write_text(textwrap.dedent(conftest))
+        (tmp.path / "conftest.py").write_text(
+            textwrap.dedent(conftest), encoding="utf-8"
+        )
     if tests:
         for name, code in tests.items():
-            (tmp.path / name).write_text(textwrap.dedent(code))
+            (tmp.path / name).write_text(textwrap.dedent(code), encoding="utf-8")
 
 
 def _normalize(text, tmp_path=None):
@@ -85,10 +89,10 @@ def assert_snapshot(name, actual, *, tmp_path=None):
     normalized = _normalize(actual, tmp_path=tmp_path)
 
     if not snap_file.exists() or os.environ.get("OXITEST_UPDATE_SNAPSHOTS"):
-        snap_file.write_text(normalized)
+        snap_file.write_text(normalized, encoding="utf-8")
         return  # first run or update — snapshot written
 
-    expected = snap_file.read_text()
+    expected = snap_file.read_text(encoding="utf-8")
     assert normalized == expected, (
         f"output does not match snapshot {snap_file.name}\n"
         f"--- expected ---\n{expected}\n"

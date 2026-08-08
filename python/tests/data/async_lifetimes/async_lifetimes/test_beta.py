@@ -13,7 +13,7 @@ from oxitest import Fixtures
 
 
 def _record(event: str) -> None:
-    with Path(os.environ["ASYNC_LIFETIMES_LOG"]).open("a") as fh:
+    with Path(os.environ["ASYNC_LIFETIMES_LOG"]).open("a", encoding="utf-8") as fh:
         fh.write(f"{event}\n")
 
 

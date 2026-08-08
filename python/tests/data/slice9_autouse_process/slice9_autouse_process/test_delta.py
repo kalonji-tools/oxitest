@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 def _record(event: str) -> None:
-    with Path(os.environ["SLICE9_PROC_LOG"]).open("a") as fh:
+    with Path(os.environ["SLICE9_PROC_LOG"]).open("a", encoding="utf-8") as fh:
         fh.write(f"{event}\n")
 
 

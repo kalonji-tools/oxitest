@@ -30,7 +30,8 @@ def oxitest_plugin(*, config: MetricsConfig | None = None) -> Plugin:
                 "format": config.format,
                 "threshold": config.threshold,
             }
-        )
+        ),
+        encoding="utf-8",
     )
 
     provider, reporter, collector, coverage = build_plugin(config)

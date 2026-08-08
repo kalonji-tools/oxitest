@@ -33,12 +33,12 @@ def _scaffold(root: Path, files: dict[str, str]) -> None:
     for rel_path, content in files.items():
         target = root / rel_path
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content)
+        target.write_text(content, encoding="utf-8")
 
 
 def _events(log: Path) -> tuple[str, ...]:
     """The fixture-written event log, one event per line."""
-    return tuple(log.read_text().splitlines()) if log.exists() else ()
+    return tuple(log.read_text(encoding="utf-8").splitlines()) if log.exists() else ()
 
 
 def _tagged(events: tuple[str, ...], tag: str) -> tuple[str, ...]:
@@ -200,7 +200,8 @@ def test_autouse_instance_is_what_the_test_observes(tmp: TempDir) -> None:
         "    instance = Stamp(next(_COUNTER))\n"
         "    with LOG.open('a') as fh:\n"
         "        fh.write(f'SETUP {instance.seq}\\n')\n"
-        "    return instance\n"
+        "    return instance\n",
+        encoding="utf-8",
     )
     (Path(tmp) / "test_autouse.py").write_text(
         "from __future__ import annotations\n"
@@ -214,7 +215,8 @@ def test_autouse_instance_is_what_the_test_observes(tmp: TempDir) -> None:
         "    assert observed.seq is not None, (\n"
         "        'the stamp must carry its build number so the outer test can "
         "match it against the autouse pass'\n"
-        "    )\n"
+        "    )\n",
+        encoding="utf-8",
     )
 
     # Act

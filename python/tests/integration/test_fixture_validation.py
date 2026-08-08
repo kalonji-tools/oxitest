@@ -22,8 +22,8 @@ import oxitest
 def test_uses_typo(sotre: oxitest.Fixture[int]) -> None:
     assert sotre == 42
 """
-    (tmp / "conftest.py").write_text(conftest)
-    (tmp / "test_typo.py").write_text(test_file)
+    (tmp / "conftest.py").write_text(conftest, encoding="utf-8")
+    (tmp / "test_typo.py").write_text(test_file, encoding="utf-8")
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_collection_error(out, rc)
     integ.assert_contains(out.lower(), "fixture", "sotre")
@@ -46,8 +46,8 @@ import oxitest
 def test_uses_store(store: oxitest.Fixture[int]) -> None:
     assert store == 42
 """
-    (tmp / "conftest.py").write_text(conftest)
-    (tmp / "test_ok.py").write_text(test_file)
+    (tmp / "conftest.py").write_text(conftest, encoding="utf-8")
+    (tmp / "test_ok.py").write_text(test_file, encoding="utf-8")
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_passed(out, rc)
 
@@ -69,8 +69,8 @@ import oxitest
 def test_typo(sotre: oxitest.Fixture[int]) -> None:
     assert sotre == 42
 """
-    (tmp / "conftest.py").write_text(conftest)
-    (tmp / "test_typo.py").write_text(test_file)
+    (tmp / "conftest.py").write_text(conftest, encoding="utf-8")
+    (tmp / "test_typo.py").write_text(test_file, encoding="utf-8")
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_collection_error(out, rc)
     integ.assert_contains(out.lower(), "did you mean")

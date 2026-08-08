@@ -17,7 +17,7 @@ import oxitest as oxi
 
 def record(event: str) -> None:
     """Append one event line to the log named by ``P2LOG``."""
-    with Path(os.environ["P2LOG"]).open("a") as handle:
+    with Path(os.environ["P2LOG"]).open("a", encoding="utf-8") as handle:
         handle.write(f"{event}\n")
 
 

@@ -26,14 +26,16 @@ def test_async_each_fixture_on_sync_test_raises_arrange_error(
         "\n"
         "@fx.fixture\n"
         "async def each_txn():\n"
-        "    yield\n"
+        "    yield\n",
+        encoding="utf-8",
     )
     (tmp / "test_sample.py").write_text(
         "from oxitest import arrange\n"
         "\n"
         "@arrange('each_txn')\n"
         "def test_sync_read():\n"
-        "    pass\n"
+        "    pass\n",
+        encoding="utf-8",
     )
 
     stdout, _stderr, rc = helpers.run_oxitest(tmp)
@@ -68,14 +70,16 @@ def test_each_loop_created_lazily_and_closed_after_test(
         "\n"
         "@fx.fixture\n"
         "async def each_txn():\n"
-        "    yield\n"
+        "    yield\n",
+        encoding="utf-8",
     )
     (tmp / "test_sample.py").write_text(
         "from oxitest import arrange\n"
         "\n"
         "@arrange('each_txn')\n"
         "async def test_async_write():\n"
-        "    pass\n"
+        "    pass\n",
+        encoding="utf-8",
     )
 
     stdout, stderr, _rc = helpers.run_oxitest(tmp)
@@ -115,7 +119,8 @@ def test_two_async_each_fixtures_share_one_per_test_session(
         "@fx.fixture\n"
         "async def second_async():\n"
         "    loops['second'] = id(asyncio.get_running_loop())\n"
-        "    yield\n"
+        "    yield\n",
+        encoding="utf-8",
     )
     (tmp / "test_sample.py").write_text(
         "from oxitest import arrange\n"
@@ -129,7 +134,8 @@ def test_two_async_each_fixtures_share_one_per_test_session(
         "    assert loops['first'] == loops['second'], (\n"
         "        f'two async-each fixtures in one @arrange must share the '\n"
         "        f'per-test session (same loop id), got {loops}'\n"
-        "    )\n"
+        "    )\n",
+        encoding="utf-8",
     )
 
     stdout, _stderr, _rc = helpers.run_oxitest(tmp)
@@ -193,14 +199,16 @@ def test_multiple_illegal_entries_listed_in_one_diagnostic(
         "\n"
         "@fx.fixture\n"
         "async def c():\n"
-        "    yield\n"
+        "    yield\n",
+        encoding="utf-8",
     )
     (tmp / "test_sample.py").write_text(
         "from oxitest import arrange\n"
         "\n"
         "@arrange('a', 'b', 'c')\n"
         "def test_sync():\n"
-        "    pass\n"
+        "    pass\n",
+        encoding="utf-8",
     )
 
     stdout, _stderr, _rc = helpers.run_oxitest(tmp)
@@ -234,7 +242,8 @@ def test_scan_is_all_or_nothing_no_partial_setup(tmp: TempDir) -> None:
         "\n"
         "@fx.fixture\n"
         "async def illegal_async():\n"
-        "    yield\n"
+        "    yield\n",
+        encoding="utf-8",
     )
     (tmp / "test_sample.py").write_text(
         "from oxitest import arrange\n"
@@ -248,7 +257,8 @@ def test_scan_is_all_or_nothing_no_partial_setup(tmp: TempDir) -> None:
         "    assert counter['setup_calls'] == 0, (\n"
         "        f'legal_sync must not have run before the scan raised, '\n"
         "        f'counter={counter}'\n"
-        "    )\n"
+        "    )\n",
+        encoding="utf-8",
     )
 
     stdout, _stderr, _rc = helpers.run_oxitest(tmp)
@@ -283,7 +293,8 @@ def test_mixed_sync_async_teardown_lifo(tmp: TempDir) -> None:
         "@fx.fixture\n"
         "def sync_c():\n"
         "    yield\n"
-        "    order.append('sync_c')\n"
+        "    order.append('sync_c')\n",
+        encoding="utf-8",
     )
     (tmp / "test_sample.py").write_text(
         "from oxitest import arrange\n"
@@ -297,7 +308,8 @@ def test_mixed_sync_async_teardown_lifo(tmp: TempDir) -> None:
         "    assert order == ['sync_c', 'async_b', 'sync_a'], (\n"
         "        f'teardown must be LIFO across mixed sync/async @arrange, '\n"
         "        f'got {order}'\n"
-        "    )\n"
+        "    )\n",
+        encoding="utf-8",
     )
 
     stdout, _stderr, _rc = helpers.run_oxitest(tmp)
@@ -328,7 +340,8 @@ def test_per_test_loop_shared_across_setup_body_and_teardown(
         "async def probe():\n"
         "    seen['setup'] = id(asyncio.get_running_loop())\n"
         "    yield\n"
-        "    seen['teardown'] = id(asyncio.get_running_loop())\n"
+        "    seen['teardown'] = id(asyncio.get_running_loop())\n",
+        encoding="utf-8",
     )
     (tmp / "test_sample.py").write_text(
         "import asyncio\n"
@@ -346,7 +359,8 @@ def test_per_test_loop_shared_across_setup_body_and_teardown(
         "        f'per-test loop identity must be stable across setup, body, '\n"
         "        f'and teardown so loop-bound arrange resources are usable '\n"
         "        f'in the body (ADR-0006), got {seen}'\n"
-        "    )\n"
+        "    )\n",
+        encoding="utf-8",
     )
 
     stdout, _stderr, _rc = helpers.run_oxitest(tmp)
@@ -375,7 +389,8 @@ def test_teardown_raise_does_not_halt_draining(tmp: TempDir) -> None:
         "async def raising():\n"
         "    yield\n"
         "    log.append('raising_teardown_start')\n"
-        "    raise RuntimeError('teardown boom')\n"
+        "    raise RuntimeError('teardown boom')\n",
+        encoding="utf-8",
     )
     (tmp / "test_sample.py").write_text(
         "from oxitest import arrange\n"
@@ -389,7 +404,8 @@ def test_teardown_raise_does_not_halt_draining(tmp: TempDir) -> None:
         "    assert 'outer_teardown' in log, (\n"
         "        f'earlier-registered teardown must fire even after later one '\n"
         "        f'raises, got log={log}'\n"
-        "    )\n"
+        "    )\n",
+        encoding="utf-8",
     )
 
     # `--warnings` expands the reporter's collapsed warning summary so the
@@ -424,7 +440,8 @@ def test_arrange_missing_fixture_surfaces_as_error(tmp: TempDir) -> None:
         "\n"
         "@arrange('nonexistent')\n"
         "def test_missing():\n"
-        "    pass\n"
+        "    pass\n",
+        encoding="utf-8",
     )
 
     stdout, _stderr, _rc = helpers.run_oxitest(tmp)
@@ -452,7 +469,8 @@ def test_arrange_scan_runs_once_per_test_not_per_parametrize_case(
         "\n"
         "@fx.fixture\n"
         "async def illegal_async():\n"
-        "    yield\n"
+        "    yield\n",
+        encoding="utf-8",
     )
     (tmp / "test_sample.py").write_text(
         "from oxitest import arrange, parametrize\n"
@@ -464,7 +482,8 @@ def test_arrange_scan_runs_once_per_test_not_per_parametrize_case(
         "    three={'x': 3},\n"
         ")\n"
         "def test_sync_cases(x: int) -> None:\n"
-        "    pass\n"
+        "    pass\n",
+        encoding="utf-8",
     )
 
     stdout, _stderr, _rc = helpers.run_oxitest(tmp)
@@ -492,7 +511,8 @@ def test_arrange_type_based_entry_resolves_via_get_by_type(tmp: TempDir) -> None
         "\n"
         "@arrange(TempDir)\n"
         "def test_type_arrange() -> None:\n"
-        "    pass\n"
+        "    pass\n",
+        encoding="utf-8",
     )
 
     stdout, _stderr, rc = helpers.run_oxitest(tmp)
@@ -523,7 +543,8 @@ def test_async_each_coroutine_only_fixture(tmp: TempDir) -> None:
         "@fx.fixture\n"
         "async def coro_only():\n"
         "    calls.append('setup')\n"
-        "    # no yield — pure coroutine, awaited for its side effect\n"
+        "    # no yield — pure coroutine, awaited for its side effect\n",
+        encoding="utf-8",
     )
     (tmp / "test_sample.py").write_text(
         "from oxitest import arrange\n"
@@ -537,7 +558,8 @@ def test_async_each_coroutine_only_fixture(tmp: TempDir) -> None:
         "    assert calls == ['setup'], (\n"
         "        f'coroutine-only async fixture must be awaited on the '\n"
         "        f'per-test loop, got calls={calls}'\n"
-        "    )\n"
+        "    )\n",
+        encoding="utf-8",
     )
 
     stdout, _stderr, rc = helpers.run_oxitest(tmp)
@@ -587,7 +609,8 @@ def test_cross_loop_asyncio_task_usable_in_body(tmp: TempDir) -> None:
         "    task = asyncio.create_task(_idle())\n"
         "    shared_state['task'] = task\n"
         "    yield\n"
-        "    shared_state.clear()\n"
+        "    shared_state.clear()\n",
+        encoding="utf-8",
     )
     (tmp / "test_sample.py").write_text(
         "import asyncio\n"
@@ -607,7 +630,8 @@ def test_cross_loop_asyncio_task_usable_in_body(tmp: TempDir) -> None:
         "        'the arrange fixture created this Task on the arrange loop; '\n"
         "        'awaiting it here without a cross-loop RuntimeError proves '\n"
         "        'body and arrange share one loop (ADR-0006 body-loop identity)'\n"
-        "    )\n"
+        "    )\n",
+        encoding="utf-8",
     )
 
     stdout, _stderr, rc = helpers.run_oxitest(tmp)
@@ -650,7 +674,8 @@ def test_async_test_without_arrange_uses_fresh_session_fallback(
         "    assert asyncio.get_running_loop() is not None, (\n"
         "        'the fallback acquire_session_guarded path must supply a '\n"
         "        'running loop for async tests with no @arrange fixtures'\n"
-        "    )\n"
+        "    )\n",
+        encoding="utf-8",
     )
 
     stdout, _stderr, rc = helpers.run_oxitest(tmp)
@@ -696,7 +721,8 @@ def test_shared_session_precedence_over_arrange_session(tmp: TempDir) -> None:
         "@fx.fixture\n"
         "async def arrange_ping():\n"
         "    seen['arrange'] = id(asyncio.get_running_loop())\n"
-        "    yield\n"
+        "    yield\n",
+        encoding="utf-8",
     )
     (tmp / "test_sample.py").write_text(
         "import asyncio\n"
@@ -730,7 +756,8 @@ def test_shared_session_precedence_over_arrange_session(tmp: TempDir) -> None:
         "        'sanity: arrange session should be a different loop from '\n"
         "        'shared session (otherwise the precedence test proves '\n"
         "        f'nothing); got {seen}'\n"
-        "    )\n"
+        "    )\n",
+        encoding="utf-8",
     )
 
     stdout, _stderr, rc = helpers.run_oxitest(tmp)

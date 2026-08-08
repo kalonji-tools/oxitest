@@ -38,18 +38,18 @@ def _scaffold_plugin_project(
     # Plugin package
     plugin_dir = project / plugin_name
     plugin_dir.mkdir()
-    (plugin_dir / "__init__.py").write_text(plugin_code)
+    (plugin_dir / "__init__.py").write_text(plugin_code, encoding="utf-8")
 
     # pyproject.toml — always declares the plugin; caller appends extra config
     toml = f'[tool.oxitest]\ntestpaths = ["tests"]\nplugins = ["{plugin_name}"]\n'
     if config:
         toml += config
-    (project / "pyproject.toml").write_text(toml)
+    (project / "pyproject.toml").write_text(toml, encoding="utf-8")
 
     # Test file
     tests_dir = project / "tests"
     tests_dir.mkdir()
-    (tests_dir / "test_pass.py").write_text(test_code)
+    (tests_dir / "test_pass.py").write_text(test_code, encoding="utf-8")
 
     return project
 
@@ -71,7 +71,7 @@ def test_plugin_loads_and_entry_called(tmp: TempDir) -> None:
         """),
         config=(
             f"\n[tool.oxitest.plugin_settings.my_plugin]\n"
-            f'marker_file = "{marker_file}"\n'
+            f'marker_file = "{marker_file.as_posix()}"\n'
         ),
     )
 
@@ -90,9 +90,8 @@ def test_plugin_loads_and_entry_called(tmp: TempDir) -> None:
         f"stdout:\n{result.stdout}\n"
         f"stderr:\n{result.stderr}"
     )
-    assert marker_file.read_text() == "loaded", (
-        f"Plugin marker file has wrong content: {marker_file.read_text()!r}"
-    )
+    content = marker_file.read_text(encoding="utf-8")
+    assert content == "loaded", f"Plugin marker file has wrong content: {content!r}"
 
 
 def test_missing_plugin_exits_with_error(tmp: TempDir) -> None:
@@ -102,9 +101,10 @@ def test_missing_plugin_exits_with_error(tmp: TempDir) -> None:
     (project / "pyproject.toml").write_text(
         "[tool.oxitest]\n"
         'testpaths = ["."]\n'
-        'plugins = ["nonexistent_plugin_xyz_12345"]\n'
+        'plugins = ["nonexistent_plugin_xyz_12345"]\n',
+        encoding="utf-8",
     )
-    (project / "test_pass.py").write_text("def test_ok(): pass\n")
+    (project / "test_pass.py").write_text("def test_ok(): pass\n", encoding="utf-8")
 
     env = _env(project)
     result = _run(
@@ -143,7 +143,7 @@ def test_plugin_receives_config(tmp: TempDir) -> None:
         """),
         config=(
             f"\n[tool.oxitest.plugin_settings.cfg_checker]\n"
-            f'output = "{output_file}"\n'
+            f'output = "{output_file.as_posix()}"\n'
             f'level = "DEBUG"\n'
             f"retries = 3\n"
         ),
@@ -160,7 +160,7 @@ def test_plugin_receives_config(tmp: TempDir) -> None:
     assert output_file.exists(), (
         "Plugin did not write config file — oxitest_plugin() was not called"
     )
-    received = json.loads(output_file.read_text())
+    received = json.loads(output_file.read_text(encoding="utf-8"))
     assert received["level"] == "DEBUG", (
         f"expected level='DEBUG', got {received.get('level')!r}"
     )
@@ -197,7 +197,8 @@ def test_plugin_log_backend_captures_records(tmp: TempDir) -> None:
                 return Plugin(log_backends=(MarkerBackend(config['marker']),))
         """),
         config=(
-            f'\n[tool.oxitest.plugin_settings.log_plugin]\nmarker = "{marker_file}"\n'
+            "\n[tool.oxitest.plugin_settings.log_plugin]\n"
+            f'marker = "{marker_file.as_posix()}"\n'
         ),
         test_code=textwrap.dedent("""\
             from oxitest import Fixture
@@ -224,9 +225,9 @@ def test_plugin_log_backend_captures_records(tmp: TempDir) -> None:
         f"stderr:\n{result.stderr}"
     )
     # After test completes, teardown should have called uninstall
-    assert marker_file.read_text() == "uninstalled", (
+    assert marker_file.read_text(encoding="utf-8") == "uninstalled", (
         f"Expected backend to be uninstalled after test, "
-        f"got state: {marker_file.read_text()!r}"
+        f"got state: {marker_file.read_text(encoding='utf-8')!r}"
     )
 
 
@@ -265,7 +266,7 @@ def test_plugin_fixture_provider_injected_in_test(tmp: TempDir) -> None:
             from oxitest import Fixture
             from db_plugin import Database
 
-            MARKER = Path('{marker_file}')
+            MARKER = Path('{marker_file.as_posix()}')
 
             def test_uses_db(db: Fixture[Database]):
                 assert db.connected, 'database should be connected'
@@ -287,8 +288,8 @@ def test_plugin_fixture_provider_injected_in_test(tmp: TempDir) -> None:
         f"stdout:\n{result.stdout}\n"
         f"stderr:\n{result.stderr}"
     )
-    assert marker_file.read_text() == "injected", (
-        f"Expected 'injected', got {marker_file.read_text()!r}"
+    assert marker_file.read_text(encoding="utf-8") == "injected", (
+        f"Expected 'injected', got {marker_file.read_text(encoding='utf-8')!r}"
     )
     assert result.returncode == 0, (
         f"Test should pass, got exit code {result.returncode}\nstdout:\n{result.stdout}"
@@ -329,7 +330,7 @@ def test_plugin_reporter_receives_events(tmp: TempDir) -> None:
         """),
         config=(
             f"\n[tool.oxitest.plugin_settings.reporter_plugin]\n"
-            f'output = "{output_file}"\n'
+            f'output = "{output_file.as_posix()}"\n'
         ),
         test_code=textwrap.dedent("""\
             def test_one(): pass
@@ -352,7 +353,7 @@ def test_plugin_reporter_receives_events(tmp: TempDir) -> None:
         f"stderr:\n{result.stderr}"
     )
 
-    events = json.loads(output_file.read_text())
+    events = json.loads(output_file.read_text(encoding="utf-8"))
 
     started = [e for e in events if e["event"] == "started"]
     completed = [e for e in events if e["event"] == "completed"]
@@ -397,7 +398,7 @@ def test_plugin_collector_discovers_extra_items(tmp: TempDir) -> None:
         test_code=textwrap.dedent(f"""\
             from pathlib import Path
 
-            MARKER = Path('{marker_file}')
+            MARKER = Path('{marker_file.as_posix()}')
 
             def test_normal():
                 pass
@@ -421,8 +422,8 @@ def test_plugin_collector_discovers_extra_items(tmp: TempDir) -> None:
         f"stdout:\n{result.stdout}\n"
         f"stderr:\n{result.stderr}"
     )
-    assert marker_file.read_text() == "collected", (
-        f"Expected 'collected', got {marker_file.read_text()!r}"
+    assert marker_file.read_text(encoding="utf-8") == "collected", (
+        f"Expected 'collected', got {marker_file.read_text(encoding='utf-8')!r}"
     )
     # Should have collected 2 items: test_normal + check_extra
     assert "2" in result.stdout or "collected 2" in result.stdout, (
@@ -462,7 +463,7 @@ def test_plugin_execution_wrapper_retries(tmp: TempDir) -> None:
             from pathlib import Path
             import oxitest
 
-            COUNTER = Path('{marker_file}')
+            COUNTER = Path('{marker_file.as_posix()}')
 
             @oxitest.mark.retry(count=3)
             def test_flaky():
@@ -487,5 +488,5 @@ def test_plugin_execution_wrapper_retries(tmp: TempDir) -> None:
         f"stderr:\n{result.stderr}"
     )
     assert marker_file.exists(), "Counter file should exist after test execution"
-    attempts = int(marker_file.read_text())
+    attempts = int(marker_file.read_text(encoding="utf-8"))
     assert attempts == 2, f"Expected 2 attempts (fail then pass), got {attempts}"

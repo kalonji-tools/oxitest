@@ -9,7 +9,7 @@ from oxitest import Fixture
 
 
 def test_alpha(engine: Fixture[str], pinned: Fixture[str]) -> None:
-    with Path(os.environ["PROC_COORD_LOG"]).open("a") as fh:
+    with Path(os.environ["PROC_COORD_LOG"]).open("a", encoding="utf-8") as fh:
         fh.write(f"USE alpha {os.getpid()} {engine}\n")
     assert engine, "the process-lifetime fixture must be injected"
     assert pinned == "pinned", "the shared fixture must be injected"

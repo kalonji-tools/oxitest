@@ -24,7 +24,7 @@ def git_repo(tmp: TempDir) -> Yields[Path]:
     run(*git, "init")
     run(*git, "config", "user.email", "test@test.com")
     run(*git, "config", "user.name", "Test")
-    (tmp / ".gitkeep").write_text("")
+    (tmp / ".gitkeep").write_text("", encoding="utf-8")
     run(*git, "add", ".")
     run(*git, "commit", "-m", "init")
     yield tmp

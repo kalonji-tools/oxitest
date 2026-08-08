@@ -35,7 +35,7 @@ def test_find_conftest_no_conftest_files(tmp: TempDir) -> None:
 
 def test_find_conftest_root_only(tmp: TempDir) -> None:
     """A conftest.py at the rootdir is found even when the test is in a subdirectory."""
-    (tmp / "conftest.py").write_text("")
+    (tmp / "conftest.py").write_text("", encoding="utf-8")
     (tmp / "tests").mkdir()
     result = find_conftest_paths(str(tmp / "tests" / "test_foo.py"), str(tmp))
     assert result == [str(tmp / "conftest.py")], (
@@ -45,10 +45,10 @@ def test_find_conftest_root_only(tmp: TempDir) -> None:
 
 def test_find_conftest_root_and_nested(tmp: TempDir) -> None:
     """Both root and nested conftest.py files are returned in the correct order."""
-    (tmp / "conftest.py").write_text("")
+    (tmp / "conftest.py").write_text("", encoding="utf-8")
     tests_dir = tmp / "tests"
     tests_dir.mkdir()
-    (tests_dir / "conftest.py").write_text("")
+    (tests_dir / "conftest.py").write_text("", encoding="utf-8")
     result = find_conftest_paths(str(tests_dir / "test_foo.py"), str(tmp))
     assert result == [
         str(tmp / "conftest.py"),
@@ -59,11 +59,11 @@ def test_find_conftest_root_and_nested(tmp: TempDir) -> None:
 def test_find_conftest_root_first_order(tmp: TempDir) -> None:
     """Conftests are returned root-first."""
     a = tmp / "conftest.py"
-    a.write_text("")
+    a.write_text("", encoding="utf-8")
     sub = tmp / "sub"
     sub.mkdir()
     b = sub / "conftest.py"
-    b.write_text("")
+    b.write_text("", encoding="utf-8")
     result = find_conftest_paths(str(sub / "test_x.py"), str(tmp))
     assert result.index(str(a)) < result.index(str(b)), (
         f"root conftest should appear before nested conftest, got order: {result}"
@@ -105,7 +105,8 @@ def test_load_fixtures_extracts_from_fixtures_instance(tmp: TempDir) -> None:
 
         def not_a_fixture():
             pass
-    """)
+    """),
+        encoding="utf-8",
     )
     result = load_fixtures_from_conftest(str(f))
     names = {d.name for d in result}
@@ -126,7 +127,8 @@ def test_load_fixtures_name_override(tmp: TempDir) -> None:
         @fixtures.fixture(name="renamed")
         def original():
             pass
-    """)
+    """),
+        encoding="utf-8",
     )
     result = load_fixtures_from_conftest(str(f))
     assert result[0].name == "renamed", (
@@ -146,7 +148,8 @@ def test_load_fixtures_autouse(tmp: TempDir) -> None:
         @fixtures.fixture(autouse=True)
         def setup():
             pass
-    """)
+    """),
+        encoding="utf-8",
     )
     result = load_fixtures_from_conftest(str(f))
     assert result[0].autouse is True, (
@@ -167,7 +170,8 @@ def test_load_fixtures_conftest_path_recorded(tmp: TempDir) -> None:
         @fixtures.fixture
         def x():
             pass
-    """)
+    """),
+        encoding="utf-8",
     )
     result = load_fixtures_from_conftest(str(f))
     assert result[0].conftest_path == str(f), (
@@ -192,7 +196,8 @@ def test_load_fixtures_multiple_instances(tmp: TempDir) -> None:
         @web_fixtures.fixture
         def client():
             pass
-    """)
+    """),
+        encoding="utf-8",
     )
     result = load_fixtures_from_conftest(str(f))
     names = {d.name for d in result}
@@ -228,7 +233,8 @@ def test_create_session_populates_registry(tmp: TempDir) -> None:
         @fixtures.fixture
         def db():
             return 42
-    """)
+    """),
+        encoding="utf-8",
     )
     session, _, _diags = create_session([str(f)])
 
@@ -254,7 +260,8 @@ def test_create_session_later_conftest_overrides_earlier(tmp: TempDir) -> None:
         @fixtures.fixture
         def val():
             return "root"
-    """)
+    """),
+        encoding="utf-8",
     )
     sub = tmp / "sub"
     sub.mkdir()
@@ -268,7 +275,8 @@ def test_create_session_later_conftest_overrides_earlier(tmp: TempDir) -> None:
         @fixtures.fixture
         def val():
             return "local"
-    """)
+    """),
+        encoding="utf-8",
     )
     session, _, _diags = create_session([str(root_conf), str(sub_conf)])
 
@@ -296,7 +304,8 @@ def test_load_fixtures_registers_conftest_in_sys_modules(tmp: TempDir) -> None:
         @fixtures.fixture
         def my_fixture():
             return 42
-    """)
+    """),
+        encoding="utf-8",
     )
     sys.modules.pop("conftest", None)
     load_fixtures_from_conftest(str(f))
@@ -320,7 +329,8 @@ def test_load_fixtures_stamps_namespace_from_variable_name(tmp: TempDir) -> None
         "db = oxitest.Fixtures()\n"
         "@db.fixture\n"
         "def conn() -> int:\n"
-        "    return 1\n"
+        "    return 1\n",
+        encoding="utf-8",
     )
     defs = load_fixtures_from_conftest(str(conftest))
     assert len(defs) == 1, f"expected 1 fixture definition, got {len(defs)}"
@@ -338,7 +348,8 @@ def test_load_fixtures_explicit_name_overrides_variable_name(tmp: TempDir) -> No
         "fixtures = oxitest.Fixtures(name='db')\n"
         "@fixtures.fixture\n"
         "def conn() -> int:\n"
-        "    return 1\n"
+        "    return 1\n",
+        encoding="utf-8",
     )
     defs = load_fixtures_from_conftest(str(conftest))
     assert defs[0].namespace == "db", (
@@ -355,7 +366,8 @@ def test_load_fixtures_sets_namespace_on_fixture_def(tmp: TempDir) -> None:
         "db = oxitest.Fixtures()\n"
         "@db.fixture\n"
         "def conn() -> int:\n"
-        "    return 1\n"
+        "    return 1\n",
+        encoding="utf-8",
     )
     defs = load_fixtures_from_conftest(str(conftest))
     assert defs[0].namespace == "db", (
@@ -370,7 +382,7 @@ def test_load_fixtures_sets_namespace_on_fixture_def(tmp: TempDir) -> None:
 def test_load_fixtures_raises_on_reserved_name_oxi_variable(tmp: TempDir) -> None:
     """Using 'oxi' as the Fixtures() variable name raises ValueError (reserved)."""
     conftest = tmp / "conftest.py"
-    conftest.write_text("import oxitest\noxi = oxitest.Fixtures()\n")
+    conftest.write_text("import oxitest\noxi = oxitest.Fixtures()\n", encoding="utf-8")
     with raises(ValueError, match="reserved"):
         load_fixtures_from_conftest(str(conftest))
 
@@ -378,7 +390,9 @@ def test_load_fixtures_raises_on_reserved_name_oxi_variable(tmp: TempDir) -> Non
 def test_load_fixtures_raises_on_explicit_name_oxi(tmp: TempDir) -> None:
     """Fixtures(name='oxi') raises ValueError because 'oxi' is a reserved namespace."""
     conftest = tmp / "conftest.py"
-    conftest.write_text("import oxitest\nfx = oxitest.Fixtures(name='oxi')\n")
+    conftest.write_text(
+        "import oxitest\nfx = oxitest.Fixtures(name='oxi')\n", encoding="utf-8"
+    )
     with raises(ValueError, match="reserved"):
         load_fixtures_from_conftest(str(conftest))
 
@@ -386,10 +400,14 @@ def test_load_fixtures_raises_on_explicit_name_oxi(tmp: TempDir) -> None:
 def test_load_fixtures_rejects_keyword_namespace_variable(tmp: TempDir) -> None:
     """Fixtures(name='class') raises ValueError: keywords disallowed as namespaces."""
     conftest = tmp / "conftest.py"
-    conftest.write_text("import oxitest\nclass_ = oxitest.Fixtures()\n")
+    conftest.write_text(
+        "import oxitest\nclass_ = oxitest.Fixtures()\n", encoding="utf-8"
+    )
     # variable name "class_" is fine, but "class" would be a syntax error
     # so test explicit name= instead
-    conftest.write_text("import oxitest\nfx = oxitest.Fixtures(name='class')\n")
+    conftest.write_text(
+        "import oxitest\nfx = oxitest.Fixtures(name='class')\n", encoding="utf-8"
+    )
     with raises(ValueError, match="Python keyword"):
         load_fixtures_from_conftest(str(conftest))
 
@@ -397,7 +415,7 @@ def test_load_fixtures_rejects_keyword_namespace_variable(tmp: TempDir) -> None:
 def test_load_fixtures_rejects_builtin_namespace_name(tmp: TempDir) -> None:
     """Using a builtin name (like 'int') as a Fixtures() variable raises ValueError."""
     conftest = tmp / "conftest.py"
-    conftest.write_text("import oxitest\nint = oxitest.Fixtures()\n")
+    conftest.write_text("import oxitest\nint = oxitest.Fixtures()\n", encoding="utf-8")
     with raises(ValueError, match="Python builtin"):
         load_fixtures_from_conftest(str(conftest))
 
@@ -405,7 +423,9 @@ def test_load_fixtures_rejects_builtin_namespace_name(tmp: TempDir) -> None:
 def test_load_fixtures_rejects_builtin_explicit_name(tmp: TempDir) -> None:
     """Fixtures(name='list') raises ValueError because builtin names are disallowed."""
     conftest = tmp / "conftest.py"
-    conftest.write_text("import oxitest\nfx = oxitest.Fixtures(name='list')\n")
+    conftest.write_text(
+        "import oxitest\nfx = oxitest.Fixtures(name='list')\n", encoding="utf-8"
+    )
     with raises(ValueError, match="Python builtin"):
         load_fixtures_from_conftest(str(conftest))
 
@@ -419,7 +439,7 @@ def test_create_session_empty_conftest_still_warns(
 ) -> None:
     """A conftest with no Fixtures instance should still emit a diagnostic."""
     f = tmp / "conftest.py"
-    f.write_text("")
+    f.write_text("", encoding="utf-8")
     create_session([str(f)])
     assert any(
         d.context == "conftest loading" and "no Fixtures instance" in d.message
@@ -443,7 +463,7 @@ def test_create_session_pre_session_diagnostics_in_returned_tuple(
     token = _diagnostic_collector_var.set(None)
     try:
         f = tmp / "conftest.py"
-        f.write_text("")  # empty conftest → emits a NOTICE diagnostic
+        f.write_text("", encoding="utf-8")  # empty conftest → emits a NOTICE diagnostic
         _session, _violations, diagnostics = create_session([str(f)])
     finally:
         _diagnostic_collector_var.reset(token)
@@ -536,7 +556,7 @@ def test_load_conftest_module_cleans_sys_modules_on_exec_failure(
     """exec_module failure cleans unique key but preserves previous conftest."""
     # Arrange: conftest that raises at module level
     conftest = tmp / "conftest.py"
-    conftest.write_text("raise RuntimeError('boom')\n")
+    conftest.write_text("raise RuntimeError('boom')\n", encoding="utf-8")
     unique_name = f"_oxitest_conftest_{abs(hash(str(conftest)))}"
     # Simulate a previously loaded conftest still aliased in sys.modules
     previous_conftest = types.ModuleType("_oxitest_conftest_previous")

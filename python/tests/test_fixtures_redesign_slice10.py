@@ -40,9 +40,9 @@ def _package_module(
     """A module object shaped like an imported plugin package on disk."""
     pkg = tmp / name
     pkg.mkdir()
-    (pkg / "__init__.py").write_text("")
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
     if with_fixtures:
-        (pkg / "__fixtures__.py").write_text("")
+        (pkg / "__fixtures__.py").write_text("", encoding="utf-8")
     module = ModuleType(name)
     module.__file__ = str(pkg / "__init__.py")
     module.__path__ = [str(pkg)]
@@ -439,12 +439,13 @@ def test_a_user_declaration_colliding_with_a_plugin_does_not_raise(
         "import oxitest as oxi\n\n"
         "@oxi.fixture(lifetime='module')\n"
         "def conn() -> int:\n"
-        "    return 2\n"
+        "    return 2\n",
+        encoding="utf-8",
     )
     user_module = ModuleType("_oxitest_user_fixtures")
     user_module.__file__ = str(user_home)
     exec(  # noqa: S102 - mirrors how the bridge loads a declaration home
-        compile(user_home.read_text(), str(user_home), "exec"),
+        compile(user_home.read_text(encoding="utf-8"), str(user_home), "exec"),
         user_module.__dict__,
     )
 

@@ -26,7 +26,8 @@ def doctest_project(tmp: TempDir) -> Yields[Path]:
         "    >>> 1 + 1\n"
         "    3\n"
         '    """\n'
-        "    pass\n"
+        "    pass\n",
+        encoding="utf-8",
     )
     yield tmp
 
@@ -52,7 +53,9 @@ def test_doctest_modules_off_by_default(doctest_project: Fixture[Path]) -> None:
 def test_doctest_coexists_with_regular_tests(doctest_project: Fixture[Path]) -> None:
     """Doctests and regular tests coexist in the same run."""
     tmp = doctest_project
-    (tmp / "test_math.py").write_text("def test_one(): assert 1 == 1\n")
+    (tmp / "test_math.py").write_text(
+        "def test_one(): assert 1 == 1\n", encoding="utf-8"
+    )
     out, _, _ = helpers.run_oxitest(tmp, "--doctest-modules", cwd=str(tmp))
     # 1 regular test + 1 doctest pass (add), 1 doctest fail (broken)
     assert "2 passed" in out, f"expected 2 passed in:\n{out}"

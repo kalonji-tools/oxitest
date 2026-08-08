@@ -139,7 +139,7 @@ def test_installed_distribution_wins_over_the_tree(tmp: TempDir) -> None:
     probe_installed = winner / "probe_pkg"
     probe_installed.mkdir(parents=True)
     (probe_installed / "__init__.py").write_text(
-        "def source() -> str:\n    return 'installed'\n"
+        "def source() -> str:\n    return 'installed'\n", encoding="utf-8"
     )
 
     suite = tmp.path / "shadow"
@@ -147,19 +147,23 @@ def test_installed_distribution_wins_over_the_tree(tmp: TempDir) -> None:
     pkg.mkdir(parents=True)
     (suite / "pyproject.toml").write_text(
         '[tool.oxitest]\ntestpaths = ["shadow_pkg"]\n'
-        'python_files = ["test_*.py"]\nstrict = "abort"\n'
+        'python_files = ["test_*.py"]\nstrict = "abort"\n',
+        encoding="utf-8",
     )
-    (pkg / "__init__.py").write_text("")
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
     decoy = suite / "probe_pkg"
     decoy.mkdir()
-    (decoy / "__init__.py").write_text("raise RuntimeError('the decoy was imported')")
+    (decoy / "__init__.py").write_text(
+        "raise RuntimeError('the decoy was imported')", encoding="utf-8"
+    )
     (pkg / "test_shadow.py").write_text(
         "from __future__ import annotations\n\n"
         "import probe_pkg\n\n\n"
         "def test_runs() -> None:\n"
         "    assert probe_pkg.source() == 'installed', (\n"
         "        'the pre-existing sys.path entry must resolve, not the tree copy'\n"
-        "    )\n"
+        "    )\n",
+        encoding="utf-8",
     )
 
     inherited = os.environ.get("PYTHONPATH", "")

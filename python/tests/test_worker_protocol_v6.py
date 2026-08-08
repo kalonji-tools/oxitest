@@ -244,7 +244,9 @@ def test_worker_accepts_a_task_missing_rootdir(tmp: oxi.Fixture[oxi.TempDir]) ->
     """
     # Arrange
     solo = tmp.path / "test_solo.py"
-    solo.write_text("def test_only():\n    assert True, 'must pass'\n")
+    solo.write_text(
+        "def test_only():\n    assert True, 'must pass'\n", encoding="utf-8"
+    )
     task = _task(
         modules=[
             {
@@ -288,9 +290,13 @@ def test_worker_runs_every_module_in_one_task(tmp: oxi.Fixture[oxi.TempDir]) -> 
     # Arrange — two real test modules, one task, one worker subprocess.
 
     alpha = tmp.path / "test_alpha.py"
-    alpha.write_text("def test_a():\n    assert True, 'alpha must pass'\n")
+    alpha.write_text(
+        "def test_a():\n    assert True, 'alpha must pass'\n", encoding="utf-8"
+    )
     beta = tmp.path / "test_beta.py"
-    beta.write_text("def test_b():\n    assert True, 'beta must pass'\n")
+    beta.write_text(
+        "def test_b():\n    assert True, 'beta must pass'\n", encoding="utf-8"
+    )
 
     def _module(path: object, fn: str) -> dict[str, Any]:
         return {

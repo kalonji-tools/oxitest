@@ -31,7 +31,8 @@ def oxitest_plugin(*, config: InfraConfig | None = None) -> Plugin:
                 "verbose": config.verbose,
                 "ssh_key": config.ssh_key,
             }
-        )
+        ),
+        encoding="utf-8",
     )
 
     provider, log_backend, wrapper = build_plugin(config)

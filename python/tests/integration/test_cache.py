@@ -11,7 +11,7 @@ from tests.integration import helpers as integ
 
 def test_cache_created_on_firstrun_oxitest(tmp: TempDir) -> None:
     """A .oxitest_cache directory is created after the first run."""
-    (tmp / "test_cached.py").write_text("def test_a(): assert True\n")
+    (tmp / "test_cached.py").write_text("def test_a(): assert True\n", encoding="utf-8")
     helpers.run_oxitest(tmp)
     cache_dir = Path(tmp) / ".oxitest_cache"
     assert cache_dir.exists(), ".oxitest_cache/ should be created after first run"
@@ -20,14 +20,15 @@ def test_cache_created_on_firstrun_oxitest(tmp: TempDir) -> None:
 def test_failed_only_runs_subset(tmp: TempDir) -> None:
     """--failed=only reruns only the previously-failed test after fixing it."""
     (tmp / "test_mixed.py").write_text(
-        "def test_pass(): assert True\ndef test_fail(): assert False\n"
+        "def test_pass(): assert True\ndef test_fail(): assert False\n",
+        encoding="utf-8",
     )
     # First run: populate the cache with one failure.
     helpers.run_oxitest(tmp)
 
     # Fix the failing test.
     (tmp / "test_mixed.py").write_text(
-        "def test_pass(): assert True\ndef test_fail(): assert True\n"
+        "def test_pass(): assert True\ndef test_fail(): assert True\n", encoding="utf-8"
     )
     out, _, rc = helpers.run_oxitest(tmp, "--failed=only")
     integ.assert_passed(out, rc, count=1)
@@ -36,14 +37,14 @@ def test_failed_only_runs_subset(tmp: TempDir) -> None:
 def test_failed_first_runs_all(tmp: TempDir) -> None:
     """--failed=first runs all tests (failed ones first) and exits 0 when clean."""
     (tmp / "test_ff.py").write_text(
-        "def test_ok(): assert True\ndef test_bad(): assert False\n"
+        "def test_ok(): assert True\ndef test_bad(): assert False\n", encoding="utf-8"
     )
     # First run: populate the cache with one failure.
     helpers.run_oxitest(tmp)
 
     # Fix the failing test.
     (tmp / "test_ff.py").write_text(
-        "def test_ok(): assert True\ndef test_bad(): assert True\n"
+        "def test_ok(): assert True\ndef test_bad(): assert True\n", encoding="utf-8"
     )
     out, _, rc = helpers.run_oxitest(tmp, "--failed=first")
     integ.assert_passed(out, rc, count=2)
@@ -68,13 +69,13 @@ def test_failed_strategy_parallel(
 ) -> None:
     """--failed=only/first with --workers 2 reruns correctly in parallel."""
     (tmp / "test_a.py").write_text(
-        "def test_a1(): assert True\ndef test_a2(): assert True\n"
+        "def test_a1(): assert True\ndef test_a2(): assert True\n", encoding="utf-8"
     )
     (tmp / "test_b.py").write_text(
-        "def test_b1(): assert True\ndef test_b2(): assert False\n"
+        "def test_b1(): assert True\ndef test_b2(): assert False\n", encoding="utf-8"
     )
     (tmp / "test_c.py").write_text(
-        "def test_c1(): assert True\ndef test_c2(): assert True\n"
+        "def test_c1(): assert True\ndef test_c2(): assert True\n", encoding="utf-8"
     )
 
     # First run: populate cache with one failure.
@@ -83,7 +84,7 @@ def test_failed_strategy_parallel(
 
     # Fix the failing test.
     (tmp / "test_b.py").write_text(
-        "def test_b1(): assert True\ndef test_b2(): assert True\n"
+        "def test_b1(): assert True\ndef test_b2(): assert True\n", encoding="utf-8"
     )
 
     # Re-run with strategy in parallel.

@@ -11,9 +11,12 @@ def test_oxi_mark_applies_to_all_tests(tmp: TempDir) -> None:
         "import oxitest\n"
         "oxi_mark = [oxitest.mark.slow]\n"
         "def test_a(): assert True\n"
-        "def test_b(): assert True\n"
+        "def test_b(): assert True\n",
+        encoding="utf-8",
     )
-    (tmp / "pyproject.toml").write_text('[tool.oxitest]\nmarkers = ["slow"]\n')
+    (tmp / "pyproject.toml").write_text(
+        '[tool.oxitest]\nmarkers = ["slow"]\n', encoding="utf-8"
+    )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_passed(out, rc, count=2)
 
@@ -24,10 +27,13 @@ def test_oxi_mark_visible_to_expression_filter(tmp: TempDir) -> None:
         "import oxitest\n"
         "oxi_mark = [oxitest.mark.slow]\n"
         "def test_a(): assert True\n"
-        "def test_b(): assert True\n"
+        "def test_b(): assert True\n",
+        encoding="utf-8",
     )
-    (tmp / "test_other.py").write_text("def test_c(): assert True\n")
-    (tmp / "pyproject.toml").write_text('[tool.oxitest]\nmarkers = ["slow"]\n')
+    (tmp / "test_other.py").write_text("def test_c(): assert True\n", encoding="utf-8")
+    (tmp / "pyproject.toml").write_text(
+        '[tool.oxitest]\nmarkers = ["slow"]\n', encoding="utf-8"
+    )
     out, _, rc = helpers.run_oxitest(tmp, "-E", "mark(slow)")
     integ.assert_passed(out, rc, count=2)
 
@@ -39,7 +45,8 @@ def test_oxi_mark_per_test_override(tmp: TempDir) -> None:
         "oxi_mark = [oxitest.mark.timeout(120)]\n"
         "@oxitest.mark.skip(reason='override')\n"
         "def test_skipped(): assert True\n"
-        "def test_runs(): assert True\n"
+        "def test_runs(): assert True\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_passed(out, rc, count=1)
@@ -49,7 +56,8 @@ def test_oxi_mark_per_test_override(tmp: TempDir) -> None:
 def test_oxi_mark_strict_validates_module_marks(tmp: TempDir) -> None:
     """--strict catches missing reason on module-level skip mark."""
     (tmp / "test_mod.py").write_text(
-        "import oxitest\noxi_mark = [oxitest.mark.skip]\ndef test_a(): assert True\n"
+        "import oxitest\noxi_mark = [oxitest.mark.skip]\ndef test_a(): assert True\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp, "--strict")
     integ.assert_failed(out, rc)
@@ -59,8 +67,11 @@ def test_oxi_mark_strict_validates_module_marks(tmp: TempDir) -> None:
 def test_oxi_mark_single_mark_not_list(tmp: TempDir) -> None:
     """oxi_mark = oxi.mark.slow (single, not list) works."""
     (tmp / "test_mod.py").write_text(
-        "import oxitest\noxi_mark = oxitest.mark.slow\ndef test_a(): assert True\n"
+        "import oxitest\noxi_mark = oxitest.mark.slow\ndef test_a(): assert True\n",
+        encoding="utf-8",
     )
-    (tmp / "pyproject.toml").write_text('[tool.oxitest]\nmarkers = ["slow"]\n')
+    (tmp / "pyproject.toml").write_text(
+        '[tool.oxitest]\nmarkers = ["slow"]\n', encoding="utf-8"
+    )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_passed(out, rc, count=1)

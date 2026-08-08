@@ -21,5 +21,5 @@ def window(name: str) -> None:
     time.sleep(0.05)
     end = time.monotonic()
     line = f"{os.getpid()} {threading.get_ident()} {start:.6f} {end:.6f} {name}"
-    with Path(os.environ["WS_LOG"]).open("a") as handle:
+    with Path(os.environ["WS_LOG"]).open("a", encoding="utf-8") as handle:
         handle.write(f"{line}\n")

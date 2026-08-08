@@ -35,9 +35,9 @@ def _run_debug(
     tmp: TempDir, test_code: str, *, always: bool = False
 ) -> tuple[str, str, int]:
     """Write test + plugin, run ``oxitest debug``, return (stdout, stderr, rc)."""
-    (tmp / "test_it.py").write_text(test_code)
-    (tmp / "debug_plugin.py").write_text(_DEBUG_PLUGIN)
-    (tmp / "pyproject.toml").write_text(_PYPROJECT)
+    (tmp / "test_it.py").write_text(test_code, encoding="utf-8")
+    (tmp / "debug_plugin.py").write_text(_DEBUG_PLUGIN, encoding="utf-8")
+    (tmp / "pyproject.toml").write_text(_PYPROJECT, encoding="utf-8")
     args = ["debug"]
     if always:
         args.append("--always")

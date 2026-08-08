@@ -302,16 +302,18 @@ strict = "abort"
 
 def test_node_id_in_nested_dir_loads_ancestor_conftests(tmp: TempDir) -> None:
     """Node ID targeting a file in a subdirectory loads all ancestor conftests."""
-    (tmp / "pyproject.toml").write_text("")
+    (tmp / "pyproject.toml").write_text("", encoding="utf-8")
     (tmp / "conftest.py").write_text(
         "import oxitest\nfx = oxitest.Fixtures()\n\n"
-        "@fx.fixture\ndef root_val() -> str:\n    return 'from_root'\n"
+        "@fx.fixture\ndef root_val() -> str:\n    return 'from_root'\n",
+        encoding="utf-8",
     )
     sub = tmp / "tests"
     sub.mkdir()
     (sub / "conftest.py").write_text(
         "import oxitest\nfx = oxitest.Fixtures()\n\n"
-        "@fx.fixture\ndef sub_val() -> str:\n    return 'from_sub'\n"
+        "@fx.fixture\ndef sub_val() -> str:\n    return 'from_sub'\n",
+        encoding="utf-8",
     )
     deep = sub / "deep"
     deep.mkdir()
@@ -320,7 +322,8 @@ def test_node_id_in_nested_dir_loads_ancestor_conftests(tmp: TempDir) -> None:
         "def test_sees_root(root_val: Fixture[str]):\n"
         "    assert root_val == 'from_root'\n\n"
         "def test_sees_sub(sub_val: Fixture[str]):\n"
-        "    assert sub_val == 'from_sub'\n"
+        "    assert sub_val == 'from_sub'\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest_subcmd(
         tmp,

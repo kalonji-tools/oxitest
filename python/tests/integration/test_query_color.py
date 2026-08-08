@@ -10,9 +10,11 @@ ANSI_ESCAPE = "\x1b["
 
 def _write_project(tmp: TempDir) -> None:
     """Write a minimal project for query testing."""
-    (tmp / "pyproject.toml").write_text("[tool.oxitest]\ntestpaths = ['.']\n")
+    (tmp / "pyproject.toml").write_text(
+        "[tool.oxitest]\ntestpaths = ['.']\n", encoding="utf-8"
+    )
     (tmp / "test_example.py").write_text(
-        "def test_add():\n    # basic test\n    assert 1 + 1 == 2\n"
+        "def test_add():\n    # basic test\n    assert 1 + 1 == 2\n", encoding="utf-8"
     )
 
 

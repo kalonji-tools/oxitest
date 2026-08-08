@@ -54,7 +54,7 @@ def _run_project(tmp: TempDir, *extra_args: str) -> _Run:
     log = Path(tmp) / "events.log"
     env = {**os.environ, "SLICE2_LOG": str(log)}
     stdout, stderr, rc = helpers.run_oxitest(_PROJECT, *extra_args, env=env)
-    events = tuple(log.read_text().splitlines()) if log.exists() else ()
+    events = tuple(log.read_text(encoding="utf-8").splitlines()) if log.exists() else ()
     return _Run(stdout=stdout, stderr=stderr, rc=rc, events=events)
 
 
@@ -147,9 +147,10 @@ def test_exitfirst_still_disposes(tmp: TempDir) -> None:
     log = Path(tmp) / "events.log"
 
     (root / "pyproject.toml").write_text(
-        '[tool.oxitest]\ntestpaths = ["pkg"]\npython_files = ["test_*.py"]\n'
+        '[tool.oxitest]\ntestpaths = ["pkg"]\npython_files = ["test_*.py"]\n',
+        encoding="utf-8",
     )
-    (pkg / "__init__.py").write_text("")
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
     (pkg / "__fixtures__.py").write_text(
         "from __future__ import annotations\n"
         "import pathlib\n"
@@ -162,7 +163,8 @@ def test_exitfirst_still_disposes(tmp: TempDir) -> None:
         "        fh.write('SETUP\\n')\n"
         "    yield 'res'\n"
         "    with LOG.open('a') as fh:\n"
-        "        fh.write('TEARDOWN\\n')\n"
+        "        fh.write('TEARDOWN\\n')\n",
+        encoding="utf-8",
     )
     (pkg / "test_aborts.py").write_text(
         "from oxitest import Fixtures\n\n\n"
@@ -171,7 +173,8 @@ def test_exitfirst_still_disposes(tmp: TempDir) -> None:
         "def test_second_fails(fx: Fixtures) -> None:\n"
         "    assert fx.pkg.resource is None, 'deliberate failure to trip -x'\n\n\n"
         "def test_never_runs(fx: Fixtures) -> None:\n"
-        "    assert fx.pkg.resource is not None, 'should not be reached'\n"
+        "    assert fx.pkg.resource is not None, 'should not be reached'\n",
+        encoding="utf-8",
     )
 
     out, err, rc = helpers.run_oxitest(None, "-x", cwd=str(root))
@@ -180,7 +183,7 @@ def test_exitfirst_still_disposes(tmp: TempDir) -> None:
         f"the project must fail so -x actually aborts; rc={rc}\n"
         f"stdout:\n{out}\nstderr:\n{err}"
     )
-    events = log.read_text().splitlines()
+    events = log.read_text(encoding="utf-8").splitlines()
     assert events.count("SETUP") == 1, (
         f"expected exactly one instantiation, got {events} — the rest of this "
         f"test is meaningless otherwise\nstdout:\n{out}"
@@ -211,19 +214,21 @@ def test_old_shared_fixture_api_unaffected(tmp: TempDir) -> None:
         "        fh.write('SETUP\\n')\n"
         "    yield 'res'\n"
         "    with LOG.open('a') as fh:\n"
-        "        fh.write('TEARDOWN\\n')\n"
+        "        fh.write('TEARDOWN\\n')\n",
+        encoding="utf-8",
     )
     for mod in ("alpha", "beta"):
         (tmp / f"test_{mod}.py").write_text(
             "from oxitest import Fixture\n\n\n"
             f"def test_{mod}(resource: Fixture[str]) -> None:\n"
-            "    assert resource == 'res', 'shared fixture must still inject'\n"
+            "    assert resource == 'res', 'shared fixture must still inject'\n",
+            encoding="utf-8",
         )
 
     out, err, rc = helpers.run_oxitest(tmp, "--serial")
 
     assert rc == 0, f"old shared=True API regressed:\nstdout:\n{out}\nstderr:\n{err}"
-    events = log.read_text().splitlines()
+    events = log.read_text(encoding="utf-8").splitlines()
     assert events.count("SETUP") == 1, (
         f"shared fixture was built {events.count('SETUP')} times across two "
         "modules — module scope must not capture shared=True fixtures, which "
@@ -245,9 +250,10 @@ def test_failing_module_teardown_is_reported(tmp: TempDir) -> None:
     pkg.mkdir(parents=True)
 
     (root / "pyproject.toml").write_text(
-        '[tool.oxitest]\ntestpaths = ["pkg"]\npython_files = ["test_*.py"]\n'
+        '[tool.oxitest]\ntestpaths = ["pkg"]\npython_files = ["test_*.py"]\n',
+        encoding="utf-8",
     )
-    (pkg / "__init__.py").write_text("")
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
     (pkg / "__fixtures__.py").write_text(
         "from __future__ import annotations\n"
         "from collections.abc import Iterator\n"
@@ -256,12 +262,14 @@ def test_failing_module_teardown_is_reported(tmp: TempDir) -> None:
         "def mod_raiser() -> Iterator[str]:\n"
         "    yield 'm'\n"
         "    msg = 'module teardown boom'\n"
-        "    raise RuntimeError(msg)\n"
+        "    raise RuntimeError(msg)\n",
+        encoding="utf-8",
     )
     (pkg / "test_only.py").write_text(
         "from oxitest import Fixtures\n\n\n"
         "def test_uses_raiser(fx: Fixtures) -> None:\n"
-        "    assert fx.pkg.mod_raiser == 'm', 'fixture injects before it fails'\n"
+        "    assert fx.pkg.mod_raiser == 'm', 'fixture injects before it fails'\n",
+        encoding="utf-8",
     )
 
     out, err, rc = helpers.run_oxitest(None, "--serial", "--warnings", cwd=str(root))
@@ -297,12 +305,14 @@ def test_failing_shared_teardown_is_reported(tmp: TempDir) -> None:
         "def shared_raiser() -> Iterator[str]:\n"
         "    yield 's'\n"
         "    msg = 'shared teardown boom'\n"
-        "    raise RuntimeError(msg)\n"
+        "    raise RuntimeError(msg)\n",
+        encoding="utf-8",
     )
     (tmp / "test_s.py").write_text(
         "from oxitest import Fixture\n\n\n"
         "def test_s(shared_raiser: Fixture[str]) -> None:\n"
-        "    assert shared_raiser == 's', 'shared fixture injects'\n"
+        "    assert shared_raiser == 's', 'shared fixture injects'\n",
+        encoding="utf-8",
     )
 
     out, err, rc = helpers.run_oxitest(tmp, "--serial", "--warnings")
@@ -330,9 +340,10 @@ def test_lifetime_inversion_resolves_without_crashing(tmp: TempDir) -> None:
     pkg.mkdir(parents=True)
 
     (root / "pyproject.toml").write_text(
-        '[tool.oxitest]\ntestpaths = ["pkg"]\npython_files = ["test_*.py"]\n'
+        '[tool.oxitest]\ntestpaths = ["pkg"]\npython_files = ["test_*.py"]\n',
+        encoding="utf-8",
     )
-    (pkg / "__init__.py").write_text("")
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
     (pkg / "__fixtures__.py").write_text(
         "from __future__ import annotations\n"
         "import oxitest as oxi\n"
@@ -342,14 +353,16 @@ def test_lifetime_inversion_resolves_without_crashing(tmp: TempDir) -> None:
         "    return 'fresh'\n\n\n"
         '@oxi.fixture(lifetime="module")\n'
         "def long_lived(per_test: Fixture[str]) -> str:\n"
-        "    return f'holds:{per_test}'\n"
+        "    return f'holds:{per_test}'\n",
+        encoding="utf-8",
     )
     (pkg / "test_inversion.py").write_text(
         "from oxitest import Fixtures\n\n\n"
         "def test_one(fx: Fixtures) -> None:\n"
         "    assert fx.pkg.long_lived == 'holds:fresh', 'inverted dep resolves'\n\n\n"
         "def test_two(fx: Fixtures) -> None:\n"
-        "    assert fx.pkg.long_lived == 'holds:fresh', 'inverted dep resolves'\n"
+        "    assert fx.pkg.long_lived == 'holds:fresh', 'inverted dep resolves'\n",
+        encoding="utf-8",
     )
 
     out, err, rc = helpers.run_oxitest(None, "--serial", cwd=str(root))

@@ -34,8 +34,8 @@ EXPECTED_ARGS = 3
 
 def apply_mutant(target: Path, old_anchor: Path, new_anchor: Path) -> int:
     """Replace the anchor in `target`, returning the process exit code."""
-    old_text = old_anchor.read_text()
-    new_text = new_anchor.read_text()
+    old_text = old_anchor.read_text(encoding="utf-8")
+    new_text = new_anchor.read_text(encoding="utf-8")
 
     # Identical anchors are the one way a matched replacement leaves the file
     # unchanged, so ruling it out here is what lets a zero exit mean the file
@@ -47,7 +47,7 @@ def apply_mutant(target: Path, old_anchor: Path, new_anchor: Path) -> int:
         )
         return CANNOT_APPLY
 
-    source = target.read_text()
+    source = target.read_text(encoding="utf-8")
     matches = source.count(old_text)
     if matches != 1:
         print(
@@ -56,7 +56,7 @@ def apply_mutant(target: Path, old_anchor: Path, new_anchor: Path) -> int:
         )
         return CANNOT_APPLY
 
-    target.write_text(source.replace(old_text, new_text))
+    target.write_text(source.replace(old_text, new_text), encoding="utf-8")
     return 0
 
 

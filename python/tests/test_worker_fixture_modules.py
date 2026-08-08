@@ -40,12 +40,13 @@ def _write_multi_package_project(root: Path, log: Path, *, cross_package: bool) 
         "[tool.oxitest]\n"
         f"testpaths = [{testpaths}]\n"
         'python_files = ["test_*.py"]\n'
-        "auto_arrange = false\n"
+        "auto_arrange = false\n",
+        encoding="utf-8",
     )
     for pkg in _PACKAGES:
         d = root / pkg
         d.mkdir()
-        (d / "__init__.py").write_text("")
+        (d / "__init__.py").write_text("", encoding="utf-8")
         (d / "__fixtures__.py").write_text(
             "from __future__ import annotations\n"
             "import os\n"
@@ -56,7 +57,8 @@ def _write_multi_package_project(root: Path, log: Path, *, cross_package: bool) 
             "def res() -> str:\n"
             "    with LOG.open('a') as fh:\n"
             "        fh.write(f'{os.getpid()}\\n')\n"
-            f"    return {pkg!r}\n"
+            f"    return {pkg!r}\n",
+            encoding="utf-8",
         )
         body = ["from oxitest import Fixtures", "", ""]
         body += [
@@ -76,7 +78,7 @@ def _write_multi_package_project(root: Path, log: Path, *, cross_package: bool) 
                 "'cross-package access must resolve in workers as it does serially'",
                 "",
             ]
-        (d / f"test_{pkg}.py").write_text("\n".join(body))
+        (d / f"test_{pkg}.py").write_text("\n".join(body), encoding="utf-8")
 
 
 def _assert_fanned_out(log: Path, out: str) -> None:
@@ -85,7 +87,7 @@ def _assert_fanned_out(log: Path, out: str) -> None:
     Load-bearing: with a single PID every fixture assertion in this file would
     be exercising the serial path and proving nothing about workers.
     """
-    pids = set(log.read_text().split()) if log.exists() else set()
+    pids = set(log.read_text(encoding="utf-8").split()) if log.exists() else set()
     assert len(pids) > 1, (
         f"the run used {len(pids)} process(es) ({pids or 'none'}) — the "
         "scheduler collapsed it to serial, so the fixture assertions here "

@@ -31,7 +31,7 @@ PAIRS: dict[str, str | list[str]] = {
 
 def parse_rust_structs(path: Path) -> dict[str, set[str]]:
     """Extract field names from #[derive(FromPyObject)] structs."""
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     structs: dict[str, set[str]] = {}
     # Match struct blocks preceded by a FromPyObject derive
     pattern = re.compile(
@@ -50,7 +50,7 @@ def parse_rust_structs(path: Path) -> dict[str, set[str]]:
 
 def parse_python_classes(path: Path) -> dict[str, set[str]]:
     """Extract field names from @dataclass classes."""
-    tree = ast.parse(path.read_text())
+    tree = ast.parse(path.read_text(encoding="utf-8"))
     classes: dict[str, set[str]] = {}
     for node in ast.walk(tree):
         if not isinstance(node, ast.ClassDef):
@@ -110,7 +110,7 @@ def parse_worker_result_fields(path: Path) -> set[str]:
     With internally-tagged enums, fields are distributed across variants.
     We collect the union of all variant fields, plus the tag field ("outcome").
     """
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     # Try enum first (internally-tagged enum)
     enum_pattern = re.compile(
         r"enum\s+WireResult\s*\{(.+?)^}",
@@ -132,7 +132,9 @@ def parse_worker_result_fields(path: Path) -> set[str]:
 
 def parse_worker_task_item_fields(path: Path) -> set[str]:
     """Extract field names from the WorkerTaskItem serde struct."""
-    return _parse_serde_struct_fields(path.read_text(), "WorkerTaskItem")
+    return _parse_serde_struct_fields(
+        path.read_text(encoding="utf-8"), "WorkerTaskItem"
+    )
 
 
 def parse_worker_item_reads(path: Path) -> set[str]:
@@ -140,7 +142,7 @@ def parse_worker_item_reads(path: Path) -> set[str]:
 
     Matches patterns like item["fn_name"] and item.get("param_id").
     """
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     fields: set[str] = set()
     for m in re.finditer(r'item\["(\w+)"\]', text):
         fields.add(m.group(1))
@@ -157,7 +159,7 @@ def parse_to_wire_fields(path: Path) -> set[str]:
     - Keyword argument names from _wire_optional calls (optional fields)
     - Direct output[...] assignments (frames, field_diffs)
     """
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     fields: set[str] = set()
     # Required fields from _wire_base dict literal
     for m in re.finditer(r'"(\w+)"\s*:', text):
@@ -268,7 +270,7 @@ def _check_reporter_pairs(python: dict[str, set[str]]) -> int:
 def _check_raw_frame(python: dict[str, set[str]]) -> int:
     """Check RawFrame (Rust) vs Frame (Python)."""
     raw_frame_fields = _parse_serde_struct_fields(
-        WIRE_RUST_PATH.read_text(), "RawFrame"
+        WIRE_RUST_PATH.read_text(encoding="utf-8"), "RawFrame"
     )
     py_frame_fields = python.get("Frame")
     if not raw_frame_fields:
@@ -317,7 +319,7 @@ def parse_protocol_version_py(path: Path) -> int | None:
     Finds a module-level ``PROTOCOL_VERSION: int = <N>`` annotated assignment.
     Returns None if the constant is missing or does not have an integer literal.
     """
-    tree = ast.parse(path.read_text())
+    tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in tree.body:
         if (
             isinstance(node, ast.AnnAssign)
@@ -336,7 +338,7 @@ def parse_protocol_version_rs(path: Path) -> int | None:
     Matches ``pub(crate) const PROTOCOL_VERSION: u32 = <N>;``. Returns None
     when the constant is missing.
     """
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     pattern = re.compile(
         r"pub\(crate\)\s+const\s+PROTOCOL_VERSION\s*:\s*u32\s*=\s*(\d+)\s*;"
     )

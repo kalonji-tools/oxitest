@@ -9,7 +9,7 @@ from oxitest import Fixture, Fixtures
 
 
 def record(event: str) -> None:
-    with Path(os.environ["ASYNCLOG"]).open("a") as handle:
+    with Path(os.environ["ASYNCLOG"]).open("a", encoding="utf-8") as handle:
         handle.write(f"{event}\n")
 
 

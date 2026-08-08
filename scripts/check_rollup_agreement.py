@@ -144,7 +144,9 @@ def main() -> int:
     workflow_dir = args.root / ".github" / "workflows"
     violations: list[Violation] = []
     for path in sorted(workflow_dir.glob("*.y*ml")):
-        violations.extend(check_workflow(load_workflow_text(path.read_text()), path))
+        violations.extend(
+            check_workflow(load_workflow_text(path.read_text(encoding="utf-8")), path)
+        )
 
     if not violations:
         return 0

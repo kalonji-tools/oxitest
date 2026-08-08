@@ -166,7 +166,8 @@ def test_fixture_ref_no_session_with_namespace_returns_error(tmp: TempDir) -> No
         "\n"
         "@db.fixture\n"
         "def conn():\n"
-        "    return 'db-conn'\n"
+        "    return 'db-conn'\n",
+        encoding="utf-8",
     )
     # Load conftest so sys.modules["conftest"] has db available for import
     load_fixtures_from_conftest(str(conftest))
@@ -190,7 +191,8 @@ def test_fixture_ref_no_session_with_namespace_returns_error(tmp: TempDir) -> No
         "\n"
         "@oxitest.parametrize(prod=StoreCase(store=_conn_ref))\n"
         "def test_query(store: Fixture[str]) -> None:\n"
-        "    assert store == 'db-conn'\n"
+        "    assert store == 'db-conn'\n",
+        encoding="utf-8",
     )
     result = helpers.run_test(str(f), "test_query", session=None, param_id="prod")
     result = helpers.assert_result(

@@ -31,7 +31,9 @@ def test_parallel_matches_serial_at_scale(tmp: TempDir) -> None:
             f"    assert {file_idx} + {test_idx} >= 0\n"
             for test_idx in range(20)
         ]
-        (tmp / f"test_scale_{file_idx}.py").write_text("\n".join(lines))
+        (tmp / f"test_scale_{file_idx}.py").write_text(
+            "\n".join(lines), encoding="utf-8"
+        )
 
     # Act: run both serial and parallel (--workers forces parallel mode).
     serial_out, _, serial_rc = helpers.run_oxitest(tmp, "--serial", timeout=90)
@@ -66,10 +68,12 @@ def test_worker_crash_reports_errors(tmp: TempDir) -> None:
         "    assert True\n"
         "\n"
         "def test_crashes_worker():\n"
-        "    os._exit(1)\n"
+        "    os._exit(1)\n",
+        encoding="utf-8",
     )
     (tmp / "test_healthy.py").write_text(
-        "def test_ok_a():\n    assert True\n\ndef test_ok_b():\n    assert True\n"
+        "def test_ok_a():\n    assert True\n\ndef test_ok_b():\n    assert True\n",
+        encoding="utf-8",
     )
 
     # Act: run with multiple workers so the crash doesn't block everything.
@@ -94,7 +98,7 @@ def test_maxfail_stops_early_under_load(tmp: TempDir) -> None:
             )
         else:
             lines.append(f"def test_item_{i}():\n    assert True\n")
-    (tmp / "test_maxfail_load.py").write_text("\n".join(lines))
+    (tmp / "test_maxfail_load.py").write_text("\n".join(lines), encoding="utf-8")
 
     # Act: use --workers to force parallel, --maxfail 3 to stop early.
     out, stderr, rc = helpers.run_oxitest(tmp, "--maxfail", "3", "--workers", "2")
@@ -135,7 +139,8 @@ def test_shared_fixture_created_once_across_workers(tmp: TempDir) -> None:
         "    count += 1\n"
         "    with open(COUNTER_FILE, 'w') as f:\n"
         "        f.write(str(count))\n"
-        "    return f'resource-{count}'\n"
+        "    return f'resource-{count}'\n",
+        encoding="utf-8",
     )
 
     # Three test files each depend on the shared fixture.
@@ -147,7 +152,8 @@ def test_shared_fixture_created_once_across_workers(tmp: TempDir) -> None:
             "    assert shared_resource.startswith('resource-'), (\n"
             "        f'shared fixture should return resource string, '\n"
             "        f'got {{shared_resource!r}}'\n"
-            "    )\n"
+            "    )\n",
+            encoding="utf-8",
         )
 
     # Act: run with workers to exercise parallel fixture sharing.
@@ -158,7 +164,7 @@ def test_shared_fixture_created_once_across_workers(tmp: TempDir) -> None:
 
     # Assert: the counter file shows the fixture was created exactly once.
     counter_path = Path(str(tmp)) / ".fixture_counter"
-    counter_value = int(counter_path.read_text().strip())
+    counter_value = int(counter_path.read_text(encoding="utf-8").strip())
     assert counter_value == 1, (
         "shared fixtures must be created once and frozen across workers — "
         "multiple creations would cause state divergence between workers "

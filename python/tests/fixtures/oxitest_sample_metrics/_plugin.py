@@ -72,7 +72,7 @@ class MetricsReporter:
     def finish(self, *, interrupted: bool, **_: Any) -> None:
         self._events.append({"event": "finish", "interrupted": interrupted})
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(json.dumps(self._events, indent=2))
+        self._path.write_text(json.dumps(self._events, indent=2), encoding="utf-8")
 
 
 class BenchCollector:
@@ -103,11 +103,11 @@ class MetricsCoverageProvider:
 
     def start(self) -> None:
         marker = self._dir / "coverage_started.txt"
-        marker.write_text("started")
+        marker.write_text("started", encoding="utf-8")
 
     def stop(self) -> None:
         marker = Path.cwd() / "coverage_stopped.txt"
-        marker.write_text("stopped")
+        marker.write_text("stopped", encoding="utf-8")
 
     def report(self, **_: Any) -> int:
         return 0

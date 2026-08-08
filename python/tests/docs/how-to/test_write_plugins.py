@@ -62,7 +62,7 @@ class JsonReporter:
 
     def finish(self, *, collect_errors, interrupted):
         self._events.append({"event": "finish", "interrupted": interrupted})
-        self._path.write_text(json.dumps(self._events, indent=2))
+        self._path.write_text(json.dumps(self._events, indent=2), encoding="utf-8")
 # --8<-- [end:json-reporter]
 # fmt: on
 
@@ -74,7 +74,7 @@ def test_json_reporter_collects_events():
     reporter.test_started(item="test_a")
     reporter.test_completed(item="test_a", outcome="passed", duration_ms=1.0)
     reporter.finish(collect_errors=[], interrupted=False)
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     assert len(data) == 3, "should have 3 events"
     assert data[0]["event"] == "started", "first event should be started"
     path.unlink()
@@ -245,7 +245,7 @@ class FileReporter:
             "interrupted": interrupted,
         })
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(json.dumps(self._events, indent=2))
+        self._path.write_text(json.dumps(self._events, indent=2), encoding="utf-8")
 # --8<-- [end:file-reporter]
 # fmt: on
 
@@ -257,7 +257,7 @@ def test_file_reporter_writes_json():
         reporter.test_started(item="test_x")
         reporter.test_completed(item="test_x", outcome="passed", duration_ms=0.5)
         reporter.finish(collect_errors=[], interrupted=False)
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         assert data[-1]["event"] == "finish", "last event should be finish"
 
 

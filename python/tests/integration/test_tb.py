@@ -7,7 +7,9 @@ from tests.integration import helpers as integ
 
 def test_tb_detail_shows_source_line(tmp: TempDir) -> None:
     """Default --tb=detail shows the assertion source line in bold."""
-    (tmp / "test_fail.py").write_text("def test_fail():\n    assert 1 == 2\n")
+    (tmp / "test_fail.py").write_text(
+        "def test_fail():\n    assert 1 == 2\n", encoding="utf-8"
+    )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_failed(out, rc)
     integ.assert_contains(out, "assert 1 == 2")
@@ -15,7 +17,9 @@ def test_tb_detail_shows_source_line(tmp: TempDir) -> None:
 
 def test_tb_detail_shows_box_chrome(tmp: TempDir) -> None:
     """Default --tb=detail shows the new box chrome."""
-    (tmp / "test_fail.py").write_text("def test_fail():\n    assert 1 == 2\n")
+    (tmp / "test_fail.py").write_text(
+        "def test_fail():\n    assert 1 == 2\n", encoding="utf-8"
+    )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_failed(out, rc)
     integ.assert_contains(out, "┌", "└")
@@ -25,7 +29,9 @@ def test_tb_detail_shows_box_chrome(tmp: TempDir) -> None:
 
 def test_tb_line_shows_one_liner(tmp: TempDir) -> None:
     """--tb=line produces a single FAILED line."""
-    (tmp / "test_fail.py").write_text("def test_fail():\n    assert 1 == 2\n")
+    (tmp / "test_fail.py").write_text(
+        "def test_fail():\n    assert 1 == 2\n", encoding="utf-8"
+    )
     out, _, rc = helpers.run_oxitest(tmp, "--tb=line")
     integ.assert_failed(out, rc)
     integ.assert_contains(out, "FAILED")
@@ -34,7 +40,9 @@ def test_tb_line_shows_one_liner(tmp: TempDir) -> None:
 
 def test_tb_no_suppresses_diagnostic(tmp: TempDir) -> None:
     """--tb=no shows no diagnostic block."""
-    (tmp / "test_fail.py").write_text("def test_fail():\n    assert 1 == 2\n")
+    (tmp / "test_fail.py").write_text(
+        "def test_fail():\n    assert 1 == 2\n", encoding="utf-8"
+    )
     out, _, rc = helpers.run_oxitest(tmp, "--tb=no")
     integ.assert_failed(out, rc)
     integ.assert_excludes(out, "assert 1 == 2", "┌")
@@ -42,7 +50,7 @@ def test_tb_no_suppresses_diagnostic(tmp: TempDir) -> None:
 
 def test_show_locals_conflict_with_tb_no(tmp: TempDir) -> None:
     """--show-locals with --tb=no is rejected."""
-    (tmp / "test_pass.py").write_text("def test_pass():\n    pass\n")
+    (tmp / "test_pass.py").write_text("def test_pass():\n    pass\n", encoding="utf-8")
     out, err, rc = helpers.run_oxitest(tmp, "--show-locals", "--tb=no")
     integ.assert_failed(out, rc)
     combined = out + err
@@ -53,7 +61,7 @@ def test_show_locals_conflict_with_tb_no(tmp: TempDir) -> None:
 
 def test_show_internals_conflict_with_tb_line(tmp: TempDir) -> None:
     """--show-internals with --tb=line is rejected."""
-    (tmp / "test_pass.py").write_text("def test_pass():\n    pass\n")
+    (tmp / "test_pass.py").write_text("def test_pass():\n    pass\n", encoding="utf-8")
     out, err, rc = helpers.run_oxitest(tmp, "--show-internals", "--tb=line")
     integ.assert_failed(out, rc)
     combined = out + err
@@ -64,7 +72,9 @@ def test_show_internals_conflict_with_tb_line(tmp: TempDir) -> None:
 
 def test_tb_detail_shows_diff(tmp: TempDir) -> None:
     """--tb=detail shows left/right diff for comparison failures."""
-    (tmp / "test_diff.py").write_text("def test_diff():\n    assert 1 == 2\n")
+    (tmp / "test_diff.py").write_text(
+        "def test_diff():\n    assert 1 == 2\n", encoding="utf-8"
+    )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_failed(out, rc)
     assert "left:" in out or "- left:" in out, f"diff left missing: {out!r}"
@@ -73,7 +83,7 @@ def test_tb_detail_shows_diff(tmp: TempDir) -> None:
 def test_tb_detail_shows_collection_diff(tmp: TempDir) -> None:
     """--tb=detail shows element-level diff for list comparisons."""
     (tmp / "test_list.py").write_text(
-        "def test_list():\n    assert [1, 2, 3] == [1, 4, 3]\n"
+        "def test_list():\n    assert [1, 2, 3] == [1, 4, 3]\n", encoding="utf-8"
     )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_failed(out, rc)

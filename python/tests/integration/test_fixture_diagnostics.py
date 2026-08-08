@@ -15,11 +15,14 @@ def test_strict_abort_unused_fixture(tmp: TempDir) -> None:
         "fx = oxi.Fixtures()\n"
         "@fx.fixture\n"
         "def unused_db() -> str:\n"
-        "    return 'connection'\n"
+        "    return 'connection'\n",
+        encoding="utf-8",
     )
-    (tmp / "test_nothing.py").write_text("def test_pass(): assert True\n")
+    (tmp / "test_nothing.py").write_text(
+        "def test_pass(): assert True\n", encoding="utf-8"
+    )
     pyproject = Path(tmp) / "pyproject.toml"
-    pyproject.write_text('[tool.oxitest]\nstrict = "abort"\n')
+    pyproject.write_text('[tool.oxitest]\nstrict = "abort"\n', encoding="utf-8")
 
     # Act
     out, stderr, rc = helpers.run_oxitest(tmp)
@@ -38,14 +41,16 @@ def test_strict_abort_missing_return_annotation(tmp: TempDir) -> None:
         "fx = oxi.Fixtures()\n"
         "@fx.fixture\n"
         "def db():\n"
-        "    return 'connection'\n"
+        "    return 'connection'\n",
+        encoding="utf-8",
     )
     (tmp / "test_uses_db.py").write_text(
         "from oxitest import Fixture\n"
-        "def test_use(db: Fixture[str]): assert db == 'connection'\n"
+        "def test_use(db: Fixture[str]): assert db == 'connection'\n",
+        encoding="utf-8",
     )
     pyproject = Path(tmp) / "pyproject.toml"
-    pyproject.write_text('[tool.oxitest]\nstrict = "abort"\n')
+    pyproject.write_text('[tool.oxitest]\nstrict = "abort"\n', encoding="utf-8")
 
     # Act
     out, stderr, rc = helpers.run_oxitest(tmp)
@@ -69,7 +74,8 @@ def test_fixture_shadow_warning_in_output(tmp: TempDir) -> None:
         "fx = oxi.Fixtures()\n"
         "@fx.fixture\n"
         "def db() -> str:\n"
-        "    return 'root_db'\n"
+        "    return 'root_db'\n",
+        encoding="utf-8",
     )
     sub = root / "sub"
     sub.mkdir()
@@ -78,12 +84,14 @@ def test_fixture_shadow_warning_in_output(tmp: TempDir) -> None:
         "fx = oxi.Fixtures()\n"
         "@fx.fixture\n"
         "def db() -> str:\n"
-        "    return 'child_db'\n"
+        "    return 'child_db'\n",
+        encoding="utf-8",
     )
     (sub / "test_shadow.py").write_text(
         "from oxitest import Fixture\n"
         "def test_use_db(db: Fixture[str]):\n"
-        "    assert db == 'child_db'\n"
+        "    assert db == 'child_db'\n",
+        encoding="utf-8",
     )
 
     # Act
@@ -104,12 +112,14 @@ def test_teardown_warning_includes_test_name(tmp: TempDir) -> None:
         "@fx.fixture\n"
         "def exploding() -> Yields[str]:\n"
         "    yield 'value'\n"
-        "    raise RuntimeError('boom in teardown')\n"
+        "    raise RuntimeError('boom in teardown')\n",
+        encoding="utf-8",
     )
     (tmp / "test_td.py").write_text(
         "from oxitest import Fixture\n"
         "def test_uses_exploding(exploding: Fixture[str]):\n"
-        "    assert exploding == 'value'\n"
+        "    assert exploding == 'value'\n",
+        encoding="utf-8",
     )
 
     # Act

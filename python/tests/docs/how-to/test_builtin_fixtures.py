@@ -46,14 +46,14 @@ def run_job():
 # --8<-- [start:tempdir]
 def test_writes_file(tmp: TempDir) -> None:
     path = tmp.path / "output.txt"
-    path.write_text("hello")
-    assert path.read_text() == "hello", "TempDir should provide a writable directory"
+    path.write_text("hello", encoding="utf-8")
+    assert path.read_text(encoding="utf-8") == "hello", "TempDir should provide a writable directory"
 # --8<-- [end:tempdir]
 
 # --8<-- [start:tempdirfactory]
 def test_shared_workspace(factory: TempDirFactory) -> None:
     workspace = factory.mktemp("workspace")
-    (workspace.path / "data.csv").write_text("a,b\n1,2")
+    (workspace.path / "data.csv").write_text("a,b\n1,2", encoding="utf-8")
     assert (workspace.path / "data.csv").exists(), "mktemp should create a usable directory"
 # --8<-- [end:tempdirfactory]
 
@@ -170,6 +170,6 @@ def test_combined(fx: oxitest.Fixtures) -> None:
     fx.oxi.log.set_level(logging.DEBUG)
     result = run_job()
     assert "started" in fx.oxi.log.text, "log should capture the job start message"
-    (fx.oxi.tmp.path / "result.txt").write_text(result)
+    (fx.oxi.tmp.path / "result.txt").write_text(result, encoding="utf-8")
 # --8<-- [end:fx-oxi]
 # fmt: on
