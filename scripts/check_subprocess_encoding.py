@@ -80,21 +80,46 @@ def _is_truthy(node: ast.expr) -> bool:
     return not (isinstance(node, ast.Constant) and node.value in (False, None))
 
 
+def _qualified_spawner(node: ast.expr) -> str | None:
+    """The spawner name if *node* is a `subprocess.X` reference, else None."""
+    if not isinstance(node, ast.Attribute):
+        return None
+    value = node.value
+    if not (isinstance(value, ast.Name) and value.id == "subprocess"):
+        return None
+    return node.attr if node.attr in SPAWNERS else None
+
+
 def _subprocess_attr(call: ast.Call) -> str | None:
     """The `subprocess.X` attribute name this call invokes, if it is one.
 
-    Only the qualified `subprocess.run(...)` form is recognised. A bare
+    Two shapes count, because both bind the keyword arguments this gate reads:
+
+    - `subprocess.run(..., text=True)` — the spawner is the call's own func;
+    - `partial(subprocess.run, text=True)` — the spawner is argument zero.
+
+    The second was invisible until #1989. `test_plugin_integration.py:15` bound
+    `text=True` through `partial` with no `encoding=`, this gate reported **0
+    violations**, and the call failed on Windows exactly as the gate's own
+    docstring describes. A gate that cannot see a form the repo actually uses
+    reports clean and means nothing.
+
+    Only the qualified `subprocess.run` form is recognised. A bare
     `from subprocess import run` would slip past — accepted deliberately: the
     repo uses the qualified form everywhere, and matching bare names means
     matching every local function called `run`.
     """
+    direct = _qualified_spawner(call.func)
+    if direct is not None:
+        return direct
+
     func = call.func
-    if not isinstance(func, ast.Attribute):
-        return None
-    value = func.value
-    if not (isinstance(value, ast.Name) and value.id == "subprocess"):
-        return None
-    return func.attr if func.attr in SPAWNERS else None
+    is_partial = (isinstance(func, ast.Name) and func.id == "partial") or (
+        isinstance(func, ast.Attribute) and func.attr == "partial"
+    )
+    if is_partial and call.args:
+        return _qualified_spawner(call.args[0])
+    return None
 
 
 def find_violations(root: Path) -> list[Violation]:
