@@ -5,6 +5,24 @@ updates:
     schedule:
       interval: "weekly"
 
+  # Dependabot's `github-actions` ecosystem at `directory: "/"` searches only
+  # `.github/workflows` and a root `action.yml`, so pins inside composite
+  # actions are invisible to it — `astral-sh/setup-uv` sat two majors stale for
+  # 69 days while seven bumps landed next door. One entry per composite; the
+  # `directories:` glob form is documented without ever being tied to this
+  # ecosystem, and globstar double-scans `.github/workflows` into duplicate PRs
+  # (dependabot-core#10884). Adding a composite means adding an entry here
+  # (#1974).
+  - package-ecosystem: "github-actions"
+    directory: "/.github/actions/setup-python"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "github-actions"
+    directory: "/.github/actions/platform-test"
+    schedule:
+      interval: "weekly"
+
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
