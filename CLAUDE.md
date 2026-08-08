@@ -159,6 +159,7 @@ When you dispatch, `docs/agents/dispatch-protocol.md` defines what a dispatched 
 - **Cross-reference the two passes before acting — for ordering, not just for overlap.** Findings that look unrelated can be sequenced: one pass once flagged four duplicated test harnesses while the other flagged a missing test, and the missing test would have been a *fifth* copy of the harness, so the deduplication had to land first. Neither pass can see that from inside itself.
 - **Explore findings before acting.** Present findings to the user. For each finding, explore the cited code to verify it's real and determine if the fix is safe. Only fix after exploration confirms the finding is actionable. Never blindly apply review suggestions. **Every finding gets a recorded disposition — fixed, deferred with a reason, or refuted — and the count in the PR matches the count the pass produced.** The obligation is on the pass today, not on its findings, and one of three findings once vanished between the pass and the PR table while the only mention of that pass in the PR was a stale "not run" line.
 - **Docs evaluation.** Check whether the changes affect user-facing documentation. Scan `docs/user/`, `docs/internals/`, `CONTEXT.md`, and error references for stale content. If docs need updating, fix them in the same PR — don't let stale docs ship.
+- **Re-count the branch's emitting commits before leaving stage 8** (`artifact` — the count goes in the PR checklist). This is the last stage that creates commits, so a count made at stage 6 is stale by here. Only `feat:`/`fix:`/`perf:` reach the changelog — `cliff.toml` skips five types explicitly and `filter_commits = true` drops every type it does not name at all, `build:` among them. Count those commits against the number of user-visible changes; two entries for one change means the grouping is wrong however coherent each commit reads on its own. If they disagree, regroup **here**, not at the merge trigger. Folding a review fix as `fixup!` + `--autosquash` keeps the count where it was; a fresh `fix:` commit does not. **A branch that emits nothing cannot fail this check**, which is most of them — across a recent 40-commit window only 14 were `feat`/`fix`/`perf` — so on such a branch say the count is silent by construction rather than reading its silence as a pass.
 
 **9. Merge rules.**
 
@@ -172,16 +173,16 @@ Three different operations in this stage get called "rebase" in ordinary speech.
 - **PR closing keywords**: GitHub requires the keyword before EACH issue number. Write `Closes #1, Closes #2, Closes #3` — NOT `Closes #1, #2, #3` (only the first gets closed).
 - Run `just preflight` before pushing.
 
-**Commit regroup (`artifact`).** At the **first push of a multi-commit branch**, regroup into coherent commits — or record in the PR why the existing grouping is already coherent. Either way it leaves a mark: a tick saying "already coherent" is a legitimate outcome, an absent tick is not.
+**Commit regroup (`artifact`).** At the **first push of a multi-commit branch**, and again when stage 8 closes, regroup into coherent commits — or record in the PR why the existing grouping is already coherent. Either way it leaves a mark: a tick saying "already coherent" is a legitimate outcome, an absent tick is not.
 
 *Not* at merge trigger, which is too late — by then the throwaway history is pushed and CI has run on it, and one branch paid a full squash → preflight → push → wait-for-CI → merge cycle to undo that. The step leaves a mark because it has been skipped silently, reported as done when it was not, and argued against with a false claim that the tooling made it impossible.
 
 "Coherent" is a judgement, so it carries two checkable clauses:
 
 1. **No commit that a `Sequenced on` row declared non-buildable may survive into merged history.**
-2. **The branch emits one changelog entry per change.** Only `feat:`/`fix:`/`perf:` reach the changelog — `cliff.toml` skips five types explicitly and `filter_commits = true` drops every type it does not name at all, `build:` among them. Count those commits: two entries for one change means the grouping is wrong however coherent each commit reads on its own. One branch was emitting two `fix:` entries for a single change; 4 commits → 2 made it one.
+2. **The branch emits one changelog entry per change** — counted when stage 8 closes, and re-counted here only if the branch has gained commits since. One branch was emitting two `fix:` entries for a single change; 4 commits → 2 made it one.
 
-Clause 2 exists because clause 1 cannot fail in the case that keeps recurring — a history whose every commit is individually coherent and whose *count against the unit of work* is still wrong. **It does not reach a branch that emits nothing**, which is most of them: across a recent 40-commit window only 14 were `feat`/`fix`/`perf`. On such a branch clause 2 is silent by construction and judgement is all you have, so say so rather than reading its silence as a pass.
+Clause 2 exists because clause 1 cannot fail in the case that keeps recurring — a history whose every commit is individually coherent and whose *count against the unit of work* is still wrong.
 
 The tooling is available, contrary to that claim:
 
