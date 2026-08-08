@@ -46,6 +46,9 @@ in
     mdbook
     mdbook-mermaid
 
+    # GitHub Actions workflow linter (#1974)
+    actionlint
+
     # Release tooling
     git-cliff
 
