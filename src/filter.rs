@@ -96,7 +96,27 @@ pub fn sort_failed_first(
 
 /// Returns true if the string contains glob metacharacters (`*`, `?`, `[`).
 pub fn contains_glob_chars(s: &str) -> bool {
+    let s = without_verbatim_prefix(s);
     s.contains('*') || s.contains('?') || s.contains('[')
+}
+
+/// Strip Windows' `\\?\` verbatim prefix before asking whether a string is a glob.
+///
+/// `std::fs::canonicalize` returns verbatim paths on Windows, so every
+/// canonicalized node ID starts `\\?\` — and that prefix contains a `?`, which
+/// is a glob metacharacter. Without this, **every** node ID on Windows is
+/// classified as a glob and routed through `globset`, which has no notion of
+/// the `::`-prefix rules node IDs rely on (#1989).
+///
+/// The damage was invisible for exact node IDs, which still matched because the
+/// pattern's `?` happens to match the literal `?` in the path it came from —
+/// 24 of 28 tests in `test_node_ids.py` passed on Windows for that reason. Only
+/// the four using class prefixes, parametrize prefixes, or a mixed
+/// node-id-plus-bare-path selection failed, which is what disguised the cause.
+///
+/// A genuine glob is unaffected: its own `*`/`?`/`[` survives the strip.
+fn without_verbatim_prefix(s: &str) -> &str {
+    s.strip_prefix(r"\\?\").unwrap_or(s)
 }
 
 /// Pre-compile glob matchers from a slice of glob ID strings.
@@ -375,7 +395,14 @@ pub fn file_matches_node_ids(items: &[PrescanItem], file_path: &str, node_ids: &
     if node_ids.is_empty() {
         return true;
     }
-    let has_glob = |s: &str| s.contains('*') || s.contains('?');
+    // Deliberately narrower than `contains_glob_chars`: `[` stays literal here
+    // so `matches_node_id_prefix`'s bidirectional rule can match a bracketed
+    // target against an unbracketed prescan item. The verbatim-prefix strip is
+    // shared, though — see `without_verbatim_prefix` (#1989).
+    let has_glob = |s: &str| {
+        let s = without_verbatim_prefix(s);
+        s.contains('*') || s.contains('?')
+    };
     let (glob_ids, literal_ids): (Vec<_>, Vec<_>) = node_ids.iter().partition(|id| has_glob(id));
     let glob_matchers = build_glob_matchers(&glob_ids);
     items
@@ -737,6 +764,59 @@ mod tests {
         let sorted = sort_failed_first(items, &failed);
         assert_eq!(&*sorted[0].fn_name, "test_a");
         assert_eq!(&*sorted[1].fn_name, "test_b");
+    }
+
+    #[test]
+    fn a_windows_verbatim_node_id_is_not_a_glob() {
+        // std::fs::canonicalize returns this shape on Windows. The `?` in the
+        // prefix made every node ID a glob, which silently disabled the
+        // `::`-prefix rules the literal path implements (#1989). These are pure
+        // string predicates, so Linux proves the Windows behaviour.
+        let verbatim = r"\\?\C:\Users\dev\proj\test_a.py::test_one";
+        assert!(
+            !contains_glob_chars(verbatim),
+            "the `?` belongs to Windows' verbatim path prefix, not to the user's \
+             selector; treating it as a glob routes every Windows node ID through \
+             globset, which cannot express `path::Class` prefix selection"
+        );
+    }
+
+    #[test]
+    fn a_windows_verbatim_node_id_that_really_is_a_glob_still_is() {
+        // The strip must not swallow a genuine glob that happens to sit behind
+        // the prefix, or `--` selection by pattern breaks on Windows instead.
+        for id in [
+            r"\\?\C:\Users\dev\proj\test_*.py::test_one",
+            r"\\?\C:\Users\dev\proj\test_a.py::test_?",
+            r"\\?\C:\Users\dev\proj\test_a.py::test_mul[double]",
+        ] {
+            assert!(
+                contains_glob_chars(id),
+                "stripping the verbatim prefix must leave the selector's own \
+                 metacharacters intact, but {id} was classified as a literal"
+            );
+        }
+    }
+
+    #[test]
+    fn source_files_survive_a_windows_verbatim_node_id() {
+        // The concrete regression: FilterConfig::source_files() drops glob node
+        // IDs, so misclassifying them emptied the set — and an empty set turns
+        // off the "files from bare paths pass through" exemption, which is why
+        // `oxitest run a.py::test_one b.py` dropped b.py entirely on Windows.
+        let cfg = crate::config::FilterConfig {
+            node_ids: vec![crate::types::NodeId::from_raw(
+                r"\\?\C:\Users\dev\proj\test_a.py::test_one",
+            )],
+            ..Default::default()
+        };
+        assert_eq!(
+            cfg.source_files().len(),
+            1,
+            "a canonicalized Windows node ID must contribute its file to the \
+             source-file set; an empty set silently disables the bare-path \
+             exemption and drops files the user asked for by name"
+        );
     }
 
     #[test]
