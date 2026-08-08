@@ -173,6 +173,48 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/platform-test
 
+  # A configuration variant, not a platform. TMPDIR points at a symlink, which
+  # reproduces on Linux the path-spelling class #1957 decodes: mkdtemp() returns
+  # the unresolved spelling while Path.cwd() reports the resolved one, so any
+  # comparison between them fails. Analogous to macOS rather than identical —
+  # there the symlinked component is a *parent* (/var -> /private/var), here it
+  # is the leaf. The divergence that reproduces the class is the same (#1964).
+  #
+  # TMPDIR is exported through $GITHUB_ENV rather than a job-level `env:` block.
+  # Job-level env cannot reference the `runner` context at all — actionlint
+  # rejects it: "context \"runner\" is not allowed here". $GITHUB_ENV also fixes
+  # the ordering problem it would have created, because the variable only applies
+  # to steps *after* the one that writes it, so the symlink is guaranteed to
+  # exist by the time anything reads TMPDIR. The only constraint left is the
+  # natural one: this step precedes the composite.
+  #
+  # It therefore covers every step the composite runs — rustup, rust-cache,
+  # setup-uv, uv sync, cargo test and maturin — not just the suite. Deliberate:
+  # `cargo test` under a symlinked root was measured green (1686 passed) before
+  # this landed, and it reaches Rust's canonicalize sites nothing else does.
+  tmpdir-symlink:
+    name: Test (symlinked TMPDIR)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Point TMPDIR at a symlinked temp root
+        run: |
+          mkdir -p "$RUNNER_TEMP/private/T"
+          ln -s "$RUNNER_TEMP/private/T" "$RUNNER_TEMP/T"
+          # Without this the job degrades silently: if the link ever stops
+          # diverging, the suite runs under an ordinary path and passes,
+          # reporting coverage it does not have. A no-op gate is worse than no
+          # gate, so fail loudly instead (#1964).
+          [ "$(readlink -f "$RUNNER_TEMP/T")" != "$RUNNER_TEMP/T" ] \
+            || { echo "TMPDIR is not symlinked — this gate would be a no-op"; exit 1; }
+          echo "TMPDIR=$RUNNER_TEMP/T" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/platform-test
+
   required:
     name: Tests (required)
     needs: [changes, rust-tests, python-tests, linux-arm, macos-arm, macos-intel]

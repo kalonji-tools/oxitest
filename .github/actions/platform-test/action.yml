@@ -1,8 +1,8 @@
 name: Platform test
 description: >
-  The standard Rust + Python test sequence for a secondary platform job.
-  The caller must run actions/checkout first — this file isn't on disk
-  until it does.
+  The standard Rust + Python test sequence for a secondary platform or
+  configuration job. The caller must run actions/checkout first — this file
+  isn't on disk until it does.
 
 runs:
   using: composite
