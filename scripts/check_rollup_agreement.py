@@ -12,10 +12,15 @@ direction — referenced but undeclared — is owned by actionlint, which types 
 actionlint, and adding `needs.no-such-job` was KILLED by it. One invariant, two
 directions, one tool each.
 
-Scoped to jobs whose `name` matches `* (required)`. A `needs:` that exists purely
+Scoped to jobs whose `name` ends in ` (required)`. A `needs:` that exists purely
 for ordering is normal — `docs.yml`'s `deploy` has `needs: build` and references
 nothing, which is correct. A wider rule fires on correct code, gets suppressed,
 and the gate dies.
+
+Known limit, by design: this proves a result is *read*, not that it is *gated on*.
+A rollup that merely echoes `needs.x.result` and branches on nothing passes here.
+Widening it to "and the reference decides the exit status" means interpreting
+shell, which is the point at which the gate starts guessing.
 
 Exits 0 if every rollup agrees, 1 with a report naming each unreferenced job.
 """
@@ -23,7 +28,6 @@ Exits 0 if every rollup agrees, 1 with a report naming each unreferenced job.
 from __future__ import annotations
 
 import argparse
-import fnmatch
 import re
 import sys
 from dataclasses import dataclass
@@ -38,7 +42,11 @@ ROOT = Path(__file__).resolve().parent.parent
 # Rollups are identified by display name, not job id: the job is called
 # `required` in all three workflows, but only the `name:` is what branch
 # protection matches on.
-REQUIRED_JOB_NAME = "* (required)"
+#
+# A plain suffix test rather than `fnmatch`, which runs `os.path.normcase` and so
+# matches case-insensitively on Windows — the required contexts are exact strings
+# in branch protection, and this repo is weighing Windows support (#1951).
+REQUIRED_JOB_SUFFIX = " (required)"
 
 # `needs.<job>` — GitHub job ids allow alphanumerics, `-` and `_`.
 _NEEDS_REF = re.compile(r"needs\.([A-Za-z0-9_-]+)")
@@ -107,7 +115,7 @@ def check_workflow(workflow: dict[str, Any], path: Path) -> list[Violation]:
         if not isinstance(job, dict):
             continue
         name = str(job.get("name", ""))
-        if not fnmatch.fnmatch(name, REQUIRED_JOB_NAME):
+        if not name.endswith(REQUIRED_JOB_SUFFIX):
             continue
         missing = declared_needs(job) - referenced_needs(job)
         if missing:
@@ -120,21 +128,6 @@ def check_workflow(workflow: dict[str, Any], path: Path) -> list[Violation]:
                 )
             )
     return violations
-
-
-def report(violations: list[Violation], root: Path) -> None:
-    """Print each unreferenced dependency and what to do about it."""
-    print("Rollup jobs wait on jobs they never check:\n")
-    for violation in violations:
-        relative = violation.path.relative_to(root)
-        print(f"  {relative}: job `{violation.job_id}` ({violation.job_name})")
-        for job_id in violation.unreferenced:
-            print(f"    - `{job_id}` is in `needs:` but no step reads it")
-    print(
-        "\nEvery job in a rollup's `needs:` must be referenced by some step of "
-        "that rollup.\nA job waited on but never checked passes the gate having "
-        "tested nothing (#1944)."
-    )
 
 
 def main() -> int:
@@ -156,7 +149,17 @@ def main() -> int:
     if not violations:
         return 0
 
-    report(violations, args.root)
+    print("Rollup jobs wait on jobs they never check:\n")
+    for violation in violations:
+        relative = violation.path.relative_to(args.root)
+        print(f"  {relative}: job `{violation.job_id}` ({violation.job_name})")
+        for job_id in violation.unreferenced:
+            print(f"    - `{job_id}` is in `needs:` but no step reads it")
+    print(
+        "\nEvery job in a rollup's `needs:` must be referenced by some step of "
+        "that rollup.\nA job waited on but never checked passes the gate having "
+        "tested nothing (#1944)."
+    )
     return 1
 
 
