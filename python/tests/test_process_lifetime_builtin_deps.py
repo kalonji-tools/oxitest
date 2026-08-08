@@ -39,7 +39,7 @@ LOG = Path(os.environ["PROBE_LOG"])
 
 
 def _record(event: str) -> None:
-    with LOG.open("a") as fh:
+    with LOG.open("a", encoding="utf-8") as fh:
         fh.write(event + "\\n")
 
 
@@ -77,7 +77,7 @@ LOG = Path(os.environ["PROBE_LOG"])
 
 def test_a_plain_consumer_first(factory: TempDirFactory) -> None:
     d = factory.mktemp("plain").path
-    with LOG.open("a") as fh:
+    with LOG.open("a", encoding="utf-8") as fh:
         fh.write(f"PLAIN dirs={len(factory.dirs)}\\n")
     assert d.exists(), "the plain temp dir must exist during the test"
 
