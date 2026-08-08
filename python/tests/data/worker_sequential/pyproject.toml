@@ -1,0 +1,4 @@
+[tool.oxitest]
+testpaths = ["ws"]
+python_files = ["test_*.py"]
+min_parallel_tests = 1
