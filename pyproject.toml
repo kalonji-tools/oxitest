@@ -192,6 +192,13 @@ test = [
 lint = [
     "ruff>=0.4",
     "codespell>=2",
+    # scripts/check_rollup_agreement.py, run by the `rollup-agreement` prek hook.
+    # It must be in `lint` specifically: quality.yml passes exactly
+    # `--only-group lint --only-group typecheck --only-group test` to the
+    # setup-python composite, so that is the environment prek runs in. PyYAML was
+    # already present locally only as a transitive dependency of mkdocs, which
+    # `--only-group` excludes — the checker would have passed here and died in CI.
+    "pyyaml>=6",
 ]
 typecheck = [
     "ty",
