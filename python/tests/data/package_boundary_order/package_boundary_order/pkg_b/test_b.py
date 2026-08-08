@@ -9,7 +9,9 @@ from oxitest import Fixtures
 
 
 def record(event: str) -> None:
-    with Path(os.environ["P2LOG"]).open("a", encoding="utf-8") as handle:
+    with Path(f"{os.environ['P2LOG']}.{os.getpid()}").open(
+        "a", encoding="utf-8"
+    ) as handle:
         handle.write(f"{event}\n")
 
 

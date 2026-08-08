@@ -36,7 +36,9 @@ _COUNTER = itertools.count(1)
 
 def _record(event: str) -> None:
     """Append one event line to the log named by ``SLICE9_PROC_LOG``."""
-    with Path(os.environ["SLICE9_PROC_LOG"]).open("a", encoding="utf-8") as fh:
+    with Path(f"{os.environ['SLICE9_PROC_LOG']}.{os.getpid()}").open(
+        "a", encoding="utf-8"
+    ) as fh:
         fh.write(f"{event}\n")
 
 

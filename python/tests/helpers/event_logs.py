@@ -22,7 +22,7 @@ rather than bending its log to fit these.
 
 from __future__ import annotations
 
-__all__ = ["EventLogRun", "run_with_event_log"]
+__all__ = ["EventLogRun", "read_event_log", "run_with_event_log"]
 
 import os
 from dataclasses import dataclass
@@ -85,6 +85,41 @@ class EventLogRun:
         return {e.split()[2] for e in self.uses}
 
 
+def read_event_log(log: Path) -> tuple[str, ...]:
+    """Every line a project's fixtures recorded, base file and per-pid shards.
+
+    Fixtures that run in more than one worker must not share one append-mode
+    file. That is race-free only because POSIX makes an ``O_APPEND`` write under
+    ``PIPE_BUF`` atomic; Windows promises nothing of the sort, and it was
+    measured there losing a record and tearing another in half (#1989). Writers
+    in multi-process projects therefore append to ``<log>.<pid>`` and this
+    reader merges the shards.
+
+    **This is the only place that knows the shard convention.** Four test files
+    previously carried their own `log.read_text().splitlines()`, so sharding a
+    writer silently emptied the file its reader was still opening — worth one
+    definition rather than five.
+
+    **Order is per shard, not global.** Lines from one process keep the order it
+    wrote them; across processes they arrive grouped by pid, because that is
+    what reading whole files concatenates. The single shared file used to
+    interleave them in rough chronological order, so an assertion about the
+    *relative* order of two processes' events would now read differently — and
+    it was never sound anyway, since interleaving across processes was never
+    guaranteed. Assert within a pid, or on counts and sets.
+
+    The glob covers the base file and the shards together: ``<log>`` for a
+    single-file writer, ``<log>.<pid>`` for a sharded one. Every checked-in data
+    project shards today, so the base file is usually absent; the pattern keeps
+    working if one goes back to a single file.
+    """
+    return tuple(
+        line
+        for source in sorted(log.parent.glob(f"{log.name}*"))
+        for line in source.read_text(encoding="utf-8").splitlines()
+    )
+
+
 def run_with_event_log(
     project: Path,
     tmp: TempDir,
@@ -104,5 +139,5 @@ def run_with_event_log(
     log = Path(tmp) / log_name
     env = {**os.environ, env_var: str(log)}
     stdout, stderr, rc = run_oxitest(project, *args, env=env)
-    events = tuple(log.read_text(encoding="utf-8").splitlines()) if log.exists() else ()
-    return EventLogRun(stdout=stdout, stderr=stderr, rc=rc, events=events)
+
+    return EventLogRun(stdout=stdout, stderr=stderr, rc=rc, events=read_event_log(log))

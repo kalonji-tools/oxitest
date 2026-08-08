@@ -74,7 +74,7 @@ def _run_project(tmp: TempDir, *extra_args: str) -> _Run:
     log = Path(tmp) / "events.log"
     env = {**os.environ, "ASYNC_LIFETIMES_LOG": str(log)}
     stdout, stderr, rc = helpers.run_oxitest(_PROJECT, *extra_args, env=env)
-    events = tuple(log.read_text(encoding="utf-8").splitlines()) if log.exists() else ()
+    events = helpers.read_event_log(log)
     return _Run(stdout=stdout, stderr=stderr, rc=rc, events=events)
 
 

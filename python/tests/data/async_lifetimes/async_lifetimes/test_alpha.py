@@ -21,7 +21,9 @@ def _record(event: str) -> None:
     interpolating one would record the proxy repr instead of the value. The
     fixtures log their own ids; the tests only need to say they ran.
     """
-    with Path(os.environ["ASYNC_LIFETIMES_LOG"]).open("a", encoding="utf-8") as fh:
+    with Path(f"{os.environ['ASYNC_LIFETIMES_LOG']}.{os.getpid()}").open(
+        "a", encoding="utf-8"
+    ) as fh:
         fh.write(f"{event}\n")
 
 

@@ -14,7 +14,9 @@ from oxitest import Fixtures
 
 
 def _record(event: str) -> None:
-    with Path(os.environ["SLICE2_LOG"]).open("a", encoding="utf-8") as fh:
+    with Path(f"{os.environ['SLICE2_LOG']}.{os.getpid()}").open(
+        "a", encoding="utf-8"
+    ) as fh:
         fh.write(f"{event}\n")
 
 
