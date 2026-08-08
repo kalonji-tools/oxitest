@@ -21,7 +21,9 @@ from oxitest import TestContext
 
 def _record(event: str) -> None:
     """Append one event to the log. A missing env value is a hard error."""
-    with Path(os.environ["TESTCONTEXT_LOG"]).open("a", encoding="utf-8") as fh:
+    with Path(f"{os.environ['TESTCONTEXT_LOG']}.{os.getpid()}").open(
+        "a", encoding="utf-8"
+    ) as fh:
         fh.write(f"{event}\n")
 
 

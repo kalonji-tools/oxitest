@@ -24,6 +24,7 @@ __all__ = [
     "make_registry",
     "make_session",
     "make_session_with",
+    "read_event_log",
     "run_oxitest",
     "run_oxitest_subcmd",
     "run_test",
@@ -32,7 +33,7 @@ __all__ = [
     "write_test_module",
 ]
 
-from tests.helpers.event_logs import EventLogRun, run_with_event_log
+from tests.helpers.event_logs import EventLogRun, read_event_log, run_with_event_log
 from tests.helpers.factories import (
     make_exc,
     make_fixture_def,

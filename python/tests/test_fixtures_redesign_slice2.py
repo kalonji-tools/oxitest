@@ -54,7 +54,7 @@ def _run_project(tmp: TempDir, *extra_args: str) -> _Run:
     log = Path(tmp) / "events.log"
     env = {**os.environ, "SLICE2_LOG": str(log)}
     stdout, stderr, rc = helpers.run_oxitest(_PROJECT, *extra_args, env=env)
-    events = tuple(log.read_text(encoding="utf-8").splitlines()) if log.exists() else ()
+    events = helpers.read_event_log(log)
     return _Run(stdout=stdout, stderr=stderr, rc=rc, events=events)
 
 
@@ -183,7 +183,7 @@ def test_exitfirst_still_disposes(tmp: TempDir) -> None:
         f"the project must fail so -x actually aborts; rc={rc}\n"
         f"stdout:\n{out}\nstderr:\n{err}"
     )
-    events = log.read_text(encoding="utf-8").splitlines()
+    events = list(helpers.read_event_log(log))
     assert events.count("SETUP") == 1, (
         f"expected exactly one instantiation, got {events} — the rest of this "
         f"test is meaningless otherwise\nstdout:\n{out}"
@@ -228,7 +228,7 @@ def test_old_shared_fixture_api_unaffected(tmp: TempDir) -> None:
     out, err, rc = helpers.run_oxitest(tmp, "--serial")
 
     assert rc == 0, f"old shared=True API regressed:\nstdout:\n{out}\nstderr:\n{err}"
-    events = log.read_text(encoding="utf-8").splitlines()
+    events = list(helpers.read_event_log(log))
     assert events.count("SETUP") == 1, (
         f"shared fixture was built {events.count('SETUP')} times across two "
         "modules — module scope must not capture shared=True fixtures, which "

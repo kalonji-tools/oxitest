@@ -26,7 +26,9 @@ import oxitest as oxi
 
 def _record(event: str) -> None:
     """Append one event line to the log named by ``SLICE9_LOG``."""
-    with Path(os.environ["SLICE9_LOG"]).open("a", encoding="utf-8") as fh:
+    with Path(f"{os.environ['SLICE9_LOG']}.{os.getpid()}").open(
+        "a", encoding="utf-8"
+    ) as fh:
         fh.write(f"{event}\n")
 
 

@@ -215,7 +215,7 @@ def test_the_supported_uses_of_ctx_all_still_pass(tmp: TempDir) -> None:
         "all four supported uses must run; a collection regression that "
         f"dropped one would still exit 0\nstdout:\n{stdout}"
     )
-    events = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+    events = list(helpers.read_event_log(log))
     assert events == ["FINALIZED test_schema"], (
         f"the finalizer a fixture registered through ctx must actually run — "
         f"the in-project test only proves it was accepted, and a guard that "

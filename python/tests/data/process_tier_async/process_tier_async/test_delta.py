@@ -15,7 +15,9 @@ def _record(event: str) -> None:
     not on concurrency — but a bare open inside an async body is a lint
     error, and rightly so.
     """
-    with Path(os.environ["PROC_ASYNC_LOG"]).open("a", encoding="utf-8") as fh:
+    with Path(f"{os.environ['PROC_ASYNC_LOG']}.{os.getpid()}").open(
+        "a", encoding="utf-8"
+    ) as fh:
         fh.write(f"{event}\n")
 
 

@@ -27,7 +27,7 @@ _COUNTER = itertools.count(1)
 def _record(event: str) -> None:
     """Append one event line to the log named by ``ASYNC_LIFETIMES_LOG``."""
     path = os.environ["ASYNC_LIFETIMES_LOG"]
-    with Path(path).open("a", encoding="utf-8") as fh:
+    with Path(f"{path}.{os.getpid()}").open("a", encoding="utf-8") as fh:
         fh.write(f"{event}\n")
 
 

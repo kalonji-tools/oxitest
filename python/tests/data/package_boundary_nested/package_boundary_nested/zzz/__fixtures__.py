@@ -16,7 +16,9 @@ import oxitest as oxi
 
 def record(event: str) -> None:
     """Append one event line to the log named by ``NESTLOG``."""
-    with Path(os.environ["NESTLOG"]).open("a", encoding="utf-8") as handle:
+    with Path(f"{os.environ['NESTLOG']}.{os.getpid()}").open(
+        "a", encoding="utf-8"
+    ) as handle:
         handle.write(f"{event}\n")
 
 

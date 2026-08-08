@@ -17,9 +17,16 @@ def window(name: str) -> None:
     sub-millisecond and the overlap assertion would pass under a concurrent
     mutant by luck.
     """
-    start = time.monotonic()
+    start = time.perf_counter()
     time.sleep(0.05)
-    end = time.monotonic()
+    end = time.perf_counter()
     line = f"{os.getpid()} {threading.get_ident()} {start:.6f} {end:.6f} {name}"
-    with Path(os.environ["WS_LOG"]).open("a", encoding="utf-8") as handle:
+    # One shard per process, not one shared file. Two workers appending to the
+    # same path is only safe because POSIX makes an O_APPEND write under
+    # PIPE_BUF atomic; Windows promises nothing of the sort, and the race was
+    # measured there as both a lost record ("got 4 records") and a torn one
+    # ("not enough values to unpack (expected 5, got 0)"). The assertions group
+    # by pid regardless, so the shared file bought nothing (#1989).
+    shard = Path(f"{os.environ['WS_LOG']}.{os.getpid()}")
+    with shard.open("a", encoding="utf-8") as handle:
         handle.write(f"{line}\n")
