@@ -52,10 +52,11 @@ def _write_multi_package_project(root: Path, log: Path, *, cross_package: bool) 
             "import os\n"
             "import pathlib\n"
             "import oxitest as oxi\n\n"
-            f"LOG = pathlib.Path({str(log)!r})\n\n\n"
+            f"LOG = pathlib.Path({str(log)!r})\n"
+            "SHARD = pathlib.Path(f'{LOG}.{os.getpid()}')\n\n\n"
             '@oxi.fixture(lifetime="function")\n'
             "def res() -> str:\n"
-            "    with LOG.open('a') as fh:\n"
+            "    with SHARD.open('a', encoding='utf-8') as fh:\n"
             "        fh.write(f'{os.getpid()}\\n')\n"
             f"    return {pkg!r}\n",
             encoding="utf-8",
@@ -87,7 +88,7 @@ def _assert_fanned_out(log: Path, out: str) -> None:
     Load-bearing: with a single PID every fixture assertion in this file would
     be exercising the serial path and proving nothing about workers.
     """
-    pids = set(log.read_text(encoding="utf-8").split()) if log.exists() else set()
+    pids = set(helpers.read_event_log(log))
     assert len(pids) > 1, (
         f"the run used {len(pids)} process(es) ({pids or 'none'}) — the "
         "scheduler collapsed it to serial, so the fixture assertions here "
@@ -179,7 +180,12 @@ def test_cross_package_access_is_rejected_identically_in_serial_and_parallel(
         f"B1 should reject this\nstdout:\n{serial_out}\nstderr:\n{serial_err}"
     )
 
-    log.unlink(missing_ok=True)
+    helpers.clear_event_log(log)
+    assert not helpers.read_event_log(log), (
+        "the serial run's PIDs survived the clear, so _assert_fanned_out below "
+        "would count them and pass on a parallel run that never fanned out"
+    )
+
     out, err, rc = helpers.run_oxitest(None, "-n", "4", cwd=str(root))
 
     assert rc != 0, (
@@ -217,7 +223,12 @@ def test_fixtures_resolve_on_a_warm_cache(tmp: TempDir) -> None:
         f"cold run failed, so the warm-cache assertion proves nothing\n{first_out}"
     )
 
-    log.unlink(missing_ok=True)
+    helpers.clear_event_log(log)
+    assert not helpers.read_event_log(log), (
+        "the cold run's PIDs survived the clear, so _assert_fanned_out below "
+        "would count them and pass on a warm run that never fanned out"
+    )
+
     out, err, rc = helpers.run_oxitest(None, "-n", "4", cwd=str(root))
 
     assert rc == 0, (

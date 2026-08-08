@@ -61,13 +61,14 @@ def _write_tempdir_project(root: Path, log: Path) -> None:
             "from oxitest import TempDirFactory",
             "",
             f"LOG = pathlib.Path({str(log)!r})",
+            "SHARD = pathlib.Path(f'{LOG}.{os.getpid()}')",
             "",
         ]
         for i in range(_TESTS_PER_MODULE):
             body += [
                 f"def test_{mod}_{i}(factory: TempDirFactory) -> None:",
                 "    d = factory.mktemp('x').path",
-                "    with LOG.open('a') as fh:",
+                "    with SHARD.open('a', encoding='utf-8') as fh:",
                 "        fh.write(f'{os.getpid()} {d}\\n')",
                 "    assert d.exists(), 'temp dir must exist while the test runs'",
                 "",
@@ -98,10 +99,11 @@ def _write_multi_group_project(root: Path, log: Path) -> None:
             "import os\n"
             "import pathlib\n"
             "from oxitest import TempDirFactory\n\n"
-            f"LOG = pathlib.Path({str(log)!r})\n\n\n"
+            f"LOG = pathlib.Path({str(log)!r})\n"
+            "SHARD = pathlib.Path(f'{LOG}.{os.getpid()}')\n\n\n"
             f"def test_{mod}(factory: TempDirFactory) -> None:\n"
             "    d = factory.mktemp('x').path\n"
-            "    with LOG.open('a') as fh:\n"
+            "    with SHARD.open('a', encoding='utf-8') as fh:\n"
             "        fh.write(f'{os.getpid()} {d}\\n')\n"
             "    assert d.exists(), 'temp dir must exist while the test runs'\n",
             encoding="utf-8",
@@ -166,13 +168,9 @@ def test_tempdir_factory_survives_a_worker_draining_several_task_groups(
 
 def _entries(log: Path) -> list[tuple[str, Path]]:
     """``(pid, path)`` pairs recorded by the run."""
-    if not log.exists():
-        return []
     return [
         (pid, Path(raw))
-        for pid, _, raw in (
-            ln.partition(" ") for ln in log.read_text(encoding="utf-8").splitlines()
-        )
+        for pid, _, raw in (ln.partition(" ") for ln in helpers.read_event_log(log))
         if raw
     ]
 
@@ -203,7 +201,7 @@ def test_tempdir_factory_cleaned_up_in_parallel(tmp: TempDir) -> None:
 
     out, err, rc = helpers.run_oxitest(None, "--serial", cwd=str(root))
     assert rc == 0, f"serial baseline must pass\nstdout:\n{out}\nstderr:\n{err}"
-    created = len(log.read_text(encoding="utf-8").splitlines())
+    created = len(helpers.read_event_log(log))
     assert created == len(_MODULES) * _TESTS_PER_MODULE, (
         f"every test must record its temp dir, got {created} — "
         "the rest of this test is meaningless if the project did not run"
@@ -213,7 +211,13 @@ def test_tempdir_factory_cleaned_up_in_parallel(tmp: TempDir) -> None:
         "not the parallel path"
     )
 
-    log.unlink()
+    helpers.clear_event_log(log)
+    assert not helpers.read_event_log(log), (
+        "the serial run's records survived the clear, so the PID guard below "
+        "would count the serial process as a second worker and pass on a "
+        "parallel run that never fanned out"
+    )
+
     out, err, rc = helpers.run_oxitest(None, "-n", "4", cwd=str(root))
     assert rc == 0, f"parallel run must pass\nstdout:\n{out}\nstderr:\n{err}"
     pids = _worker_pids(log)
@@ -249,13 +253,14 @@ def test_shared_fixture_teardown_runs_in_worker(tmp: TempDir) -> None:
         "import pathlib\n"
         "from oxitest import Fixtures\n\n"
         "fx = Fixtures()\n"
-        f"LOG = pathlib.Path({str(log)!r})\n\n\n"
+        f"LOG = pathlib.Path({str(log)!r})\n"
+        "SHARD = pathlib.Path(f'{LOG}.{os.getpid()}')\n\n\n"
         "@fx.fixture(shared=True)\n"
         "def resource() -> str:\n"
-        "    with LOG.open('a') as fh:\n"
+        "    with SHARD.open('a', encoding='utf-8') as fh:\n"
         "        fh.write(f'SETUP {os.getpid()}\\n')\n"
         "    yield 'res'\n"
-        "    with LOG.open('a') as fh:\n"
+        "    with SHARD.open('a', encoding='utf-8') as fh:\n"
         "        fh.write(f'TEARDOWN {os.getpid()}\\n')\n",
         encoding="utf-8",
     )
@@ -278,7 +283,7 @@ def test_shared_fixture_teardown_runs_in_worker(tmp: TempDir) -> None:
 
     out, err, rc = helpers.run_oxitest(None, "-n", "4", cwd=str(root))
     assert rc == 0, f"parallel run must pass\nstdout:\n{out}\nstderr:\n{err}"
-    events = log.read_text(encoding="utf-8").splitlines()
+    events = helpers.read_event_log(log)
     setups = [e for e in events if e.startswith("SETUP")]
     teardowns = [e for e in events if e.startswith("TEARDOWN")]
     pids = {e.split()[1] for e in setups}
