@@ -23,6 +23,11 @@ _CWD_DELETE_PROBE = (
     "try:\n"
     "    os.rmdir(d)\n"
     "except OSError:\n"
+    # Step out before retrying: the directory is undeletable *because* it is
+    # this process's cwd, so without the chdir the probe leaks one temp
+    # directory per worker on every run of the suite.
+    "    os.chdir(tempfile.gettempdir())\n"
+    "    os.rmdir(d)\n"
     "    sys.exit(1)\n"
     "sys.exit(0)\n"
 )
