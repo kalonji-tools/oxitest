@@ -26,12 +26,6 @@ These surfaces will not change in backward-incompatible ways without a major ver
 **Configuration**
 
 - All `[tool.oxitest]` keys documented in the reference
-- Wire protocol version (`PROTOCOL_VERSION`) — the guarantee is that the
-  constant is meaningful and that the Rust and Python halves stay in step, not
-  that incrementing it is a breaking change. The worker wire is internal to a
-  single wheel, so a bump ships in a normal minor or patch release; see
-  `src/worker_result/wire.rs` for when to bump.
-- Cache format version (`CACHE_VERSION`)
 
 ## Deprecated
 
