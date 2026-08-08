@@ -119,7 +119,7 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 ## Execution Model
 
-**Worker** — A subprocess (`python -m oxitest._bridge.worker`) that receives test tasks over stdin and writes results to stdout as LDJSON (wire protocol v3). Persistent within a run.
+**Worker** — A subprocess (`python -m oxitest._bridge.worker`) that receives test tasks over stdin and writes results to stdout as LDJSON (wire protocol v7). Persistent within a run. **Runs one Test Item at a time**: `run_task` iterates its items in a plain loop, so process-global state mutated by one test is never observed by a simultaneous one — only inherited by later ones. `Patcher`'s four surfaces and the CWD-liveness guard both rest on this. The reporter's `worker #N | concurrent: …` line counts node IDs in flight *across all workers*, including queued ones, and is not intra-Worker concurrency.
 
 **Serial Execution** — Tests run sequentially in the main process. Used when the test count is below `min_parallel_tests` or when `--serial` is passed.
 

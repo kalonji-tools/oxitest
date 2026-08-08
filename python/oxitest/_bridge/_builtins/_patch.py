@@ -18,8 +18,14 @@ from oxitest._bridge._fixture_type import injectable
 class Patcher:
     """Applies temporary overrides to attributes, env vars, and working directory.
 
-    All changes are reverted in LIFO order when the test completes. Four
-    scoped mutation surfaces:
+    All four surfaces mutate **process-global** state. A Worker runs one test
+    at a time, so a restored change is never visible to another test — but a
+    change whose restore does not run is inherited by every later test in that
+    Worker. Changes are reverted in LIFO order when the test completes; every
+    undo is attempted even when an earlier one raises, and a failure is
+    reported rather than swallowed (#1966).
+
+    The four mutation surfaces:
 
     - :meth:`setattr` — swap an attribute on any object.
     - :meth:`setenv` — set an environment variable.
@@ -112,6 +118,11 @@ class Patcher:
 
     def chdir(self, path: Any) -> None:
         """Temporarily change the working directory, restoring it after the test.
+
+        The sharpest of the four surfaces: the working directory is read
+        implicitly by every relative path, and inherited by every subprocess
+        spawned without an explicit ``cwd``. A restore that does not run leaves
+        later tests in this Worker in the wrong directory (#1957).
 
         Args:
             path: Directory to change into. Accepts any `os.fspath`-compatible value.

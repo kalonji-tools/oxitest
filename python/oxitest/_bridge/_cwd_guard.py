@@ -6,11 +6,13 @@ deleted, every subprocess spawned afterwards in that worker dies during
 interpreter startup — ``coverage`` calls ``os.path.abspath(os.curdir)`` at
 import, which raises ``FileNotFoundError`` on a removed directory (#1957).
 
-The predicate is **liveness, not change**: with up to 78 tests in flight per
-worker, a test legitimately holding a ``patch.chdir`` into a live directory
-must never be blamed. Asking "did the directory change?" blamed innocent
-concurrent tests in 5 of 6 measured trials; asking "is it still there?"
-blamed none and still caught the poisoning.
+The predicate is **liveness, not change**. A Worker runs one test at a time,
+so the hazard is not interference between simultaneous tests — it is a test
+that leaves the directory somewhere the *later* tests in that Worker inherit.
+A test legitimately holding a ``patch.chdir`` into a live directory must never
+be blamed for it. Asking "did the directory change?" blamed such tests in 5 of
+6 measured trials; asking "is it still there?" blamed none and still caught
+the poisoning.
 """
 
 from __future__ import annotations
