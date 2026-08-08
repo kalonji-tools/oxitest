@@ -12,7 +12,9 @@ from pathlib import Path
 
 from oxitest import TempDir
 
-_run = partial(subprocess.run, capture_output=True, text=True, timeout=30)
+_run = partial(
+    subprocess.run, capture_output=True, text=True, encoding="utf-8", timeout=30
+)
 _PYTHON_SRC = str(Path(__file__).resolve().parents[2] / "python")
 
 
