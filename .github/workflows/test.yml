@@ -215,10 +215,19 @@ jobs:
 
       - uses: ./.github/actions/platform-test
 
-  # Advisory on arrival, per map #1946 standing preference 5 — promotion into
-  # `Tests (required)` is an acceptance criterion of #1986 itself, not a
-  # follow-up, and is gated on the suite going green here. It is deliberately
-  # absent from the `required` job's `needs:` until then.
+  # Advisory, and deliberately absent from the `required` job's `needs:`.
+  #
+  # Map #1946 standing preference 5 says a platform job is promoted to required
+  # in the same ticket that adds it, never a follow-up, because permanent-
+  # advisory is how CI rots into silently-red. That is **overridden here by
+  # maintainer decision**: #1986 took Windows from 292 non-passes to 39, but the
+  # residue is 39 genuine cross-platform defects (plugin system, debugger, node
+  # IDs, fixture cache, cwd guard), and holding a shipped gate-backed
+  # improvement behind that is the worse trade.
+  #
+  # **#1989 owns the promotion** and states the accepted risk. If #1989 stalls,
+  # this job is advisory indefinitely and preference 5 was right — so treat a
+  # long-lived advisory Windows job as a bug in the backlog, not a steady state.
   windows:
     name: Test (Windows x86_64)
     needs: changes
