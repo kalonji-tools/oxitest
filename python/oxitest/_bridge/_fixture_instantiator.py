@@ -687,14 +687,14 @@ class FixtureInstantiator:
             _reject_nonshared_async(dep_name, dep_val, defn.name)
 
         with _fixture_scope(self, ctx.module_path, ctx.fn_teardowns):
-            _start = time.monotonic()
+            _start = time.perf_counter()
             value = self._async_mgr.resolve(
                 defn.func,
                 deps,
                 boundary=_async_teardown_boundary(defn, ctx),
             )
             self._setup_times[_cache_key(defn)].append(
-                (time.monotonic() - _start) * 1000.0
+                (time.perf_counter() - _start) * 1000.0
             )
 
         proxy = FrozenProxy(value)
@@ -747,7 +747,7 @@ class FixtureInstantiator:
         deps = await self._resolve_async_deps(defn, ctx, scope_refs)
 
         with _fixture_scope(self, ctx.module_path, ctx.fn_teardowns):
-            _start = time.monotonic()
+            _start = time.perf_counter()
             try:
                 raw = defn.func(**deps)
                 if inspect.isasyncgen(raw):
@@ -763,7 +763,9 @@ class FixtureInstantiator:
                     value = raw
             except Exception as exc:
                 raise FixtureSetupError(defn.name, exc) from exc
-            self._setup_times[timing_key].append((time.monotonic() - _start) * 1000.0)
+            self._setup_times[timing_key].append(
+                (time.perf_counter() - _start) * 1000.0
+            )
 
         if scope_refs is not None:
             # The per-test cache stores the value raw: function-lifetime
@@ -869,7 +871,7 @@ class FixtureInstantiator:
 
         with _fixture_scope(self, ctx.module_path, ctx.fn_teardowns):
             try:
-                _start = time.monotonic()
+                _start = time.perf_counter()
                 result = defn.func(**deps)
                 outcome = _unpack_sync(result, defn.name)
                 match outcome:
@@ -887,10 +889,10 @@ class FixtureInstantiator:
                             # in the timing report (#1962).
                             if not setup_completed(_gen):
                                 return
-                            _td_start = time.monotonic()
+                            _td_start = time.perf_counter()
                             _orig()
                             self._teardown_times[_name].append(
-                                (time.monotonic() - _td_start) * 1000.0
+                                (time.perf_counter() - _td_start) * 1000.0
                             )
 
                         # `start` performs the registration itself, so the
@@ -905,7 +907,7 @@ class FixtureInstantiator:
                     case _:
                         assert_never(outcome)
                 self._setup_times[_cache_key(defn)].append(
-                    (time.monotonic() - _start) * 1000.0
+                    (time.perf_counter() - _start) * 1000.0
                 )
             except Exception as exc:
                 raise FixtureSetupError(defn.name, exc) from exc
