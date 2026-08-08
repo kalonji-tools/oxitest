@@ -295,7 +295,7 @@ A subtracting claim MUST carry:
 
 This is `artifact` tier: it binds when someone reads the comment. Its value is that the omission becomes visible — a missing quote is the tell — where today there is nothing to look for.
 
-**A citation must survive the merge it describes.** Issue comments are this repo's home for specs and research, so its most durable records carry its weakest referential integrity: a bare `path:line` rots the moment the branch it describes lands. One issue's own merge broke the citations in its comments: a cited `drain.rs:42-44` had become `));`/`}`. Cite a **symbol**, or `path:line@commit`, or quote the excerpt inline so the citation carries its own evidence.
+**A citation must survive the merge it describes.** Issue comments are this repo's home for specs and research, so its most durable records carry its weakest referential integrity: a bare `path:line` rots the moment the branch it describes lands. One issue's own merge broke the citations in its comments: a cited `drain.rs:42-44` had become `));`/`}`. Cite a **symbol**, or `path:line@commit`, or quote the excerpt inline so the citation carries its own evidence. A quote rots on **content** and fails loudly (zero hits); a bare line number rots on **position** and fails silently. Never cite `CLAUDE.md` by bare line number — it is a repeating structure of tables and clauses that this repo edits continuously, so a stale line lands on plausible neighbouring prose.
 
 ### Believing a verdict (`artifact`)
 
