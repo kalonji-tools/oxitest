@@ -243,7 +243,7 @@ jobs:
 
   required:
     name: Tests (required)
-    needs: [changes, rust-tests, python-tests, linux-arm, macos-arm, macos-intel, tmpdir-symlink]
+    needs: [changes, rust-tests, python-tests, linux-arm, macos-arm, macos-intel, tmpdir-symlink, windows]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -271,7 +271,8 @@ jobs:
           # the defect #1961 fixed.
           for result in "${{ needs.rust-tests.result }}" "${{ needs.python-tests.result }}" \
                         "${{ needs.linux-arm.result }}" "${{ needs.macos-arm.result }}" \
-                        "${{ needs.macos-intel.result }}" "${{ needs.tmpdir-symlink.result }}"; do
+                        "${{ needs.macos-intel.result }}" "${{ needs.tmpdir-symlink.result }}" \
+                        "${{ needs.windows.result }}"; do
             case "$result" in
               success|skipped) ;;
               *) echo "A test job ended in '$result'; only success or skipped may pass"; exit 1 ;;
