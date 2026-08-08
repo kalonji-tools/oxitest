@@ -55,6 +55,7 @@ check: (_log _blue "Running static checks...")
     ty check
     cargo clippy --all-targets -- -D warnings
     codespell --toml pyproject.toml
+    actionlint
 
 # Validate lock files match manifests (matches prek pre-push hooks)
 check-locks: (_log _blue "Checking lock files...")
