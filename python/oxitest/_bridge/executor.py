@@ -43,9 +43,11 @@ from oxitest._bridge._errors import (
 )
 from oxitest._bridge._fixture_context import (
     TestRunContext,
+    _callback_name,
     _current_teardown_node_id,
     _in_teardown,
     _test_run_context,
+    _warn_callback_teardown,
     _warn_teardown,
 )
 from oxitest._bridge._fixture_registry import FixtureScope
@@ -345,8 +347,7 @@ def _run_teardowns(fn_teardowns: list[Callable[[], None]], node_id: str) -> None
     in_td = _in_teardown.set(True)
     try:
         for td in reversed(fn_teardowns):
-            with contextlib.suppress(Exception):
-                td()
+            safe_teardown(td, _callback_name(td), warn=_warn_callback_teardown)
     finally:
         _in_teardown.reset(in_td)
         _current_teardown_node_id.reset(token)

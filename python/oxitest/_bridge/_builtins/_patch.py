@@ -122,9 +122,30 @@ class Patcher:
         self._undos.append(lambda p=old: os.chdir(p))
 
     def close(self) -> None:
+        """Revert every override in LIFO order, then re-raise the first failure.
+
+        Every undo is attempted even when an earlier one raises. Aborting on
+        the first failure stranded every undo behind it — measured leaking an
+        env override into the next test in the same worker (#1966) — and these
+        surfaces are process-global, so a stranded undo is inherited rather
+        than discarded.
+
+        The first exception is re-raised after the sweep, so a direct caller
+        still sees the failure it sees today. Under oxitest the teardown drain
+        turns it into a diagnostic rather than a test failure.
+        """
+        first: Exception | None = None
         for fn in reversed(self._undos):
-            fn()
+            try:
+                fn()
+            except Exception as exc:  # noqa: BLE001 — an undo runs user-reachable code; the first failure is re-raised below
+                # `is None`, not `or`: an exception is not guaranteed truthy,
+                # and this repo has been bitten by that idiom before.
+                if first is None:
+                    first = exc
         self._undos.clear()
+        if first is not None:
+            raise first
 
 
 class _PatcherFixture(BuiltinFixture, fixture_type=Patcher):

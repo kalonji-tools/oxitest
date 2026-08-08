@@ -124,3 +124,34 @@ def _warn_teardown(name: str, exc: Exception, *, node_id: str = "") -> None:
     else:
         msg = f"error during teardown: {exc}"
     emit_diagnostic(DiagnosticSeverity.WARNING, "fixture teardown", msg)
+
+
+def _callback_name(fn: Callable[[], None]) -> str:
+    """Best-effort display name for a raw-appended teardown callback.
+
+    ``__qualname__`` carries the enclosing scope for a closure
+    (``A.<locals>._x``), which is noise in a diagnostic — the trailing segment
+    is the part the author recognises. A bound method has no ``<locals>`` and
+    survives whole, so ``Patcher.close`` reads as itself.
+    """
+    qualname = getattr(fn, "__qualname__", "")
+    return qualname.rsplit(">.", 1)[-1]
+
+
+def _warn_callback_teardown(name: str, exc: Exception) -> None:
+    """Report a raw-appended teardown callback that raised.
+
+    Separate from ``_warn_teardown`` rather than a mode flag on it: these
+    callbacks are not fixtures — ``ctx.addfinalizer`` registers plain
+    callables and the built-ins append bound methods — so borrowing the
+    fixture wording would be false. ``safe_teardown`` takes a ``warn``
+    callback for exactly this.
+    """
+    node_id = _current_teardown_node_id.get()
+    who = f"teardown callback '{name}'" if name else "a teardown callback"
+    # Empty at the process tier: nothing sets the node id there, because no
+    # single node owns that boundary (#1952).
+    where = f" during {node_id}" if node_id else ""
+    emit_diagnostic(
+        DiagnosticSeverity.WARNING, "fixture teardown", f"{who} failed{where}: {exc}"
+    )
