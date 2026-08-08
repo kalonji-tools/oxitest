@@ -133,9 +133,11 @@ Assignment is **folded into `gh pr create`** (`fold-in`) — there is no separat
 | **Rests on** | premises the acceptance criteria depend on |
 | **Narrowed by** | premises that removed an acceptance criterion, a gate, or a task |
 | **Sequenced on** | steps whose predecessor must leave a buildable tree — empty is a legitimate answer, and asserts that every step stands alone |
-| **Not reached by** | the case none of the premises above cover — empty is a legitimate answer, and asserts you looked |
+| **Not reached by** | the case none of the premises above cover — name a **dimension the premise set never varied**, not another case inside one it already considered. Empty is a legitimate answer, and asserts you looked |
 
 `Narrowed by` exists because a premise that *deletes* an acceptance criterion is invisible to a ledger scoped by acceptance criteria, and that is the shape of the worst defect in the series. `Not reached by` exists because the other three are each scoped to claims that **exist**, and nothing else evaluates the set for coverage — one branch's seven `Rests on` rows were each verified, each still true afterwards, and the change regressed every project in the one case none of them reached.
+
+**"Dimension" is the operative word, and it is what makes the row work.** The rows that have changed the work named a variable the premises never moved — the lifetime tier a message's mechanism silently assumed, the execution mode every premise shared. The row that failed enumerated further entries inside a dimension already under consideration: it was filled in, honest, and measured, and the fatal case was a different one in a dimension nobody had thought to vary. So the question the row answers is not *"what other case is there?"* — which is discharged by naming **a** case — but *"what did every premise here hold constant without saying so?"*
 
 **Every row carries evidence of the same kind as its claim.** Never a bare verdict — `Verified ✅` is free to write, `0/6` is not.
 
