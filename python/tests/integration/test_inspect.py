@@ -29,11 +29,21 @@ def test_inspect_fails_gracefully_without_tty(tmp: TempDir) -> None:
     failure proves CLI parsing, file collection, and graph construction all
     succeeded without crashing.
     """
-    _out, _err, rc = _run_inspect(cwd=str(tmp))
+    _out, err, rc = _run_inspect(cwd=str(tmp))
     assert rc != 0, (
         "inspect must exit non-zero when stdout is not a TTY — "
         "a zero exit here would mean the TUI ran successfully in a pipe, "
         "which crossterm does not support"
+    )
+    # The exit code alone cannot tell the explicit guard from the old
+    # behaviour: before #1989 this also exited non-zero, because
+    # enable_raw_mode() happened to fail on POSIX. It did not on Windows, where
+    # the TUI blocked on input instead. Asserting the message is what makes the
+    # guard verifiable on the platform CI runs most.
+    assert "interactive terminal" in err, (
+        "the refusal must say why and what to do instead; without this the "
+        "test passes on the raw errno it used to emit ('No such device or "
+        f"address'), which told the user nothing. got stderr:\n{err!r}"
     )
 
 
