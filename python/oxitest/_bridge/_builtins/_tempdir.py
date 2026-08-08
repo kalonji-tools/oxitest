@@ -71,11 +71,12 @@ class TempDir:
 
         >>> from oxitest import TempDir
         >>> from pathlib import Path
-        >>> tmp = TempDir(Path("/tmp/example"))
-        >>> str(tmp)
-        '/tmp/example'
-        >>> str(tmp / "file.txt")
-        '/tmp/example/file.txt'
+        >>> base = Path("/tmp/example")
+        >>> tmp = TempDir(base)
+        >>> str(tmp) == str(base)
+        True
+        >>> str(tmp / "file.txt") == str(base / "file.txt")
+        True
         >>> isinstance(tmp.path, Path)
         True
 
