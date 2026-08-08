@@ -160,9 +160,30 @@ class TimeoutMiddleware:
             case TimeoutOff():
                 return next_fn
             case TimeoutSet(seconds=s):
-                return _compose(make_timeout_wrapper(s), next_fn)
+                return _compose(
+                    make_timeout_wrapper(s, is_async=plan.is_async), next_fn
+                )
             case _:
                 assert_never(self.timeout)
+
+
+def _effective_timeout_secs(plan: ExecutionPlan, timeout: Timeout) -> int | None:
+    """The deadline that applies to this test — a mark wins over the ambient default.
+
+    Resolved here rather than inside ``_async_test_core`` so the ambient default
+    reaches ``asyncio.wait_for`` too. Before #1998 only a mark did, which left an
+    async test under a global ``timeout`` enforced solely by the OS-level arm.
+    """
+    mark = next((m for m in plan.marks if m.name == "timeout"), None)
+    if mark is not None:
+        return extract_timeout_seconds(mark.kwargs)
+    match timeout:
+        case TimeoutSet(seconds=s):
+            return s
+        case TimeoutOff():
+            return None
+        case _:
+            assert_never(timeout)
 
 
 class AsyncDepGuardMiddleware:
@@ -263,16 +284,15 @@ async def _teardown_async_generators(
         )
 
 
-async def _async_test_core(plan: ExecutionPlan) -> TestResult:
+async def _async_test_core(
+    plan: ExecutionPlan, timeout_secs: int | None = None
+) -> TestResult:
     """Await coroutines, run the test body, teardown async fixtures.
 
-    Handles mark-timeout extraction so all three session middleware variants
-    share identical async test logic.
+    ``timeout_secs`` is resolved upstream by ``_effective_timeout_secs`` so all
+    three session middleware variants share identical async test logic and the
+    ambient default reaches ``wait_for``, not only a per-test mark (#1998).
     """
-    timeout_mark = next((m for m in plan.marks if m.name == "timeout"), None)
-    timeout_secs = (
-        extract_timeout_seconds(timeout_mark.kwargs) if timeout_mark else None
-    )
     unpacked = await _unpack_async_fixtures(plan.kwargs)
     if isinstance(unpacked, TestResult):
         return unpacked
@@ -304,6 +324,7 @@ class _SessionRunMiddleware:
     """
 
     session: AsyncSession
+    timeout_secs: int | None = None
 
     def apply(
         self, *, plan: ExecutionPlan, next_fn: Callable[[], TestResult]
@@ -311,9 +332,10 @@ class _SessionRunMiddleware:
         if not plan.is_async:
             return next_fn
         session = self.session
+        secs = self.timeout_secs
 
         def _base() -> TestResult:
-            return session.run(_async_test_core(plan))
+            return session.run(_async_test_core(plan, secs))
 
         return _base
 
@@ -327,6 +349,7 @@ class AsyncBridgeMiddleware:
     """
 
     backend: AsyncBackend
+    timeout_secs: int | None = None
 
     def apply(
         self, *, plan: ExecutionPlan, next_fn: Callable[[], TestResult]
@@ -334,10 +357,11 @@ class AsyncBridgeMiddleware:
         if not plan.is_async:
             return next_fn
         backend = self.backend
+        secs = self.timeout_secs
 
         def _base() -> TestResult:
             with acquire_session_guarded(backend) as session:
-                return session.run(_async_test_core(plan))
+                return session.run(_async_test_core(plan, secs))
 
         return _base
 
@@ -371,11 +395,12 @@ class _MiddlewarePipeline:
         mws.append(TimeoutMiddleware(timeout=self.timeout))
         mws.extend(self._pre_session)
         if plan.is_async:
+            secs = _effective_timeout_secs(plan, self.timeout)
             match strategy:
                 case Shared(session=s) | Arrange(session=s):
-                    mws.append(_SessionRunMiddleware(session=s))
+                    mws.append(_SessionRunMiddleware(session=s, timeout_secs=secs))
                 case Fresh(backend=b):
-                    mws.append(AsyncBridgeMiddleware(backend=b))
+                    mws.append(AsyncBridgeMiddleware(backend=b, timeout_secs=secs))
                 case _:
                     assert_never(strategy)
         return mws

@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from types import MappingProxyType
 
 from oxitest import TempDir
+from oxitest._bridge._errors import OxitestTimeoutError
+from oxitest._bridge._mark_api import MarkInfo
+from oxitest._bridge._middleware import ExecutionPlan, _effective_timeout_secs
 from oxitest._bridge._timeout import (
+    TimeoutOff,
+    TimeoutSet,
     _IdleHandler,
     _IdleTimer,
     _UnixTimeoutContext,
     _WindowsTimeoutContext,
+    make_timeout_wrapper,
 )
 from oxitest._bridge.result import PassedResult, TimeoutResult
 from tests import helpers
@@ -181,4 +188,173 @@ def test_unix_timeout_state_starts_idle() -> None:
     assert isinstance(ctx._state, _IdleHandler), (  # noqa: SLF001
         "Fresh Unix context must be in _IdleHandler state"
         " — no signal handler installed until __enter__"
+    )
+
+
+# ── Which arm is applied to which kind (#1998) ───────────────────────────────
+#
+# `context_cls` makes both arms reachable from one platform. Without it the
+# Windows branch is unexecuted on every job that is not Windows, which is the
+# state that let #1998 ship.
+
+
+def test_async_test_does_not_arm_an_arm_that_cannot_bound_blocking_calls() -> None:
+    """An arm that cannot bound blocking calls is not armed for an async test.
+
+    The ctypes arm cannot bound one, so an async test gains nothing from it and
+    pays the post-__exit__ injection race (#1998).
+    """
+    entered: list[str] = []
+
+    class _Probe(_WindowsTimeoutContext):
+        def __enter__(self) -> None:
+            entered.append("armed")
+            super().__enter__()
+
+    wrapper = make_timeout_wrapper(60, is_async=True, context_cls=_Probe)
+    result = wrapper(PassedResult)
+
+    assert entered == [], (
+        "an arm that cannot bound a blocking call must not be armed for an async"
+        " test — asyncio.wait_for already owns everything the loop can see"
+    )
+    assert isinstance(result, PassedResult), (
+        "skipping the arm must not skip the body — the wrapper still has to run"
+        " the test and pass its result through"
+    )
+
+
+def test_async_test_keeps_an_arm_that_can_bound_blocking_calls() -> None:
+    """An arm that can bound blocking calls stays armed for an async test.
+
+    SIGALRM bounds a blocking call the event loop cannot see, so removing it
+    for async tests would regress a measured 1.00s guarantee.
+    """
+    entered: list[str] = []
+
+    class _Probe(_UnixTimeoutContext):
+        # Deliberately does NOT call super().__enter__(): this test asserts the
+        # dispatch decision, and entering the real Unix arm would need
+        # signal.SIGALRM, which does not exist on Windows. Calling super() here
+        # made the Windows job red with AttributeError.
+        def __enter__(self) -> None:
+            entered.append("armed")
+
+        def __exit__(self, *_: object) -> None:
+            return
+
+    wrapper = make_timeout_wrapper(60, is_async=True, context_cls=_Probe)
+    wrapper(PassedResult)
+
+    assert entered == ["armed"], (
+        "the Unix arm must still be entered for async tests — asyncio.wait_for"
+        " cannot bound a coroutine that blocks, so this is the only mechanism"
+        " that covers that case"
+    )
+
+
+def test_an_unarmed_async_wrapper_still_reports_a_timeout() -> None:
+    """Skipping the OS arm must not skip the OxitestTimeoutError translation.
+
+    `_run_with_timeout` raises OxitestTimeoutError out of `asyncio.wait_for`,
+    and this wrapper is the only place that turns it into a TimeoutResult.
+    An early-return passthrough dropped that, letting the error escape — which
+    is invisible on any platform whose arm keeps the full wrapper, and made
+    three async timeout tests hang to the harness limit on Windows.
+    """
+    wrapper = make_timeout_wrapper(1, is_async=True, context_cls=_WindowsTimeoutContext)
+
+    def _times_out() -> PassedResult:
+        raise OxitestTimeoutError
+
+    result = wrapper(_times_out)
+
+    assert isinstance(result, TimeoutResult), (
+        f"an unarmed async wrapper must still translate the loop's timeout into"
+        f" a TimeoutResult, got {result!r} — otherwise the error escapes and the"
+        f" test is reported as an error, or hangs"
+    )
+
+
+def test_sync_test_always_arms_even_when_blocking_calls_are_unbounded() -> None:
+    """A sync test always arms, whatever the arm can bound.
+
+    It has no event loop, so the best-effort arm is all there is — the async
+    skip must not leak into the sync path.
+    """
+    entered: list[str] = []
+
+    class _Probe(_WindowsTimeoutContext):
+        def __enter__(self) -> None:
+            entered.append("armed")
+            super().__enter__()
+
+    wrapper = make_timeout_wrapper(60, is_async=False, context_cls=_Probe)
+    wrapper(PassedResult)
+
+    assert entered == ["armed"], (
+        "a sync test must keep the arm on every platform — dropping it would"
+        " leave the sync path with no deadline enforcement at all"
+    )
+
+
+# ── The ambient default reaches the event loop (#1998 AC1) ───────────────────
+#
+# `test_async_test_default_timeout_fires` cannot cover this on Linux: SIGALRM
+# still arms for async tests there, so it passes whether or not the default
+# ever reaches asyncio.wait_for. These assert the routing itself, which is the
+# only enforcement left on a platform whose arm is skipped for async.
+
+
+def _plan_with(marks: tuple[MarkInfo, ...]) -> ExecutionPlan:
+    """A minimal async ExecutionPlan carrying *marks* and nothing else."""
+    return ExecutionPlan(
+        fn=lambda: None,
+        fn_name="test_x",
+        kwargs=MappingProxyType({}),
+        marks=marks,
+        no_message_lines=(),
+        is_async=True,
+    )
+
+
+def test_ambient_default_becomes_the_effective_deadline() -> None:
+    """A global timeout becomes the effective deadline for an unmarked test.
+
+    Without it the async path sees None and asyncio.wait_for is never armed,
+    leaving a global --timeout unenforced wherever the OS arm is skipped.
+    """
+    secs = _effective_timeout_secs(_plan_with(()), TimeoutSet(seconds=7))
+
+    assert secs == 7, (
+        f"a global timeout must reach the async path, got {secs!r} — on Windows"
+        " this is the only enforcement an async test has left"
+    )
+
+
+def test_a_timeout_mark_wins_over_the_ambient_default() -> None:
+    """A per-test mark takes precedence over the ambient default.
+
+    Precedence has to match TimeoutMiddleware, which skips when a mark is
+    present — if these disagreed a marked test would get the global value.
+    """
+    mark = MarkInfo(name="timeout", args=(), kwargs=MappingProxyType({"seconds": 3}))
+
+    secs = _effective_timeout_secs(_plan_with((mark,)), TimeoutSet(seconds=7))
+
+    assert secs == 3, (
+        f"the per-test mark must win over the ambient default, got {secs!r}"
+    )
+
+
+def test_no_timeout_anywhere_leaves_the_deadline_unset() -> None:
+    """No mark and no ambient timeout means no deadline at all.
+
+    TimeoutOff must not become a deadline — an unmarked test under no global
+    timeout has to stay unbounded, or every test acquires a silent limit.
+    """
+    secs = _effective_timeout_secs(_plan_with(()), TimeoutOff())
+
+    assert secs is None, (
+        f"no mark and no ambient timeout must mean no deadline, got {secs!r}"
     )
