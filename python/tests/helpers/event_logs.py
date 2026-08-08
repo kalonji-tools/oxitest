@@ -2,8 +2,9 @@
 
 Several acceptance suites answer the same shape of question — *how many times
 was this fixture built, and in which process* — and reporter output cannot
-answer it. They run oxitest as a subprocess against a checked-in project whose
-fixtures append lines to a log, then assert on the log.
+answer it. They run oxitest as a subprocess against a project — checked in
+under ``data/`` or built inline by the test — whose fixtures append lines to a
+log, then assert on the log.
 
 The scaffolding for that was copied four times before it moved here. The
 copies had already drifted: three spelled ``running_pids`` identically and the
@@ -22,7 +23,7 @@ rather than bending its log to fit these.
 
 from __future__ import annotations
 
-__all__ = ["EventLogRun", "read_event_log", "run_with_event_log"]
+__all__ = ["EventLogRun", "clear_event_log", "read_event_log", "run_with_event_log"]
 
 import os
 from dataclasses import dataclass
@@ -85,6 +86,19 @@ class EventLogRun:
         return {e.split()[2] for e in self.uses}
 
 
+def _shards(log: Path) -> list[Path]:
+    """The base file and every per-pid shard of *log*, in a stable order.
+
+    One glob covers both: ``<log>`` for a single-file writer, ``<log>.<pid>``
+    for a sharded one. **This is the only place that knows the shard
+    convention.** Test files used to carry their own
+    ``log.read_text().splitlines()``, so sharding a writer silently emptied the
+    file its reader was still opening — and later, so clearing a log removed the
+    base file and left every shard in place (#1989, #1999).
+    """
+    return sorted(log.parent.glob(f"{log.name}*"))
+
+
 def read_event_log(log: Path) -> tuple[str, ...]:
     """Every line a project's fixtures recorded, base file and per-pid shards.
 
@@ -95,10 +109,8 @@ def read_event_log(log: Path) -> tuple[str, ...]:
     in multi-process projects therefore append to ``<log>.<pid>`` and this
     reader merges the shards.
 
-    **This is the only place that knows the shard convention.** Four test files
-    previously carried their own `log.read_text().splitlines()`, so sharding a
-    writer silently emptied the file its reader was still opening — worth one
-    definition rather than five.
+    :func:`_shards` is the only place that knows the shard convention, and
+    every operation on an event log goes through it.
 
     **Order is per shard, not global.** Lines from one process keep the order it
     wrote them; across processes they arrive grouped by pid, because that is
@@ -108,16 +120,32 @@ def read_event_log(log: Path) -> tuple[str, ...]:
     it was never sound anyway, since interleaving across processes was never
     guaranteed. Assert within a pid, or on counts and sets.
 
-    The glob covers the base file and the shards together: ``<log>`` for a
-    single-file writer, ``<log>.<pid>`` for a sharded one. Every checked-in data
-    project shards today, so the base file is usually absent; the pattern keeps
+    Every project these suites run shards today, checked in under ``data/`` and
+    built inline alike, so the base file is usually absent; the pattern keeps
     working if one goes back to a single file.
     """
     return tuple(
         line
-        for source in sorted(log.parent.glob(f"{log.name}*"))
+        for source in _shards(log)
         for line in source.read_text(encoding="utf-8").splitlines()
     )
+
+
+def clear_event_log(log: Path) -> None:
+    """Drop every record written so far — base file and per-pid shards alike.
+
+    A test that runs the same project twice under one ``tmp`` has to remove the
+    first run's records before it reads the second's, or a fan-out guard counts
+    the earlier run's PID and passes on a run that never fanned out.
+    ``log.unlink()`` cannot do that job once the writer shards: it removes the
+    base file and leaves every shard in place, which is silent rather than loud.
+
+    A missing file is not an error. A run that wrote nothing has nothing to
+    clear, which is why the callers that used ``unlink(missing_ok=True)`` need
+    no equivalent here.
+    """
+    for source in _shards(log):
+        source.unlink()
 
 
 def run_with_event_log(
