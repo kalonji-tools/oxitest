@@ -54,7 +54,7 @@ jobs:
         with:
           uv-sync-args: --group test
 
-      - uses: taiki-e/install-action@v2.85.6
+      - uses: taiki-e/install-action@v2.85.8
         with:
           tool: cargo-llvm-cov,cargo-insta
 
