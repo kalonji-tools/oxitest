@@ -648,6 +648,7 @@ dev = [
     { name = "mkdocs-material" },
     { name = "mkdocs-minify-plugin" },
     { name = "mkdocstrings", extra = ["python"] },
+    { name = "pyyaml" },
     { name = "ruff" },
     { name = "ty" },
 ]
@@ -660,6 +661,7 @@ docs = [
 ]
 lint = [
     { name = "codespell" },
+    { name = "pyyaml" },
     { name = "ruff" },
 ]
 test = [
@@ -683,6 +685,7 @@ dev = [
     { name = "mkdocs-material", specifier = ">=9" },
     { name = "mkdocs-minify-plugin", specifier = ">=0.7" },
     { name = "mkdocstrings", extras = ["python"], specifier = ">=0.24" },
+    { name = "pyyaml", specifier = ">=6" },
     { name = "ruff", specifier = ">=0.4" },
     { name = "ty" },
 ]
@@ -695,6 +698,7 @@ docs = [
 ]
 lint = [
     { name = "codespell", specifier = ">=2" },
+    { name = "pyyaml", specifier = ">=6" },
     { name = "ruff", specifier = ">=0.4" },
 ]
 test = [
