@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from collections.abc import AsyncGenerator
 from types import MappingProxyType
 
@@ -357,4 +359,105 @@ def test_no_timeout_anywhere_leaves_the_deadline_unset() -> None:
 
     assert secs is None, (
         f"no mark and no ambient timeout must mean no deadline, got {secs!r}"
+    )
+
+
+# ── The injection cannot outlive its region (#1998) ──────────────────────────
+
+
+def test_injection_after_exit_is_refused() -> None:
+    """A timer firing after __exit__ must not inject.
+
+    Timer.cancel() is only `finished.set()` and Timer.run() checks it *before*
+    calling the function, so a cancel arriving after that check does nothing.
+    This guard is the only thing left that can stop the injection.
+    """
+    ctx = _WindowsTimeoutContext(seconds=60)
+    ctx.__enter__()
+    ctx.__exit__()
+
+    injected: list[int] = []
+
+    def _record(thread_id: int, _exc: type[BaseException] | None) -> int:
+        injected.append(thread_id)
+        return 1
+
+    ctx._inject(threading.get_ident(), _record)  # noqa: SLF001
+
+    assert injected == [], (
+        "a timer that fires after __exit__ must not inject — the region it"
+        " guarded is over, so the exception would surface on unrelated code"
+    )
+
+
+def test_injection_while_active_still_fires() -> None:
+    """A timer firing inside the region must still inject.
+
+    The guard must refuse only *after* __exit__ — refusing while the region is
+    live would disable timeouts entirely, and read as a passing test.
+    """
+    ctx = _WindowsTimeoutContext(seconds=60)
+    ctx.__enter__()
+
+    injected: list[int] = []
+
+    def _record(thread_id: int, _exc: type[BaseException] | None) -> int:
+        injected.append(thread_id)
+        return 1
+
+    try:
+        ctx._inject(threading.get_ident(), _record)  # noqa: SLF001
+    finally:
+        ctx.__exit__()
+
+    assert injected == [threading.get_ident()], (
+        "an in-region timer must still inject — this is the assertion that stops"
+        " the guard above from being satisfied by never injecting at all"
+    )
+
+
+def test_the_windows_arm_end_to_end_still_times_a_test_out() -> None:
+    """The Windows arm, driven for real, still produces a TimeoutResult.
+
+    Every other test here either never enters the context or uses a deadline
+    long enough that the timer never fires, so a guard that refused *valid*
+    in-region injections would leave all of them green. This one runs the real
+    timer thread and the real ctypes injection — it works on any platform, and
+    it is the only end-to-end proof that the guard did not disarm the arm it
+    was added to protect.
+    """
+    wrapper = make_timeout_wrapper(1, context_cls=_WindowsTimeoutContext)
+
+    def _busy_loop() -> PassedResult:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            pass
+        return PassedResult()
+
+    started = time.monotonic()
+    result = wrapper(_busy_loop)
+    elapsed = time.monotonic() - started
+
+    assert isinstance(result, TimeoutResult), (
+        f"the Windows arm must still fire on pure-Python work, got {result!r}"
+        " — if this fails the guard is refusing injections inside their own region"
+    )
+    assert elapsed < 5, (
+        f"the injection must arrive near the 1s deadline, not at the body's own"
+        f" 10s end; took {elapsed:.2f}s"
+    )
+
+
+def test_a_fired_timer_whose_test_finished_reports_passed() -> None:
+    """A completed test reports passed even if its timer already fired.
+
+    __exit__ running means the body returned, so the deadline never bit;
+    reporting `timeout` for a completed test would be a lie (#1998 AC4).
+    """
+    wrapper = make_timeout_wrapper(60, context_cls=_WindowsTimeoutContext)
+
+    result = wrapper(PassedResult)
+
+    assert isinstance(result, PassedResult), (
+        "a completed body must not be relabelled as a timeout by a late timer"
     )

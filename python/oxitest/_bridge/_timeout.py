@@ -118,6 +118,21 @@ class _UnixTimeoutContext:
         raise OxitestTimeoutError
 
 
+def _set_async_exc(thread_id: int, exc: type[BaseException] | None) -> int:
+    """Set or clear a pending async exception on *thread_id*.
+
+    ``exc=None`` clears whatever is pending. Both directions route through here
+    so the guard in ``_WindowsTimeoutContext`` and its over-broad-result branch
+    cannot drift apart.
+    """
+    return int(
+        ctypes.pythonapi.PyThreadState_SetAsyncExc(
+            ctypes.c_ulong(thread_id),
+            ctypes.py_object(exc) if exc is not None else None,
+        )
+    )
+
+
 class _WindowsTimeoutContext:
     """Best-effort timeout via ctypes async exception injection.
 
@@ -135,23 +150,58 @@ class _WindowsTimeoutContext:
     def __init__(self, seconds: int) -> None:
         self._seconds = seconds
         self._state: _WindowsTimerState = _IdleTimer()
+        # Guards the state transition against the timer thread. Timer.cancel()
+        # is only `self.finished.set()`, and Timer.run() checks `is_set()`
+        # *before* calling the function — so a cancel arriving after that check
+        # does nothing, and both sides can otherwise believe they won (#1998).
+        self._lock = threading.Lock()
+        self._injected = False
+        # The thread the timer is aimed at, captured once in __enter__. __exit__
+        # must clear *that* thread, not whichever one happens to run it — the
+        # two are the same under `with`, but deriving them independently means a
+        # future divergence would silently clear the wrong thread and restore
+        # the very leak this guard exists to prevent.
+        self._armed_thread_id: int | None = None
 
     def __enter__(self) -> None:
         thread_id = threading.get_ident()
         timer = threading.Timer(self._seconds, lambda: self._inject(thread_id))
-        self._state = _ActiveTimer(timer=timer)
+        with self._lock:
+            self._state = _ActiveTimer(timer=timer)
+            self._injected = False
+            self._armed_thread_id = thread_id
         timer.start()
 
     def __exit__(self, *_: object) -> None:
-        if isinstance(self._state, _ActiveTimer):
-            self._state.timer.cancel()
-            self._state = _IdleTimer()
+        with self._lock:
+            if isinstance(self._state, _ActiveTimer):
+                self._state.timer.cancel()
+                self._state = _IdleTimer()
+            injected = self._injected
+            armed_thread_id = self._armed_thread_id
+            self._injected = False
+        if injected and armed_thread_id is not None:
+            # SetAsyncExc only makes the exception *pending*; it is delivered at
+            # the target thread's next bytecode boundary, which may be long
+            # after this region. Clearing is the only way to stop an injection
+            # we already lost the race to from landing on unrelated code.
+            self._clear(armed_thread_id)
 
-    def _inject(self, thread_id: int) -> None:
-        result = ctypes.pythonapi.PyThreadState_SetAsyncExc(
-            ctypes.c_ulong(thread_id),
-            ctypes.py_object(OxitestTimeoutError),
-        )
+    def _clear(self, thread_id: int) -> None:
+        """Drop any pending injection on *thread_id*."""
+        _set_async_exc(thread_id, None)
+
+    def _inject(self, thread_id: int, set_exc: Any = _set_async_exc) -> None:
+        with self._lock:
+            if isinstance(self._state, _IdleTimer):
+                # __exit__ already ran: the region this timer guarded is over,
+                # so injecting now would surface on whatever runs next.
+                return
+            self._injected = True
+            result = set_exc(thread_id, OxitestTimeoutError)
+        # Deliberately outside the lock: emit_diagnostic reaches user-visible
+        # collection machinery, and holding a lock the timer thread also takes
+        # while calling into it is a deadlock shape.
         if result == 0:
             emit_diagnostic(
                 DiagnosticSeverity.WARNING,
@@ -159,10 +209,7 @@ class _WindowsTimeoutContext:
                 "OxitestTimeoutError could not be injected: thread not found",
             )
         elif result > 1:
-            ctypes.pythonapi.PyThreadState_SetAsyncExc(
-                ctypes.c_ulong(thread_id),
-                None,
-            )
+            self._clear(thread_id)
 
 
 _TimeoutContext = _UnixTimeoutContext | _WindowsTimeoutContext
