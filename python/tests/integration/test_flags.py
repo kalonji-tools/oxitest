@@ -611,9 +611,24 @@ def test_tb_no_suppresses_traceback(tmp: TempDir) -> None:
 
 
 def test_timeout_cli_flag(tmp: TempDir) -> None:
-    """--timeout applies a session-wide timeout to tests without @mark.timeout."""
+    """--timeout applies a session-wide timeout to tests without @mark.timeout.
+
+    The inner sleep is deliberately short. On Unix ``SIGALRM`` interrupts the
+    sleep, so the sleep's length never mattered; on Windows the timeout is
+    injected with ``PyThreadState_SetAsyncExc``, which only fires at a bytecode
+    boundary — and ``time.sleep`` executes none. Measured: a 1-second timeout
+    around ``time.sleep(5)`` raises after **5.00s**, not 1.
+
+    So ``--timeout`` reports on Windows but does not bound wall-clock time, and
+    a 30-second sleep made this test outlive the harness's own 30-second limit.
+    What it asserts — that the flag reaches the runner and produces a timeout
+    outcome — needs no long sleep to demonstrate on any platform (#1989).
+
+    The enforcement gap itself is a product limitation recorded on #1989; it is
+    not what this test covers.
+    """
     (tmp / "test_slow.py").write_text(
-        "import time\n\ndef test_hangs():\n    time.sleep(30)\n", encoding="utf-8"
+        "import time\n\ndef test_hangs():\n    time.sleep(5)\n", encoding="utf-8"
     )
     out, _, rc = helpers.run_oxitest(tmp, "--timeout", "1")
     integ.assert_failed(out, rc)
