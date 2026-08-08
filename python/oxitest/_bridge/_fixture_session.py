@@ -30,10 +30,11 @@ from oxitest._bridge._errors import (
     UsageError,
 )
 from oxitest._bridge._fixture_context import (
+    _callback_name,
     _current_teardown_node_id,
     _fixture_scope,
     _in_teardown,
-    _warn_teardown,
+    _warn_callback_teardown,
 )
 from oxitest._bridge._fixture_instantiator import (
     DispatchContext,
@@ -213,7 +214,7 @@ class _Scope:
         token = _in_teardown.set(True)
         try:
             for fn in reversed(self.teardowns):
-                safe_teardown(fn, warn=_warn_teardown)
+                safe_teardown(fn, _callback_name(fn), warn=_warn_callback_teardown)
             # No per-test result exists at this boundary — the drain belongs to
             # a scope, not to any one test — so this reports and repairs but
             # cannot fail anything, unlike the function tier's check (#1957).
