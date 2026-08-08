@@ -23,7 +23,7 @@ def test_unpack_sync_plain_value() -> None:
 
 
 def test_unpack_sync_generator() -> None:
-    """_unpack_sync on a generator returns HasTeardown with the first value."""
+    """_unpack_sync on a generator returns HasTeardown carrying the generator."""
 
     def gen() -> Generator[str, None, None]:
         yield "setup_val"
@@ -32,8 +32,58 @@ def test_unpack_sync_generator() -> None:
     assert isinstance(outcome, HasTeardown), (
         f"generator should yield HasTeardown, got {type(outcome).__name__}"
     )
-    assert outcome.value == "setup_val", f"expected 'setup_val', got {outcome.value!r}"
+    registered: list[object] = []
+    assert outcome.start(registered.append) == "setup_val", (
+        "start() must run the body to its yield"
+    )
     outcome.teardown()
+
+
+def test_unpack_sync_does_not_advance_the_generator() -> None:
+    """The body must not run until start() — registration happens in between.
+
+    This is the whole point of the split (#1962): the caller registers the
+    teardown against a generator that has not been started, then starts it. If
+    _unpack_sync advanced, there would be no point at which a teardown could be
+    registered before setup ran.
+    """
+    ran: list[str] = []
+
+    def gen() -> Generator[str, None, None]:
+        ran.append("body")
+        yield "v"
+
+    outcome = _unpack_sync(gen(), "my_fix")
+    assert isinstance(outcome, HasTeardown), "generator should yield HasTeardown"
+    assert ran == [], (
+        f"_unpack_sync must not run the fixture body; it ran {ran}. Advancing "
+        f"here reopens the window where an interrupt strands a set-up fixture "
+        f"with no teardown registered"
+    )
+    outcome.start(lambda _td: None)
+    assert ran == ["body"], f"start() must run the body, ran {ran}"
+
+
+def test_teardown_of_an_unstarted_generator_is_a_no_op() -> None:
+    """A registered-but-never-started fixture must not be resumed.
+
+    ``next()`` on an unstarted generator *runs the setup*, so a teardown that
+    did not check would execute the fixture body during teardown — strictly
+    worse than the missed teardown it is meant to fix.
+    """
+    ran: list[str] = []
+
+    def gen() -> Generator[str, None, None]:
+        ran.append("setup")
+        yield "v"
+        ran.append("teardown")
+
+    outcome = _unpack_sync(gen(), "never_started")
+    assert isinstance(outcome, HasTeardown), "generator should yield HasTeardown"
+    outcome.teardown()
+    assert ran == [], (
+        f"tearing down an unstarted fixture must run nothing, but ran {ran}"
+    )
 
 
 def test_unpack_sync_generator_teardown_captures_exception() -> None:
@@ -48,7 +98,9 @@ def test_unpack_sync_generator_teardown_captures_exception() -> None:
     assert isinstance(outcome, HasTeardown), (
         f"generator should yield HasTeardown, got {type(outcome).__name__}"
     )
-    assert outcome.value == "val", f"expected 'val', got {outcome.value!r}"
+    assert outcome.start(lambda _td: None) == "val", (
+        "start() must return the yielded value"
+    )
     diags: list[Diagnostic] = []
     token = _diagnostic_collector_var.set(diags)
     try:
@@ -62,13 +114,47 @@ def test_unpack_sync_generator_teardown_captures_exception() -> None:
 
 
 def test_fixture_outcome_variants() -> None:
-    """HasTeardown carries value+teardown; NoTeardown carries value only."""
+    """HasTeardown carries generator+teardown; NoTeardown carries value only."""
     no_td = NoTeardown(value="x")
     assert no_td.value == "x", f"expected 'x', got {no_td.value!r}"
+
+    def gen() -> Generator[str, None, None]:
+        yield "y"
 
     def _noop() -> None:
         return None
 
-    has_td = HasTeardown(value="y", teardown=_noop)
-    assert has_td.value == "y", f"expected 'y', got {has_td.value!r}"
+    generator = gen()
+    has_td = HasTeardown(generator=generator, teardown=_noop)
+    assert has_td.generator is generator, (
+        "HasTeardown must carry the generator itself — the value does not "
+        "exist until start() is called"
+    )
     assert has_td.teardown is _noop, "teardown should be the callable passed in"
+    generator.close()
+
+
+def test_start_registers_the_teardown_before_running_the_body() -> None:
+    """Registration must precede the advance, structurally rather than by rule.
+
+    This is the property the whole fix turns on, and it is invisible in normal
+    operation: the two orders differ only when an interrupt lands between them.
+    A previous version left the two statements adjacent at the call site, and a
+    mutation that swapped them killed no test. `start()` taking the registration
+    callback is what makes the wrong order unreachable (#1962).
+    """
+    order: list[str] = []
+
+    def gen() -> Generator[str, None, None]:
+        order.append("body")
+        yield "v"
+
+    outcome = _unpack_sync(gen(), "ordered")
+    assert isinstance(outcome, HasTeardown), "generator should yield HasTeardown"
+    outcome.start(lambda _td: order.append("registered"))
+
+    assert order == ["registered", "body"], (
+        f"the teardown must be registered before the fixture body runs, got "
+        f"{order}. Advancing first reopens the window in which an interrupt "
+        f"leaves a set-up fixture with nothing to dispose it"
+    )

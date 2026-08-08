@@ -9,16 +9,26 @@ assert the default silently swallows without side effects.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncGenerator, Generator
 from typing import Annotated
 
+import oxitest as oxi
 from oxitest._bridge._boundary import (
+    _ADVANCED_ASYNC_GENS,
+    advance_async_gen,
     async_safe_call,
     safe_call,
     safe_teardown,
     safe_type_hints,
+    setup_completed,
 )
 from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 from oxitest._bridge.result import Diagnostic
+
+
+def _async_setup_completed_via_record(agen: object) -> bool:
+    """The 3.11 arm of `setup_completed`, reachable on any interpreter."""
+    return agen in _ADVANCED_ASYNC_GENS
 
 
 def _raise() -> None:
@@ -181,3 +191,118 @@ def test_safe_type_hints_forwards_kwargs_to_get_type_hints() -> None:
         "include_extras=True must preserve Annotated[...] wrapper; "
         "without it the wrapper is stripped"
     )
+
+
+def test_setup_completed_only_for_suspended_sync_generators() -> None:
+    """Only a generator sitting at its yield has setup worth tearing down.
+
+    The three states are not interchangeable: never-started must be False
+    because resuming it would *run* the setup, and raised-before-yield must be
+    False because the body already unwound (#1962).
+    """
+
+    def gen() -> Generator[str, None, None]:
+        yield "v"
+
+    created = gen()
+    assert not setup_completed(created), (
+        "an unstarted generator has no completed setup — resuming it would run "
+        "the fixture body during teardown"
+    )
+    next(created)
+    assert setup_completed(created), (
+        "a generator suspended at its yield has completed setup and must be torn down"
+    )
+    created.close()
+
+    def raiser() -> Generator[str, None, None]:
+        msg = "boom"
+        raise RuntimeError(msg)
+        yield "never"
+
+    closed = raiser()
+    with oxi.raises(RuntimeError):
+        next(closed)
+    assert not setup_completed(closed), (
+        "a generator that raised before yielding has already unwound; there is "
+        "nothing left to resume"
+    )
+
+
+def test_setup_completed_only_for_async_generators_advanced_through_the_helper() -> (
+    None
+):
+    """Async setup-completion is bookkeeping, not introspection.
+
+    There is no stdlib predicate for this across 3.11 to 3.14 —
+    ``getasyncgenstate`` and ``ag_suspended`` are 3.12+, and the pre-3.12
+    ``f_lasti == -1`` idiom is wrong on both 3.11 and 3.12. So the one function
+    that advances an async fixture records that it did, and this is what the
+    drain reads (#1962).
+    """
+
+    async def agen() -> AsyncGenerator[str, None]:
+        yield "v"
+
+    async def drive() -> None:
+        created = agen()
+        assert not setup_completed(created), (
+            "an async generator that was never advanced has no completed setup "
+            "— resuming it would run the fixture body during teardown"
+        )
+
+        advanced = agen()
+        value = await advance_async_gen(advanced)
+        assert value == "v", "the helper must return the yielded value"
+        assert setup_completed(advanced), (
+            "advancing through the helper is what records setup completion; "
+            "without it every async fixture teardown would be skipped"
+        )
+        await advanced.aclose()
+
+        async def araiser() -> AsyncGenerator[str, None]:
+            msg = "boom"
+            raise RuntimeError(msg)
+            yield "never"
+
+        failed = araiser()
+        with oxi.raises(RuntimeError):
+            await advance_async_gen(failed)
+        assert not setup_completed(failed), (
+            "a body that raised before yielding never reached the mark, so it "
+            "has nothing to tear down"
+        )
+
+    asyncio.run(drive())
+
+
+def test_the_311_fallback_arm_reads_the_advance_record() -> None:
+    """Exercise the bookkeeping arm on every version, not just on 3.11.
+
+    ``setup_completed`` asks the interpreter on 3.12+ and falls back to the
+    record kept by ``advance_async_gen`` on 3.11, which has no equivalent
+    question to ask. Only one arm runs per interpreter, so without this the
+    3.11 arm would be exercised by exactly one CI job and by nothing a
+    developer runs — and the previous attempt at a version-branched predicate
+    shipped broken for precisely that reason (#1962).
+    """
+
+    async def agen() -> AsyncGenerator[str, None]:
+        yield "v"
+
+    async def drive() -> None:
+        created = agen()
+        assert not _async_setup_completed_via_record(created), (
+            "the fallback must not claim setup for a generator that was never "
+            "advanced through the helper"
+        )
+
+        advanced = agen()
+        await advance_async_gen(advanced)
+        assert _async_setup_completed_via_record(advanced), (
+            "advance_async_gen is what writes the record the 3.11 arm reads; "
+            "if this fails, every async fixture teardown is skipped on 3.11"
+        )
+        await advanced.aclose()
+
+    asyncio.run(drive())
