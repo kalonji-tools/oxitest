@@ -147,11 +147,23 @@ jobs:
 
   required:
     name: Docs (required)
-    needs: [build, doc-tests]
+    needs: [changes, build, doc-tests]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Check the change filter ran
+        shell: bash
+        run: |
+          # `changes` decides what gets built and tested, so unlike the jobs
+          # below it has no `skipped` allowance (#1925). It carries no `if:`
+          # and no `needs:`, so it always runs: any result other than success
+          # means the docs selection is unknown rather than empty (#1961).
+          case "${{ needs.changes.result }}" in
+            success) ;;
+            *) echo "Detect docs changes ended in '${{ needs.changes.result }}'; the docs selection is unknown"; exit 1 ;;
+          esac
+
       - name: Check build result
         shell: bash
         run: |
