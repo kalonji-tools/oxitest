@@ -18,6 +18,7 @@ correct calls gets suppressed, and then it is not a gate. So the
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import textwrap
@@ -40,12 +41,24 @@ _SCRIPT_PATH = _REPO_ROOT / "scripts" / "check_subprocess_encoding.py"
 
 
 def _run_checker(root: Path) -> subprocess.CompletedProcess[str]:
-    """Run the checker against ``root`` and return the completed process."""
+    """Run the checker against ``root`` and return the completed process.
+
+    ``PYTHONIOENCODING`` makes both halves agree. The parent decodes UTF-8, but
+    a piped ``sys.stdout`` in the child defaults to ``locale.getencoding()`` —
+    cp1252 on Windows — and the checker's own failure message contains an
+    em-dash, which cp1252 writes as the single byte ``0x97``. That is not a
+    valid UTF-8 start byte, so the parent's reader thread dies mid-read,
+    ``result.stdout`` becomes ``None``, and the assertion below fails as
+    ``TypeError: argument of type 'NoneType' is not iterable`` — nowhere near
+    the cause. Declaring the child's encoding is the fix; ``errors="replace"``
+    would corrupt the text rather than transport it.
+    """
     return subprocess.run(
         [sys.executable, str(_SCRIPT_PATH), "--root", str(root)],
         capture_output=True,
         text=True,
         encoding="utf-8",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         check=False,
     )
 
