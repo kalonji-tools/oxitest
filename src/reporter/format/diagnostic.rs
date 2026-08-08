@@ -264,6 +264,18 @@ pub fn fmt_diagnostic_block(
         return String::new();
     }
 
+    // A timeout carries a message and nothing else — no file, line, or trace,
+    // because the test never returned to produce them. It still needs a
+    // non-empty block: both deferred-failure paths drop an entry whose block is
+    // empty, so a timed-out test was counted in the summary and named nowhere.
+    // `oxitest --timeout N` reported "1 timeout" and left the reader no way to
+    // learn which test it was (#1989).
+    if let TestOutcome::Timeout { message } = outcome {
+        let mut out = String::new();
+        render_closing(&mut out, message, use_color);
+        return out;
+    }
+
     let diag = match outcome.diagnostic() {
         Some(d) => d,
         None => return String::new(),
@@ -740,6 +752,33 @@ mod tests {
         );
         // Source line still shown as hero
         assert!(block.contains("assert False"), "must show source line");
+    }
+
+    #[test]
+    fn a_timeout_renders_a_non_empty_block_so_the_test_gets_named() {
+        // Both deferred-failure paths drop an entry whose block is empty, and a
+        // Timeout carries no FailureDiagnostic, so it rendered as "" and the
+        // test was counted in the summary but named nowhere. `oxitest --timeout
+        // N` said "1 timeout" and left no way to find out which test (#1989).
+        let item = TestItem::builder("tests/test_slow.py", "test_slow").arc();
+        let outcome = TestOutcome::Timeout {
+            message: "Timed out after 1s".to_string(),
+        };
+
+        let block = fmt_diagnostic_block(&item, &outcome, &TbStyle::Detail, false, false);
+
+        assert!(
+            !block.is_empty(),
+            "an empty block is silently discarded by push_deferred_diag and by \
+             the tty reporter's deferred list, so the timed-out test never \
+             appears in the failure listing at all"
+        );
+        assert!(
+            block.contains("Timed out after 1s"),
+            "the block must carry the timeout's own message — it is the only \
+             diagnostic a timeout has, since the test never returned to produce \
+             a file, line, or trace; got {block:?}"
+        );
     }
 
     #[test]
