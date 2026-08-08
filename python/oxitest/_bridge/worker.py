@@ -437,7 +437,7 @@ def run(task: WorkerTask, session: Any) -> None:
                     markers=frozenset(item.get("markers", [])),
                 )
 
-                start = time.monotonic()
+                start = time.perf_counter()
                 result = run_test(
                     meta,
                     session=session,
@@ -445,7 +445,7 @@ def run(task: WorkerTask, session: Any) -> None:
                     keep_tmp=keep_tmp,
                     debug=debug,
                 )
-                duration_ms = (time.monotonic() - start) * 1000.0
+                duration_ms = (time.perf_counter() - start) * 1000.0
                 _emit(result.to_wire(meta.node_id, duration_ms))
     finally:
         _end_task_session(session, module_paths)
