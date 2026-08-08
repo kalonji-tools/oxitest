@@ -872,3 +872,62 @@ That retirement is not scoped to tests, and `TestContext.current()` refuses insi
 #### What did not change
 
 The `function` tier, whose scope teardown list *is* the per-test `fn_teardowns` — excluded explicitly rather than incidentally, so the tier is provably untouched. `inject_builtin`'s session-scoped branch, including Amendment 6's process routing. And the scope **ladder**: `_SCOPE_RANK` orders the tiers for autouse only, and nothing validates that a fixture's dependencies are no narrower than itself — that remains [#1580](https://github.com/kalonji-tools/oxitest/issues/1580)'s and [#1750](https://github.com/kalonji-tools/oxitest/issues/1750)'s.
+
+### Amendment 11 — the interrupt contract has two halves, and only one was written down (2026-08-08)
+
+**Issue:** [#1962](https://github.com/kalonji-tools/oxitest/issues/1962). Extends the Consequences note at *"A worker built a fresh `FixtureSession` for every task group it popped"*; supersedes nothing.
+
+#### The rule
+
+**A fixture's teardown is registered before its body is allowed to run, and a fixture is torn down if and only if its body reached its `yield`.**
+
+The Consequences section already stated the *drain* half of the interrupt contract — that the worker's `try/finally` is "load-bearing" because it is "the only thing that survives the `KeyboardInterrupt` a Ctrl-C delivers mid-task". That was true, and it stays true. What was never written down is the **registration** half, and it is the half that was broken: six sites advanced a generator and only then registered its teardown, so an interrupt arriving in between left a fully set-up fixture with nothing scheduled to dispose it. The drain ran correctly and found an empty list.
+
+At `lifetime="process"` the consequence is terminal — no other process runs that teardown.
+
+| Site | Advance | Register |
+|---|---|---|
+| `_fixture_instantiator._instantiate` (sync) | `next(result)` | `scope_teardowns.append` |
+| `_fixture_instantiator._instantiate_async` | `await raw.__anext__()` | `_queue_async_teardown` |
+| `_fixture_instantiator._resolve_async_deps` | `await dep_val.__anext__()` | `_queue_async_teardown` |
+| `_async_orchestrator.SharedAsyncManager.resolve` | `live_session.run(anext(result))` | `register_teardown` |
+| `_middleware._unpack_async_fixtures` | `await anext(v)` | `async_teardowns.append` |
+| `executor._drive_arrange_async_each` | `session.run(_first())` | `fn_teardowns.append` |
+
+Each had at most an `except Exception` between the two, which does not catch `KeyboardInterrupt`. Measured on x86_64 Linux with unmodified fixtures: the sync site lost a teardown in **6 of 30** interrupted runs, the async sites in **5 of 5**. The async half is worse because its advance suspends to the event loop, which is where a pending signal is delivered.
+
+#### Only-if, and what it costs
+
+The "if and only if" is the deliberate half. A fixture interrupted **before** its `yield` is **not** torn down, and any resource it acquired before that point leaks.
+
+This is the `contextlib.contextmanager` contract: `__enter__` calls `next(gen)`, and `__exit__` never runs if that raises. The alternative — running a teardown for a body that never completed — executes post-`yield` cleanup against a setup that never happened, and for a generator that was never started at all it would *run the setup during teardown*. A fixture that needs more than this writes its own `try`/`finally` inside the body, which is the only construct that can name a half-acquired resource.
+
+`_boundary.setup_completed` is the predicate, and its two halves answer differently.
+
+**Sync asks the stdlib.** `inspect.getgeneratorstate` has existed since 3.2 and is total: `True` only for `GEN_SUSPENDED`, while a generator that was never started reports `CREATED` and one that raised before yielding reports `CLOSED`.
+
+**Async needs two arms**, because no single question covers the supported range. On **3.12+** `inspect.getasyncgenstate` answers exactly and has no window — it reports what the generator *is*, however it got there. On **3.11** that function does not exist, nor does `ag_suspended`, and the pre-3.12 idiom `ag_frame.f_lasti == -1` is wrong on 3.11 *and* 3.12, where a *created* generator already reports `f_lasti >= 0`. So on 3.11 alone, `_boundary.advance_async_gen` — the one function that advances an async fixture — records the generator in a `WeakSet` once its body returns from the first `yield`, and `setup_completed` reads that.
+
+Both arms were settled by measurement, and each cost a red CI job to find. A version-branched first attempt shipped an `f_lasti` fallback that only the 3.11 job could execute, and it failed there. The replacement used the record on *every* version and regressed `test_async_yield_fixture_teardown_runs_on_timeout` on macOS x86_64 — green on three other platforms and 20/20 locally — because the record carries a one-bytecode window between the advance returning and the mark being taken, which introspection does not. Hence the ordering: ask the interpreter wherever it can be asked, and confine the record to the one version that cannot.
+
+**The 3.11 arm therefore carries a residual window the others do not.** An interrupt between the advance returning and the mark leaves the generator suspended but unrecorded, so its teardown is skipped — the same class of loss this amendment is about, narrowed from roughly twenty lines to a single bytecode. The direction is deliberate: marking *before* the advance would invert the failure into resuming a generator that never started, running the fixture's setup during teardown. A missed teardown is recoverable by the user; a setup executed during teardown is not.
+
+The record is *written* on every version even though only 3.11 reads it, so the code path that maintains it is exercised by the whole suite everywhere rather than by one CI job.
+
+#### Structural, not documented
+
+The first implementation moved each registration above its advance and said so in a comment. Mutation testing swapped one pair back and **no test failed** — the two orders are indistinguishable except under an interrupt, which no test can inject into a few-bytecode span on demand. So the ordering is now carried by the type: `HasTeardown.start()` takes the registration callback and performs it itself, and there is no path to the advance that does not pass through it. This is [ADR-0011](0011-no-unhandled-panic-routes.md)'s rule — an invariant lives in a type, not in a comment — applied to a Python seam.
+
+#### Known gap
+
+Three sites share the shape but hold no generator, so `setup_completed` cannot sort them and this amendment does not cover them:
+
+| Site | Work done first | Registered after |
+|---|---|---|
+| `_fixture_instantiator.resolve_by_source`, `PluginSource` | `provider.create(ctx=None)` | `ctx.teardown_target.append` |
+| `executor.acquire_each_session` | `stack.enter_context(...)` | `fn_teardowns.append` |
+| `_fixture_session.resolve_for_test` | `_Scope(...)` constructed | `fn_teardowns.append` |
+
+The first two leak a real resource on interrupt; the third leaks cache and stats only. They need a different mechanism — the teardown closure captures a value that does not exist until the work has been done, so registration cannot simply precede it — and that is a second design decision, deliberately not taken here.
+
+`ctx.addfinalizer` is **not** in this class: it is a bare append with no advance, so there is nothing to interrupt between. The analogous window is in user code, between acquiring a resource and calling `addfinalizer`, and no framework can close it.

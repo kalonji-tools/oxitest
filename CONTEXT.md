@@ -83,6 +83,8 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 **Yield Fixture** — A fixture that uses `yield` to separate setup from teardown. Return type annotated `Yields[T]`.
 
+**Setup Completed** — Said of a yield fixture whose body has reached its `yield`, as distinct from one whose body merely *began*. Only a fixture whose setup completed is torn down: one interrupted before its `yield` has no post-`yield` half to run, and one that was never started would have its setup executed by the attempt. The distinction is load-bearing because a teardown is registered *before* the body is allowed to run — otherwise an interrupt arriving between the two would strand a set-up fixture with nothing to dispose it (ADR-0009 Amendment 11). The cost is deliberate and matches `contextlib.contextmanager`: a resource acquired before the `yield` and interrupted leaks, and a fixture that cannot accept that writes its own `try`/`finally` inside the body.
+
 ## Conftest
 
 **conftest.py** — A reserved filename discovered by walking from rootdir to the test file's directory. Holds fixtures. Unlike pytest — and unlike `@oxi.fixture` declarations — its fixtures are registered **run-wide**, not scoped to the containing subtree, so they are exempt from the B1 boundary. Two visibility regimes therefore run side by side until `conftest.py` support is retired (#1720); the gap is tracked as #1760.
