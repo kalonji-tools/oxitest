@@ -196,3 +196,61 @@ def test_script_exits_0_on_this_repo() -> None:
         f"wired into prek and just check; got {result.returncode} with "
         f"stdout={result.stdout!r}"
     )
+
+
+def test_a_partial_wrapped_spawner_is_a_violation(tmp: TempDir) -> None:
+    """``partial(subprocess.run, text=True)`` binds the same defect.
+
+    This form was invisible to the gate until #1989: it matched
+    ``subprocess.run`` as the *func* of a call, and under ``partial`` the
+    spawner is argument zero. ``test_plugin_integration.py:15`` used exactly
+    this shape with no ``encoding=``, the gate reported zero violations, and
+    the call failed on Windows in the way this file's docstring describes.
+    """
+    # Arrange
+    root = Path(tmp)
+    _write_python(
+        root,
+        """
+        import subprocess
+        from functools import partial
+
+        _run = partial(subprocess.run, capture_output=True, text=True)
+        """,
+    )
+
+    # Act
+    result = _run_checker(root)
+
+    # Assert
+    assert result.returncode == 1, (
+        "a text-mode spawner bound through functools.partial decodes with the "
+        "locale codec exactly as a direct call does; a gate blind to the form "
+        f"reports clean on a live defect, got {result.returncode} with "
+        f"stdout={result.stdout!r}"
+    )
+
+
+def test_a_partial_wrapped_spawner_naming_an_encoding_is_clean(tmp: TempDir) -> None:
+    """The partial form must not fire once it names an encoding."""
+    # Arrange
+    root = Path(tmp)
+    _write_python(
+        root,
+        """
+        import subprocess
+        from functools import partial
+
+        _run = partial(subprocess.run, text=True, encoding="utf-8")
+        """,
+    )
+
+    # Act
+    result = _run_checker(root)
+
+    # Assert
+    assert result.returncode == 0, (
+        "widening the gate to see partial must not make it fire on the fixed "
+        f"form, or the fix it demands is itself a violation; got "
+        f"{result.returncode} with stdout={result.stdout!r}"
+    )
