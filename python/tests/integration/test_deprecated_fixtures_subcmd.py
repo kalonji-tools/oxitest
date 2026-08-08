@@ -70,6 +70,7 @@ def test_fixtures_subcmd_hidden_from_help() -> None:
         [sys.executable, "-m", "oxitest", "--help"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=30,
         check=False,
     )

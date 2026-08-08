@@ -14,6 +14,7 @@ def _run_inspect(*args: str, cwd: str | None = None) -> tuple[str, str, int]:
         [sys.executable, "-m", "oxitest", "inspect", *args],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
         cwd=cwd,
         check=False,
