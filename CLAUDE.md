@@ -84,7 +84,7 @@ Grill → Issue → Triage → Spec → Draft PR → Plan → Implement → Revi
 
 The numbers are the stages below. Rebase, preflight and waiting for CI are *inside* stage 9 — see its merge sequence.
 
-**1. Grill new ideas.** Any new feature, concept, or design direction MUST be stress-tested against the existing domain model and documented decisions before anything is committed to.
+**1. Grill new ideas.** Any new feature, concept, or design direction MUST be stress-tested against the existing domain model and documented decisions before anything is committed to. A defect whose mechanism is unestablished is not yet grillable. Establish the mechanism first; grilling remedies on an unverified diagnosis produces a decision tree rooted in a guess, and every option inherits the issue's framing. An issue that marks its own mechanism `unverified` is stating that this precondition fails.
 
 The **user** invokes `grill-with-docs` — it is marked `disable-model-invocation`, so an agent cannot call it and this stage will otherwise read as skipped rather than as impossible. An agent that reaches this stage unaided runs `grilling` plus `domain-modeling` (which is what `grill-with-docs` does) and records in the issue that it did so, and that no user-driven grilling took place.
 
@@ -186,16 +186,17 @@ Clause 2 exists because clause 1 cannot fail in the case that keeps recurring �
 The tooling is available, contrary to that claim:
 
 ```bash
-git branch -f backup/<slug> HEAD          # 1. safety net, before touching anything
+BASE=$(git rev-parse HEAD)                # 1. capture AFTER everything you intend to keep is committed
+git branch -f backup/<slug> "$BASE"       #    a named ref, so the safety net survives the shell
 
 git reset --soft HEAD~N && git commit     # collapse the last N into one
 git rebase --onto <base> <old-parent> <branch>   # move a middle commit
 GIT_SEQUENCE_EDITOR=true git rebase --autosquash -i <base>   # fold fixup! commits
 
-git diff --quiet backup/<slug> HEAD       # 2. empty ⇒ nothing lost or gained
+git diff --quiet "$BASE" HEAD             # 2. empty ⇒ nothing lost or gained
 ```
 
-`git rebase -i` works here **provided `GIT_SEQUENCE_EDITOR` is set** — it is only the interactive editor that is unavailable, not the command, so `--autosquash` is usable too. The two bracketing commands are the point: tree equality proves the regroup preserved content whatever the commits became, which means every gate result from before the regroup still applies afterwards.
+`git rebase -i` works here **provided `GIT_SEQUENCE_EDITOR` is set** — it is only the interactive editor that is unavailable, not the command, so `--autosquash` is usable too. The two bracketing commands are the point: tree equality proves the regroup preserved content whatever the commits became, which means every gate result from before the regroup still applies afterwards. The baseline is **captured, not chosen** — a ref taken before the edits predates the content it protects, so a *correct* regroup reports `TREE DIFFERS`, presentationally identical to one that lost work.
 
 **Merge sequence** — this order, every time:
 
@@ -204,7 +205,7 @@ git diff --quiet backup/<slug> HEAD       # 2. empty ⇒ nothing lost or gained
 3. push; wait for CI green;
 4. `gh pr merge --rebase`.
 
-**"CI green" means the required contexts, not every check.** The required set is defined by branch protection — query it (`gh api repos/{owner}/{repo}/branches/main/protection`) rather than trusting a remembered list, because a copy here would drift. A red **non-required** check is not a merge blocker — and is not thereby uninteresting. Say so in the debrief, and say what it was pointing at: across five recorded instances it was pointing at something real four times. Do not make a coverage check green by measuring less — widening an `ignore:` list over untested code is the recorded anti-pattern, not a fix.
+**"CI green" means the required contexts, not every check.** The required set is defined by branch protection — query it (`gh api repos/{owner}/{repo}/branches/main/protection`) rather than trusting a remembered list, because a copy here would drift. A red **non-required** check is not a merge blocker — and is not thereby uninteresting. Say so in the debrief, and say what it was pointing at: across five recorded instances it was pointing at something real four times. Do not make a coverage check green by measuring less — widening an `ignore:` list over untested code is the recorded anti-pattern, not a fix. An issue whose acceptance criterion promotes a job into a required rollup states the observed pass rate it is promoting on, and names any known flake in that job's path — the number gets stated, not a bar set.
 
 **An instruction that arrives mid-gate wins — and you report what the gate had reached.** Do what you are asked, and in the same reply state exactly what had and had not been verified when you stopped: which checks completed, which never ran. The failure this prevents is not disobedience, it is silently converting an instruction into a claim that the gate passed.
 
@@ -278,7 +279,7 @@ The pipeline gates code. This gates *conclusions*.
 A subtracting claim MUST carry:
 
 1. the **exact command** re-run, and its output;
-2. evidence the command is **the one the claim is about** — one real verdict cited `just check` against an issue whose reproduction used a different clippy invocation, and so measured a different thing. That particular gap was later closed in #1815; the lesson is the mismatch, not the command. The command must also be **scoped so it cannot match your own scratch** — an unscoped `grep` over the worktree finds the spec asserting the claim and confirms it;
+2. evidence the command is **the one the claim is about** — one real verdict cited `just check` against an issue whose reproduction used a different clippy invocation, and so measured a different thing. That particular gap was later closed in #1815; the lesson is the mismatch, not the command. The command must also be **scoped so it cannot match your own scratch** — an unscoped `grep` over the worktree finds the spec asserting the claim and confirms it, and the hazard is not `grep`'s: any full-command-line matcher sees the shell that launched it, so `pgrep -f` and `pkill -f` match themselves. Both killed the shell that launched them, exit 144, twice in one session;
 3. evidence the run **executed** rather than replaying a cache — a cached `cargo clippy` once returned 0 where a forced rebuild found 11. "Green" and "ran" are different claims.
 
 This is `artifact` tier: it binds when someone reads the comment. Its value is that the omission becomes visible — a missing quote is the tell — where today there is nothing to look for.
