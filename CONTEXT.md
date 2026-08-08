@@ -99,7 +99,9 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 **xfail** — Mark that declares a test as expected to fail. An xfail test that passes is an "xpass."
 
-**timeout** — Mark that sets a per-test deadline in seconds.
+**timeout** — Mark that sets a per-test deadline in seconds. A property of one test, chosen by its author. Distinct from the **watchdog**.
+
+**watchdog** — The coordinator's per-result silence budget for a worker. A worker that emits nothing for the budget is killed and every test in flight on it is reported as an error. Infrastructure, not a user-facing deadline: no test declares it, and exceeding it says nothing about how long any individual test ran.
 
 ## Outcomes
 
