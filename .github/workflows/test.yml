@@ -175,17 +175,32 @@ jobs:
 
   required:
     name: Tests (required)
-    needs: [rust-tests, python-tests, linux-arm, macos-arm, macos-intel]
+    needs: [changes, rust-tests, python-tests, linux-arm, macos-arm, macos-intel]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Check the change filter ran
+        shell: bash
+        run: |
+          # `changes` decides what gets tested, so unlike the jobs below it has
+          # no `skipped` allowance (#1925). It carries no `if:` and no `needs:`,
+          # so it always runs: any result other than success means the test
+          # selection is unknown rather than empty (#1961).
+          case "${{ needs.changes.result }}" in
+            success) ;;
+            *) echo "Detect changes ended in '${{ needs.changes.result }}'; the test selection is unknown"; exit 1 ;;
+          esac
+
       - name: Check results
         shell: bash
         run: |
           # Allowlist, not a failure-blocklist — see docs.yml's `required` job (#1925).
-          # Every job in `needs:` above must appear here: one that is waited on
-          # but never checked is a silent hole (#1944).
+          # Every job in `needs:` above must be checked by *some* step of this
+          # job: one that is waited on but never checked is a silent hole
+          # (#1944). `changes` is checked by the step above and must NOT be
+          # added here — that would give it a `skipped` allowance and restore
+          # the defect #1961 fixed.
           for result in "${{ needs.rust-tests.result }}" "${{ needs.python-tests.result }}" \
                         "${{ needs.linux-arm.result }}" "${{ needs.macos-arm.result }}" \
                         "${{ needs.macos-intel.result }}"; do
