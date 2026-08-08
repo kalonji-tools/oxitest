@@ -53,6 +53,22 @@ _repr_safe = _safe_repr
 INTERNAL_PREFIXES = ("oxitest/_bridge/", "oxitest/_builtins/", "oxitest/plugin")
 
 
+def _is_internal_frame(filename: str) -> bool:
+    r"""Whether a traceback frame belongs to oxitest's own machinery.
+
+    The separators are normalised because ``co_filename`` carries the platform
+    separator: on Windows it is ``...\\oxitest\\_bridge\\...``, which matches
+    none of the prefixes above. Every internal frame therefore counted as user
+    code there, and oxitest's own machinery appeared in every traceback whether
+    or not ``--show-internals`` was passed (#1989).
+
+    The test that should have caught it asserted the *absence* of
+    ``"oxitest/_bridge"`` — a string Windows output can never contain — so it
+    passed on Windows while asserting nothing.
+    """
+    return any(p in filename.replace("\\", "/") for p in INTERNAL_PREFIXES)
+
+
 def _capture_locals(frame: Any) -> tuple[tuple[str, str], ...]:
     """Capture non-private local variables from a frame object."""
     return tuple(
@@ -96,7 +112,7 @@ def _get_frames(
     while tb is not None:
         code = tb.tb_frame.f_code
         filename = code.co_filename
-        is_internal = any(p in filename for p in INTERNAL_PREFIXES)
+        is_internal = _is_internal_frame(filename)
 
         frame = Frame(
             file=filename,
