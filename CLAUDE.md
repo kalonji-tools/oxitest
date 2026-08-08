@@ -309,7 +309,7 @@ Illustrative only, **not exhaustive**. Note that syntax-valid is not verified:
 | Semantically gated | Syntax-only or ungated |
 |---|---|
 | `src/**.rs` — fmt, clippy, `test-rust`, `cargo doc` | `bacon.toml`, `prek.toml`, `cliff.toml`, `codecov.yml` — `check-toml`/`check-yaml` parse them; nothing validates them |
-| `python/**.py` — ruff, ty, `test-python` | `justfile`, `devenv.nix`, `flake.nix`, `nix/` — no gate at all |
+| `python/**.py` — ruff, ty, `test-python`, plus `scripts/check_subprocess_encoding.py` for text-mode `subprocess` calls with no `encoding=` (#1986) | `justfile`, `devenv.nix`, `flake.nix`, `nix/` — no gate at all |
 | `docs/**.md` in the mkdocs nav — `mkdocs --strict` | `.github/actions/*/action.yml` — `check-yaml` parses them; actionlint cannot read a composite |
 | `.github/workflows/*` — actionlint for referenced-but-undeclared `needs:`, plus `scripts/check_rollup_agreement.py` for the reverse (#1974) | |
 | `docs/internals/**` — mdbook | `.envrc`, `.config/wt.toml` — no gate |
