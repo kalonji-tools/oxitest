@@ -215,6 +215,23 @@ jobs:
 
       - uses: ./.github/actions/platform-test
 
+  # Advisory on arrival, per map #1946 standing preference 5 — promotion into
+  # `Tests (required)` is an acceptance criterion of #1986 itself, not a
+  # follow-up, and is gated on the suite going green here. It is deliberately
+  # absent from the `required` job's `needs:` until then.
+  windows:
+    name: Test (Windows x86_64)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: windows-latest
+    # 45, against the other platform jobs' 30. #1951 measured the full
+    # sequence at ~16 min on this runner against ~6 on Linux arm64, and a
+    # Windows-slowness timeout would read as a product failure.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/platform-test
+
   required:
     name: Tests (required)
     needs: [changes, rust-tests, python-tests, linux-arm, macos-arm, macos-intel, tmpdir-symlink]

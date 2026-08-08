@@ -50,7 +50,30 @@ import sys
 import time
 from pathlib import Path
 
+import oxitest as oxi
 from oxitest import TempDir
+
+# Both tests below signal a *process group*, which Windows does not have:
+# `os.killpg` and `os.getpgid` are absent there, and `start_new_session` is a
+# POSIX-only `Popen` argument. Measured on `windows-latest` (#1951):
+# `AttributeError: module 'os' has no attribute 'killpg'`.
+#
+# The Windows equivalent is a different mechanism, not a rename — the run would
+# have to be spawned with `CREATE_NEW_PROCESS_GROUP` and signalled with
+# `CTRL_BREAK_EVENT`, which reaches the worker down a different path than
+# SIGINT. That is unbuilt and deliberately out of scope for #1986; it would
+# gate the Windows job's promotion on work that cannot be verified locally
+# (`flake.nix:10` pins `x86_64-linux`), and #1962 §3 shipped red twice in
+# exactly this area.
+#
+# So what Windows does NOT test, explicitly: that a Ctrl-C equivalent still
+# runs process-lifetime teardowns. On Windows that contract is unverified.
+_NEEDS_PROCESS_GROUPS = sys.platform == "win32"
+_NO_PROCESS_GROUPS_REASON = (
+    "needs POSIX process groups (os.killpg/os.getpgid/start_new_session); "
+    "the Windows CTRL_BREAK_EVENT equivalent is unbuilt, so process-tier "
+    "teardown-on-interrupt is unverified on Windows (#1986)"
+)
 
 _MODULES = ("a", "b", "c", "d")
 #: Long enough that the signal lands while tests are still running, short
@@ -233,6 +256,7 @@ def _assert_every_user_was_torn_down(used: set[str], torn: set[str]) -> None:
     )
 
 
+@oxi.mark.skip(when=_NEEDS_PROCESS_GROUPS, reason=_NO_PROCESS_GROUPS_REASON)
 def test_an_interrupted_run_still_tears_down_the_process_tier(
     tmp: TempDir,
 ) -> None:
@@ -252,6 +276,7 @@ def test_an_interrupted_run_still_tears_down_the_process_tier(
     _assert_every_user_was_torn_down(used, torn)
 
 
+@oxi.mark.skip(when=_NEEDS_PROCESS_GROUPS, reason=_NO_PROCESS_GROUPS_REASON)
 def test_an_interrupted_run_tears_down_an_async_process_fixture(
     tmp: TempDir,
 ) -> None:
