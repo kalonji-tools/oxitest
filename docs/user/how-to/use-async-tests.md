@@ -294,6 +294,13 @@ The `@mark.timeout` decorator and the global `timeout` config key both apply to
 async tests. When the timeout fires, the test is cancelled and reported with
 status `timeout`.
 
+The deadline is enforced by the event loop, so it bites whenever your coroutine
+`await`s. A coroutine that *blocks* instead — calling `time.sleep` rather than
+`await asyncio.sleep`, or making a synchronous network call — never yields, so
+the loop cannot cancel it. On Linux and macOS a signal still interrupts such a
+call; on Windows nothing can, and the timeout is reported only once the blocking
+call returns. See [the platform note on timeouts](use-markers.md#set-a-per-test-timeout).
+
 ## Async/sync compatibility
 
 An async test can reach anything. A **sync** test's answer depends on the route

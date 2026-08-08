@@ -88,9 +88,25 @@ is not applied and the test runs normally.
 --8<-- "python/tests/docs/how-to/test_markers.py:timeout"
 ```
 
-oxitest kills the test and marks it failed if it exceeds the timeout. `seconds` must be
-a positive integer. A global timeout can also be set in `pyproject.toml` via the
-`timeout` key.
+oxitest stops the test and reports it with status `timeout` if it exceeds the limit.
+`seconds` must be a positive integer. A global timeout can also be set in
+`pyproject.toml` via the `timeout` key.
+
+!!! warning "A blocking call is not interrupted on Windows"
+
+    What a deadline can interrupt depends on what the test is doing, and on the
+    platform:
+
+    | The test is | Linux / macOS | Windows |
+    |---|---|---|
+    | running Python code, or `await`ing | bounded | bounded |
+    | blocked in a C call — `time.sleep`, a socket read, `subprocess.wait` | bounded | **not bounded** |
+
+    On Unix the deadline is delivered by `SIGALRM`, which interrupts a blocking
+    call. Windows has no equivalent, so oxitest raises the timeout at the next
+    Python bytecode boundary — which a blocking call does not reach until it
+    returns. A test that sleeps for 5 seconds under a 1-second timeout is
+    reported as a timeout on Windows, but only after the full 5 seconds.
 
 ## Apply marks to every test in a file
 
