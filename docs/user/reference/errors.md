@@ -544,6 +544,27 @@ assigned because setup failed.
 ---
 
 ```text
+[warning] fixture teardown — teardown callback '<name>' failed during <node_id>: <error>
+```
+
+**Cause:** A cleanup callback registered outside the yield-fixture route raised
+during teardown. That covers `ctx.addfinalizer()` / `ctx.on_teardown()` and the
+cleanups the built-in fixtures register for themselves — `Patcher.close`,
+`TempDir`'s removal, the capture fixtures' `close`. `<name>` is the callable: a
+bound method reads as `Patcher.close`, a plain function as its own name.
+
+Before this was reported, such a failure was discarded in silence — the cleanup
+stopped running and nothing said so. This is a **diagnostic**, not an error: the
+test result and the exit code are unaffected.
+
+**Fix:** Fix the cleanup. For `Patcher.close` the usual cause is a
+`patch.chdir()` whose original directory has since been deleted. Note that the
+remaining overrides are still reverted — a failing undo does not strand the
+ones behind it.
+
+---
+
+```text
 [warning] teardown registration — a callback registered from inside a running teardown is never run — the loop that would have run it has already passed this point. Do this cleanup inline in the current teardown instead.
 ```
 
