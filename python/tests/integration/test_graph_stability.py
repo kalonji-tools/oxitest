@@ -175,7 +175,8 @@ def test_cross_conftest_dependency_edges(tmp: TempDir) -> None:
         "\n"
         "@fx.fixture\n"
         "def db_url() -> str:\n"
-        "    return 'postgres://localhost/test'\n"
+        "    return 'postgres://localhost/test'\n",
+        encoding="utf-8",
     )
 
     # Inner directory with its own conftest that depends on outer fixture
@@ -189,13 +190,15 @@ def test_cross_conftest_dependency_edges(tmp: TempDir) -> None:
         "\n"
         "@fx.fixture\n"
         "def db_conn(db_url: Fixture[str]) -> str:\n"
-        "    return f'connected-to:{db_url}'\n"
+        "    return f'connected-to:{db_url}'\n",
+        encoding="utf-8",
     )
     (inner / "test_inner.py").write_text(
         "from oxitest import Fixture\n"
         "\n"
         "def test_uses_inner(db_conn: Fixture[str]):\n"
-        "    assert 'postgres://' in db_conn\n"
+        "    assert 'postgres://' in db_conn\n",
+        encoding="utf-8",
     )
 
     # ── Act ──────────────────────────────────────────────────────────────

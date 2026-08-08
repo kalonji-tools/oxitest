@@ -18,7 +18,8 @@ def test_shared_fixture_with_parametrize(tmp: TempDir) -> None:
         "def db() -> str:\n"
         "    global call_count\n"
         "    call_count += 1\n"
-        "    return f'conn-{call_count}'\n"
+        "    return f'conn-{call_count}'\n",
+        encoding="utf-8",
     )
     (tmp / "test_shared_param.py").write_text(
         "from dataclasses import dataclass\n"
@@ -32,7 +33,8 @@ def test_shared_fixture_with_parametrize(tmp: TempDir) -> None:
         "@oxi.parametrize(a=Case(1), b=Case(2), c=Case(3))\n"
         "def test_uses_same_db(db: Fixture[str], case: Case):\n"
         "    # shared fixture: always conn-1 regardless of parametrize case\n"
-        "    assert db == 'conn-1', f'expected conn-1, got {db}'\n"
+        "    assert db == 'conn-1', f'expected conn-1, got {db}'\n",
+        encoding="utf-8",
     )
 
     out, _, rc = helpers.run_oxitest(tmp)
@@ -54,7 +56,8 @@ def test_shared_and_autouse_both_apply(tmp: TempDir) -> None:
         "\n"
         "@fx.fixture(autouse=True)\n"
         "def setup():\n"
-        "    log.append('setup')\n"
+        "    log.append('setup')\n",
+        encoding="utf-8",
     )
     (tmp / "test_both.py").write_text(
         "from oxitest import Fixture\n"
@@ -63,7 +66,8 @@ def test_shared_and_autouse_both_apply(tmp: TempDir) -> None:
         "    assert db == 'shared-conn'\n"
         "\n"
         "def test_b(db: Fixture[str]):\n"
-        "    assert db == 'shared-conn'\n"
+        "    assert db == 'shared-conn'\n",
+        encoding="utf-8",
     )
 
     out, _, rc = helpers.run_oxitest(tmp)
@@ -85,13 +89,14 @@ def test_legacy_conftest_autouse_fires_for_sibling_package(tmp: TempDir) -> None
         "def record_firing() -> None:\n"
         "    log = Path(__file__).resolve().parent.parent / 'firings.txt'\n"
         "    with log.open('a') as fh:\n"
-        "        fh.write('fired\\n')\n"
+        "        fh.write('fired\\n')\n",
+        encoding="utf-8",
     )
     (tmp / "alpha" / "test_alpha.py").write_text(
-        "def test_in_alpha():\n    assert True, 'placeholder'\n"
+        "def test_in_alpha():\n    assert True, 'placeholder'\n", encoding="utf-8"
     )
     (tmp / "beta" / "test_beta.py").write_text(
-        "def test_in_beta():\n    assert True, 'placeholder'\n"
+        "def test_in_beta():\n    assert True, 'placeholder'\n", encoding="utf-8"
     )
 
     # Act
@@ -99,7 +104,7 @@ def test_legacy_conftest_autouse_fires_for_sibling_package(tmp: TempDir) -> None
 
     # Assert
     integ.assert_passed(out, rc, count=2)
-    firings = (tmp / "firings.txt").read_text().splitlines()
+    firings = (tmp / "firings.txt").read_text(encoding="utf-8").splitlines()
     assert len(firings) == 2, (
         "legacy conftest autouse is exempt from B1 (unanchored sources are "
         "ambient); if the sibling-package firing disappears, #1774's filter "
@@ -126,7 +131,8 @@ def test_yield_fixture_teardown_lifo(tmp: TempDir) -> None:
         "def second(first: Fixture[str]) -> Yields[str]:\n"
         "    order.append('setup-second')\n"
         "    yield f'{first}+second'\n"
-        "    order.append('teardown-second')\n"
+        "    order.append('teardown-second')\n",
+        encoding="utf-8",
     )
     (tmp / "test_ordering.py").write_text(
         "from oxitest import Fixture\n"
@@ -140,7 +146,8 @@ def test_yield_fixture_teardown_lifo(tmp: TempDir) -> None:
         "    assert conftest.order == [\n"
         "        'setup-first', 'setup-second',\n"
         "        'teardown-second', 'teardown-first',\n"
-        "    ], f'unexpected order: {conftest.order}'\n"
+        "    ], f'unexpected order: {conftest.order}'\n",
+        encoding="utf-8",
     )
 
     out, _, rc = helpers.run_oxitest(tmp)
@@ -158,7 +165,8 @@ def test_skip_takes_precedence_over_xfail(tmp: TempDir) -> None:
         "    assert False\n"
         "\n"
         "def test_plain_pass():\n"
-        "    assert True\n"
+        "    assert True\n",
+        encoding="utf-8",
     )
 
     out, _, rc = helpers.run_oxitest(tmp)

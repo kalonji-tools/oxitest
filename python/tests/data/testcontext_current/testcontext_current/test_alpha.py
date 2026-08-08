@@ -12,7 +12,7 @@ from testcontext_current import _util
 
 def _record(event: str) -> None:
     """Append one event line. Sync, because a bare open in an async body lints."""
-    with Path(os.environ["TCC_LOG"]).open("a") as fh:
+    with Path(os.environ["TCC_LOG"]).open("a", encoding="utf-8") as fh:
         fh.write(f"{event}\n")
 
 

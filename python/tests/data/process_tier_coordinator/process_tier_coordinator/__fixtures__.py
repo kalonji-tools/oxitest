@@ -22,7 +22,7 @@ _COUNTER = itertools.count(1)
 
 def _record(event: str) -> None:
     """Append one event line to the log named by ``PROC_COORD_LOG``."""
-    with Path(os.environ["PROC_COORD_LOG"]).open("a") as fh:
+    with Path(os.environ["PROC_COORD_LOG"]).open("a", encoding="utf-8") as fh:
         fh.write(f"{event}\n")
 
 

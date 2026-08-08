@@ -45,7 +45,8 @@ def test_inspect_expression_filter_accepted(tmp: TempDir) -> None:
     it then fails due to the non-TTY environment (as expected).
     """
     (tmp / "test_hello.py").write_text(
-        "def test_hello():\n    assert 1 + 1 == 2, 'basic arithmetic must hold'\n"
+        "def test_hello():\n    assert 1 + 1 == 2, 'basic arithmetic must hold'\n",
+        encoding="utf-8",
     )
     _out, err, _rc = _run_inspect("-E", "name(hello)", cwd=str(tmp))
     assert "invalid" not in err.lower(), (

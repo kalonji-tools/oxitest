@@ -53,7 +53,7 @@ def _write_tempdir_project(root: Path, log: Path) -> None:
     """A project whose tests each mktemp() a dir and record its path."""
     pkg = root / "pkg"
     pkg.mkdir()
-    (pkg / "conftest.py").write_text("")
+    (pkg / "conftest.py").write_text("", encoding="utf-8")
     for mod in _MODULES:
         body = [
             "import os",
@@ -72,9 +72,10 @@ def _write_tempdir_project(root: Path, log: Path) -> None:
                 "    assert d.exists(), 'temp dir must exist while the test runs'",
                 "",
             ]
-        (pkg / f"test_{mod}.py").write_text("\n".join(body))
+        (pkg / f"test_{mod}.py").write_text("\n".join(body), encoding="utf-8")
     (root / "pyproject.toml").write_text(
-        '[tool.oxitest]\ntestpaths = ["pkg"]\npython_files = ["test_*.py"]\n'
+        '[tool.oxitest]\ntestpaths = ["pkg"]\npython_files = ["test_*.py"]\n',
+        encoding="utf-8",
     )
 
 
@@ -102,14 +103,16 @@ def _write_multi_group_project(root: Path, log: Path) -> None:
             "    d = factory.mktemp('x').path\n"
             "    with LOG.open('a') as fh:\n"
             "        fh.write(f'{os.getpid()} {d}\\n')\n"
-            "    assert d.exists(), 'temp dir must exist while the test runs'\n"
+            "    assert d.exists(), 'temp dir must exist while the test runs'\n",
+            encoding="utf-8",
         )
     (root / "pyproject.toml").write_text(
         "[tool.oxitest]\n"
         'testpaths = ["pkg"]\n'
         'python_files = ["test_*.py"]\n'
         "auto_arrange = false\n"
-        "min_parallel_tests = 1\n"
+        "min_parallel_tests = 1\n",
+        encoding="utf-8",
     )
 
 
@@ -167,7 +170,9 @@ def _entries(log: Path) -> list[tuple[str, Path]]:
         return []
     return [
         (pid, Path(raw))
-        for pid, _, raw in (ln.partition(" ") for ln in log.read_text().splitlines())
+        for pid, _, raw in (
+            ln.partition(" ") for ln in log.read_text(encoding="utf-8").splitlines()
+        )
         if raw
     ]
 
@@ -198,7 +203,7 @@ def test_tempdir_factory_cleaned_up_in_parallel(tmp: TempDir) -> None:
 
     out, err, rc = helpers.run_oxitest(None, "--serial", cwd=str(root))
     assert rc == 0, f"serial baseline must pass\nstdout:\n{out}\nstderr:\n{err}"
-    created = len(log.read_text().splitlines())
+    created = len(log.read_text(encoding="utf-8").splitlines())
     assert created == len(_MODULES) * _TESTS_PER_MODULE, (
         f"every test must record its temp dir, got {created} — "
         "the rest of this test is meaningless if the project did not run"
@@ -251,7 +256,8 @@ def test_shared_fixture_teardown_runs_in_worker(tmp: TempDir) -> None:
         "        fh.write(f'SETUP {os.getpid()}\\n')\n"
         "    yield 'res'\n"
         "    with LOG.open('a') as fh:\n"
-        "        fh.write(f'TEARDOWN {os.getpid()}\\n')\n"
+        "        fh.write(f'TEARDOWN {os.getpid()}\\n')\n",
+        encoding="utf-8",
     )
     for mod in _MODULES:
         body = ["from oxitest import Fixture", ""]
@@ -261,17 +267,18 @@ def test_shared_fixture_teardown_runs_in_worker(tmp: TempDir) -> None:
                 "    assert resource == 'res', 'shared fixture must be injected'",
                 "",
             ]
-        (pkg / f"test_{mod}.py").write_text("\n".join(body))
+        (pkg / f"test_{mod}.py").write_text("\n".join(body), encoding="utf-8")
     (root / "pyproject.toml").write_text(
         "[tool.oxitest]\n"
         'testpaths = ["pkg"]\n'
         'python_files = ["test_*.py"]\n'
-        "auto_arrange = false\n"
+        "auto_arrange = false\n",
+        encoding="utf-8",
     )
 
     out, err, rc = helpers.run_oxitest(None, "-n", "4", cwd=str(root))
     assert rc == 0, f"parallel run must pass\nstdout:\n{out}\nstderr:\n{err}"
-    events = log.read_text().splitlines()
+    events = log.read_text(encoding="utf-8").splitlines()
     setups = [e for e in events if e.startswith("SETUP")]
     teardowns = [e for e in events if e.startswith("TEARDOWN")]
     pids = {e.split()[1] for e in setups}

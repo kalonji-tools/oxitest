@@ -20,7 +20,7 @@ def test_api_writes_to_db(fx: Fixtures) -> None:
 # --8<-- [start:fx-oxi-test]
 def test_export(fx: Fixtures) -> None:
     result = fx.db.conn.export()
-    (fx.oxi.tmp.path / "export.json").write_text(result)
+    (fx.oxi.tmp.path / "export.json").write_text(result, encoding="utf-8")
     assert fx.oxi.tmp.path.joinpath("export.json").exists(), "export file should exist"
 # --8<-- [end:fx-oxi-test]
 

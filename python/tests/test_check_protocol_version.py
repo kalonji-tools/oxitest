@@ -59,7 +59,7 @@ def test_extractor_py_reads_annotated_int_assignment(tmp: TempDir) -> None:
     """
     module = _load_script_module()
     fake_py = tmp / "result.py"
-    fake_py.write_text("PROTOCOL_VERSION: int = 7\n")
+    fake_py.write_text("PROTOCOL_VERSION: int = 7\n", encoding="utf-8")
 
     version = module.parse_protocol_version_py(fake_py)
 
@@ -78,7 +78,7 @@ def test_extractor_py_returns_none_when_constant_absent(tmp: TempDir) -> None:
     """
     module = _load_script_module()
     fake_py = tmp / "result.py"
-    fake_py.write_text("OTHER_CONSTANT: int = 3\n")
+    fake_py.write_text("OTHER_CONSTANT: int = 3\n", encoding="utf-8")
 
     version = module.parse_protocol_version_py(fake_py)
 
@@ -100,7 +100,8 @@ def test_extractor_py_ignores_non_module_level_assignments(tmp: TempDir) -> None
         textwrap.dedent("""\
         class Something:
             PROTOCOL_VERSION: int = 99
-        """)
+        """),
+        encoding="utf-8",
     )
 
     version = module.parse_protocol_version_py(fake_py)
@@ -124,7 +125,9 @@ def test_extractor_rs_reads_pub_crate_const(tmp: TempDir) -> None:
     """
     module = _load_script_module()
     fake_rs = tmp / "wire.rs"
-    fake_rs.write_text("pub(crate) const PROTOCOL_VERSION: u32 = 42;\n")
+    fake_rs.write_text(
+        "pub(crate) const PROTOCOL_VERSION: u32 = 42;\n", encoding="utf-8"
+    )
 
     version = module.parse_protocol_version_rs(fake_rs)
 
@@ -141,7 +144,7 @@ def test_extractor_rs_returns_none_when_constant_absent(tmp: TempDir) -> None:
     """
     module = _load_script_module()
     fake_rs = tmp / "wire.rs"
-    fake_rs.write_text("pub(crate) const OTHER_CONST: u32 = 3;\n")
+    fake_rs.write_text("pub(crate) const OTHER_CONST: u32 = 3;\n", encoding="utf-8")
 
     version = module.parse_protocol_version_rs(fake_rs)
 
@@ -186,26 +189,26 @@ def _build_mock_repo(dst: TempDir, py_version: int, rs_version: int) -> None:
     py_text, py_subs = re.subn(
         r"PROTOCOL_VERSION: int = \d+",
         f"PROTOCOL_VERSION: int = {py_version}",
-        py_path.read_text(),
+        py_path.read_text(encoding="utf-8"),
     )
     assert py_subs == 1, (
         f"expected exactly one PROTOCOL_VERSION assignment in result.py, "
         f"rewrote {py_subs} — the scaffold cannot control the version it is "
         "testing, so every assertion downstream is meaningless"
     )
-    py_path.write_text(py_text)
+    py_path.write_text(py_text, encoding="utf-8")
 
     rs_path = dst / "src/worker_result/wire.rs"
     rs_text, rs_subs = re.subn(
         r"pub\(crate\) const PROTOCOL_VERSION: u32 = \d+;",
         f"pub(crate) const PROTOCOL_VERSION: u32 = {rs_version};",
-        rs_path.read_text(),
+        rs_path.read_text(encoding="utf-8"),
     )
     assert rs_subs == 1, (
         f"expected exactly one PROTOCOL_VERSION const in wire.rs, rewrote "
         f"{rs_subs} — see above"
     )
-    rs_path.write_text(rs_text)
+    rs_path.write_text(rs_text, encoding="utf-8")
 
 
 def test_script_exits_zero_when_versions_match(tmp: TempDir) -> None:

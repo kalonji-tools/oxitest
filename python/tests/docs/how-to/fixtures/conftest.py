@@ -79,7 +79,7 @@ def managed_file(ctx: TestContext) -> Path:
     import os
     os.close(fd)
     path = Path(name)
-    path.write_text("hello")
+    path.write_text("hello", encoding="utf-8")
     ctx.addfinalizer(lambda: path.unlink(missing_ok=True))
     return path
 # --8<-- [end:imperative-teardown]

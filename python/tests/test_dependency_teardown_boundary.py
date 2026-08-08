@@ -304,13 +304,13 @@ def _scaffold(
     """Write a probe project: one fixtures module, one test module."""
     probe = root / "probe"
     probe.mkdir(parents=True)
-    (probe / "__fixtures__.py").write_text(fixtures)
-    (probe / "test_p.py").write_text(tests)
-    (root / "pyproject.toml").write_text(pyproject)
+    (probe / "__fixtures__.py").write_text(fixtures, encoding="utf-8")
+    (probe / "test_p.py").write_text(tests, encoding="utf-8")
+    (root / "pyproject.toml").write_text(pyproject, encoding="utf-8")
     if plugin is not None:
         pkg = root / "probe_plugin"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(plugin)
+        (pkg / "__init__.py").write_text(plugin, encoding="utf-8")
 
 
 def _run(root: Path, log: Path) -> tuple[str, str, int]:
@@ -322,7 +322,7 @@ def _run(root: Path, log: Path) -> tuple[str, str, int]:
 
 def _events(log: Path) -> list[str]:
     """Every recorded line, in order."""
-    return log.read_text().splitlines() if log.exists() else []
+    return log.read_text(encoding="utf-8").splitlines() if log.exists() else []
 
 
 def test_tempdir_survives_the_first_test(tmp: TempDir) -> None:

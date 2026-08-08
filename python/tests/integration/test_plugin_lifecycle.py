@@ -87,9 +87,10 @@ def _write_infra_project(tmp: TempDir, test_code: str, extra_toml: str = "") -> 
         "\n"
         "[tool.oxitest.plugin_settings.oxitest_sample_infra]\n"
         'host = "default-host"\n'
-        f"{extra_toml}"
+        f"{extra_toml}",
+        encoding="utf-8",
     )
-    (tmp / "test_example.py").write_text(test_code)
+    (tmp / "test_example.py").write_text(test_code, encoding="utf-8")
 
 
 def _write_metrics_project(tmp: TempDir, test_code: str, extra_toml: str = "") -> None:
@@ -101,9 +102,10 @@ def _write_metrics_project(tmp: TempDir, test_code: str, extra_toml: str = "") -
         "\n"
         "[tool.oxitest.plugin_settings.oxitest_sample_metrics]\n"
         'output = "metrics.json"\n'
-        f"{extra_toml}"
+        f"{extra_toml}",
+        encoding="utf-8",
     )
-    (tmp / "test_example.py").write_text(test_code)
+    (tmp / "test_example.py").write_text(test_code, encoding="utf-8")
 
 
 def _write_both_plugins_project(tmp: TempDir, test_code: str) -> None:
@@ -118,9 +120,10 @@ def _write_both_plugins_project(tmp: TempDir, test_code: str) -> None:
         'host = "default-host"\n'
         "\n"
         "[tool.oxitest.plugin_settings.oxitest_sample_metrics]\n"
-        'output = "metrics.json"\n'
+        'output = "metrics.json"\n',
+        encoding="utf-8",
     )
-    (tmp / "test_example.py").write_text(test_code)
+    (tmp / "test_example.py").write_text(test_code, encoding="utf-8")
 
 
 def _write_inline_fixture_plugin(tmp: TempDir) -> None:
@@ -147,7 +150,8 @@ def _write_inline_fixture_plugin(tmp: TempDir) -> None:
         "        pass\n\n"
         "def oxitest_plugin(config=None):\n"
         "    Path.cwd().joinpath('plugin_activated.txt').write_text('yes')\n"
-        "    return Plugin(fixture_providers=(SimpleProvider(),))\n"
+        "    return Plugin(fixture_providers=(SimpleProvider(),))\n",
+        encoding="utf-8",
     )
 
 
@@ -172,7 +176,8 @@ def _write_inline_reporter_plugin(tmp: TempDir) -> None:
         "        Path.cwd().joinpath('reporter_output.json').write_text(\n"
         "            json.dumps(self._events, indent=2))\n\n"
         "def oxitest_plugin(config=None):\n"
-        "    return Plugin(reporters=(SimpleReporter(),))\n"
+        "    return Plugin(reporters=(SimpleReporter(),))\n",
+        encoding="utf-8",
     )
 
 
@@ -190,7 +195,8 @@ def _write_inline_wrapper_plugin(tmp: TempDir) -> None:
         "        Path.cwd().joinpath('wrapper_intercepted.txt').write_text('yes')\n"
         "        return test_fn()\n\n"
         "def oxitest_plugin(config=None):\n"
-        "    return Plugin(execution_wrappers=(SimpleWrapper(),))\n"
+        "    return Plugin(execution_wrappers=(SimpleWrapper(),))\n",
+        encoding="utf-8",
     )
 
 
@@ -215,7 +221,8 @@ def test_prefix_collision_produces_error(tmp: TempDir) -> None:
         "class CfgA:\n"
         "    flag_a: Annotated[bool, Cli(help='A')] = False\n\n"
         "oxitest_cli_extension = CliExtension(prefix='dup', config_type=CfgA)\n"
-        "def oxitest_plugin(*, config=None): return Plugin()\n"
+        "def oxitest_plugin(*, config=None): return Plugin()\n",
+        encoding="utf-8",
     )
     (tmp / "dup_plugin_b.py").write_text(
         "from dataclasses import dataclass\n"
@@ -225,14 +232,16 @@ def test_prefix_collision_produces_error(tmp: TempDir) -> None:
         "class CfgB:\n"
         "    flag_b: Annotated[bool, Cli(help='B')] = False\n\n"
         "oxitest_cli_extension = CliExtension(prefix='dup', config_type=CfgB)\n"
-        "def oxitest_plugin(*, config=None): return Plugin()\n"
+        "def oxitest_plugin(*, config=None): return Plugin()\n",
+        encoding="utf-8",
     )
     (tmp / "pyproject.toml").write_text(
         "[tool.oxitest]\n"
         'testpaths = ["."]\n'
-        'plugins = ["dup_plugin_a", "dup_plugin_b"]\n'
+        'plugins = ["dup_plugin_a", "dup_plugin_b"]\n',
+        encoding="utf-8",
     )
-    (tmp / "test_example.py").write_text("def test_one(): pass\n")
+    (tmp / "test_example.py").write_text("def test_one(): pass\n", encoding="utf-8")
     out, err, rc = _run(tmp)
     combined = out + err
     assert rc != 0, f"prefix collision should produce non-zero exit, got {rc}"
@@ -245,9 +254,10 @@ def test_plugin_without_extension_still_works(tmp: TempDir) -> None:
     """Plugin with no oxitest_cli_extension loads and activates normally."""
     _write_inline_fixture_plugin(tmp)
     (tmp / "pyproject.toml").write_text(
-        '[tool.oxitest]\ntestpaths = ["."]\nplugins = ["fixture_plugin"]\n'
+        '[tool.oxitest]\ntestpaths = ["."]\nplugins = ["fixture_plugin"]\n',
+        encoding="utf-8",
     )
-    (tmp / "test_example.py").write_text("def test_one(): pass\n")
+    (tmp / "test_example.py").write_text("def test_one(): pass\n", encoding="utf-8")
     out, _, rc = _run(tmp)
     integ.assert_passed(out, rc)
     assert (tmp / "plugin_activated.txt").exists(), (
@@ -264,7 +274,8 @@ def test_plugin_receives_pyproject_settings(tmp: TempDir) -> None:
         "def oxitest_plugin(config=None):\n"
         "    Path.cwd().joinpath('config_echo.json').write_text(\n"
         "        json.dumps(config))\n"
-        "    return Plugin()\n"
+        "    return Plugin()\n",
+        encoding="utf-8",
     )
     (tmp / "pyproject.toml").write_text(
         "[tool.oxitest]\n"
@@ -273,12 +284,13 @@ def test_plugin_receives_pyproject_settings(tmp: TempDir) -> None:
         "\n"
         "[tool.oxitest.plugin_settings.config_echo_plugin]\n"
         'host = "my-server"\n'
-        "timeout = 60\n"
+        "timeout = 60\n",
+        encoding="utf-8",
     )
-    (tmp / "test_example.py").write_text("def test_one(): pass\n")
+    (tmp / "test_example.py").write_text("def test_one(): pass\n", encoding="utf-8")
     out, _, rc = _run(tmp)
     integ.assert_passed(out, rc)
-    config = json.loads((tmp / "config_echo.json").read_text())
+    config = json.loads((tmp / "config_echo.json").read_text(encoding="utf-8"))
     assert config["host"] == "my-server", (
         f"plugin_settings should reach plugin, got {config['host']!r}"
     )
@@ -317,7 +329,8 @@ def test_fixture_provider_injects_into_tests(tmp: TempDir) -> None:
     """Test function receives simple_value fixture from inline plugin."""
     _write_inline_fixture_plugin(tmp)
     (tmp / "pyproject.toml").write_text(
-        '[tool.oxitest]\ntestpaths = ["."]\nplugins = ["fixture_plugin"]\n'
+        '[tool.oxitest]\ntestpaths = ["."]\nplugins = ["fixture_plugin"]\n',
+        encoding="utf-8",
     )
     (tmp / "test_example.py").write_text(
         "from oxitest import Fixture\n"
@@ -326,7 +339,8 @@ def test_fixture_provider_injects_into_tests(tmp: TempDir) -> None:
         "    print(f'got data={simple_value.data}')\n"
         "    assert simple_value.data == 'hello', (\n"
         "        f'expected hello, got {simple_value.data!r}'\n"
-        "    )\n"
+        "    )\n",
+        encoding="utf-8",
     )
     out, _, rc = _run(tmp)
     integ.assert_passed(out, rc)
@@ -337,14 +351,15 @@ def test_reporter_receives_events_and_writes_output(tmp: TempDir) -> None:
     """Inline reporter plugin writes reporter_output.json with events."""
     _write_inline_reporter_plugin(tmp)
     (tmp / "pyproject.toml").write_text(
-        '[tool.oxitest]\ntestpaths = ["."]\nplugins = ["reporter_plugin"]\n'
+        '[tool.oxitest]\ntestpaths = ["."]\nplugins = ["reporter_plugin"]\n',
+        encoding="utf-8",
     )
-    (tmp / "test_example.py").write_text("def test_one(): pass\n")
+    (tmp / "test_example.py").write_text("def test_one(): pass\n", encoding="utf-8")
     out, _, rc = _run(tmp)
     integ.assert_passed(out, rc)
     reporter_path = tmp / "reporter_output.json"
     assert reporter_path.exists(), "Reporter plugin should write reporter_output.json"
-    events = json.loads(reporter_path.read_text())
+    events = json.loads(reporter_path.read_text(encoding="utf-8"))
     event_types = [e["event"] for e in events]
     assert "started" in event_types, (
         f"reporter should contain 'started' event, got {event_types}"
@@ -364,14 +379,16 @@ def test_execution_wrapper_intercepts_marked_tests(tmp: TempDir) -> None:
         "[tool.oxitest]\n"
         'testpaths = ["."]\n'
         'plugins = ["wrapper_plugin"]\n'
-        'markers = ["remote: run on remote host"]\n'
+        'markers = ["remote: run on remote host"]\n',
+        encoding="utf-8",
     )
     (tmp / "test_example.py").write_text(
         "import oxitest\n\n"
         "@oxitest.mark.remote\n"
         "def test_remote_action() -> None:\n"
         "    print('remote executed')\n"
-        "    assert True, 'remote test should pass'\n"
+        "    assert True, 'remote test should pass'\n",
+        encoding="utf-8",
     )
     out, _, rc = _run(tmp)
     integ.assert_passed(out, rc)
@@ -388,9 +405,10 @@ def test_two_plugins_active_simultaneously(tmp: TempDir) -> None:
     (tmp / "pyproject.toml").write_text(
         "[tool.oxitest]\n"
         'testpaths = ["."]\n'
-        'plugins = ["fixture_plugin", "reporter_plugin"]\n'
+        'plugins = ["fixture_plugin", "reporter_plugin"]\n',
+        encoding="utf-8",
     )
-    (tmp / "test_example.py").write_text("def test_one(): pass\n")
+    (tmp / "test_example.py").write_text("def test_one(): pass\n", encoding="utf-8")
     out, _, rc = _run(tmp)
     integ.assert_passed(out, rc)
     assert (tmp / "plugin_activated.txt").exists(), "fixture plugin should be activated"
@@ -423,12 +441,14 @@ def test_fixtures_from_both_plugins_in_same_test(tmp: TempDir) -> None:
         "    def teardown(self, **_: Any) -> None:\n"
         "        pass\n\n"
         "def oxitest_plugin(config=None):\n"
-        "    return Plugin(fixture_providers=(CounterProvider(),))\n"
+        "    return Plugin(fixture_providers=(CounterProvider(),))\n",
+        encoding="utf-8",
     )
     (tmp / "pyproject.toml").write_text(
         "[tool.oxitest]\n"
         'testpaths = ["."]\n'
-        'plugins = ["fixture_plugin", "fixture_plugin_b"]\n'
+        'plugins = ["fixture_plugin", "fixture_plugin_b"]\n',
+        encoding="utf-8",
     )
     (tmp / "test_example.py").write_text(
         "from oxitest import Fixture\n"
@@ -442,7 +462,8 @@ def test_fixtures_from_both_plugins_in_same_test(tmp: TempDir) -> None:
         "    counter.increment()\n"
         "    assert counter.count == 1, (\n"
         "        f'expected count 1, got {counter.count}'\n"
-        "    )\n"
+        "    )\n",
+        encoding="utf-8",
     )
     out, _, rc = _run(tmp)
     integ.assert_passed(out, rc)
@@ -467,7 +488,8 @@ def test_plugin_configs_independent(tmp: TempDir) -> None:
         "def oxitest_plugin(config=None):\n"
         "    Path.cwd().joinpath('config_x.json').write_text(\n"
         "        json.dumps(config))\n"
-        "    return Plugin()\n"
+        "    return Plugin()\n",
+        encoding="utf-8",
     )
     (tmp / "plugin_y.py").write_text(
         "import json\n"
@@ -476,7 +498,8 @@ def test_plugin_configs_independent(tmp: TempDir) -> None:
         "def oxitest_plugin(config=None):\n"
         "    Path.cwd().joinpath('config_y.json').write_text(\n"
         "        json.dumps(config))\n"
-        "    return Plugin()\n"
+        "    return Plugin()\n",
+        encoding="utf-8",
     )
     (tmp / "pyproject.toml").write_text(
         "[tool.oxitest]\n"
@@ -487,13 +510,14 @@ def test_plugin_configs_independent(tmp: TempDir) -> None:
         'host = "x-host"\n'
         "\n"
         "[tool.oxitest.plugin_settings.plugin_y]\n"
-        'host = "y-host"\n'
+        'host = "y-host"\n',
+        encoding="utf-8",
     )
-    (tmp / "test_example.py").write_text("def test_one(): pass\n")
+    (tmp / "test_example.py").write_text("def test_one(): pass\n", encoding="utf-8")
     out, _, rc = _run(tmp)
     integ.assert_passed(out, rc)
-    cfg_x = json.loads((tmp / "config_x.json").read_text())
-    cfg_y = json.loads((tmp / "config_y.json").read_text())
+    cfg_x = json.loads((tmp / "config_x.json").read_text(encoding="utf-8"))
+    cfg_y = json.loads((tmp / "config_y.json").read_text(encoding="utf-8"))
     assert cfg_x["host"] == "x-host", (
         f"plugin_x should see x-host, got {cfg_x['host']!r}"
     )
@@ -508,9 +532,10 @@ def test_plugin_configs_independent(tmp: TempDir) -> None:
 def test_missing_plugin_module_error(tmp: TempDir) -> None:
     """Missing plugin module should produce a clear error mentioning the module name."""
     (tmp / "pyproject.toml").write_text(
-        '[tool.oxitest]\ntestpaths = ["."]\nplugins = ["nonexistent_plugin_xyz"]\n'
+        '[tool.oxitest]\ntestpaths = ["."]\nplugins = ["nonexistent_plugin_xyz"]\n',
+        encoding="utf-8",
     )
-    (tmp / "test_example.py").write_text("def test_one(): pass\n")
+    (tmp / "test_example.py").write_text("def test_one(): pass\n", encoding="utf-8")
     out, err, rc = _run(tmp)
     combined = out + err
     assert rc != 0, f"missing plugin should produce non-zero exit, got {rc}"
@@ -522,12 +547,13 @@ def test_missing_plugin_module_error(tmp: TempDir) -> None:
 def test_invalid_entrypoint_return_type_error(tmp: TempDir) -> None:
     """oxitest_plugin returns a string instead of Plugin; clear error."""
     (tmp / "bad_plugin.py").write_text(
-        "def oxitest_plugin(config=None): return 'not a Plugin'\n"
+        "def oxitest_plugin(config=None): return 'not a Plugin'\n", encoding="utf-8"
     )
     (tmp / "pyproject.toml").write_text(
-        '[tool.oxitest]\ntestpaths = ["."]\nplugins = ["bad_plugin"]\n'
+        '[tool.oxitest]\ntestpaths = ["."]\nplugins = ["bad_plugin"]\n',
+        encoding="utf-8",
     )
-    (tmp / "test_example.py").write_text("def test_one(): pass\n")
+    (tmp / "test_example.py").write_text("def test_one(): pass\n", encoding="utf-8")
     *_, rc = _run(tmp)
     assert rc != 0, f"invalid entrypoint should produce non-zero exit, got {rc}"
 
@@ -593,7 +619,9 @@ def test_plugin_config_precedence(tmp: TempDir, case: CliPrecedenceCase) -> None
     out, err, rc = _run(tmp, *case.cli_args, env_extra=case.env_extra or None)
     combined = out + err
     integ.assert_passed(combined, rc)
-    config = json.loads((tmp / "infra_config_received.json").read_text())
+    config = json.loads(
+        (tmp / "infra_config_received.json").read_text(encoding="utf-8")
+    )
     assert config["host"] == case.expected_host, (
         f"expected host={case.expected_host!r} with cli={case.cli_args} "
         f"env={case.env_extra}, got {config['host']!r}"
@@ -602,8 +630,10 @@ def test_plugin_config_precedence(tmp: TempDir, case: CliPrecedenceCase) -> None
 
 def test_unknown_flag_rejected_without_plugins(tmp: TempDir) -> None:
     """Unknown flags still produce errors when no plugins are configured."""
-    (tmp / "pyproject.toml").write_text('[tool.oxitest]\ntestpaths = ["."]\n')
-    (tmp / "test_example.py").write_text("def test_one(): pass\n")
+    (tmp / "pyproject.toml").write_text(
+        '[tool.oxitest]\ntestpaths = ["."]\n', encoding="utf-8"
+    )
+    (tmp / "test_example.py").write_text("def test_one(): pass\n", encoding="utf-8")
     out, err, rc = _run(tmp, "--bogus-flag")
     assert rc != 0, f"unknown flag should produce non-zero exit, got {rc}"
     combined = (out + err).lower()

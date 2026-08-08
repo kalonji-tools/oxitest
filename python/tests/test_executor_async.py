@@ -571,7 +571,8 @@ def test_shared_async_fixture_cached_across_tests(tmp: TempDir) -> None:
         "async def test_a(pool: Fixture[int]) -> None:\n"
         "    assert pool == 1\n"
         "async def test_b(pool: Fixture[int]) -> None:\n"
-        "    assert pool == 1\n"
+        "    assert pool == 1\n",
+        encoding="utf-8",
     )
     call_count = 0
 
@@ -625,7 +626,8 @@ def test_shared_async_stray_task_cleanup(tmp: TempDir) -> None:
         "async def test_leaker(pool: Fixture[int]) -> None:\n"
         "    asyncio.get_event_loop().create_task(asyncio.sleep(999))\n"
         "async def test_clean(pool: Fixture[int]) -> None:\n"
-        "    assert pool == 42\n"
+        "    assert pool == 42\n",
+        encoding="utf-8",
     )
 
     async def async_pool_factory() -> int:
@@ -680,7 +682,8 @@ def test_shared_async_yield_fixture_teardown_at_session_end(tmp: TempDir) -> Non
     f.write_text(
         "from oxitest import Fixture\n"
         "async def test_ok(pool: Fixture[int]) -> None:\n"
-        "    assert pool == 42\n"
+        "    assert pool == 42\n",
+        encoding="utf-8",
     )
     log: list[str] = []
 
@@ -732,7 +735,8 @@ def test_non_shared_async_test_gets_own_loop(tmp: TempDir) -> None:
         "    assert pool == 42\n"
         "async def test_independent() -> None:\n"
         "    loop = asyncio.get_running_loop()\n"
-        "    assert loop is not None\n"
+        "    assert loop is not None\n",
+        encoding="utf-8",
     )
 
     async def async_pool_factory() -> int:

@@ -9,7 +9,7 @@ ModuleSource-backed FixtureDef. Enforces loud collision detection.
 from __future__ import annotations
 
 import types
-from pathlib import Path
+from pathlib import Path, PurePath
 
 from oxitest import TempDir, raises
 from oxitest._bridge._errors import UsageError
@@ -483,7 +483,12 @@ def test_async_function_autouse_is_refused() -> None:
 
     # Assert
     message = str(caught.value)
-    assert "txn" in message and path in message, (
+    # The diagnostic renders an absolute path, so on Windows a POSIX `__file__`
+    # comes back as `D:\t\pkg\__fixtures__.py` and the literal input string is
+    # not in it. Asserting the tail components keeps the real requirement — the
+    # message names the fixture and locates its file — on every platform (#1989).
+    located = PurePath(path).parts[-2:]
+    assert "txn" in message and all(part in message for part in located), (
         "the user has to find the declaration; a message naming neither the "
         f"fixture nor its file leaves them grepping a whole tree: {message!r}"
     )

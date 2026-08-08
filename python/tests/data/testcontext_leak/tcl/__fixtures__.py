@@ -19,7 +19,7 @@ from oxitest._bridge._errors import TestContextUnavailableError
 
 def _record(event: str) -> None:
     """Append one event line to the log named by ``TCL_LOG``."""
-    with Path(os.environ["TCL_LOG"]).open("a") as fh:
+    with Path(os.environ["TCL_LOG"]).open("a", encoding="utf-8") as fh:
         fh.write(f"{event}\n")
 
 

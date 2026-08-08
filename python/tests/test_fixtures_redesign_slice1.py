@@ -36,7 +36,7 @@ def test_module_source_end_to_end(tmp: TempDir) -> None:
     assert json_path.exists(), (
         f"--json should create the output file; stdout:\n{out}\nstderr:\n{err}"
     )
-    data = json.loads(json_path.read_text())
+    data = json.loads(json_path.read_text(encoding="utf-8"))
     tests = data["results"]["tests"]
     outcomes = {t["name"]: t["status"] for t in tests}
     assert len(outcomes) == 2, (
@@ -62,13 +62,15 @@ def test_old_fixtures_api_still_works(tmp: TempDir) -> None:
         "fx = Fixtures()\n\n"
         "@fx.fixture\n"
         "def db() -> str:\n"
-        "    return 'connected'\n"
+        "    return 'connected'\n",
+        encoding="utf-8",
     )
     (tmp / "test_old_api.py").write_text(
         "from oxitest import Fixture\n\n"
         "def test_uses_old_api(db: Fixture[str]) -> None:\n"
         "    assert db == 'connected', "
-        "'old Fixtures() conftest API must still work after ModuleSource changes'\n"
+        "'old Fixtures() conftest API must still work after ModuleSource changes'\n",
+        encoding="utf-8",
     )
 
     out, err, rc = helpers.run_oxitest(tmp)
@@ -145,13 +147,16 @@ def test_syntax_error_in_fixtures_py_diagnoses(tmp: TempDir) -> None:
     """
     inner = tmp / "broken_pkg"
     inner.mkdir()
-    (inner / "__init__.py").write_text("")
-    (inner / "__fixtures__.py").write_text("def broken(\n")  # syntax error
+    (inner / "__init__.py").write_text("", encoding="utf-8")
+    (inner / "__fixtures__.py").write_text(
+        "def broken(\n", encoding="utf-8"
+    )  # syntax error
     (inner / "test_x.py").write_text(
-        "def test_something():\n    assert True, 'sanity'\n"
+        "def test_something():\n    assert True, 'sanity'\n", encoding="utf-8"
     )
     (tmp / "pyproject.toml").write_text(
-        '[tool.oxitest]\ntestpaths = ["broken_pkg"]\npython_files = ["test_*.py"]\n'
+        '[tool.oxitest]\ntestpaths = ["broken_pkg"]\npython_files = ["test_*.py"]\n',
+        encoding="utf-8",
     )
 
     out, err, _rc = helpers.run_oxitest(tmp)
@@ -173,21 +178,24 @@ def test_decorated_fixture_raising_surfaces_error(tmp: TempDir) -> None:
     """
     inner = tmp / "raising_pkg"
     inner.mkdir()
-    (inner / "__init__.py").write_text("")
+    (inner / "__init__.py").write_text("", encoding="utf-8")
     (inner / "__fixtures__.py").write_text(
         "import oxitest as oxi\n\n"
         '@oxi.fixture(lifetime="function")\n'
         "def conn() -> object:\n"
-        "    raise RuntimeError('boom from fixture')\n"
+        "    raise RuntimeError('boom from fixture')\n",
+        encoding="utf-8",
     )
     (inner / "test_x.py").write_text(
         "from oxitest import Fixtures\n\n"
         "def test_uses_conn(fx: Fixtures) -> None:\n"
         "    conn = fx.raising_pkg.conn\n"
-        "    assert conn is not None, 'should have raised before reaching here'\n"
+        "    assert conn is not None, 'should have raised before reaching here'\n",
+        encoding="utf-8",
     )
     (tmp / "pyproject.toml").write_text(
-        '[tool.oxitest]\ntestpaths = ["raising_pkg"]\npython_files = ["test_*.py"]\n'
+        '[tool.oxitest]\ntestpaths = ["raising_pkg"]\npython_files = ["test_*.py"]\n',
+        encoding="utf-8",
     )
 
     out, err, rc = helpers.run_oxitest(tmp)

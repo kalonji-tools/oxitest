@@ -21,14 +21,14 @@ def write_test_file(
 ) -> str:
     """Write a test file into *tmp_path* and return its path as str."""
     f = tmp_path / name
-    f.write_text(code)
+    f.write_text(code, encoding="utf-8")
     return str(f)
 
 
 def write_test_module(tmp: TempDir, code: str, *, name: str = "test_auto.py") -> str:
     """Write dedented code to a named file in tmp and return its path as str."""
     f = tmp / name
-    f.write_text(textwrap.dedent(code))
+    f.write_text(textwrap.dedent(code), encoding="utf-8")
     return str(f)
 
 

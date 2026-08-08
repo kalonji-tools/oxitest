@@ -49,7 +49,7 @@ def test_cached_fixture_values_render_their_value(tmp: TempDir) -> None:
     # checkout's absolute path, so key on the function name alone.
     outcomes = {
         t["name"].rpartition("::")[2]: t["status"]
-        for t in json.loads(report.read_text())["results"]["tests"]
+        for t in json.loads(report.read_text(encoding="utf-8"))["results"]["tests"]
     }
     assert set(outcomes) == _EXPECTED, (
         f"the data-project did not run as written — expected {sorted(_EXPECTED)}, "

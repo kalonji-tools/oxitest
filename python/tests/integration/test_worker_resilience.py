@@ -16,7 +16,8 @@ def test_worker_crash_reported_as_failure(tmp: TempDir) -> None:
         "    assert 1 == 1\n"
         "\n"
         "def test_crashes():\n"
-        "    os._exit(1)\n"
+        "    os._exit(1)\n",
+        encoding="utf-8",
     )
 
     out, stderr, rc = helpers.run_oxitest(tmp, "--workers", "2")
@@ -37,7 +38,8 @@ def test_timeout_reported_per_test(tmp: TempDir) -> None:
         "    assert 1 == 1\n"
         "\n"
         "def test_hangs():\n"
-        "    time.sleep(30)\n"
+        "    time.sleep(30)\n",
+        encoding="utf-8",
     )
 
     out, _, rc = helpers.run_oxitest(tmp, "--timeout", "1")

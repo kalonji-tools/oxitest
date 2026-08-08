@@ -365,7 +365,8 @@ def test_script_exits_1_on_a_mock_layout_with_a_mismatch(tmp: TempDir) -> None:
                 needs: [alpha, beta]
                 steps:
                   - run: echo "${{ needs.alpha.result }}"
-        """)
+        """),
+        encoding="utf-8",
     )
 
     # Act

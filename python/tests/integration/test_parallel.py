@@ -18,10 +18,11 @@ def _parse_counts(out: str) -> dict[str, int]:
 def test_serial_and_default_same_counts(tmp: TempDir) -> None:
     """Serial and default (parallel) runs produce the same outcome counts."""
     (tmp / "test_a.py").write_text(
-        "def test_one(): assert True\ndef test_two(): assert True\n"
+        "def test_one(): assert True\ndef test_two(): assert True\n", encoding="utf-8"
     )
     (tmp / "test_b.py").write_text(
-        "def test_fail(): assert False\ndef test_pass(): assert True\n"
+        "def test_fail(): assert False\ndef test_pass(): assert True\n",
+        encoding="utf-8",
     )
     serial_out, _, _ = helpers.run_oxitest(tmp, "--serial")
     default_out, _, _ = helpers.run_oxitest(tmp)
@@ -37,7 +38,8 @@ def test_serial_and_default_both_pass(tmp: TempDir) -> None:
     (tmp / "test_all_pass.py").write_text(
         "def test_alpha(): assert True\n"
         "def test_beta(): assert True\n"
-        "def test_gamma(): assert True\n"
+        "def test_gamma(): assert True\n",
+        encoding="utf-8",
     )
     serial_out, _, serial_rc = helpers.run_oxitest(tmp, "--serial")
     default_out, _, default_rc = helpers.run_oxitest(tmp)

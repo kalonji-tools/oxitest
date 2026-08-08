@@ -345,14 +345,16 @@ def test_full_pipeline_fx_namespace_access(tmp: TempDir) -> None:
         "db = oxitest.Fixtures()\n"
         "@db.fixture\n"
         "def conn() -> str:\n"
-        "    return 'connected'\n"
+        "    return 'connected'\n",
+        encoding="utf-8",
     )
 
     test_file = tmp / "test_ns.py"
     test_file.write_text(
         "import oxitest\n"
         "def test_access(fx: oxitest.Fixtures) -> None:\n"
-        "    assert fx.db.conn == 'connected'\n"
+        "    assert fx.db.conn == 'connected'\n",
+        encoding="utf-8",
     )
 
     defs = load_fixtures_from_conftest(str(conftest))
@@ -381,7 +383,8 @@ def test_full_pipeline_fx_oxi_tmp(
         "def test_oxi_tmp(fx: oxitest.Fixtures) -> None:\n"
         "    p = Path(str(fx.oxi.tmp)) / 'hello.txt'\n"
         "    p.write_text('hi')\n"
-        "    assert p.read_text() == 'hi'\n"
+        "    assert p.read_text() == 'hi'\n",
+        encoding="utf-8",
     )
 
     result = helpers.run_test(str(test_file), "test_oxi_tmp", fixture_session)
@@ -406,7 +409,8 @@ def test_full_pipeline_two_namespaces_same_fixture_name(tmp: TempDir) -> None:
         "cache = oxitest.Fixtures()\n"
         "@cache.fixture\n"
         "def url() -> str:\n"
-        "    return 'redis://localhost'\n"
+        "    return 'redis://localhost'\n",
+        encoding="utf-8",
     )
 
     test_file = tmp / "test_two_ns.py"
@@ -414,7 +418,8 @@ def test_full_pipeline_two_namespaces_same_fixture_name(tmp: TempDir) -> None:
         "import oxitest\n"
         "def test_two_namespaces(fx: oxitest.Fixtures) -> None:\n"
         "    assert fx.db.url == 'postgres://localhost'\n"
-        "    assert fx.cache.url == 'redis://localhost'\n"
+        "    assert fx.cache.url == 'redis://localhost'\n",
+        encoding="utf-8",
     )
 
     defs = load_fixtures_from_conftest(str(conftest))

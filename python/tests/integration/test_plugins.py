@@ -7,8 +7,10 @@ from tests.integration import helpers as integ
 
 def test_plugins_no_plugins_configured(tmp: TempDir) -> None:
     """`plugins` with no plugins shows 'no plugins configured' and exits 0."""
-    (tmp / "pyproject.toml").write_text("[tool.oxitest]\ntestpaths = ['.']\n")
-    (tmp / "test_example.py").write_text("def test_one(): pass\n")
+    (tmp / "pyproject.toml").write_text(
+        "[tool.oxitest]\ntestpaths = ['.']\n", encoding="utf-8"
+    )
+    (tmp / "test_example.py").write_text("def test_one(): pass\n", encoding="utf-8")
     out, _, rc = helpers.run_oxitest_subcmd(tmp, "query", "plugins", cwd=".")
     integ.assert_passed(out, rc)
     integ.assert_contains(out, "no results")
@@ -16,7 +18,7 @@ def test_plugins_no_plugins_configured(tmp: TempDir) -> None:
 
 def test_plugins_exits_zero(tmp: TempDir) -> None:
     """`plugins` exits 0 even with no pyproject.toml."""
-    (tmp / "test_example.py").write_text("def test_one(): pass\n")
+    (tmp / "test_example.py").write_text("def test_one(): pass\n", encoding="utf-8")
     out, _, rc = helpers.run_oxitest_subcmd(tmp, "query", "plugins", cwd=".")
     integ.assert_passed(out, rc)
 
@@ -32,12 +34,14 @@ def test_plugins_with_configured_plugin(tmp: TempDir) -> None:
         "    @property\n"
         "    def records(self): return []\n\n"
         "def oxitest_plugin(config=None):\n"
-        "    return Plugin(log_backends=(_Log(),))\n"
+        "    return Plugin(log_backends=(_Log(),))\n",
+        encoding="utf-8",
     )
     (tmp / "pyproject.toml").write_text(
-        "[tool.oxitest]\ntestpaths = ['.']\nplugins = [\"my_plugin\"]\n"
+        "[tool.oxitest]\ntestpaths = ['.']\nplugins = [\"my_plugin\"]\n",
+        encoding="utf-8",
     )
-    (tmp / "test_example.py").write_text("def test_one(): pass\n")
+    (tmp / "test_example.py").write_text("def test_one(): pass\n", encoding="utf-8")
     out, _, rc = helpers.run_oxitest_subcmd(tmp, "query", "plugins", cwd=".")
     integ.assert_passed(out, rc)
     integ.assert_contains(out, "my_plugin")

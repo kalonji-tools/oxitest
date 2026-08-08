@@ -149,9 +149,10 @@ def test_diagnostic_surfaces_via_oxitest_runner(tmp: TempDir) -> None:
         "\n"
         "@fx.fixture(autouse=True)\n"
         "async def each_txn():\n"
-        "    yield\n"
+        "    yield\n",
+        encoding="utf-8",
     )
-    (tmp / "test_sample.py").write_text("def test_noop(): pass\n")
+    (tmp / "test_sample.py").write_text("def test_noop(): pass\n", encoding="utf-8")
 
     out, err, rc = helpers.run_oxitest(tmp)
 

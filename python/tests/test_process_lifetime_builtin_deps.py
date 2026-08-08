@@ -97,9 +97,9 @@ def _write_project(root: Path, test_module: str) -> None:
     """Scaffold a project whose process-lifetime fixture uses the factory."""
     probe = root / "probe"
     probe.mkdir(parents=True)
-    (probe / "__fixtures__.py").write_text(_FIXTURES)
-    (probe / "test_p.py").write_text(test_module)
-    (root / "pyproject.toml").write_text(_PYPROJECT)
+    (probe / "__fixtures__.py").write_text(_FIXTURES, encoding="utf-8")
+    (probe / "test_p.py").write_text(test_module, encoding="utf-8")
+    (root / "pyproject.toml").write_text(_PYPROJECT, encoding="utf-8")
 
 
 def _run(root: Path, log: Path) -> tuple[str, str, int]:
@@ -115,7 +115,7 @@ def _lines(log: Path, prefix: str) -> list[str]:
         return []
     return [
         ln.removeprefix(prefix)
-        for ln in log.read_text().splitlines()
+        for ln in log.read_text(encoding="utf-8").splitlines()
         if ln.startswith(prefix)
     ]
 

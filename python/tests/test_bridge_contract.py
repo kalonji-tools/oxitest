@@ -134,7 +134,7 @@ def test_collected_item_fields_match_rust() -> None:
     field. The contract test verifies that every Rust field name is accessible
     as a Python attribute on a sample instance.
     """
-    source = _BRIDGE_RS.read_text()
+    source = _BRIDGE_RS.read_text(encoding="utf-8")
     rust_fields = _rust_struct_fields(source, "CollectedItem")
     # Python dataclass fields — ``kind`` replaces the ``param_id`` field, but
     # ``param_id`` is still exposed as a @property for Rust compat.
@@ -155,7 +155,7 @@ def test_collected_item_fields_match_rust() -> None:
 
 def test_raw_violation_fields_match_rust() -> None:
     """CollectedViolation fields must match RawViolation in bridge.rs."""
-    source = _BRIDGE_RS.read_text()
+    source = _BRIDGE_RS.read_text(encoding="utf-8")
     rust_fields = _rust_struct_fields(source, "RawViolation")
     python_fields = _python_fields(CollectedViolation)
     assert rust_fields == python_fields, (
@@ -173,7 +173,7 @@ def test_frame_fields_match_rust() -> None:
     (bridge path). A field rename on either side causes silent data loss or a
     runtime panic with no compile-time protection.
     """
-    source = _WORKER_RESULT_RS.read_text()
+    source = _WORKER_RESULT_RS.read_text(encoding="utf-8")
     rust_fields = _rust_struct_fields(source, "RawFrame")
     python_fields = _python_fields(Frame)
     assert rust_fields == python_fields, (
@@ -313,7 +313,7 @@ def test_collected_item_manual_construction() -> None:
 
 def test_violation_kind_variants_match_rust() -> None:
     """Every Python ViolationKind value has a Rust match arm (not Unknown)."""
-    source = _BRIDGE_RS.read_text()
+    source = _BRIDGE_RS.read_text(encoding="utf-8")
     rust_values = _rust_violation_kind_values(source)
     python_values = frozenset(v.value for v in ViolationKind)
     assert rust_values == python_values, (
@@ -604,7 +604,7 @@ def test_protocol_version_always_present() -> None:
 
 def test_protocol_version_matches_rust_constant() -> None:
     """Python PROTOCOL_VERSION must equal Rust PROTOCOL_VERSION."""
-    source = _WORKER_RESULT_RS.read_text()
+    source = _WORKER_RESULT_RS.read_text(encoding="utf-8")
     match = re.search(r"PROTOCOL_VERSION:\s*u32\s*=\s*(\d+)", source)
     assert match, "PROTOCOL_VERSION not found in src/worker_result/wire.rs"
     rust_version = int(match.group(1))
@@ -682,7 +682,7 @@ def test_fixture_session_has_bridge_methods() -> None:
     src/reporter/bridge.rs at test-run time so it stays in sync automatically
     as the Rust side evolves.
     """
-    source = "\n".join(f.read_text() for f in _BRIDGE_RS_FILES)
+    source = "\n".join(f.read_text(encoding="utf-8") for f in _BRIDGE_RS_FILES)
     bridge_methods = _rust_bridge_method_calls(source)
     session = FixtureSession(FixtureRegistry())
     for method in sorted(bridge_methods):

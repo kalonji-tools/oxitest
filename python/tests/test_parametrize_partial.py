@@ -418,7 +418,8 @@ def test_executor_composed_with_fixture(tmp: TempDir) -> None:
         "fixtures = oxitest.Fixtures()\n"
         "@fixtures.fixture\n"
         "def multiplier():\n"
-        "    return 10\n"
+        "    return 10\n",
+        encoding="utf-8",
     )
     f = tmp / "test_mul.py"
     f.write_text(
@@ -433,7 +434,8 @@ def test_executor_composed_with_fixture(tmp: TempDir) -> None:
         "@oxitest.parametrize(a=partial(Case, x=2))\n"
         "@oxitest.parametrize(c=partial(Case, expected=20))\n"
         "def test_mul(x: int, expected: int, multiplier: Fixture[int]) -> None:\n"
-        "    assert x * multiplier == expected\n"
+        "    assert x * multiplier == expected\n",
+        encoding="utf-8",
     )
     session, _, _diags = create_session([str(conftest)])
     result = helpers.run_test(str(f), "test_mul", session=session, param_id="a-c")
@@ -476,7 +478,8 @@ def test_executor_composed_with_fixture_ref(tmp: TempDir) -> None:
         "fixtures = oxitest.Fixtures()\n"
         "@fixtures.fixture\n"
         "def pg_db():\n"
-        "    return 'postgres'\n"
+        "    return 'postgres'\n",
+        encoding="utf-8",
     )
     f = tmp / "test_db.py"
     f.write_text(
@@ -494,7 +497,8 @@ def test_executor_composed_with_fixture_ref(tmp: TempDir) -> None:
         "@oxitest.parametrize(pg=partial(Case, db=pg_db))\n"
         "@oxitest.parametrize(check=partial(Case, expected='postgres'))\n"
         "def test_db(db: Fixture[str], expected: str) -> None:\n"
-        "    assert db == expected\n"
+        "    assert db == expected\n",
+        encoding="utf-8",
     )
     session, _, _diags = create_session([str(conftest)])
     result = helpers.run_test(str(f), "test_db", session=session, param_id="pg-check")

@@ -99,7 +99,8 @@ def test_captured_warnings_not_in_report(tmp: TempDir) -> None:
         def test_uncaptured():
             warnings.warn("not_captured", UserWarning, stacklevel=1)
             assert True, ""
-    """)
+    """),
+        encoding="utf-8",
     )
     result = subprocess.run(
         [sys.executable, "-m", "oxitest", str(tmp), "--serial", "--warnings"],

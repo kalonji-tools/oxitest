@@ -186,7 +186,8 @@ def test_executor_dict_mode_with_fixture(tmp: TempDir) -> None:
         "fixtures = oxitest.Fixtures()\n"
         "@fixtures.fixture\n"
         "def multiplier():\n"
-        "    return 10\n"
+        "    return 10\n",
+        encoding="utf-8",
     )
     f = tmp / "test_mul.py"
     f.write_text(
@@ -195,7 +196,8 @@ def test_executor_dict_mode_with_fixture(tmp: TempDir) -> None:
         "from oxitest import Fixture\n"
         "@oxitest.parametrize(double=dict(x=2, expected=20))\n"
         "def test_mul(x: int, expected: int, multiplier: Fixture[int]) -> None:\n"
-        "    assert x * multiplier == expected\n"
+        "    assert x * multiplier == expected\n",
+        encoding="utf-8",
     )
     session, _, _diags = create_session([str(conftest)])
     result = helpers.run_test(str(f), "test_mul", session=session, param_id="double")

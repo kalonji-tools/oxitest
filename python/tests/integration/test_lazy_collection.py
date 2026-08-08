@@ -83,7 +83,7 @@ def test_lazy_collection_last_failed_only_imports_matched(tmp: TempDir) -> None:
     integ.assert_failed(out, rc)
 
     # Fix the test
-    (tmp / "test_b.py").write_text("def test_fail(): pass\n")
+    (tmp / "test_b.py").write_text("def test_fail(): pass\n", encoding="utf-8")
 
     # Second run with --failed=only
     out, _, rc = helpers.run_oxitest(tmp, "--failed=only")
@@ -92,22 +92,24 @@ def test_lazy_collection_last_failed_only_imports_matched(tmp: TempDir) -> None:
 
 def test_lazy_collection_conftest_ancestor_chain(tmp: TempDir) -> None:
     """Filtered run should only load ancestor-chain conftests."""
-    (tmp / "pyproject.toml").write_text("[tool.oxitest]\n")
+    (tmp / "pyproject.toml").write_text("[tool.oxitest]\n", encoding="utf-8")
     (tmp / "conftest.py").write_text(
         "from oxitest import Fixtures\n"
         "fx = Fixtures()\n"
         "@fx.fixture\n"
         "def shared():\n"
-        "    return 42\n"
+        "    return 42\n",
+        encoding="utf-8",
     )
     unit = tmp / "unit"
     unit.mkdir()
     (unit / "test_a.py").write_text(
-        "from oxitest import Fixture\ndef test_unit(shared: Fixture[int]): pass\n"
+        "from oxitest import Fixture\ndef test_unit(shared: Fixture[int]): pass\n",
+        encoding="utf-8",
     )
     integ_dir = tmp / "integration"
     integ_dir.mkdir()
-    (integ_dir / "test_b.py").write_text("def test_integ(): pass\n")
+    (integ_dir / "test_b.py").write_text("def test_integ(): pass\n", encoding="utf-8")
 
     # Run only unit test
     out, _, rc = helpers.run_oxitest_subcmd(

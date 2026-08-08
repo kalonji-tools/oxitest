@@ -8,7 +8,7 @@ from tests.integration import helpers as integ
 def test_all_pass_exits_zero(tmp: TempDir) -> None:
     """All-passing test suite should exit 0 with no failures reported."""
     (tmp / "test_ok.py").write_text(
-        "def test_a(): assert 1 == 1\ndef test_b(): assert True\n"
+        "def test_a(): assert 1 == 1\ndef test_b(): assert True\n", encoding="utf-8"
     )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_passed(out, rc)
@@ -16,7 +16,7 @@ def test_all_pass_exits_zero(tmp: TempDir) -> None:
 
 def test_failure_exits_one(tmp: TempDir) -> None:
     """A failing assertion should cause oxitest to exit with a non-zero code."""
-    (tmp / "test_fail.py").write_text("def test_x(): assert 1 == 2\n")
+    (tmp / "test_fail.py").write_text("def test_x(): assert 1 == 2\n", encoding="utf-8")
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_failed(out, rc)
 
@@ -26,7 +26,8 @@ def test_all_skip_exits_zero(tmp: TempDir) -> None:
     (tmp / "test_skip.py").write_text(
         "import oxitest\n\n"
         "@oxitest.mark.skip(reason='not ready')\n"
-        "def test_skipped(): pass\n"
+        "def test_skipped(): pass\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_passed(out, rc)
@@ -38,7 +39,8 @@ def test_xfail_exits_zero(tmp: TempDir) -> None:
     (tmp / "test_xfail.py").write_text(
         "import oxitest\n\n"
         "@oxitest.mark.xfail(reason='known bug')\n"
-        "def test_expected_fail(): assert False\n"
+        "def test_expected_fail(): assert False\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_passed(out, rc)
@@ -48,7 +50,7 @@ def test_xfail_exits_zero(tmp: TempDir) -> None:
 def test_mixed_pass_and_fail(tmp: TempDir) -> None:
     """A suite with both passing and failing tests should exit non-zero."""
     (tmp / "test_mix.py").write_text(
-        "def test_good(): assert True\ndef test_bad(): assert False\n"
+        "def test_good(): assert True\ndef test_bad(): assert False\n", encoding="utf-8"
     )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_failed(out, rc)
@@ -57,7 +59,7 @@ def test_mixed_pass_and_fail(tmp: TempDir) -> None:
 
 def test_no_tests_collected(tmp: TempDir) -> None:
     """A file with no test functions should exit 0 with zero tests collected."""
-    (tmp / "test_empty.py").write_text("# no test functions\n")
+    (tmp / "test_empty.py").write_text("# no test functions\n", encoding="utf-8")
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_passed(out, rc)
 
@@ -84,7 +86,8 @@ def test_composed_parametrize_runs_cartesian_product(tmp: TempDir) -> None:
         ")\n"
         "def test_math(label: str, multiplier: int) -> None:\n"
         "    assert isinstance(label, str), 'label should be str'\n"
-        "    assert multiplier > 0, 'multiplier should be positive'\n"
+        "    assert multiplier > 0, 'multiplier should be positive'\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_passed(out, rc, count=4)

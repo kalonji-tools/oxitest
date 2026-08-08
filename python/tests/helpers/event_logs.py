@@ -104,5 +104,5 @@ def run_with_event_log(
     log = Path(tmp) / log_name
     env = {**os.environ, env_var: str(log)}
     stdout, stderr, rc = run_oxitest(project, *args, env=env)
-    events = tuple(log.read_text().splitlines()) if log.exists() else ()
+    events = tuple(log.read_text(encoding="utf-8").splitlines()) if log.exists() else ()
     return EventLogRun(stdout=stdout, stderr=stderr, rc=rc, events=events)

@@ -80,7 +80,7 @@ def test_failure_output(
     extra_args: tuple[str, ...],
 ) -> None:
     """Failure output matches expected patterns for each scenario."""
-    (tmp / "test_check.py").write_text(test_code)
+    (tmp / "test_check.py").write_text(test_code, encoding="utf-8")
     out, _, rc = helpers.run_oxitest(tmp, *extra_args)
     assert rc != 0, f"expected non-zero exit code:\n{out}"
     for s in expected:
@@ -105,7 +105,8 @@ def test_default_hides_passing_tests(tmp: TempDir) -> None:
 
         def test_fail():
             assert 1 == 2, ""
-    """)
+    """),
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp, "--serial")
     assert rc != 0, f"expected non-zero exit code, got rc={rc}\n{out}"
@@ -133,7 +134,8 @@ def test_verbose_failure_node_id_shown(tmp: TempDir) -> None:
 
         def test_fail_gamma():
             assert 1 == 2, ""
-    """)
+    """),
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp, "--serial", "-v")
     assert rc != 0, f"expected non-zero exit code, got rc={rc}\n{out}"
@@ -153,7 +155,8 @@ def test_default_shows_summary_for_all_passing(tmp: TempDir) -> None:
 
         def test_two():
             assert True, ""
-    """)
+    """),
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp, "--serial")
     assert rc == 0, f"expected zero exit code, got rc={rc}\n{out}"
@@ -170,7 +173,8 @@ def test_failure_diagnostic_shown_in_default(tmp: TempDir) -> None:
         def test_diag():
             x = 42
             assert x == 99, ""
-    """)
+    """),
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp, "--serial")
     assert rc != 0, f"expected non-zero exit code, got rc={rc}\n{out}"
@@ -190,7 +194,8 @@ def test_parallel_failure_diagnostics_match_serial(tmp: TempDir) -> None:
             left = [1, 2, 3]
             right = [1, 2, 4]
             assert left == right
-    """)
+    """),
+        encoding="utf-8",
     )
 
     # Serial: runs tests in-process via the PyO3 bridge (run_phase)

@@ -610,12 +610,13 @@ def test_affected_run_reports_a_nonexistent_skip_entry(
             [tool.oxitest.doctest]
             scope = "public"
             skip = ["nope/"]
-        """)
+        """),
+        encoding="utf-8",
     )
     (tmp / "pkg").mkdir()
-    (tmp / "pkg" / "__init__.py").write_text("")
+    (tmp / "pkg" / "__init__.py").write_text("", encoding="utf-8")
     (tmp / "pkg" / "test_baseline.py").write_text(
-        'def test_baseline():\n    assert True, "sanity"\n'
+        'def test_baseline():\n    assert True, "sanity"\n', encoding="utf-8"
     )
     run(*git, "add", ".")
     run(*git, "commit", "-m", "baseline")
@@ -623,7 +624,7 @@ def test_affected_run_reports_a_nonexistent_skip_entry(
     # A staged change is required — --affected with an empty set early-exits
     # Success at FilesCollected, before the coverage check ever runs.
     (tmp / "pkg" / "test_new.py").write_text(
-        'def test_new():\n    assert True, "sanity"\n'
+        'def test_new():\n    assert True, "sanity"\n', encoding="utf-8"
     )
     run(*git, "add", "pkg/test_new.py")
 

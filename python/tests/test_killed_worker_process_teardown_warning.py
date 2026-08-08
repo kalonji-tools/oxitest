@@ -90,10 +90,10 @@ def _write(
     package = root / pkg
     package.mkdir(parents=True)
     if fixtures is not None:
-        (package / "__fixtures__.py").write_text(fixtures)
+        (package / "__fixtures__.py").write_text(fixtures, encoding="utf-8")
     for name, body in modules.items():
-        (package / name).write_text(body)
-    (root / "pyproject.toml").write_text(_PYPROJECT.format(pkg=pkg))
+        (package / name).write_text(body, encoding="utf-8")
+    (root / "pyproject.toml").write_text(_PYPROJECT.format(pkg=pkg), encoding="utf-8")
 
 
 def _run(root: Path) -> str:

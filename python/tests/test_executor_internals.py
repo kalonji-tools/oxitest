@@ -315,7 +315,7 @@ def test_bad_module_path_returns_error(tmp: TempDir) -> None:
 def test_bad_fn_name_returns_error(tmp: TempDir) -> None:
     """run_test returns an error when the function name is absent from the module."""
     module = tmp / "test_mod.py"
-    module.write_text("def test_real(): pass\n")
+    module.write_text("def test_real(): pass\n", encoding="utf-8")
     result = helpers.run_test(str(module), "test_missing")
     assert result.status == "error", (
         "a missing function name means the collector and executor disagree on what"

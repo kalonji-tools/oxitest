@@ -53,16 +53,18 @@ def write_project(
 
     """
     if pyproject:
-        (tmp / "pyproject.toml").write_text(textwrap.dedent(pyproject))
+        (tmp / "pyproject.toml").write_text(
+            textwrap.dedent(pyproject), encoding="utf-8"
+        )
     if conftest:
-        (tmp / "conftest.py").write_text(textwrap.dedent(conftest))
+        (tmp / "conftest.py").write_text(textwrap.dedent(conftest), encoding="utf-8")
     for name, code in tests.items():
-        (tmp / name).write_text(textwrap.dedent(code))
+        (tmp / name).write_text(textwrap.dedent(code), encoding="utf-8")
     if extra_files:
         for rel_path, content in extra_files.items():
             target = tmp / rel_path
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(content)
+            target.write_text(content, encoding="utf-8")
 
 
 def assert_passed(out: str, rc: int, *, count: int | None = None) -> None:

@@ -135,7 +135,8 @@ def test_executor_parametrize_case_with_fixture(tmp: TempDir) -> None:
         "fixtures = oxitest.Fixtures()\n"
         "@fixtures.fixture\n"
         "def multiplier():\n"
-        "    return 10\n"
+        "    return 10\n",
+        encoding="utf-8",
     )
     f = tmp / "test_mixed.py"
     f.write_text(
@@ -149,7 +150,8 @@ def test_executor_parametrize_case_with_fixture(tmp: TempDir) -> None:
         "    expected: int\n"
         "@oxitest.parametrize(double=MulCase(x=2, expected=20))\n"
         "def test_mul(x: int, expected: int, multiplier: Fixture[int]) -> None:\n"
-        "    assert x * multiplier == expected\n"
+        "    assert x * multiplier == expected\n",
+        encoding="utf-8",
     )
     session, _, _diags = create_session([str(conftest)])
     result = helpers.run_test(str(f), "test_mul", session=session, param_id="double")
@@ -173,7 +175,8 @@ def test_fixture_ref_in_parametrize_resolves_fixture(tmp: TempDir) -> None:
         "\n"
         "@fixtures.fixture\n"
         "def sqlite_db():\n"
-        "    return 'sqlite'\n"
+        "    return 'sqlite'\n",
+        encoding="utf-8",
     )
     f = tmp / "test_db.py"
     # The test file defines local stubs decorated with Fixtures() so they get
@@ -202,7 +205,8 @@ def test_fixture_ref_in_parametrize_resolves_fixture(tmp: TempDir) -> None:
         "    sq=DbCase(db=sqlite_db, expected='sqlite'),\n"
         ")\n"
         "def test_db(db: Fixture[str], expected: str) -> None:\n"
-        "    assert db == expected\n"
+        "    assert db == expected\n",
+        encoding="utf-8",
     )
     session, _, _diags = create_session([str(conftest)])
     result_pg = helpers.run_test(str(f), "test_db", session=session, param_id="pg")
@@ -251,7 +255,9 @@ def test_fixture_ref_compact_mode_raises(tmp: TempDir) -> None:
 def test_fixture_ref_unregistered_fixture_errors(tmp: TempDir) -> None:
     """Passing an unregistered fixture function as FixtureRef value -> error result."""
     conftest = tmp / "conftest.py"
-    conftest.write_text("import oxitest\nfixtures = oxitest.Fixtures()\n")
+    conftest.write_text(
+        "import oxitest\nfixtures = oxitest.Fixtures()\n", encoding="utf-8"
+    )
     f = tmp / "test_bad.py"
     f.write_text(
         "from __future__ import annotations\n"
@@ -264,7 +270,8 @@ def test_fixture_ref_unregistered_fixture_errors(tmp: TempDir) -> None:
         "def unknown_db(): return 'x'\n"
         "@oxitest.parametrize(pg=DbCase(db=unknown_db))\n"
         "def test_db(db: Fixture[str]) -> None:\n"
-        "    pass\n"
+        "    pass\n",
+        encoding="utf-8",
     )
     session, _, _diags = create_session([str(conftest)])
     result = helpers.run_test(str(f), "test_db", session=session, param_id="pg")
@@ -345,7 +352,8 @@ def test_fixture_ref_uses_namespace_qualified_lookup_when_namespace_present(
         "\n"
         "@http.fixture\n"
         "def conn():  # same name, different namespace\n"
-        "    return 'http-conn'\n"
+        "    return 'http-conn'\n",
+        encoding="utf-8",
     )
     # Test file imports the db-namespace conn from conftest. The registry
     # resolves the namespace via FixtureDef.namespace (matched by func identity).
@@ -371,7 +379,8 @@ def test_fixture_ref_uses_namespace_qualified_lookup_when_namespace_present(
         "\n"
         "@oxitest.parametrize(prod=StoreCase(store=_conn_ref))\n"
         "def test_query(store: Fixture[str]) -> None:\n"
-        "    assert store == 'db-conn'\n"
+        "    assert store == 'db-conn'\n",
+        encoding="utf-8",
     )
     session, _, _diags = create_session([str(conftest)])
     result = helpers.run_test(str(f), "test_query", session=session, param_id="prod")
@@ -397,7 +406,8 @@ def test_fixture_ref_falls_back_to_flat_lookup_when_no_namespace(tmp: TempDir) -
         "\n"
         "@fixtures.fixture\n"
         "def pg_db():\n"
-        "    return 'flat-pg'\n"
+        "    return 'flat-pg'\n",
+        encoding="utf-8",
     )
     # The test file defines a local stub (NOT imported from conftest) so it will
     # NOT be in the session registry.  The flat lookup must still resolve it.
@@ -420,7 +430,8 @@ def test_fixture_ref_falls_back_to_flat_lookup_when_no_namespace(tmp: TempDir) -
         "\n"
         "@oxitest.parametrize(pg=DbCase(db=pg_db))\n"
         "def test_db(db: Fixture[str]) -> None:\n"
-        "    assert db == 'flat-pg'\n"
+        "    assert db == 'flat-pg'\n",
+        encoding="utf-8",
     )
     session, _, _diags = create_session([str(conftest)])
     result = helpers.run_test(str(f), "test_db", session=session, param_id="pg")

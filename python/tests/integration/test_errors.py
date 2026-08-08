@@ -8,7 +8,7 @@ from tests.integration import helpers as integ
 def test_import_error_exits_nonzero(tmp: TempDir) -> None:
     """A test file with an import error causes a non-zero exit code."""
     (tmp / "test_bad_import.py").write_text(
-        "import nonexistent_module_xyz\n\ndef test_x(): assert True\n"
+        "import nonexistent_module_xyz\n\ndef test_x(): assert True\n", encoding="utf-8"
     )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_failed(out, rc)
@@ -16,14 +16,14 @@ def test_import_error_exits_nonzero(tmp: TempDir) -> None:
 
 def test_syntax_error_exits_nonzero(tmp: TempDir) -> None:
     """A test file with a syntax error causes a non-zero exit code."""
-    (tmp / "test_syntax.py").write_text("def test_x(\n")
+    (tmp / "test_syntax.py").write_text("def test_x(\n", encoding="utf-8")
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_failed(out, rc)
 
 
 def test_invalid_marker_expression_exits_nonzero(tmp: TempDir) -> None:
     """An invalid -m expression causes a non-zero exit code."""
-    (tmp / "test_ok.py").write_text("def test_ok(): assert True\n")
+    (tmp / "test_ok.py").write_text("def test_ok(): assert True\n", encoding="utf-8")
     out, _, rc = helpers.run_oxitest(tmp, "-m", "not and or")
     integ.assert_failed(out, rc)
 
@@ -36,8 +36,10 @@ def test_no_test_files_found(tmp: TempDir) -> None:
 
 def test_invalid_python_files_glob_exits_with_usage_error(tmp: TempDir) -> None:
     """An invalid glob pattern in python_files exits with UsageError (code 4)."""
-    (tmp / "pyproject.toml").write_text('[tool.oxitest]\npython_files = ["["]\n')
-    (tmp / "test_foo.py").write_text("def test_ok(): pass\n")
+    (tmp / "pyproject.toml").write_text(
+        '[tool.oxitest]\npython_files = ["["]\n', encoding="utf-8"
+    )
+    (tmp / "test_foo.py").write_text("def test_ok(): pass\n", encoding="utf-8")
     _, stderr, rc = helpers.run_oxitest(tmp)
     assert rc == 4, f"invalid glob should exit with UsageError (4), got {rc}"
     integ.assert_contains(stderr, "invalid glob pattern")

@@ -27,7 +27,8 @@ def test_affected_parallel_runs_subcommands_correctly(tmp: TempDir) -> None:
         "    assert result.returncode == 0, (\n"
         "        f'nested oxitest list failed with rc={result.returncode}\\n'\n"
         "        f'stderr: {result.stderr}'\n"
-        "    )\n"
+        "    )\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_passed(out, rc, count=1)
@@ -45,7 +46,9 @@ def git_worktree(git_repo: Fixture[Path], tmp: TempDir) -> Yields[Path]:
     git = ["git", "-C", str(main_repo)]
 
     # Create a baseline test file and commit it.
-    (main_repo / "test_base.py").write_text("def test_base(): assert True\n")
+    (main_repo / "test_base.py").write_text(
+        "def test_base(): assert True\n", encoding="utf-8"
+    )
     run(*git, "add", ".")
     run(*git, "commit", "-m", "baseline")
 
@@ -70,7 +73,9 @@ def test_affected_works_in_git_worktree(git_worktree: Fixture[Path]) -> None:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
 
     # Add a new test file in the worktree and stage it.
-    (worktree_path / "test_new.py").write_text("def test_new(): assert True\n")
+    (worktree_path / "test_new.py").write_text(
+        "def test_new(): assert True\n", encoding="utf-8"
+    )
     wt_git = ["git", "-C", str(worktree_path)]
     run(*wt_git, "add", "test_new.py")
 
@@ -98,7 +103,9 @@ def test_affected_verbose_summary(git_repo: Fixture[Path]) -> None:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
 
     # Add a new test file.
-    (repo / "test_new.py").write_text("def test_new(): assert True, 'new test'\n")
+    (repo / "test_new.py").write_text(
+        "def test_new(): assert True, 'new test'\n", encoding="utf-8"
+    )
     run("git", "-C", str(repo), "add", "test_new.py")
 
     _out, err, rc = helpers.run_oxitest(
@@ -119,7 +126,9 @@ def test_affected_full_verbose_shows_stages(git_repo: Fixture[Path]) -> None:
         return subprocess.run(cmd, check=True, capture_output=True, env=clean_env)
 
     # Add a new test file.
-    (repo / "test_new.py").write_text("def test_new(): assert True, 'new test'\n")
+    (repo / "test_new.py").write_text(
+        "def test_new(): assert True, 'new test'\n", encoding="utf-8"
+    )
     run("git", "-C", str(repo), "add", "test_new.py")
 
     _out, err, rc = helpers.run_oxitest(

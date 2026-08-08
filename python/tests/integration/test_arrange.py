@@ -16,20 +16,23 @@ def _write_shared_suite(tmp: TempDir) -> None:
         "@fx.fixture\n"
         "def repo(db: oxi.Fixture[dict]) -> dict:\n"
         "    return db\n"
-        "__all__ = ['fx']\n"
+        "__all__ = ['fx']\n",
+        encoding="utf-8",
     )
     (tmp / "test_shared.py").write_text(
         "import oxitest as oxi\n"
         "def test_direct(db: oxi.Fixture[dict]) -> None:\n"
         "    assert db['ready']\n"
         "def test_transitive(repo: oxi.Fixture[dict]) -> None:\n"
-        "    assert repo['ready']\n"
+        "    assert repo['ready']\n",
+        encoding="utf-8",
     )
     (tmp / "test_plain.py").write_text(
         "def test_plain_a() -> None:\n"
         "    assert True\n"
         "def test_plain_b() -> None:\n"
-        "    assert True\n"
+        "    assert True\n",
+        encoding="utf-8",
     )
 
 
@@ -46,7 +49,8 @@ def test_auto_arrange_no_shared_fixtures(tmp: TempDir) -> None:
         "def test_a() -> None:\n"
         "    assert True\n"
         "def test_b() -> None:\n"
-        "    assert True\n"
+        "    assert True\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_passed(out, rc, count=2)

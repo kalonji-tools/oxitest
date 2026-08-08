@@ -7,14 +7,18 @@ from tests.integration import helpers as integ
 
 def test_persistent_failure_exits_1(tmp: TempDir) -> None:
     """A test that always fails still exits 1 even with --retries 1."""
-    (tmp / "test_always_fail.py").write_text("def test_always_bad(): assert False\n")
+    (tmp / "test_always_fail.py").write_text(
+        "def test_always_bad(): assert False\n", encoding="utf-8"
+    )
     out, _, rc = helpers.run_oxitest(tmp, "--retries", "1")
     integ.assert_failed(out, rc)
 
 
 def test_retries_zero_is_default(tmp: TempDir) -> None:
     """Without --retries, a failing test exits 1 and output has no 'flaky'."""
-    (tmp / "test_fail_default.py").write_text("def test_bad(): assert False\n")
+    (tmp / "test_fail_default.py").write_text(
+        "def test_bad(): assert False\n", encoding="utf-8"
+    )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_failed(out, rc)
     integ.assert_excludes(out, "flaky")
@@ -30,7 +34,8 @@ def test_flaky_test_exits_0(tmp: TempDir) -> None:
         "    if not marker.exists():\n"
         "        marker.write_text('seen')\n"
         "        assert False, 'first attempt'\n"
-        "    marker.unlink()\n"
+        "    marker.unlink()\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp, "--retries", "1", "--serial")
     integ.assert_passed(out, rc)
@@ -47,10 +52,12 @@ def test_flaky_test_retries_in_parallel(tmp: TempDir) -> None:
         "    if not marker.exists():\n"
         "        marker.write_text('seen')\n"
         "        assert False, 'first attempt'\n"
-        "    marker.unlink()\n"
+        "    marker.unlink()\n",
+        encoding="utf-8",
     )
     (tmp / "test_stable.py").write_text(
-        "def test_stable_a(): assert True\ndef test_stable_b(): assert True\n"
+        "def test_stable_a(): assert True\ndef test_stable_b(): assert True\n",
+        encoding="utf-8",
     )
     out, _, rc = helpers.run_oxitest(tmp, "--retries", "1", "--workers", "2")
     integ.assert_passed(out, rc)

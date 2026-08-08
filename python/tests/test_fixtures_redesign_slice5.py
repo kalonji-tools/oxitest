@@ -179,7 +179,8 @@ def test_inline_fixtures_survive_a_warm_module_cache(tmp: TempDir) -> None:
     # Arrange
     project = Path(tmp)
     (project / "pyproject.toml").write_text(
-        '[tool.oxitest]\ntestpaths = ["proj"]\npython_files = ["test_*.py"]\n'
+        '[tool.oxitest]\ntestpaths = ["proj"]\npython_files = ["test_*.py"]\n',
+        encoding="utf-8",
     )
     package = project / "proj"
     package.mkdir()
@@ -193,7 +194,8 @@ def test_inline_fixtures_survive_a_warm_module_cache(tmp: TempDir) -> None:
         "def test_uses_the_inline_fixture(client: Fixture[str]) -> None:\n"
         '    assert client == "connected", (\n'
         '        "an inline fixture must resolve on every run, warm cache or not"\n'
-        "    )\n"
+        "    )\n",
+        encoding="utf-8",
     )
 
     # Act — first run, cold cache.
@@ -215,7 +217,7 @@ def test_inline_fixtures_survive_a_warm_module_cache(tmp: TempDir) -> None:
         f"second run cannot be a warm-cache run and proves nothing:\n"
         f"stdout:\n{cold_out}"
     )
-    cached_modules = json.loads(timings.read_text()).get("modules", {})
+    cached_modules = json.loads(timings.read_text(encoding="utf-8")).get("modules", {})
     assert any("test_inline_client.py" in key for key in cached_modules), (
         f"the test module itself must reach the item cache — that entry is what "
         f"the unfixed code serves on the second run instead of importing (and "
@@ -251,7 +253,8 @@ def test_an_aliased_inline_fixture_survives_a_warm_cache_too(tmp: TempDir) -> No
     # Arrange
     project = Path(tmp)
     (project / "pyproject.toml").write_text(
-        '[tool.oxitest]\ntestpaths = ["proj"]\npython_files = ["test_*.py"]\n'
+        '[tool.oxitest]\ntestpaths = ["proj"]\npython_files = ["test_*.py"]\n',
+        encoding="utf-8",
     )
     package = project / "proj"
     package.mkdir()
@@ -265,7 +268,8 @@ def test_an_aliased_inline_fixture_survives_a_warm_cache_too(tmp: TempDir) -> No
         "def test_uses_the_aliased_fixture(client: Fixture[str]) -> None:\n"
         '    assert client == "connected", (\n'
         '        "the import alias must not change whether the fixture resolves"\n'
-        "    )\n"
+        "    )\n",
+        encoding="utf-8",
     )
 
     # Act
