@@ -138,10 +138,16 @@ class _XFailHandler(MarkHandler):
 class _TimeoutHandler(MarkHandler):
     mark_name = "timeout"
 
+    def __init__(self, *, is_async: bool = False) -> None:
+        # Only the constructor learns the test kind. `handle` keeps the
+        # MarkHandler signature byte-identical, so plugin handlers — which
+        # implement `handle`, not `__init__` — are untouched.
+        self._is_async = is_async
+
     def handle(self, mark: MarkInfo) -> MarkAction:
         """Wrap execution with a deadline; raises `OxitestTimeoutError` if exceeded."""
         seconds = extract_timeout_seconds(mark.kwargs)
-        return Wrap(make_timeout_wrapper(seconds))
+        return Wrap(make_timeout_wrapper(seconds, is_async=self._is_async))
 
 
 class _PluginMarkHandler(MarkHandler):
@@ -187,16 +193,22 @@ _BUILTIN_HANDLER_NAMES: frozenset[str] = frozenset(_MARK_REGISTRY)
 def evaluate_marks(
     marks: Sequence[MarkInfo],
     plugin_handlers: Sequence[MarkHandler] = (),
+    *,
+    is_async: bool = False,
 ) -> MarksOutcome:
     """Run marks through the handler registry.
 
     Returns a MarksHalt(result) to short-circuit, or MarksProceed(wrappers)
     with callables to compose around the test execution, in order added.
     plugin_handlers: additional handlers from plugin execution wrappers.
+    is_async: the test's kind, which decides whether the timeout mark arms an
+    OS-level timer on top of the event loop's own deadline (#1998).
     """
-    registry = _MARK_REGISTRY
+    # Substituted before the plugin merge, so a plugin-supplied "timeout"
+    # handler still wins — the same precedence the merge already had.
+    registry = {**_MARK_REGISTRY, "timeout": _TimeoutHandler(is_async=is_async)}
     if plugin_handlers:
-        registry = {**_MARK_REGISTRY, **{h.mark_name: h for h in plugin_handlers}}
+        registry = {**registry, **{h.mark_name: h for h in plugin_handlers}}
     wrappers: list[MarkWrapper] = []
     for mark in marks:
         handler = registry.get(mark.name)

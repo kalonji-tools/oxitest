@@ -330,6 +330,8 @@ _NULL_SESSION: _SessionProtocol = FixtureSession([])
 def _evaluate_marks_phase(
     session: _SessionProtocol,
     marks: Sequence[MarkInfo],
+    *,
+    is_async: bool,
 ) -> MarksOutcome:
     """Evaluate marks over the plugin-augmented registry and return the outcome."""
     _plugin_handlers: list[MarkHandler] = [
@@ -339,6 +341,7 @@ def _evaluate_marks_phase(
     return evaluate_marks(
         marks,
         plugin_handlers=_plugin_handlers,
+        is_async=is_async,
     )
 
 
@@ -679,7 +682,14 @@ def _run_test_impl(
 
     try:
         marks = get_marks(fn_raw)
-        marks_outcome = _evaluate_marks_phase(effective_session, marks)
+        marks_outcome = _evaluate_marks_phase(
+            effective_session,
+            marks,
+            # Same expression _build_execution_plan uses for ExecutionPlan.is_async.
+            # Marks are evaluated before the plan exists, so this cannot read it —
+            # deriving it from the same source is what keeps the two in agreement.
+            is_async=inspect.iscoroutinefunction(resolved.fn),
+        )
         match marks_outcome:
             case MarksHalt(result=short_circuit_result):
                 return short_circuit_result

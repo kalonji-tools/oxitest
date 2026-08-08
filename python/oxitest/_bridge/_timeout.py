@@ -92,6 +92,12 @@ class _UnixTimeoutContext:
     raise ValueError when called from a non-main thread.
     """
 
+    #: SIGALRM interrupts a blocking C call: measured, ``time.sleep(5)`` under a
+    #: 1s alarm raises at 1.00s. An async test therefore still benefits from
+    #: this arm, because ``asyncio.wait_for`` cannot bound a coroutine that
+    #: blocks — it never yields, so the loop never delivers the cancellation.
+    bounds_blocking_calls = True
+
     def __init__(self, seconds: int) -> None:
         self._seconds = seconds
         self._state: _UnixHandlerState = _IdleHandler()
@@ -119,6 +125,12 @@ class _WindowsTimeoutContext:
     Pure Python code is always interrupted promptly. C extensions
     holding the GIL without yielding may delay the interrupt.
     """
+
+    #: ``PyThreadState_SetAsyncExc`` fires only at a Python bytecode boundary,
+    #: so a blocking C call is not bounded — measured at 5.00s under a 1s limit
+    #: (#1989). An async test gains nothing from this arm and pays the
+    #: post-``__exit__`` injection race, so it is not armed for one (#1998).
+    bounds_blocking_calls = False
 
     def __init__(self, seconds: int) -> None:
         self._seconds = seconds
@@ -153,11 +165,19 @@ class _WindowsTimeoutContext:
             )
 
 
-def _timeout_context(seconds: int) -> _UnixTimeoutContext | _WindowsTimeoutContext:
-    """Return a platform-appropriate timeout context manager."""
+_TimeoutContext = _UnixTimeoutContext | _WindowsTimeoutContext
+
+
+def _timeout_context_class() -> type[_TimeoutContext]:
+    """Return the platform-appropriate timeout context *class*."""
     if hasattr(signal, "alarm"):
-        return _UnixTimeoutContext(seconds)
-    return _WindowsTimeoutContext(seconds)
+        return _UnixTimeoutContext
+    return _WindowsTimeoutContext
+
+
+def _timeout_context(seconds: int) -> _TimeoutContext:
+    """Return a platform-appropriate timeout context manager."""
+    return _timeout_context_class()(seconds)
 
 
 def extract_timeout_seconds(mark_kwargs: Mapping[str, object]) -> int:
@@ -174,16 +194,39 @@ def extract_timeout_seconds(mark_kwargs: Mapping[str, object]) -> int:
     return seconds
 
 
-def make_timeout_wrapper(seconds: int) -> Any:
+def make_timeout_wrapper(
+    seconds: int,
+    *,
+    is_async: bool = False,
+    context_cls: type[_TimeoutContext] | None = None,
+) -> Any:
     """Return an execution wrapper that enforces a timeout of *seconds*.
 
     The returned wrapper has the ExecutionWrapper signature:
     `wrapper(next_fn: Callable[[], TestResult]) -> TestResult`.
+
+    An async test already has its deadline enforced by ``asyncio.wait_for``.
+    The OS-level arm is layered on top only when it bounds something the loop
+    cannot see — a blocking call. Where it cannot, arming it buys nothing and
+    costs the post-``__exit__`` injection race (#1998), so it is skipped.
+
+    ``context_cls`` exists for tests: it makes both arms reachable from one
+    platform, which is the only way either branch gets covered by CI.
     """
+    cls = context_cls if context_cls is not None else _timeout_context_class()
+    arm = not (is_async and not cls.bounds_blocking_calls)
 
     def wrapper(next_fn: Any) -> Any:
         try:
-            with _timeout_context(seconds):
+            if not arm:
+                # No OS-level arm: the event loop owns the deadline. The
+                # `except` below is still required — `_run_with_timeout` raises
+                # OxitestTimeoutError out of `asyncio.wait_for`, and this is the
+                # only place that turns it into a TimeoutResult. Returning a
+                # bare passthrough here let that error escape uncaught, which is
+                # invisible on any platform whose arm keeps the full wrapper.
+                return next_fn()
+            with cls(seconds):
                 return next_fn()
         except OxitestTimeoutError:
             return TimeoutResult(message=f"Timed out after {seconds}s")
