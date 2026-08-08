@@ -310,7 +310,8 @@ Illustrative only, **not exhaustive**. Note that syntax-valid is not verified:
 |---|---|
 | `src/**.rs` — fmt, clippy, `test-rust`, `cargo doc` | `bacon.toml`, `prek.toml`, `cliff.toml`, `codecov.yml` — `check-toml`/`check-yaml` parse them; nothing validates them |
 | `python/**.py` — ruff, ty, `test-python` | `justfile`, `devenv.nix`, `flake.nix`, `nix/` — no gate at all |
-| `docs/**.md` in the mkdocs nav — `mkdocs --strict` | `.github/workflows/*` — YAML syntax only, no actionlint |
+| `docs/**.md` in the mkdocs nav — `mkdocs --strict` | `.github/actions/*/action.yml` — `check-yaml` parses them; actionlint cannot read a composite |
+| `.github/workflows/*` — actionlint for referenced-but-undeclared `needs:`, plus `scripts/check_rollup_agreement.py` for the reverse (#1974) | |
 | `docs/internals/**` — mdbook | `.envrc`, `.config/wt.toml` — no gate |
 | `Cargo.lock`, `uv.lock` — lock checks | `*.md` outside the mkdocs nav — codespell only, no link check |
 
