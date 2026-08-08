@@ -547,13 +547,25 @@ mod tests {
         let (files, _) = collect_files(&config).unwrap();
         assert_eq!(files.len(), 1);
         let path_str = files[0].as_str();
+        let path = camino::Utf8Path::new(path_str);
+        // `starts_with('/')` until #1986: that spells "absolute" in POSIX
+        // syntax, so on Windows it rejected a perfectly canonical
+        // `\\?\C:\Users\...\test_foo.py`. `is_absolute()` asks the question the
+        // test means on whichever platform it runs.
         assert!(
-            path_str.starts_with('/'),
+            path.is_absolute(),
             "collected path should be absolute, got: {path_str}"
         );
+        // Component-wise rather than a `"/./"` substring search — that spelling
+        // was POSIX-only too, and it could not see a trailing `/.` or any `..`
+        // at all. This is the stronger assertion, not a portable rewrite of the
+        // weaker one.
         assert!(
-            !path_str.contains("/./"),
-            "collected path should have no ./ components, got: {path_str}"
+            !path.components().any(|component| matches!(
+                component,
+                camino::Utf8Component::CurDir | camino::Utf8Component::ParentDir
+            )),
+            "collected path should have no . or .. components, got: {path_str}"
         );
     }
 

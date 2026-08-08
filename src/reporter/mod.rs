@@ -438,7 +438,13 @@ mod tests {
     fn test_make_reporter_wraps_in_composite_when_json_path_given() {
         use camino::Utf8PathBuf;
         let opts = ReporterOptsBuilder::new().build();
-        let path = Utf8PathBuf::from("/tmp/oxitest_report.json");
+        // Hardcoded `/tmp/oxitest_report.json` until #1986. On Windows that
+        // directory does not exist, so the write failed and `finish()`
+        // correctly returned `UsageError` — the product was right and the test
+        // was wrong. A real temp dir asks the question on every platform.
+        let dir = assert_fs::TempDir::new().unwrap();
+        let path = Utf8PathBuf::from_path_buf(dir.path().join("oxitest_report.json"))
+            .expect("temp dir path must be UTF-8");
         let mut reporter = make_reporter(opts, false, Some(path), None, vec![]);
         assert_eq!(
             reporter.finish(&[], false, &ReporterSession::new(0)).code(),
