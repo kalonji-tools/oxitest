@@ -240,11 +240,43 @@ extract `node_id` and `duration_ms`. If successful, it synthesises an Error sent
 so the test is still recorded in results. If even `WireMinimal` fails, the line is
 logged as bad output.
 
-### Malformed JSON from worker
+### Non-protocol lines on worker stdout
 
-If the Rust side receives a line that doesn't parse as valid JSON, it logs a warning
-and counts it as a received result (to maintain the expected count), but does not
-forward it to the reporter. The watchdog deadline is still reset.
+A worker's stdout is the protocol pipe, and `_emit` is not its only writer: a test, a
+C extension, or an uncaptured child process inherits fd 1 and can put arbitrary bytes
+on it. Rust classifies each line by whether it is JSON at all.
+
+| Line | Treatment |
+| --- | --- |
+| A valid `WireResult` | Counted. Forwarded to the reporter |
+| Valid JSON, but not a valid result | Counted. `WireMinimal` salvage, or an Error sentinel under node ID `<worker>::malformed_output` |
+| Not JSON at all | **Not counted.** Logged as `ignoring non-protocol line on worker stdout`, then dropped |
+
+The third row changed in #2010. A line that is not JSON used to count toward the
+expected result count, so one `print()` in a test consumed the slot its own result
+needed. The real result then arrived after the drain had finished and was discarded as
+`unexpected result after the final task group`, so the run reported `no tests ran` and
+exited 0.
+
+The cost of not guessing: a line that *swallows* a result — test output with no
+trailing newline, so the result concatenates onto it — leaves the worker one result
+short. The watchdog or the disconnect reports that shortfall instead of an immediate
+sentinel. That is slower, and it is accurate.
+
+The watchdog deadline is reset by any non-empty line, protocol or not. A worker that is
+producing output is alive.
+
+### Undecodable bytes on worker stdout
+
+The reader decodes each line with `str::from_utf8`, and falls back to a lossy decode
+after logging `invalid UTF-8 on worker stdout`. Invalid UTF-8 costs one mangled line,
+not the rest of that worker's output.
+
+Before #2010 the reader read into a `String`, so invalid UTF-8 returned
+`ErrorKind::InvalidData` and the reader treated that as end-of-stream. One undecodable
+byte ended the worker's whole result stream, every remaining test it owned was reported
+as "Worker subprocess exited unexpectedly", and dropping the receiver closed the pipe —
+so the worker's next write killed it for real, after it had been blamed for dying.
 
 ### Subprocess crash
 
