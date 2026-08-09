@@ -35,6 +35,40 @@ fn take_child_pipes(
     ))
 }
 
+/// Decodes one line of worker stdout, replacing invalid UTF-8 in place.
+///
+/// A worker's stdout is the protocol pipe, and `_emit` is not its only writer:
+/// a test, a C extension, or an uncaptured child process inherits fd 1 and can
+/// put arbitrary bytes on it. Reading into a `String` made one undecodable byte
+/// return `ErrorKind::InvalidData`, which the reader treated as end-of-stream —
+/// so the whole worker's output ended, and the drain reported process death for
+/// a worker that was alive and passing (#2010).
+///
+/// Written as two arms rather than one unconditional `from_utf8_lossy` call
+/// with a warning beside it. The shorter form is six lines lighter and behaves
+/// identically — `from_utf8_lossy` borrows when the input is already valid — but
+/// it leaves no point where the invalid-input *content* can be mutated on its
+/// own. Collapsed, the only available mutant empties every line, valid ones
+/// included, and the tests then die on a 30s timeout instead of on the
+/// assertion they exist to prove. The arms are the testing seam.
+///
+/// The warning does not fire for a worker that legitimately prints `U+FFFD`.
+/// One case does produce a false positive: a line past `MAX_LINE_LENGTH` is
+/// truncated on a byte index, which can cut a character in half and make a
+/// valid line look undecodable here.
+fn decode_worker_line(raw: &[u8]) -> String {
+    match std::str::from_utf8(raw) {
+        Ok(text) => text.to_string(),
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "invalid UTF-8 on worker stdout — replacing the undecodable bytes"
+            );
+            String::from_utf8_lossy(raw).into_owned()
+        }
+    }
+}
+
 /// Spawns a worker subprocess and returns its stdin, a line receiver for stdout,
 /// and the child handle. Returns `None` on spawn or pipe failure.
 pub fn setup_worker_process(
@@ -74,17 +108,24 @@ pub fn setup_worker_process(
     // can use recv_timeout() and remain responsive to the watchdog deadline.
     let (line_tx, line_rx) = crossbeam_channel::bounded::<String>(1024);
     // Note: this thread is intentionally detached. It exits naturally when:
-    // 1. The worker process exits → stdout closes → read_line() returns Ok(0)
+    // 1. The worker process exits → stdout closes → read_until() returns Ok(0)
     // 2. The channel receiver is dropped → send() returns Err → loop breaks
     // The thread cannot outlive the worker process or the channel, so no
     // explicit join is needed.
     std::thread::spawn(move || {
         let mut stdout = worker_stdout;
-        let mut buf = String::with_capacity(256);
+        let mut buf = Vec::with_capacity(256);
         loop {
             buf.clear();
-            match stdout.read_line(&mut buf) {
-                Ok(0) | Err(_) => break,
+            match stdout.read_until(b'\n', &mut buf) {
+                Ok(0) => break,
+                Err(e) => {
+                    tracing::error!(
+                        error = %e,
+                        "worker stdout read failed — abandoning this worker's output"
+                    );
+                    break;
+                }
                 Ok(_) => {
                     if buf.len() > MAX_LINE_LENGTH {
                         tracing::warn!(
@@ -94,7 +135,7 @@ pub fn setup_worker_process(
                         );
                         buf.truncate(MAX_LINE_LENGTH);
                     }
-                    if line_tx.send(buf.clone()).is_err() {
+                    if line_tx.send(decode_worker_line(&buf)).is_err() {
                         break;
                     }
                 }
@@ -851,7 +892,10 @@ mod line_length_tests {
     // >10 MB to trigger. That is impractical in a unit test context. The constant
     // value and channel capacity are verified here; normal operation is covered by
     // the integration tests via `just test`.
-
+    //
+    // Being untested matters less than it did: `buf` is a `Vec<u8>`, so the
+    // truncate is infallible. It used to be a `String`, whose `truncate` panics
+    // off a character boundary — this path could kill the reader thread (#2010).
     #[test]
     fn max_line_length_is_ten_mebibytes() {
         assert_eq!(
@@ -859,6 +903,43 @@ mod line_length_tests {
             10 * 1024 * 1024,
             "MAX_LINE_LENGTH must be 10 MiB — change this value only with a deliberate decision \
              about memory safety for the coordinator process"
+        );
+    }
+}
+
+#[cfg(test)]
+mod decode_tests {
+    use super::*;
+
+    #[test]
+    fn valid_utf8_passes_through_unchanged() {
+        let raw = "café\n".as_bytes();
+
+        assert_eq!(
+            decode_worker_line(raw),
+            "café\n",
+            "the common path must be byte-exact — a lossy decode of valid input \
+             would silently corrupt every non-ASCII diagnostic a worker sends"
+        );
+    }
+
+    #[test]
+    fn invalid_utf8_is_replaced_rather_than_dropped() {
+        let raw = b"\xe9 raw, not utf-8\n";
+
+        let decoded = decode_worker_line(raw);
+
+        assert!(
+            decoded.contains("raw, not utf-8"),
+            "the decodable remainder of the line must survive. Returning nothing \
+             here is the old behaviour by another route: the line is lost and the \
+             worker is blamed for exiting. Got: {decoded:?}"
+        );
+        assert!(
+            decoded.contains('\u{FFFD}'),
+            "the undecodable byte must become a replacement character, so the line \
+             stays one line and an operator can see that something was lost. \
+             Got: {decoded:?}"
         );
     }
 }
