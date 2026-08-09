@@ -493,12 +493,18 @@ pub struct PluginCliExtensions {
 /// Merged configuration from `[tool.oxitest]` in `pyproject.toml` and CLI flags.
 ///
 /// CLI flags take precedence over `pyproject.toml` values. Construct via
-/// `Config::load(rootdir)` then `config.merge_run_args(&args)` or
+/// `Config::load(rootdir, invocation_dir)` then `config.merge_run_args(&args)` or
 /// `config.merge_debug_args(&args)`. Defaults come from `Config::default()`.
 #[derive(Debug, Clone)]
 pub struct Config {
     /// Project root directory (where `pyproject.toml` lives).
     pub rootdir: Utf8PathBuf,
+    /// The directory `oxitest` was invoked from.
+    ///
+    /// A relative Target on the command line is resolved against this, never
+    /// against [`Config::rootdir`] (#2026). Distinct from the worker's current
+    /// directory, which is process-global and may be moved by `patch.chdir`.
+    pub invocation_dir: Utf8PathBuf,
     /// File discovery and path configuration.
     pub paths: PathConfig,
     /// Execution control: parallelism, timeouts, retries, debug mode.
@@ -521,6 +527,10 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             rootdir: Utf8PathBuf::from("."),
+            // Never empty: an empty base silently means "the working
+            // directory" to every path operation, which is the defect #2026
+            // removed.
+            invocation_dir: Utf8PathBuf::from("."),
             paths: PathConfig::default(),
             exec: ExecConfig::default(),
             output: OutputConfig::default(),
@@ -569,10 +579,68 @@ pub fn has_plugins_configured(rootdir: &Utf8Path) -> bool {
         .is_some_and(|plugins| !plugins.is_empty())
 }
 
-pub fn find_rootdir(start: Option<&Utf8Path>) -> Utf8PathBuf {
-    let start = start.unwrap_or(Utf8Path::new("."));
+/// Resolve a Target spelled on the command line.
+///
+/// A relative Target is resolved against `base` — the directory `oxitest` was
+/// invoked from — and never against the rootdir. The rootdir is *derived from*
+/// the Target, so resolving the Target against it is circular, and an empty
+/// rootdir is what that circle looked like when it closed (#2026). An absolute
+/// Target is returned unchanged.
+///
+/// `base` is threaded in rather than read from the environment here, so that
+/// every caller is testable without mutating the process working directory.
+pub fn resolve_target(base: &Utf8Path, path: &Utf8Path) -> Utf8PathBuf {
+    if path.is_absolute() {
+        path.to_owned()
+    } else {
+        base.join(path)
+    }
+}
+
+/// The directory `oxitest` was invoked from.
+///
+/// Captured once per entry into the pipeline and threaded from there, so that
+/// every consumer of a Target sees the same base even if something later moves
+/// the process working directory. Falls back to `.` when the working directory
+/// cannot be read or is not UTF-8 — never an empty path, which every path
+/// operation would silently read as the working directory anyway (#2026).
+///
+/// **Canonicalised**, because [`find_rootdir`] canonicalises its own result and
+/// the two are compared. On Windows `std::fs::canonicalize` returns the
+/// extended-length `\\?\D:\…` form while `std::env::current_dir` returns the
+/// plain `D:\…` one, so an uncanonicalised base would give `testpaths` a
+/// different spelling from `Config::rootdir`. `collect_from` stops its
+/// conftest walk at `d == config.rootdir`; with two spellings that test never
+/// matches, and the walk climbs past the project root. Linux cannot show this,
+/// because `getcwd` already returns the canonical path (#2018 is the same
+/// asymmetry seen from the other side).
+pub fn invocation_dir() -> Utf8PathBuf {
+    std::env::current_dir()
+        .ok()
+        .and_then(|dir| Utf8PathBuf::from_path_buf(dir).ok())
+        .map(|dir| dir.canonicalize_utf8().unwrap_or(dir))
+        .unwrap_or_else(|| Utf8PathBuf::from("."))
+}
+
+/// Walk up from `start` to the directory holding `pyproject.toml`.
+///
+/// `start` is a Target spelled on the command line, so it is resolved against
+/// `invocation_dir` before the walk begins (#2026). That resolution is what
+/// makes `test_x.py` and `./test_x.py` one input: before it, a bare filename
+/// gave `start.parent() == ""`, `canonicalize_utf8("")` failed, the
+/// `pyproject.toml` probe then resolved against the working directory, and the
+/// function returned an **empty** rootdir that every consumer read as "the
+/// working directory".
+///
+/// The return value is always absolute and never empty.
+pub fn find_rootdir(start: Option<&Utf8Path>, invocation_dir: &Utf8Path) -> Utf8PathBuf {
+    let start = match start {
+        Some(path) => resolve_target(invocation_dir, path),
+        None => invocation_dir.to_owned(),
+    };
     let start = if start.is_file() {
-        start.parent().unwrap_or(start)
+        // `start` is absolute here, so a file always has a parent.
+        start.parent().unwrap_or(&start).to_owned()
     } else {
         start
     };
@@ -602,8 +670,22 @@ pub fn cpu_count() -> usize {
         .unwrap_or(1)
 }
 
+#[cfg(test)]
 impl Config {
-    pub fn load(rootdir: &Utf8Path) -> Self {
+    /// Load with the invocation directory equal to the rootdir.
+    ///
+    /// That is the shape every test written before #2026 assumed, and the shape
+    /// a run from the project root still has — so a test using this asserts
+    /// behaviour where resolving against the rootdir and resolving against the
+    /// invocation directory give the same answer. A test about the two
+    /// *disagreeing* must call [`Config::load`] with two different values.
+    fn load_at(dir: &Utf8Path) -> Self {
+        Self::load(dir, dir)
+    }
+}
+
+impl Config {
+    pub fn load(rootdir: &Utf8Path, invocation_dir: &Utf8Path) -> Self {
         let pyproject_path = rootdir.join("pyproject.toml");
         let config = Self {
             paths: PathConfig {
@@ -614,6 +696,7 @@ impl Config {
                 ..PathConfig::default()
             },
             rootdir: rootdir.to_owned(),
+            invocation_dir: invocation_dir.to_owned(),
             ..Self::default()
         };
 
@@ -752,7 +835,7 @@ mod tests {
         std::fs::write(dir.path().join("pyproject.toml"), "").unwrap();
         let subdir = utf8_dir.join("tests");
         std::fs::create_dir(&subdir).unwrap();
-        let rootdir = find_rootdir(Some(&subdir));
+        let rootdir = find_rootdir(Some(&subdir), &utf8_dir);
         assert_eq!(rootdir, utf8_dir);
     }
 
@@ -764,7 +847,7 @@ mod tests {
             .unwrap()
             .canonicalize_utf8()
             .unwrap();
-        let rootdir = find_rootdir(Some(&utf8_dir));
+        let rootdir = find_rootdir(Some(&utf8_dir), &utf8_dir);
         assert_eq!(rootdir, utf8_dir);
     }
 
@@ -775,13 +858,148 @@ mod tests {
         std::fs::write(dir.path().join("pyproject.toml"), "").unwrap();
         let subdir = utf8_dir.join("a").join("b");
         std::fs::create_dir_all(&subdir).unwrap();
-        let rootdir = find_rootdir(Some(&subdir));
+        let rootdir = find_rootdir(Some(&subdir), utf8_dir);
         assert!(
             rootdir.is_absolute(),
             "rootdir should be absolute, got: {rootdir}"
         );
         assert!(!rootdir.as_str().is_empty(), "rootdir must not be empty");
         assert!(rootdir.join("pyproject.toml").exists());
+    }
+
+    // ── #2026: a relative Target resolves against the invocation directory ──
+    //
+    // Every test below passes the invocation directory explicitly. None calls
+    // `std::env::set_current_dir`, which is process-global and would make these
+    // order-dependent under the parallel test runner.
+
+    /// Build `<tmp>/pyproject.toml` and `<tmp>/sub/test_x.py`, and return the
+    /// canonical project root and its `sub` directory.
+    fn project_with_subdir(dir: &TempDir) -> (Utf8PathBuf, Utf8PathBuf) {
+        let root = Utf8Path::from_path(dir.path())
+            .unwrap()
+            .canonicalize_utf8()
+            .unwrap();
+        std::fs::write(root.join("pyproject.toml"), "").unwrap();
+        let sub = root.join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(sub.join("test_x.py"), "def test_x(): pass\n").unwrap();
+        (root, sub)
+    }
+
+    #[test]
+    fn find_rootdir_resolves_a_bare_filename_against_the_invocation_dir() {
+        let dir = TempDir::new().unwrap();
+        let (root, sub) = project_with_subdir(&dir);
+
+        let rootdir = find_rootdir(Some(Utf8Path::new("test_x.py")), &sub);
+
+        assert_eq!(
+            rootdir, root,
+            "a bare filename names a file in the invocation directory, so the walk must start there and reach the project root — before #2026 its parent was the empty path, canonicalize failed, and the walk returned an empty rootdir that every consumer read as the working directory"
+        );
+    }
+
+    #[test]
+    fn find_rootdir_agrees_on_both_spellings_of_one_file() {
+        let dir = TempDir::new().unwrap();
+        let (_root, sub) = project_with_subdir(&dir);
+
+        let bare = find_rootdir(Some(Utf8Path::new("test_x.py")), &sub);
+        let dotted = find_rootdir(Some(Utf8Path::new("./test_x.py")), &sub);
+
+        assert_eq!(
+            bare, dotted,
+            "`test_x.py` and `./test_x.py` name the same file, so they must produce the same rootdir — the two spellings taking different branches is the whole of #2026"
+        );
+    }
+
+    #[test]
+    fn find_rootdir_never_returns_an_empty_path() {
+        let dir = TempDir::new().unwrap();
+        let (_root, sub) = project_with_subdir(&dir);
+
+        for seed in [
+            Some(Utf8Path::new("test_x.py")),
+            Some(Utf8Path::new("./test_x.py")),
+            Some(Utf8Path::new(".")),
+            Some(Utf8Path::new("sub")),
+            None,
+        ] {
+            let rootdir = find_rootdir(seed, &sub);
+            assert!(
+                !rootdir.as_str().is_empty(),
+                "an empty rootdir is silently read as the working directory by every path operation downstream, so no seed may produce one — seed was {seed:?}"
+            );
+            assert!(
+                rootdir.is_absolute(),
+                "a relative rootdir moves with the process working directory, which the worker may change — seed was {seed:?}, got {rootdir}"
+            );
+        }
+    }
+
+    #[test]
+    fn find_rootdir_ignores_the_invocation_dir_for_an_absolute_seed() {
+        let dir = TempDir::new().unwrap();
+        let (root, sub) = project_with_subdir(&dir);
+        let elsewhere = TempDir::new().unwrap();
+        let elsewhere = Utf8Path::from_path(elsewhere.path())
+            .unwrap()
+            .canonicalize_utf8()
+            .unwrap();
+
+        let rootdir = find_rootdir(Some(&sub.join("test_x.py")), &elsewhere);
+
+        assert_eq!(
+            rootdir, root,
+            "an absolute Target already says where it is, so the invocation directory must not touch it"
+        );
+    }
+
+    #[test]
+    fn resolve_target_joins_a_relative_path_onto_the_base() {
+        let resolved = resolve_target(Utf8Path::new("/work/sub"), Utf8Path::new("test_x.py"));
+
+        assert_eq!(
+            resolved,
+            Utf8PathBuf::from("/work/sub/test_x.py"),
+            "a relative Target means what the shell meant, so it hangs off the invocation directory"
+        );
+    }
+
+    #[test]
+    fn resolve_target_returns_an_absolute_path_unchanged() {
+        let resolved = resolve_target(
+            Utf8Path::new("/work/sub"),
+            Utf8Path::new("/elsewhere/test_x.py"),
+        );
+
+        assert_eq!(
+            resolved,
+            Utf8PathBuf::from("/elsewhere/test_x.py"),
+            "an absolute Target must survive resolution untouched, or a Target outside the project becomes unreachable"
+        );
+    }
+
+    #[test]
+    fn resolve_target_keeps_a_windows_verbatim_base_intact() {
+        // On Windows `std::fs::canonicalize` returns the extended-length form
+        // while `std::env::current_dir` returns the plain one, and mixing the
+        // two is #2018's defect. This asserts the join does not rewrite or drop
+        // the prefix; it runs on every platform because the base is only a
+        // string to `join`.
+        let base = Utf8Path::new(r"\\?\D:\work\sub");
+
+        let resolved = resolve_target(base, Utf8Path::new("test_x.py"));
+
+        assert!(
+            resolved.as_str().starts_with(r"\\?\D:\work\sub"),
+            "the verbatim prefix identifies the volume on Windows, so dropping or rewriting it would resolve the Target against a different root — got {resolved}"
+        );
+        assert!(
+            resolved.as_str().ends_with("test_x.py"),
+            "the Target must still name the file the user typed — got {resolved}"
+        );
     }
 
     #[test]
@@ -982,14 +1200,14 @@ mod tests {
     #[test]
     fn test_cache_max_age_default_is_50() {
         let dir = TempDir::new().unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let config = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         assert_eq!(config.features.cache_max_age, 50);
     }
 
     #[test]
     fn test_min_parallel_tests_default_is_100() {
         let dir = TempDir::new().unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let config = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         assert_eq!(config.exec.min_parallel_tests, 100);
     }
 

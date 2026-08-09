@@ -322,7 +322,17 @@ impl Config {
         self
     }
 
-    /// Merge CLI paths into testpaths, resolving relative paths against rootdir.
+    /// Merge CLI paths into testpaths, resolving relative paths against the
+    /// directory `oxitest` was invoked from.
+    ///
+    /// **Not** against the rootdir (#2026). The rootdir is derived from these
+    /// same paths, so resolving them against it is circular: a run from below
+    /// the rootdir looked for `<rootdir>/<arg>`, found nothing, and exited 0.
+    /// [`crate::config::resolve_target`] owns the rule.
+    ///
+    /// The Targets are resolved here rather than at the command-line boundary
+    /// because [`crate::target::render_missing_paths`] echoes the argument back
+    /// verbatim; absolutising earlier would print a path the user never typed.
     ///
     /// Writes [`PathConfig::testpaths`] and **not**
     /// [`PathConfig::declared_testpaths`] — see that field for why. This is the
@@ -332,22 +342,21 @@ impl Config {
             self.filter.has_explicit_paths = true;
             self.paths.testpaths = paths
                 .iter()
-                .map(|p| {
-                    if p.is_absolute() {
-                        p.clone()
-                    } else {
-                        self.rootdir.join(p)
-                    }
-                })
+                .map(|p| crate::config::resolve_target(&self.invocation_dir, p))
                 .collect();
         }
     }
 
     /// Canonicalize node IDs so their file paths match the canonical form used by collected items.
     ///
-    /// Resolves relative paths in node IDs against rootdir, then canonicalizes via
-    /// `std::fs::canonicalize`. Source files are computed on-demand via
-    /// [`FilterConfig::source_files()`].
+    /// Resolves relative paths in node IDs against the directory `oxitest` was
+    /// invoked from, then canonicalizes via `std::fs::canonicalize`. Source
+    /// files are computed on-demand via [`FilterConfig::source_files()`].
+    ///
+    /// The base is the invocation directory and not the rootdir, for the reason
+    /// [`Config::merge_paths`] gives. A node ID carried the same defect in a
+    /// louder form: `./test_x.py::test_x` run from below the rootdir was
+    /// refused with `no such test` for a test that exists (#2026).
     fn canonicalize_node_ids(&mut self, raw_ids: &[crate::types::NodeId]) {
         use crate::types::NodeId;
 
@@ -360,18 +369,17 @@ impl Config {
                     return id.clone();
                 };
 
-                // Glob node IDs: prepend rootdir but skip fs::canonicalize.
+                let abs_path =
+                    crate::config::resolve_target(&self.invocation_dir, Utf8Path::new(file_part));
+
+                // Glob node IDs: absolutised like any other, but `fs::canonicalize`
+                // is skipped because a pattern is not a real path. A glob is also
+                // exempt from the existence check, so leaving it on the rootdir
+                // made the same defect silent instead of loud (#2026).
                 if crate::filter::contains_glob_chars(file_part) {
-                    let abs_pattern = self.rootdir.join(file_part);
-                    return NodeId::from_raw(&format!("{abs_pattern}::{rest}"));
+                    return NodeId::from_raw(&format!("{abs_path}::{rest}"));
                 }
 
-                let file_path = Utf8PathBuf::from(file_part);
-                let abs_path = if file_path.is_absolute() {
-                    file_path
-                } else {
-                    self.rootdir.join(&file_path)
-                };
                 match std::fs::canonicalize(abs_path.as_std_path()) {
                     Ok(canonical) => match Utf8PathBuf::from_path_buf(canonical) {
                         Ok(utf8) => NodeId::from_raw(&format!("{utf8}::{rest}")),
@@ -423,7 +431,7 @@ mod tests {
     #[test]
     fn test_load_with_no_pyproject_returns_defaults() {
         let dir = TempDir::new().unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let config = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         assert_eq!(
             config.paths.python_files,
             Config::default().paths.python_files
@@ -437,7 +445,7 @@ mod tests {
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("pyproject.toml").write_str("").unwrap();
         let utf8_dir = camino::Utf8Path::from_path(dir.path()).unwrap();
-        let cfg = Config::load(utf8_dir);
+        let cfg = Config::load_at(utf8_dir);
         assert_eq!(
             cfg.rootdir, utf8_dir,
             "load should store rootdir exactly as given, got: {}",
@@ -454,7 +462,7 @@ mod tests {
             "[tool.pytest]\ntestpaths = [\"tests\"]\n",
         )
         .unwrap();
-        let config = Config::load(utf8_dir);
+        let config = Config::load_at(utf8_dir);
         assert_eq!(config.paths.testpaths, vec![utf8_dir.to_owned()]);
     }
 
@@ -467,7 +475,7 @@ mod tests {
             "[tool.oxitest]\ntestpaths = [\"tests\"]\n",
         )
         .unwrap();
-        let config = Config::load(utf8_dir);
+        let config = Config::load_at(utf8_dir);
         assert_eq!(config.paths.testpaths, vec![utf8_dir.join("tests")]);
     }
 
@@ -480,14 +488,14 @@ mod tests {
             "[tool.oxitest]\npython_files = [\"check_*.py\"]\n",
         )
         .unwrap();
-        let config = Config::load(utf8_dir);
+        let config = Config::load_at(utf8_dir);
         assert_eq!(config.paths.python_files, vec!["check_*.py".to_string()]);
     }
 
     #[test]
     fn test_merge_run_args_exitfirst_sets_maxfail_1() {
         let dir = TempDir::new().unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let config = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let mut args = base_run_args();
         args.exitfirst = true;
         let merged = config.merge_run_args(&args);
@@ -497,7 +505,7 @@ mod tests {
     #[test]
     fn test_merge_run_args_maxfail_sets_maxfail() {
         let dir = TempDir::new().unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let config = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let mut args = base_run_args();
         args.maxfail = Some(3);
         let merged = config.merge_run_args(&args);
@@ -508,7 +516,7 @@ mod tests {
     fn test_merge_run_args_paths_overrides_testpaths() {
         let dir = TempDir::new().unwrap();
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
-        let config = Config::load(utf8_dir);
+        let config = Config::load_at(utf8_dir);
         let custom = utf8_dir.join("custom_tests");
         let mut args = base_run_args();
         args.paths = vec![custom.clone()];
@@ -567,7 +575,7 @@ mod tests {
             "[tool.oxitest]\ncolor = \"always\"\n",
         )
         .unwrap();
-        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cfg = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         assert_eq!(cfg.output.color, ColorMode::Always);
         let args = base_run_args();
         let merged = cfg.merge_run_args(&args);
@@ -582,7 +590,7 @@ mod tests {
             "[tool.oxitest]\ncolor = \"always\"\n",
         )
         .unwrap();
-        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cfg = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let args = parse_run(&["--color", "never"]);
         let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.output.color, ColorMode::Never);
@@ -597,7 +605,7 @@ mod tests {
             "[tool.oxitest]\nmarkers = [\"slow: marks tests as slow\", \"integration\"]\n",
         )
         .unwrap();
-        let config = Config::load(utf8_dir);
+        let config = Config::load_at(utf8_dir);
         assert!(
             config
                 .markers
@@ -621,7 +629,7 @@ mod tests {
             "[tool.oxitest]\nmarkers = [\"slow: marks slow tests\"]\n",
         )
         .unwrap();
-        let config = Config::load(utf8_dir);
+        let config = Config::load_at(utf8_dir);
         assert_eq!(config.markers.registered_markers, vec!["slow".to_string()]);
     }
 
@@ -634,7 +642,7 @@ mod tests {
             "[tool.oxitest]\ntimeout = 30\n",
         )
         .unwrap();
-        let config = Config::load(utf8_dir);
+        let config = Config::load_at(utf8_dir);
         assert_eq!(config.exec.timeout_secs, Some(30));
     }
 
@@ -642,7 +650,7 @@ mod tests {
     fn test_timeout_absent_is_none() {
         let dir = TempDir::new().unwrap();
         fs::write(dir.path().join("pyproject.toml"), "[tool.oxitest]\n").unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let config = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         assert_eq!(config.exec.timeout_secs, None);
     }
 
@@ -650,7 +658,8 @@ mod tests {
     fn test_config_worker_count_serial_returns_1() {
         let dir = TempDir::new().unwrap();
         let args = parse_run(&["--serial"]);
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap()).merge_run_args(&args);
+        let config =
+            Config::load_at(Utf8Path::from_path(dir.path()).unwrap()).merge_run_args(&args);
         assert_eq!(config.worker_count(), 1);
     }
 
@@ -658,7 +667,8 @@ mod tests {
     fn test_config_worker_count_explicit_workers() {
         let dir = TempDir::new().unwrap();
         let args = parse_run(&["--workers", "3"]);
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap()).merge_run_args(&args);
+        let config =
+            Config::load_at(Utf8Path::from_path(dir.path()).unwrap()).merge_run_args(&args);
         assert_eq!(config.worker_count(), 3);
     }
 
@@ -666,7 +676,8 @@ mod tests {
     fn test_config_worker_count_default_is_cpu_count() {
         let dir = TempDir::new().unwrap();
         let args = base_run_args();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap()).merge_run_args(&args);
+        let config =
+            Config::load_at(Utf8Path::from_path(dir.path()).unwrap()).merge_run_args(&args);
         assert!(config.worker_count() >= 1);
     }
 
@@ -679,7 +690,7 @@ mod tests {
             "[tool.oxitest]\ncache_max_age = 20\n",
         )
         .unwrap();
-        let config = Config::load(utf8_dir);
+        let config = Config::load_at(utf8_dir);
         assert_eq!(config.features.cache_max_age, 20);
     }
 
@@ -692,14 +703,14 @@ mod tests {
             "[tool.oxitest]\nmin_parallel_tests = 50\n",
         )
         .unwrap();
-        let config = Config::load(utf8_dir);
+        let config = Config::load_at(utf8_dir);
         assert_eq!(config.exec.min_parallel_tests, 50);
     }
 
     #[test]
     fn test_timeout_multiplier_default_is_none() {
         let dir = TempDir::new().unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let config = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         assert!(config.exec.timeout_multiplier.is_none());
     }
 
@@ -712,7 +723,7 @@ mod tests {
             "[tool.oxitest]\ntimeout_multiplier = 3.0\n",
         )
         .unwrap();
-        let config = Config::load(utf8_dir);
+        let config = Config::load_at(utf8_dir);
         assert_eq!(config.exec.timeout_multiplier, Some(3.0));
     }
 
@@ -725,7 +736,7 @@ mod tests {
             "[tool.oxitest]\nfailed = \"first\"\n",
         )
         .unwrap();
-        let config = Config::load(utf8_dir);
+        let config = Config::load_at(utf8_dir);
         assert_eq!(config.filter.failed, Some(FailedMode::First));
     }
 
@@ -764,7 +775,7 @@ spawn_overhead_ms = 100.0
             "[tool.oxitest]\nstrict = \"abort\"\n",
         )
         .unwrap();
-        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cfg = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let args = parse_run(&["--strict=enforce"]);
         let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.markers.strict, Some(StrictMode::Enforce));
@@ -795,7 +806,7 @@ spawn_overhead_ms = 100.0
             "[tool.oxitest]\nstrict = \"enforce\"\n",
         )
         .unwrap();
-        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cfg = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let args = base_run_args();
         let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.markers.strict, Some(StrictMode::Enforce));
@@ -809,7 +820,7 @@ spawn_overhead_ms = 100.0
             "[tool.oxitest]\nstrict = \"abort\"\n",
         )
         .unwrap();
-        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cfg = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let mut args = base_run_args();
         args.strict = Some(StrictMode::Off);
         let merged = cfg.merge_run_args(&args);
@@ -944,7 +955,7 @@ spawn_overhead_ms = 100.0
             "[tool.oxitest]\nschedule = \"failed-first\"\n",
         )
         .unwrap();
-        let config = Config::load(utf8_dir);
+        let config = Config::load_at(utf8_dir);
         assert_eq!(config.filter.schedule, ScheduleStrategy::FailedFirst);
     }
 
@@ -956,7 +967,7 @@ spawn_overhead_ms = 100.0
             "[tool.oxitest]\nschedule = \"random\"\n",
         )
         .unwrap();
-        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cfg = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let args = base_run_args();
         let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.filter.schedule, ScheduleStrategy::Random);
@@ -970,7 +981,7 @@ spawn_overhead_ms = 100.0
             "[tool.oxitest]\nschedule = \"random\"\n",
         )
         .unwrap();
-        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cfg = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let args = parse_run(&["--schedule", "failed-first"]);
         let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.filter.schedule, ScheduleStrategy::FailedFirst);
@@ -984,7 +995,7 @@ spawn_overhead_ms = 100.0
             "[tool.oxitest]\ntimeout = 60\n",
         )
         .unwrap();
-        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cfg = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         assert_eq!(cfg.exec.timeout_secs, Some(60));
         let args = parse_run(&["--timeout", "10"]);
         let merged = cfg.merge_run_args(&args);
@@ -999,7 +1010,7 @@ spawn_overhead_ms = 100.0
             "[tool.oxitest]\ntimeout = 45\n",
         )
         .unwrap();
-        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cfg = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let args = base_run_args();
         let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.exec.timeout_secs, Some(45));
@@ -1076,7 +1087,7 @@ async_backend = "trio"
             "[tool.oxitest]\naffected_base = \"main\"\n",
         )
         .unwrap();
-        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cfg = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let args = parse_run(&["--affected"]);
         let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.filter.affected, Some("main".to_string()));
@@ -1085,7 +1096,7 @@ async_backend = "trio"
     #[test]
     fn test_affected_bare_defaults_to_head_without_config() {
         let dir = TempDir::new().unwrap();
-        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cfg = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let args = parse_run(&["--affected"]);
         let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.filter.affected, Some("HEAD".to_string()));
@@ -1099,7 +1110,7 @@ async_backend = "trio"
             "[tool.oxitest]\naffected_base = \"main\"\n",
         )
         .unwrap();
-        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cfg = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let args = parse_run(&["--affected=develop"]);
         let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.filter.affected, Some("develop".to_string()));
@@ -1125,7 +1136,7 @@ async_backend = "trio"
             "[tool.oxitest]\nretries = 2\n",
         )
         .unwrap();
-        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cfg = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let args = parse_run(&["--retries", "5"]);
         let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.exec.retries, 5);
@@ -1216,7 +1227,7 @@ async_backend = "trio"
     #[test]
     fn test_debug_post_mortem_merge() {
         let dir = TempDir::new().unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let config = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let args = DebugArgs::default_for_test(); // defaults to PostMortem
         let merged = config.merge_debug_args(&args);
         assert!(merged.exec.mode.is_serial(), "debug should imply serial");
@@ -1245,7 +1256,7 @@ async_backend = "trio"
             "[tool.oxitest]\ntimeout = 30\n",
         )
         .unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let config = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let args = DebugArgs::default_for_test();
         let merged = config.merge_debug_args(&args);
         assert_eq!(
@@ -1257,7 +1268,7 @@ async_backend = "trio"
     #[test]
     fn test_merge_debug_args_applies_mode() {
         let dir = TempDir::new().unwrap();
-        let config = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let config = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let args = DebugArgs::default_for_test();
         let merged = config.merge_debug_args(&args);
         assert!(merged.exec.mode.is_serial());
@@ -1287,7 +1298,7 @@ async_backend = "trio"
             "[tool.oxitest]\nkeep_tmp = \"always\"\n",
         )
         .unwrap();
-        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cfg = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let args = parse_run(&["--keep-tmp=failed"]);
         let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.output.keep_tmp, KeepTmpMode::Failed);
@@ -1301,7 +1312,7 @@ async_backend = "trio"
             "[tool.oxitest]\nkeep_tmp = \"always\"\n",
         )
         .unwrap();
-        let cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let cfg = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         let args = base_run_args();
         let merged = cfg.merge_run_args(&args);
         assert_eq!(merged.output.keep_tmp, KeepTmpMode::Always);
@@ -1358,7 +1369,7 @@ async_backend = "trio"
     #[test]
     fn test_use_gitignore_cli_disables() {
         let dir = TempDir::new().unwrap();
-        let mut cfg = Config::load(Utf8Path::from_path(dir.path()).unwrap());
+        let mut cfg = Config::load_at(Utf8Path::from_path(dir.path()).unwrap());
         assert!(cfg.paths.use_gitignore);
         cfg.paths.use_gitignore = false; // simulates what pipeline does with CLI flag
         assert!(!cfg.paths.use_gitignore);

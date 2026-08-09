@@ -300,38 +300,15 @@ pub fn unmatched_literal_targets<'a>(
 /// never typed, and the path half of Target validation prints the argument
 /// verbatim — so the two halves of one feature would disagree (#1797).
 ///
-/// `rootdir` can be **empty**, and that is a pre-existing defect this function
-/// only works around. `partition_positionals` puts the file part of a node ID
-/// into `paths`, so `find_rootdir` is seeded with it; when that file sits
-/// directly in the working directory its parent is `""`, `canonicalize_utf8`
-/// fails on the empty path, and the `pyproject.toml` probe then succeeds
-/// against the working directory and returns `""`. The same happens for a plain
-/// `oxitest test_foo.py` run from a project root. Falling back to the process
-/// working directory keeps this message honest without changing rootdir
-/// inference, which #1797 deliberately does not touch.
+/// `base` is the rootdir. It can no longer be empty: `find_rootdir` resolves
+/// its seed against the invocation directory and always returns an absolute
+/// path (#2026). Until then this function fell back to the process working
+/// directory, because a bare-filename Target produced an empty rootdir.
 fn display_target(node_id: &str, base: &str) -> String {
     let Some((path, rest)) = node_id.split_once("::") else {
         return node_id.to_string();
     };
     relativise(path, base).map_or_else(|| node_id.to_string(), |rel| format!("{rel}::{rest}"))
-}
-
-/// The directory a Target is spelled relative to.
-///
-/// Normally the rootdir. When that is empty — the pre-existing `find_rootdir`
-/// defect described on [`display_target`] — the process working directory is the
-/// honest reference, because it is what the user's argument was relative to.
-/// Resolved once per refusal rather than once per Target, so the message costs
-/// one lookup however many Targets it names.
-fn display_base(rootdir: &camino::Utf8Path) -> String {
-    if !rootdir.as_str().is_empty() {
-        return rootdir.as_str().to_string();
-    }
-    std::env::current_dir()
-        .ok()
-        .and_then(|dir| camino::Utf8PathBuf::from_path_buf(dir).ok())
-        .map(|dir| dir.into_string())
-        .unwrap_or_default()
 }
 
 /// Drop Windows' extended-length `\\?\` prefix so two spellings of one path can
@@ -385,10 +362,10 @@ pub fn render_unmatched_targets(
     unmatched: &[&crate::types::NodeId],
     rootdir: &camino::Utf8Path,
 ) -> String {
-    let base = display_base(rootdir);
+    let base = rootdir.as_str();
     let mut out = String::from("error: no such test\n");
     for id in unmatched {
-        out.push_str(&format!("  {}\n", display_target(id.as_ref(), &base)));
+        out.push_str(&format!("  {}\n", display_target(id.as_ref(), base)));
     }
     out.push_str(
         "\nA node ID that matches no test is a usage error, not an empty run.\n\

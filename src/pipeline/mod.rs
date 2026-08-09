@@ -220,8 +220,15 @@ impl<'a> PipelineCommand<'a> {
     }
 
     /// Load the config under `rootdir` and merge this command's flags into it.
-    fn load_config(&self, rootdir: &camino::Utf8Path) -> config::Config {
-        let cfg = config::Config::load(rootdir);
+    ///
+    /// `invocation_dir` is the base every relative Target on this command line
+    /// is resolved against (#2026).
+    fn load_config(
+        &self,
+        rootdir: &camino::Utf8Path,
+        invocation_dir: &camino::Utf8Path,
+    ) -> config::Config {
+        let cfg = config::Config::load(rootdir, invocation_dir);
         match self {
             Self::Run(args) => cfg.merge_run_args(args),
             Self::Debug(args) => cfg.merge_debug_args(args),
@@ -539,8 +546,9 @@ fn setup_with_plugin_recovery(
     argv: &[String],
     phase1_err: clap::Error,
     rootdir: &Utf8PathBuf,
+    invocation_dir: &camino::Utf8Path,
 ) -> PyResult<Result<PipelineShared, ExitCode>> {
-    let cfg = config::Config::load(rootdir);
+    let cfg = config::Config::load(rootdir, invocation_dir);
     let extensions =
         bridge::discover_plugin_cli(py, &cfg.features.plugins, &cfg.features.plugin_settings)?;
 
@@ -619,8 +627,8 @@ fn setup_with_plugin_recovery(
     if let Some(code) = refuse_missing_targets(&pipeline_command) {
         return Ok(Err(code));
     }
-    let rootdir = config::find_rootdir(pipeline_command.first_path());
-    let mut cfg = pipeline_command.load_config(&rootdir);
+    let rootdir = config::find_rootdir(pipeline_command.first_path(), invocation_dir);
+    let mut cfg = pipeline_command.load_config(&rootdir, invocation_dir);
 
     if !use_gitignore {
         cfg.paths.use_gitignore = false;
@@ -635,6 +643,12 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
     let argv: Vec<String> = std::iter::once("oxitest".to_string())
         .chain(args.iter().cloned())
         .collect();
+
+    // Captured once and threaded from here, so every relative Target on this
+    // command line resolves against the same base — including on the
+    // plugin-recovery path, which reaches `find_rootdir` twice more (#2026).
+    let invocation_dir = config::invocation_dir();
+    let invocation_dir = invocation_dir.as_path();
 
     // ── Phase 1: Core CLI parse ────────────────────────────────────
     //
@@ -668,9 +682,9 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
                         None
                     }
                 });
-                let rootdir = config::find_rootdir(first_path);
+                let rootdir = config::find_rootdir(first_path, invocation_dir);
                 if config::has_plugins_configured(&rootdir) {
-                    return setup_with_plugin_recovery(py, &argv, e, &rootdir);
+                    return setup_with_plugin_recovery(py, &argv, e, &rootdir, invocation_dir);
                 }
             }
 
@@ -713,8 +727,8 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
     }
 
     if let config::Command::Inspect(args) = command {
-        let rootdir = config::find_rootdir(None);
-        let cfg = config::Config::load(&rootdir);
+        let rootdir = config::find_rootdir(None, invocation_dir);
+        let cfg = config::Config::load(&rootdir, invocation_dir);
         return py.detach(|| match crate::inspect::run(&args, &cfg) {
             Ok(()) => Ok(Err(ExitCode::Success)),
             Err(e) => {
@@ -730,8 +744,8 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
     if let Some(code) = refuse_missing_targets(&pipeline_command) {
         return Ok(Err(code));
     }
-    let rootdir = config::find_rootdir(pipeline_command.first_path());
-    let mut cfg = pipeline_command.load_config(&rootdir);
+    let rootdir = config::find_rootdir(pipeline_command.first_path(), invocation_dir);
+    let mut cfg = pipeline_command.load_config(&rootdir, invocation_dir);
     if !use_gitignore {
         cfg.paths.use_gitignore = false;
     }
