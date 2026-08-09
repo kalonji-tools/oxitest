@@ -27,6 +27,7 @@ mod reporter;
 mod retry;
 mod scheduler;
 mod strict;
+mod target;
 mod types;
 mod worker_result;
 mod worker_session;

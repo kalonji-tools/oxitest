@@ -52,6 +52,12 @@ impl Pipeline {
         // ── Item-level filtering (formerly PreFilter::filter) ────────────
 
         // Node ID filter (positional node IDs).
+        //
+        // No #1797 Target check here, deliberately. Transition 6 already refused
+        // a Target that matched nothing, against the complete collected set.
+        // `apply_strict_mode` has run by this point, so repeating the check on
+        // its output could report a Target as unmatched when strict mode dropped
+        // the item that matched it.
         let source_files = shared.cfg.filter.source_files();
         let items = filter::filter_by_node_ids(
             result.clean_items,

@@ -206,6 +206,19 @@ impl<'a> PipelineCommand<'a> {
         paths.first().map(camino::Utf8PathBuf::as_path)
     }
 
+    /// Every positional path for this command, in the order given.
+    ///
+    /// `first_path` returns only the head because rootdir discovery needs one
+    /// seed. Target validation needs them all (#1797).
+    fn paths(&self) -> &[camino::Utf8PathBuf] {
+        match self {
+            Self::Run(args) => &args.paths,
+            Self::Debug(args) => &args.paths,
+            Self::Query(args) => &args.paths,
+            Self::Fixtures(args) => &args.paths,
+        }
+    }
+
     /// Load the config under `rootdir` and merge this command's flags into it.
     fn load_config(&self, rootdir: &camino::Utf8Path) -> config::Config {
         let cfg = config::Config::load(rootdir);
@@ -242,6 +255,23 @@ fn report_non_pipeline_command(command: &config::Command) -> ExitCode {
          and must not reach it"
     );
     ExitCode::UsageError
+}
+
+/// Refuse the whole run when a path Target does not exist (#1797).
+///
+/// Returns the exit code to leave with, or `None` when every path Target is
+/// present.
+///
+/// Called from **both** `setup` and `setup_with_plugin_recovery`. Recovery is
+/// entered from inside `setup`'s CLI-error arm and returns from there, so a
+/// single check in `setup` would never run for a plugin-extended command line.
+fn refuse_missing_targets(pipeline_command: &PipelineCommand) -> Option<ExitCode> {
+    let missing = crate::target::missing_paths(pipeline_command.paths());
+    if missing.is_empty() {
+        return None;
+    }
+    eprint!("{}", crate::target::render_missing_paths(&missing));
+    Some(ExitCode::UsageError)
 }
 
 /// Validate that no two plugins claim the same CLI prefix.
@@ -586,6 +616,9 @@ fn setup_with_plugin_recovery(
     let Some(pipeline_command) = PipelineCommand::from_command(&command) else {
         return Ok(Err(report_non_pipeline_command(&command)));
     };
+    if let Some(code) = refuse_missing_targets(&pipeline_command) {
+        return Ok(Err(code));
+    }
     let rootdir = config::find_rootdir(pipeline_command.first_path());
     let mut cfg = pipeline_command.load_config(&rootdir);
 
@@ -694,6 +727,9 @@ fn setup(py: Python<'_>, args: &[String]) -> PyResult<Result<PipelineShared, Exi
     let Some(pipeline_command) = PipelineCommand::from_command(&command) else {
         return Ok(Err(report_non_pipeline_command(&command)));
     };
+    if let Some(code) = refuse_missing_targets(&pipeline_command) {
+        return Ok(Err(code));
+    }
     let rootdir = config::find_rootdir(pipeline_command.first_path());
     let mut cfg = pipeline_command.load_config(&rootdir);
     if !use_gitignore {

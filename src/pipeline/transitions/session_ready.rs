@@ -147,6 +147,22 @@ impl Pipeline {
             merged_violations.extend(unused);
         }
 
+        // #1797: a literal node-ID Target that matches no test refuses the whole
+        // run. This is the only site that checks, and it must stay that way: it
+        // is transition 6, so it sees the complete collected set. Transition 10
+        // (`strict_or_skip`) filters again, but by then strict mode has already
+        // run, so a Target whose only item strict mode dropped would look
+        // unmatched and be refused for the wrong reason.
+        let unmatched =
+            crate::filter::unmatched_literal_targets(&items, &shared.cfg.filter.node_ids);
+        if !unmatched.is_empty() {
+            eprint!(
+                "{}",
+                crate::filter::render_unmatched_targets(&unmatched, &shared.cfg.rootdir)
+            );
+            return Err(ExitCode::UsageError);
+        }
+
         // Apply node ID filter early.
         let source_files = shared.cfg.filter.source_files();
         let items =

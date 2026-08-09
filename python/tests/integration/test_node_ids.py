@@ -38,8 +38,16 @@ def test_sub():
     integ.assert_passed(out, rc, count=1)
 
 
-def test_run_node_id_nonexistent_test_collects_zero(tmp: TempDir) -> None:
-    """Targeting a test that doesn't exist collects zero items."""
+def test_run_node_id_nonexistent_test_is_refused(tmp: TempDir) -> None:
+    """Targeting a test that does not exist refuses the run (#1797).
+
+    This test previously asserted ``"no tests ran"``, pinning an exit code of 0.
+    That was the defect #1797 fixes: a node ID naming a test that does not exist
+    was indistinguishable from a successful run, so a renamed test still passed
+    CI while running nothing. The old expectation is recorded here rather than
+    deleted, because the change is deliberate and a future reader will want to
+    know that exit 0 was once the documented answer.
+    """
     integ.write_project(
         tmp,
         pyproject="# oxitest",
@@ -50,13 +58,25 @@ def test_add():
 """,
         },
     )
-    out, *_ = helpers.run_oxitest_subcmd(
+    out, err, rc = helpers.run_oxitest_subcmd(
         tmp,
         "run",
         "test_math.py::test_nonexistent",
         cwd=".",
     )
-    integ.assert_contains(out, "no tests ran")
+
+    assert rc == 4, (
+        "a literal node ID that matches no test must exit 4 (UsageError), not 0 — "
+        f"exit 0 is the #1797 false-green this assertion used to pin, got {rc}"
+    )
+    assert "no such test" in out + err, (
+        "the refusal must say which Target was not found, or the user cannot tell "
+        "a typo from an empty suite"
+    )
+    assert "no tests ran" not in out, (
+        "'no tests ran' is the old exit-0 wording and must not survive the "
+        "refusal — printing both would leave the outcome ambiguous"
+    )
 
 
 # ── Class-based node IDs ─────────────────────────────────────────────────────
