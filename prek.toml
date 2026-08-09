@@ -51,6 +51,11 @@ entry = "cargo fmt"
 pass_filenames = false
 files = "\\.rs$"
 
+# The four `stages = ["pre-push"]` hooks below are run by CI, at
+# `.github/workflows/quality.yml`'s `prek run --all-files --stage pre-push` step.
+# No pre-push shim is installed locally, on purpose: `just preflight` is the
+# mandated local gate and already covers them, so a shim would make every
+# compliant push repeat that work (#1823).
 [[repos.hooks]]
 id = "cargo-clippy"
 name = "cargo clippy"
@@ -102,14 +107,6 @@ files = "(Cargo\\.toml|Cargo\\.lock)$"
 stages = ["pre-push"]
 
 [[repos.hooks]]
-id = "check-tag-version"
-name = "tag matches Cargo.toml version"
-language = "system"
-entry = "bash scripts/check-tag-version.sh"
-pass_filenames = false
-stages = ["pre-push"]
-
-[[repos.hooks]]
 id = "bridge-sync"
 name = "bridge-sync"
 language = "system"
@@ -158,14 +155,6 @@ entry = "python scripts/check_justfile_quoting.py"
 pass_filenames = false
 files = "^justfile$"
 
-[[repos.hooks]]
-id = "affected-tests"
-name = "affected tests"
-language = "system"
-entry = "bash -c 'PYTHONPATH=python uv run python -m oxitest --affected'"
-pass_filenames = false
-stages = ["pre-push"]
-
 # Fetched by prek, not taken from `devenv.nix`: the CI job that runs prek installs
 # prek and nothing else, so a `language = "system"` hook would find no binary.
 # Upstream's manifest scopes itself to `^\.github/workflows/`, which is what keeps
@@ -173,8 +162,8 @@ stages = ["pre-push"]
 # spurious syntax errors (#1974).
 #
 # A hook declaring no `stages:` runs at every stage, so both hooks here get local
-# pre-commit coverage *and* both of quality.yml's prek steps, sidestepping the
-# inert local pre-push tier (#1823).
+# pre-commit coverage *and* both of quality.yml's prek steps. The pre-push stage
+# is CI-only by design, so a hook that must also run locally declares no stage.
 [[repos]]
 repo = "https://github.com/rhysd/actionlint"
 rev = "v1.7.12"

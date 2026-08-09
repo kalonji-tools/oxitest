@@ -366,7 +366,7 @@ Never install tools globally or via `pip install` / `cargo install`. If a tool i
 
 ### prek
 
-Pre-commit hooks are managed by prek (not pre-commit). Hooks run automatically on `git commit`. To run all hooks manually:
+Pre-commit hooks are managed by prek (not pre-commit). Hooks run automatically on `git commit`. Hooks that declare `stages = ["pre-push"]` do **not** run on a local push — no pre-push shim is installed, and CI runs them instead. `prek.toml` says which and why. To run all hooks manually:
 
 ```bash
 prek run --all-files
