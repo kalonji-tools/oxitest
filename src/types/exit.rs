@@ -8,7 +8,9 @@ use super::{DurationMs, NodeId, OutcomeKind, TestOutcome};
 /// - `Failure` (1) — at least one hard failure.
 /// - `Interrupted` (2) — the run was interrupted (e.g. Ctrl-C).
 /// - `CollectError` (3) — one or more collection errors.
-/// - `UsageError` (4) — invalid CLI arguments or conflicting flags.
+/// - `UsageError` (4) — the request itself was invalid: conflicting flags, or a
+///   Target that does not exist (ADR-0014). Defined by the *class* of the error,
+///   not by when it is detected.
 ///
 /// **Severity is defined by [`as_i32`](ExitCode::as_i32), and the variant
 /// declaration order below means nothing.** `PartialOrd`/`Ord` are deliberately
