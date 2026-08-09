@@ -29,7 +29,7 @@ from oxitest._bridge._fixture_registry import (
 from oxitest._bridge._fixture_type import FixtureRef
 from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._fn_metadata import _update, get_metadata
-from oxitest._bridge._loader import _load_module, _LoadError
+from oxitest._bridge._loader import _load_module, _LoadError, already_imported
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._metadata import get_marks
 from oxitest._bridge._module_source_registrar import (
@@ -439,18 +439,34 @@ def _import_test_module(
 
     Raises ImportError on load failure.
     """
-    try:
-        module = _load_module(path, unique_name)
-    except _LoadError as e:
-        result = e.result
-        if not isinstance(result, ErrorResult):
-            # _load_module only raises _LoadError with _error_result(),
-            # which always produces an ErrorResult — this branch is unreachable.
-            msg = (  # pragma: no cover
-                f"_LoadError.result expected ErrorResult, got {type(result).__name__}"
-            )
-            raise TypeError(msg) from None  # pragma: no cover
-        raise ImportError(result.message) from None
+    # A source module collected for its doctests is normally already imported
+    # under its real dotted name. Executing it again runs every class body a
+    # second time, re-firing registration hooks into registries that are never
+    # evicted (#2014).
+    #
+    # Reuse is scoped to this package because _load_module also AST-rewrites
+    # asserts and injects _OxitestAssertionError. Skipping that is right for a
+    # source module, whose asserts are not test assertions, and wrong for a
+    # test file. Test infrastructure is canonically importable too —
+    # `tests.helpers` is — so an unscoped rule would silently strip operand
+    # detail from its assertions the moment it entered doctest scope.
+    canonical = already_imported(path)
+    if canonical is not None and canonical.__name__.startswith("oxitest."):
+        module = canonical
+    else:
+        try:
+            module = _load_module(path, unique_name)
+        except _LoadError as e:
+            result = e.result
+            if not isinstance(result, ErrorResult):
+                # _load_module only raises _LoadError with _error_result(),
+                # which always produces an ErrorResult — this branch is unreachable.
+                msg = (  # pragma: no cover
+                    f"_LoadError.result expected ErrorResult,"
+                    f" got {type(result).__name__}"
+                )
+                raise TypeError(msg) from None  # pragma: no cover
+            raise ImportError(result.message) from None
 
     # Store in session module cache if available — executor will reuse this module.
     if session is not None:

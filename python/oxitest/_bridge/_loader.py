@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 import traceback
 from collections.abc import Callable
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Literal
 
 from oxitest._bridge._assert_error import (
@@ -15,7 +17,14 @@ from oxitest._bridge._errors import LoadError as _LoadError
 from oxitest._bridge.result import _error_result
 from oxitest._oxitest import rewrite_asserts
 
-__all__ = ["LoadKind", "ModuleCache", "_LoadError", "_load_module", "_resolve_fn"]
+__all__ = [
+    "LoadKind",
+    "ModuleCache",
+    "_LoadError",
+    "_load_module",
+    "_resolve_fn",
+    "already_imported",
+]
 
 LoadKind = Literal["test", "doctest"]
 
@@ -51,6 +60,73 @@ class ModuleCache:
         """Drop every kind for *module_path*."""
         for key in [k for k in self._modules if k[0] == module_path]:
             del self._modules[key]
+
+
+_SYNTHETIC_PREFIX = "_oxitest_"
+
+
+def already_imported(module_path: str) -> ModuleType | None:
+    """Return the module already imported from *module_path*, if any.
+
+    Executing a file that is already in ``sys.modules`` under its real dotted
+    name builds a second set of class objects for everything it defines. For
+    ``_builtins/*`` that re-fires ``BuiltinFixture.__init_subclass__`` into a
+    registry that is never evicted, so the duplicates accumulate for the life
+    of the worker (#1962).
+
+    Both load routes use this, and each applies its own policy at the call
+    site. The doctest route reuses whatever it finds, because it never
+    rewrites. The collection route reuses only modules inside this package,
+    because ``_load_module`` also AST-rewrites asserts and skipping that is
+    wrong for a test file (#2014).
+
+    Executing against the canonical module rather than a private copy is
+    deliberate: it is what "one identity per module" means, and it matches
+    how pytest's own doctest collection behaves. The cost is that code which
+    mutates module state at import now leaks into the rest of the run;
+    accepted.
+
+    ``conftest_loader`` also registers each conftest.py under the bare key
+    ``"conftest"``. That is a legitimate match — the comparison below is on
+    the resolved path, so it can never return the wrong file — but the key is
+    last-writer-wins across siblings, and which conftest wins varies with the
+    modules a run selects (``-k``, positional paths, ``--affected``). So in a
+    multi-conftest project one conftest's doctests get canonical reuse and its
+    siblings' get a fresh execution, and which is which is not fixed.
+
+    Resolution is not skippable: raw ``__file__`` strings can differ for the
+    same file (``/var`` vs ``/private/var`` and similar symlink spellings,
+    #1957), so only the resolved path is a safe comparison. The basename
+    pre-filter that avoids most of those resolutions is explained at its
+    call site below.
+    """
+    try:
+        target = Path(module_path).resolve()
+    except OSError:
+        return None
+    target_name = target.name
+    # list(...) snapshots the dict: a PEP 562 module __getattr__, reached via
+    # the getattr below, can import and mutate sys.modules mid-iteration,
+    # which raises RuntimeError: dictionary changed size during iteration
+    # over a live view.
+    for name, module in list(sys.modules.items()):
+        if name.startswith(_SYNTHETIC_PREFIX):
+            continue
+        file = getattr(module, "__file__", None)
+        # Basename first, so most candidates never reach the resolve() below.
+        # os.path.basename ~165us/call against this repo's ~420-entry
+        # sys.modules; Path(file).name ~1026us for the same string op, and
+        # this runs once per collected or doctested module. PTH119 prefers
+        # pathlib; measured
+        # here, pathlib is the 6-8x slower way to read one string.
+        if file is None or os.path.basename(file) != target_name:  # noqa: PTH119
+            continue
+        try:
+            if Path(file).resolve() == target:
+                return module
+        except OSError:
+            continue
+    return None
 
 
 def _load_module(module_path: str, unique_name: str) -> Any:

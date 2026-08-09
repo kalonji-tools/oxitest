@@ -1,7 +1,11 @@
-"""Module identity for the doctest load route (#1962 §2).
+"""Module identity for both load routes (#1962 §2, #2014).
 
 The test route AST-rewrites asserts and injects globals; the doctest route
 executes source as written. They must never serve each other's module.
+
+Both routes reuse an already-imported module rather than executing a second
+copy. The collection route scopes that reuse to this package, because reuse
+skips the rewrite the test route depends on.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ from oxitest._bridge._builtins import _tempdir
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._doctest_runner import _doctest_module_name, _import_doctest_module
 from oxitest._bridge._loader import ModuleCache
+from oxitest._bridge.importer import _import_test_module, collect_module
 from oxitest._bridge.result import ErrorResult
 from tests import helpers
 
@@ -181,7 +186,7 @@ def test_import_doctest_module_ignores_a_synthetic_sys_modules_entry(
 ) -> None:
     """A module installed under any of oxitest's own synthetic names is not canonical.
 
-    Without the ``_SYNTHETIC_PREFIX`` guard, ``_already_imported`` would treat
+    Without the ``_SYNTHETIC_PREFIX`` guard, ``already_imported`` would treat
     any ``sys.modules`` entry as a real import as long as its ``__file__``
     resolves to the target path — including another oxitest route's own
     private copy. A probe against this exact defect got back
@@ -190,7 +195,7 @@ def test_import_doctest_module_ignores_a_synthetic_sys_modules_entry(
     missed two of the five write sites on the day it was written (#1962).
     """
     # Arrange — a real file on disk, so the resolved-path comparison in
-    # _already_imported can succeed, with a fake module installed under a
+    # already_imported can succeed, with a fake module installed under a
     # synthetic name pointing at it. Nothing else in the process has any
     # reason to have imported this fresh file under a real dotted name, so
     # the fake is the *only* sys.modules entry that can match by path.
@@ -310,4 +315,58 @@ def test_loading_a_builtin_module_for_doctests_adds_no_registry_duplicates() -> 
         "loading a built-in module through the doctest route registered its "
         "classes again; BuiltinFixture.for_type() resolves by class identity, "
         "so which object a caller gets would depend on which route loaded it"
+    )
+
+
+# ── The collection route (#2014) ──────────────────────────────────────────────
+
+
+def test_collecting_a_builtin_module_adds_no_registry_duplicates() -> None:
+    """The collection route must not re-register a built-in module's classes.
+
+    Doctest coverage makes a source module collectable, so ``collect_module``
+    reaches ``_builtins/*`` and used to execute it a second time under an
+    ``_oxitest_collect_*`` name (#2014). This drives that route directly:
+    observing it after the fact cannot work, because whether a worker collects
+    a built-in before the shape-rule test is scheduling-dependent.
+    """
+    # Arrange
+    before = sorted(cls.__name__ for cls in BuiltinFixture.registered_types())
+
+    # Act
+    collect_module(str(Path(_tempdir.__file__)))
+
+    # Assert
+    after = sorted(cls.__name__ for cls in BuiltinFixture.registered_types())
+    assert after == before, (
+        "collecting a built-in module registered its classes a second time; "
+        "BuiltinFixture.for_type() resolves by class identity, so which object "
+        "a caller gets would then depend on which route loaded the module"
+    )
+
+
+def test_collecting_a_module_outside_the_package_still_rewrites_asserts() -> None:
+    """Reuse is scoped to this package, so a test file keeps its rewrite.
+
+    ``_load_module`` injects ``_OxitestAssertionError`` and rewrites asserts so
+    a failure carries operand detail. Reusing an already-imported module skips
+    that. Test infrastructure is canonically importable — ``tests.helpers`` is —
+    so an unscoped reuse rule would silently strip that detail (#2014).
+    """
+    # Arrange — helpers is imported at module scope above, so it is already in
+    # sys.modules under a canonical, non-oxitest name. That is the condition.
+    assert not helpers.__name__.startswith("oxitest."), (
+        "this test is void unless the arranged module sits outside the oxitest "
+        "package — inside it, reuse is correct and the assertion below would "
+        "pass for the wrong reason"
+    )
+
+    # Act
+    module = _import_test_module(str(Path(helpers.__file__)), "_probe_2014", None)
+
+    # Assert
+    assert "_OxitestAssertionError" in module.__dict__, (
+        "a module outside the oxitest package was reused instead of loaded, so "
+        "its asserts were never rewritten; every assertion in it would report "
+        "without operand detail and nothing would announce the loss"
     )
