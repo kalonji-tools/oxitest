@@ -188,6 +188,29 @@ pub fn drain_worker_results(
                         );
                     }
                     Err(e) => {
+                        // A line that is not JSON at all is not protocol
+                        // traffic — it is a test, a C extension, or an
+                        // uncaptured child writing to fd 1, which is the same
+                        // pipe. Counting it against `expected` filled the slot
+                        // the real result needed (#2010). See
+                        // `docs/internals/src/worker-protocol.md` for the full
+                        // classification and what not counting it costs.
+                        //
+                        // It does NOT reset the deadline, for the same reason
+                        // an empty line does not: it is not the worker
+                        // answering, and once it stopped counting, nothing else
+                        // bounds this loop. A test looping on `print()` held
+                        // the drain open indefinitely — measured at 4.79M lines
+                        // and still running — where `drain_until_eof` has
+                        // `MAX_TAIL_LINES` for exactly this shape.
+                        if serde_json::from_str::<serde_json::Value>(trimmed).is_err() {
+                            tracing::warn!(
+                                error = %e,
+                                output = %trimmed,
+                                "ignoring non-protocol line on worker stdout"
+                            );
+                            continue;
+                        }
                         received += 1;
                         result_deadline = Instant::now() + watchdog;
                         // Try to salvage node_id + duration_ms for an error sentinel
@@ -223,7 +246,7 @@ pub fn drain_worker_results(
                                         ),
                                         duration_ms: types::DurationMs::ZERO,
                                         outcome: types::TestOutcome::error_sentinel(format!(
-                                            "Malformed worker output (not valid JSON): {e}"
+                                            "Malformed worker result (JSON, but not a result): {e}"
                                         )),
                                     },
                                     worker_id,
@@ -1061,14 +1084,22 @@ mod drain_tests {
     }
 
     // ── Test 11 ─────────────────────────────────────────────────────────────────
-    // Completely invalid JSON (not salvageable via WireMinimal) must still emit
-    // an error sentinel so the test is not silently dropped.
+    // JSON that is not a result (not salvageable via WireMinimal) must still
+    // emit an error sentinel so the test is not silently dropped.
+    //
+    // This test used to send `"not json at all"` and assert the same thing.
+    // That was the contract #2010 removed: a line which is not JSON at all is
+    // not the worker answering, so counting it deleted the answer. The salvage
+    // path is kept for the case it was written for — a worker that emitted
+    // something structured and wrong.
     #[test]
-    fn completely_malformed_json_emits_error_sentinel() {
+    fn json_that_is_not_a_result_emits_error_sentinel() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
         let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
 
-        line_tx.send("not json at all\n".to_string()).unwrap();
+        line_tx
+            .send("{\"unexpected\": true}\n".to_string())
+            .unwrap();
         drop(line_tx);
 
         let (outcome, received) =
@@ -1081,12 +1112,14 @@ mod drain_tests {
         );
         assert_eq!(
             received, 1,
-            "the malformed line must be counted as received"
+            "a malformed result is still the worker's answer for that test; \
+             refusing the slot would leave the drain waiting for a second answer \
+             that never comes, until the watchdog kills a healthy worker"
         );
         let result = expect_result(
             result_rx
                 .try_recv()
-                .expect("an error sentinel must be sent for completely malformed JSON"),
+                .expect("an error sentinel must be sent for JSON that is not a result"),
         );
         assert!(
             matches!(
@@ -1096,6 +1129,102 @@ mod drain_tests {
             "outcome must be an Error sentinel, got: {:?}",
             result.resolved.outcome
         );
+    }
+
+    // ── #2010 ───────────────────────────────────────────────────────────────────
+    // A worker's stdout is the protocol pipe, and a test can write to fd 1.
+    // A line that is not protocol traffic must not consume a result slot: it
+    // used to, so the real result arrived after the drain had already returned
+    // Complete and was discarded as "unexpected result after the final task
+    // group". One stray print() deleted one passing test, and the run exited 0.
+    #[test]
+    fn non_protocol_line_does_not_consume_a_result_slot() {
+        let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+        let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
+
+        line_tx.send("hello from a test\n".to_string()).unwrap();
+        line_tx.send(valid_json("t::a")).unwrap();
+        drop(line_tx);
+
+        let (outcome, received) =
+            drain_worker_results(&line_rx, 1, Duration::from_secs(5), &result_tx, 0);
+
+        assert_eq!(
+            outcome,
+            DrainOutcome::Complete,
+            "the worker sent the one result it owed, so the drain must complete \
+             rather than spend the slot on the stray line and time out"
+        );
+        assert_eq!(
+            received, 1,
+            "only the real result counts — counting the stray line too is what \
+             discarded the real one"
+        );
+        let messages: Vec<WorkerMessage> = result_rx.try_iter().collect();
+        assert_eq!(
+            messages.len(),
+            1,
+            "the stray line must produce no result of its own, or one passing \
+             test is reported twice — once real, once as malformed output"
+        );
+        // Asserting the node id, not just the count. Counting the stray line
+        // also yields exactly one message — the `<worker>::malformed_output`
+        // sentinel — so every assertion above passes with the fix reverted.
+        // Measured: a mutant that restores the old arm left this test green and
+        // was caught only by the end-to-end suite.
+        let result = expect_result(messages.into_iter().next().expect("one message"));
+        assert_eq!(
+            result.resolved.node_id.to_string(),
+            "t::a",
+            "the surviving result must be the worker's real one. A \
+             `<worker>::malformed_output` sentinel here means the stray line \
+             was counted and the real result was discarded behind it"
+        );
+    }
+
+    // Once a non-protocol line stopped counting toward `expected`, nothing else
+    // bounded this loop: `drain_until_eof` carries MAX_TAIL_LINES for exactly
+    // this shape, and its doc comment says the dispatch loop "has no such need
+    // because `expected` bounds it" — which #2010 made false. A test looping on
+    // print() held the drain open past 45s and 4.79M lines before the deadline
+    // stopped being reset for these lines.
+    //
+    // Same shape as bug44_empty_lines_spin_without_progress, and for the same
+    // reason: a line that is not the worker answering must not prove liveness.
+    #[test]
+    fn non_protocol_lines_spin_without_progress() {
+        let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
+
+        let handle = std::thread::spawn(move || {
+            let stop = std::time::Instant::now() + SPAM_WINDOW;
+            while std::time::Instant::now() < stop {
+                if line_tx.send("spam\n".to_string()).is_err() {
+                    break;
+                }
+            }
+        });
+
+        let watchdog = Duration::from_millis(50);
+        let start = std::time::Instant::now();
+
+        let (outcome, received) = drain_worker_results(&line_rx, 1, watchdog, &result_tx, 0);
+
+        let elapsed = start.elapsed();
+        assert_eq!(received, 0, "no real result was ever sent");
+        assert!(
+            matches!(outcome, DrainOutcome::TimedOut),
+            "a worker emitting only non-protocol lines has answered nothing, so \
+             the watchdog must fire. Got {outcome:?}"
+        );
+        assert!(
+            elapsed <= watchdog + JITTER_SLACK,
+            "the watchdog did not fire within {:?}; elapsed={elapsed:?}. \
+             Non-protocol lines are resetting the deadline, which holds the \
+             drain open for as long as a test keeps printing.",
+            watchdog + JITTER_SLACK
+        );
+        drop(handle);
     }
 }
 
