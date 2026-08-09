@@ -496,6 +496,14 @@ def _drain(context: str, teardown: Callable[..., None], *args: str) -> None:
 def main() -> None:
     """Read newline-delimited JSON tasks from stdin, write one result line per test."""
     _maybe_start_coverage()
+    # Declare UTF-8 before the first read: the coordinator writes raw UTF-8
+    # (serde_json::to_writer), and a codec cannot be changed once reads have
+    # begun. Without this the task decodes with the locale codec, which on
+    # Windows is cp1252, and one non-ASCII character in a path makes every
+    # result come back under a node id the coordinator never issued (#2004).
+    from oxitest._bridge._streams import force_utf8_streams
+
+    force_utf8_streams()
     # Force line buffering on stdout so each print() flushes on newline.
     # Piped stdout defaults to block buffering (8KB), which starves the
     # Rust watchdog — it expects one result line per test.

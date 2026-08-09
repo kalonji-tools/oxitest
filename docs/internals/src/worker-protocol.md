@@ -20,6 +20,32 @@ graph LR
 - stdout: piped (Rust reads results)
 - stderr: inherited (Python tracebacks visible to user)
 
+### Encoding
+
+**Every byte on all three streams is UTF-8, on every platform.**
+
+This is a property of the protocol, not of the host. Rust writes tasks with
+`serde_json::to_writer`, which does not escape non-ASCII — a path containing
+`ü` goes down the pipe as raw UTF-8. Rust reads results with
+`BufRead::read_line` into a `String`, which rejects anything that is not valid
+UTF-8 and, at `src/worker_session.rs`, treats that read error the same as EOF.
+
+Python does not honour this by default. A worker's `sys.stdin`, `sys.stdout`
+and `sys.stderr` fall back to the locale codec, which on Windows is cp1252, so
+`worker.py:main()` calls `force_utf8_streams()` before its first read.
+Without it a non-ASCII path decodes to mojibake, every result comes back under
+a node id the coordinator never issued, `parallel::drain` discards all of them,
+and the run reports `no tests ran` with exit code 0 (#2004).
+
+Two consequences worth keeping in mind when changing this code:
+
+- The declaration must precede the first read. `TextIOWrapper.reconfigure`
+  raises `UnsupportedOperation` once a stream has been read from.
+- Worker→Rust stdout survives independently of that, because `_emit` uses
+  `json.dumps`'s `ensure_ascii=True` default and so emits pure ASCII. That is
+  a second line of defence, not a redundant one — do not disable it for
+  payload size without re-checking the `read_line` path above.
+
 ## Lifecycle
 
 1. Rust spawns the worker subprocess
