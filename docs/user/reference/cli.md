@@ -480,12 +480,10 @@ the full `file:line` list of every bare assertion is printed instead.
 
 ## Exit codes
 
-| Code | Meaning |
-|------|---------|
-| `0` | All tests passed (or no tests were collected). |
-| `1` | One or more tests failed or errored. |
-| `2` | Run interrupted (e.g. `-x` or `--maxfail` reached). |
-| `3` | Collection error or strict violations found when using `--strict=abort`. |
-| `4` | Invalid CLI arguments — oxitest exits before running any tests. |
+See the [Exit Codes](exit-codes.md) reference page.
 
-See the [Exit Codes](exit-codes.md) reference page for full details.
+The table that used to sit here restated that page and drifted from it: it still
+described code `0` as covering any run that collected nothing, and code `4` as
+invalid CLI arguments only, after both meanings changed in
+[ADR-0014](../../adr/0014-target-validation.md). One file defines each fact, so
+this section points at that file instead of copying it.

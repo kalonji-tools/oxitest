@@ -12,6 +12,8 @@
 
 **Node ID** — Unique identifier for a test item. Format: `module_path::fn_name` or `module_path::ClassName::method_name` for class methods. Parametrized variants append `[param_id]` (e.g., `module_path::fn_name[case1]`, `module_path::ClassName::method_name[case1]`).
 
+**Target** — A path, a directory, or a node ID given as a command-line argument. A Target that names something absent is a usage error: the run is refused and nothing executes. A **glob** node-ID Target is exempt, because a glob asks to match what is present rather than asserting that it exists.
+
 **Collection** — The phase where oxitest discovers test files, imports them, and produces test items.
 
 **Execution** — The phase where test items are run and produce outcomes.
