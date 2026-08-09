@@ -1042,10 +1042,10 @@ class FixtureSession:
                 if hint is Fixtures:
                     kwargs[param_name] = FixturesProxy(
                         self,
-                        # The whole meta, not module_path + fn_name: fx.oxi.ctx
-                        # rebuilds a TestContext downstream, and the two fields
-                        # this used to pass are the two that are NOT its
-                        # identity (#1874).
+                        # The whole meta, not module_path + fn_name: a builtin
+                        # resolved through this proxy rebuilds its own view
+                        # downstream, and the two fields this used to pass are
+                        # the two that are NOT the test's identity (#1874).
                         meta,
                         fn_teardowns,
                         # A sync test cannot await, so the proxy rejects async

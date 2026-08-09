@@ -16,9 +16,9 @@ reported ``""``, both silently. ``f"test_{ctx.name}"`` in a fixture therefore
 produced one well-formed, identical string for every test in a run — a
 collision that surfaces somewhere else entirely.
 
-``fx.oxi.ctx`` was a fourth case and is not in the table because it is no
-longer synthetic: the proxy now forwards the running test's ``TestMeta`` whole
-rather than rebuilding one from ``module_path`` + ``fn_name``.
+``fx.oxi.ctx`` was a fourth case. It is removed (ADR-0015); the proxy forwards
+the running test's ``TestMeta`` whole, so the identity a builtin reads through
+it is the real one rather than a rebuild from ``module_path`` + ``fn_name``.
 """
 
 from __future__ import annotations
@@ -187,11 +187,7 @@ def test_a_fixture_reading_ctx_name_fails_the_run() -> None:
 
 
 def test_the_supported_uses_of_ctx_all_still_pass(tmp: TempDir) -> None:
-    """The positive half: teardown from a fixture, identity from a test.
-
-    Includes ``fx.oxi.ctx.node_id``, which returned ``""`` from a real test
-    before the proxy forwarded the running test's ``TestMeta`` whole.
-    """
+    """The positive half: teardown from a fixture, identity from a test."""
     # Arrange
     project = _PROJECT / "supported"
     log = Path(tmp) / "events.log"
@@ -206,13 +202,13 @@ def test_the_supported_uses_of_ctx_all_still_pass(tmp: TempDir) -> None:
 
     # Assert
     assert rc == 0, (
-        f"ctx.addfinalizer from a fixture, ctx identity on a test, and "
-        f"fx.oxi.ctx identity must all keep working; without this the refusal "
-        f"next door could be a blanket break\nstdout:\n{stdout}\n"
+        f"ctx.addfinalizer from a fixture, ctx.module_path from a fixture, and "
+        f"ctx identity on a test must all keep working; without this the "
+        f"refusal next door could be a blanket break\nstdout:\n{stdout}\n"
         f"stderr:\n{stderr}"
     )
-    assert "4 passed" in stdout, (
-        "all four supported uses must run; a collection regression that "
+    assert "3 passed" in stdout, (
+        "all three supported uses must run; a collection regression that "
         f"dropped one would still exit 0\nstdout:\n{stdout}"
     )
     events = list(helpers.read_event_log(log))
