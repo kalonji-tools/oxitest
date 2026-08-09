@@ -89,4 +89,21 @@ The user-visible cost is stated rather than minimised: **a suite whose CI names 
 - `CONTEXT.md` gains **Target** as a domain term.
 - `exit-codes.md` gains a "Targets" section, and code 4's row names the new source.
 - `src/types/exit.rs`'s doc comment is a third definition site for code 4 and is kept consistent with the reference.
-- A pre-existing defect was found and deliberately left alone: `find_rootdir` returns an **empty** rootdir when a relative Target names a file directly in the working directory, because the file's parent is `""` and the `pyproject.toml` probe then resolves against the working directory. It is unrelated to this decision and is worked around only where a Target is spelled back to the user.
+
+## Amendment — what a relative Target is relative to (#2026)
+
+**A relative Target is resolved against the directory `oxitest` was invoked from, never against the rootdir.**
+
+The rootdir is *derived from* the Target. Resolving the Target against it is circular, and that circle had closed: `find_rootdir` returned an **empty** rootdir whenever a Target named a file directly in the invocation directory, because the file's parent was `""`. `find_rootdir` now resolves its seed against the invocation directory first, so its result is always absolute and never empty.
+
+This amendment **withdraws a claim made above**. The original consequence list said the empty rootdir was *"unrelated to this decision"* and left it alone. It is not unrelated. It produced the same class this ADR exists to remove — a run that names a real test file, executes nothing, and exits 0 — reached by a different route:
+
+```
+cd sub && oxitest ./test_x.py    # exit 0, "no tests ran", on a file holding one test
+```
+
+Two further symptoms came from the same cause. A node ID naming a test that exists was refused with `no such test`, which is this ADR's own message reporting a false negative. And with two Targets, argument **order** decided whether the run executed at all, because `first_path` seeds the rootdir from the first Target only.
+
+The workaround this consequence licensed — `display_base`, which fell back to the process working directory when the rootdir was empty — is deleted, because the condition it handled can no longer occur.
+
+The exit-code contract is **unchanged**. A valid Target that holds no tests still exits 0 and reports nothing (`exit-codes.md`). #2026 removes the case where a Target only *appeared* to hold no tests.

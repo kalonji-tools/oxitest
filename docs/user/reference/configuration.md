@@ -18,7 +18,13 @@ directory). It stops at the first directory that contains any of:
 - `setup.cfg`
 - `tox.ini`
 
-The rootdir anchors relative paths and is printed at the start of each run.
+The rootdir anchors relative paths **declared in configuration**, such as
+`testpaths`, and is printed at the start of each run.
+
+A relative path given **on the command line** is different: it is resolved
+against the directory you ran `oxitest` from, like any other command-line tool.
+The rootdir is found by walking up from that path, so it cannot also be the
+thing the path is measured against.
 
 ## Configuration section
 
