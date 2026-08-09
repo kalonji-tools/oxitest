@@ -183,10 +183,14 @@ def test_end_package_is_inert_without_package_declarations() -> None:
     )
 
 
-def _run_worker(task: dict[str, Any]) -> subprocess.CompletedProcess[str]:
+def _run_worker(
+    task: dict[str, Any], env_overlay: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     """Feed one task to a real worker subprocess and return the finished process."""
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join(p for p in sys.path if p)
+    if env_overlay is not None:
+        env.update(env_overlay)
     return subprocess.run(
         [sys.executable, "-m", "oxitest._bridge.worker"],
         input=json.dumps(task),
@@ -230,6 +234,34 @@ def test_worker_subprocess_rejects_a_stale_task() -> None:
     assert "just build" in diagnostics[0]["message"], (
         "the emitted diagnostic must carry the actionable message, not just the "
         "SystemExit text the user never sees"
+    )
+
+
+def test_a_rejected_task_message_survives_a_non_utf8_locale() -> None:
+    """The rejection reason must reach the parent, not die in its reader.
+
+    The message carries an em dash, which cp1252 encodes as the single byte
+    0x97. The parent decodes with encoding="utf-8" as #1986 requires, so an
+    undeclared child codec kills the decode: on POSIX it raises, on Windows it
+    kills a reader thread and leaves proc.stderr empty while the test above
+    still passes. Asserting on stderr *content* fails under either (#2004).
+    """
+    # Arrange
+    task = _task()
+    del task["protocol_version"]
+
+    # Act
+    proc = _run_worker(task, env_overlay={"PYTHONIOENCODING": "cp1252"})
+
+    # Assert
+    assert proc.stderr is not None, (
+        "a None stderr means the parent's reader died decoding the child — the "
+        "failure mode that let the test above pass on Windows while its harness "
+        "crashed"
+    )
+    assert "just build" in proc.stderr, (
+        "the SystemExit message is the only thing a developer running a stale "
+        f"extension sees on stderr; got {proc.stderr!r}"
     )
 
 
