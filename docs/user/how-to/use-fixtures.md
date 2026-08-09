@@ -429,12 +429,12 @@ under short names. Mix custom and built-in fixtures through the same `fx` parame
 | `fx.oxi.patch` | `Patcher` |
 | `fx.oxi.log` | `LogCapture` |
 | `fx.oxi.warn` | `WarnCapture` |
-| `fx.oxi.ctx` | `TestContext` — legacy, use `oxi.current_test()` |
 
-!!! warning "`fx.oxi.ctx` is legacy"
-    It still works and stays semver-protected until v4, but
-    `oxi.current_test()` replaces it — and unlike `fx.oxi.ctx`, it is
-    reachable from a plain function the test calls (#1949).
+!!! note "`TestContext` is not on this list"
+    There is no `fx.oxi.ctx`. Reach the running test with
+    `oxi.current_test()`, which is also reachable from a plain function the
+    test calls (#1949). Inside a fixture body, declare `ctx: TestContext` as a
+    parameter instead.
 
 !!! warning "Reserved name"
     Using `oxi` as a `Fixtures()` variable name is reserved and raises a `ValueError`

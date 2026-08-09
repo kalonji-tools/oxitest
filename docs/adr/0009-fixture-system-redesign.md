@@ -931,3 +931,19 @@ Three sites share the shape but hold no generator, so `setup_completed` cannot s
 The first two leak a real resource on interrupt; the third leaks cache and stats only. They need a different mechanism — the teardown closure captures a value that does not exist until the work has been done, so registration cannot simply precede it — and that is a second design decision, deliberately not taken here.
 
 `ctx.addfinalizer` is **not** in this class: it is a bare append with no advance, so there is nothing to interrupt between. The analogous window is in user code, between acquiring a resource and calling `addfinalizer`, and no framework can close it.
+
+### Amendment 12 — the v4 consequence at "Retirement" is discharged (2026-08-09)
+
+The Retirement note above records a consequence and marks it undecided:
+
+> Taken together, at v4 a fixture would have **no route to `TestContext` at all**, and `yield` would be its only cleanup mechanism. … Recorded here for the v4 conversation that already gates [#1720](https://github.com/kalonji-tools/oxitest/issues/1720), not decided.
+
+**It is discharged, and it was false.** The consequence follows only from reading `stability.md`'s Deprecated row literally — that row said *"`ctx: TestContext` parameter injection"* with no qualifier. `docs/user/reference/python-api/builtins.md` had already scoped the deprecation to **tests**, and instructs fixtures to declare the parameter:
+
+> Inside a **fixture** body, declare `ctx: TestContext` as a parameter — that context supports `on_teardown` and `module_path`, though not the test's identity (#1874).
+
+Two shipped documents disagreed about the scope of one deprecation, and the ADR's worry inherited the broader reading. `stability.md` is corrected: the legacy row now says **on a test**, and the fixture route is stated as documented rather than legacy.
+
+So a fixture keeps its route to `TestContext`, `yield` is not its only cleanup mechanism, and no design change was needed — a one-line qualification resolved it.
+
+**Retirement is also no longer keyed to a version.** Per [ADR-0015](0015-releases-are-cut-when-earned.md) this project does not schedule retirements while it has no users, so the `Retired at` column is gone from `stability.md`. `fx.oxi.ctx`, the other spelling that note names, is **removed** rather than deprecated.

@@ -199,10 +199,13 @@ Inside a **fixture** body, declare `ctx: TestContext` as a parameter — that
 context supports `on_teardown` and `module_path`, though not the test's
 identity (#1874).
 
-!!! warning "Legacy spellings"
-    `ctx: TestContext` parameter injection on a **test**, and `fx.oxi.ctx`,
-    both still work and remain semver-protected until v4. Prefer
-    `TestContext.current()` in new code.
+!!! warning "Legacy spelling"
+    `ctx: TestContext` parameter injection **on a test** still works and stays
+    semver-protected; no retirement is scheduled. Prefer
+    `TestContext.current()` in new code. On a **fixture** the parameter is not
+    legacy — it is the documented route.
+
+    `fx.oxi.ctx` is **removed**.
 
 ### Usage for Fixture Authors
 
