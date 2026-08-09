@@ -1,0 +1,7 @@
+[project]
+name = "target-relative-base"
+version = "0.1.0"
+
+# No `testpaths`: the rootdir itself is the tree, so the only thing that decides
+# what a Target means is how the Target is spelled (#2026).
+[tool.oxitest]
