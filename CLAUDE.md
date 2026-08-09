@@ -243,7 +243,7 @@ If you need the gate while someone else is running it, the individual phases hav
 gh pr merge --rebase
 git push origin --delete <branch>
 git -C <primary-worktree> pull --ff-only
-wt remove <branch> -D --foreground --yes
+wt remove <branch> -D --foreground --yes -C <primary-worktree>
 ```
 
 `--yes` is not optional here: `wt` prompts for approval, and without it the command fails outright in a non-interactive session — in the very block offered as the workaround for a known trap.
@@ -310,7 +310,7 @@ This is `artifact` tier: it binds when someone reads the comment. Its value is t
 
 Before believing any verdict:
 
-1. **Capture the exit status directly**, never through a pipe. `cmd | tail -30` reports *tail's* status, which is how a `command not found` once read as a passing gate.
+1. **Verify an operation by querying the resulting state**, not by reading its output. `gh pr view --json state,mergedAt` after a merge, `git status -sb` after a commit or push. This holds whatever the command printed, whatever wrapper it ran under, and whether or not the output was truncated. It replaces a prohibition on pipes that six eval entries recorded agents quoting and then violating, because it competed with a real need to truncate noise and lost every time (#2003).
 2. **Pin an asynchronously-fetched verdict to its subject** before reading it. Resolve the head SHA first (`gh pr view "$PR" --json headRefOid`) and refuse any answer that is not about that SHA: an **empty** CI rollup reads as "nothing pending", and after a force-push a **complete green tally belonging to the previous head** reads as success.
 3. **Decide "did it run?" on the terminal marker, not the clock.** A complete `just preflight` ends with `→ Preflight passed`; a run without that line did not finish, whatever it cost. Most phases announce themselves with a `→ ` line too, but not all — `mdbook` and `cargo doc` are silent — so count the marker, not the lines. Four branches once reported a failing preflight in 0–4 s because a `sed` had rewritten the recipe name; the tell was that no phase line appeared at all, not the duration. **A non-zero exit voids the heuristic entirely**: read the log. Wall-clock alone has misfired in both directions, and complete green runs have measured 108–140 s.
 4. **State the run count.** N clean runs is not evidence of absence. Say how many times you ran it and capture the output — a flake and a fix are indistinguishable from a single green.
