@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import oxitest
 from oxitest import Fixture, LogCapture, Patcher, StdCapture, TempDir
-from oxitest._bridge._builtin_context import TestContext as OxiTestContext
 from oxitest._bridge._errors import BoundaryError, FixtureNotFoundError
 from oxitest._bridge._fixture_registry import (
     ConftestSource,
@@ -30,9 +29,9 @@ def _meta(module_path: str, fn_name: str = "test_fake") -> TestMeta:
     """A TestMeta for a proxy under test.
 
     ``FixturesProxy`` and ``OxiNamespaceProxy`` take the running test's whole
-    ``TestMeta`` rather than a module path plus a name, because ``fx.oxi.ctx``
-    hands it straight to ``TestContext`` and the two fields they used to take
-    are the two that are *not* its identity (#1874).
+    ``TestMeta`` rather than a module path plus a name: a builtin resolved
+    through the proxy reads the identity from it, and the two fields they used
+    to take are the two that are *not* that identity (#1874).
     """
     return TestMeta(
         module_path=module_path,
@@ -290,17 +289,35 @@ def test_shared_fixture_accessed_via_namespace_is_frozen_proxy() -> None:
     )
 
 
-# ── OxiNamespaceProxy ctx ──────────────────────────────────────────────────
+# ── OxiNamespaceProxy: ctx is removed ──────────────────────────────────────
 
 
-def test_oxi_proxy_ctx_returns_test_context(
+def test_oxi_proxy_no_longer_resolves_ctx(
     fixture_session: Fixture[FixtureSession],
 ) -> None:
-    """fx.oxi.ctx should return a TestContext instance."""
+    """``fx.oxi.ctx`` is removed and refuses like any other unknown name.
+
+    The replacements are ``oxi.current_test()`` from a test and
+    ``ctx: TestContext`` from a fixture. Removed without a deprecation
+    period per ADR-0015.
+    """
+    # Arrange
     proxy = OxiNamespaceProxy(fixture_session, _meta("/fake/test.py"), [])
-    result = proxy.ctx
-    assert isinstance(result, OxiTestContext), (
-        f"oxi.ctx should return a TestContext instance, got {type(result).__name__}"
+
+    # Act
+    with oxitest.raises(AttributeError) as exc_info:
+        _ = proxy.ctx
+
+    # Assert
+    message = str(exc_info.value)
+    assert "no builtin 'ctx'" in message, (
+        "a removed name must fail through the same unknown-name path as any "
+        f"other, so a user who tries it is told what happened; got: {message}"
+    )
+    advertised = message.split("Available: ")[1]
+    assert "ctx" not in advertised, (
+        "the Available list is what a user reads after the refusal, so it "
+        f"must stop offering a name that cannot resolve; got: {advertised}"
     )
 
 

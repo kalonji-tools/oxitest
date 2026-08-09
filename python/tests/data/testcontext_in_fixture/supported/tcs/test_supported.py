@@ -1,10 +1,10 @@
-"""Four supported uses of ``TestContext``, none of which #1874 may break."""
+"""Three supported uses of ``TestContext``, none of which #1874 may break."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from oxitest import Fixture, Fixtures, TestContext
+from oxitest import Fixture, TestContext
 
 
 def test_a_fixture_may_register_a_finalizer(schema: Fixture[str]) -> None:
@@ -33,18 +33,4 @@ def test_a_test_reads_its_own_identity(ctx: TestContext) -> None:
         "node_id is the field the proxy route used to lose; asserting it here "
         "is what makes the proxy comparison below a comparison of two real "
         "answers rather than of two empty strings"
-    )
-
-
-def test_the_proxy_route_reports_the_same_identity(
-    ctx: TestContext, fx: Fixtures
-) -> None:
-    assert fx.oxi.ctx.node_id == ctx.node_id, (
-        "fx.oxi.ctx used to rebuild a synthetic TestMeta from module_path and "
-        "fn_name and drop node_id, so this returned '' from a real test whose "
-        "node id was in scope the whole time"
-    )
-    assert fx.oxi.ctx.marks == ctx.marks, (
-        "markers were dropped by the same rebuild; comparing against the "
-        "test's own ctx is what makes the two routes provably one answer"
     )

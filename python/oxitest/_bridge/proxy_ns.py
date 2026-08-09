@@ -5,7 +5,6 @@ __all__ = ["FixturesProxy", "NamespaceProxy", "OxiNamespaceProxy"]
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from oxitest._bridge._builtin_context import TestContext
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._builtins._capture import FdCapture, StdCapture
 from oxitest._bridge._builtins._logcapture import LogCapture
@@ -23,10 +22,7 @@ _OXI_NAMES: dict[str, type] = {
     "fd_cap": FdCapture,
     "patch": Patcher,
     "log": LogCapture,
-    # "ctx" handled separately via _CTX_NAME / TestContext (not in this dict)
 }
-
-_CTX_NAME = "ctx"
 
 
 class _CachingProxy:
@@ -123,12 +119,9 @@ class OxiNamespaceProxy(_CachingProxy):
             raise AttributeError(name)
 
         def _resolve() -> Any:
-            if name == _CTX_NAME:
-                inner: type | None = TestContext
-            else:
-                inner = _OXI_NAMES.get(name)
+            inner = _OXI_NAMES.get(name)
             if inner is None:
-                available = ", ".join(sorted([*_OXI_NAMES, _CTX_NAME]))
+                available = ", ".join(sorted(_OXI_NAMES))
                 msg = f"fx.oxi has no builtin '{name}'. Available: {available}"
                 raise AttributeError(msg)
             impl_cls = BuiltinFixture.for_type(inner)
@@ -140,9 +133,8 @@ class OxiNamespaceProxy(_CachingProxy):
                 raise RuntimeError(msg)
             # The running test's own meta, forwarded whole. This used to
             # rebuild a synthetic TestMeta from module_path + fn_name and drop
-            # node_id, markers and kind — so `fx.oxi.ctx.node_id` returned ""
-            # from a real test whose node id was in scope the entire time
-            # (#1874).
+            # node_id, markers and kind, so a builtin resolved here saw an
+            # identity the real test had in scope the entire time (#1874).
             return self._session.inject_builtin(
                 impl_cls,
                 self._meta,
