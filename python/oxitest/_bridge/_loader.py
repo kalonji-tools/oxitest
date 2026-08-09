@@ -66,7 +66,7 @@ _SYNTHETIC_PREFIX = "_oxitest_"
 
 
 def already_imported(module_path: str) -> ModuleType | None:
-    """Return the module already imported from *module_path*, if any.
+    r"""Return the module already imported from *module_path*, if any.
 
     Executing a file that is already in ``sys.modules`` under its real dotted
     name builds a second set of class objects for everything it defines. For
@@ -94,17 +94,40 @@ def already_imported(module_path: str) -> ModuleType | None:
     multi-conftest project one conftest's doctests get canonical reuse and its
     siblings' get a fresh execution, and which is which is not fixed.
 
-    Resolution is not skippable: raw ``__file__`` strings can differ for the
-    same file (``/var`` vs ``/private/var`` and similar symlink spellings,
-    #1957), so only the resolved path is a safe comparison. The basename
-    pre-filter that avoids most of those resolutions is explained at its
-    call site below.
+    Identity is compared, not spelling. Raw ``__file__`` strings can differ for
+    one file (``/var`` vs ``/private/var`` and similar symlink spellings,
+    #1957), and resolving both sides does not reconcile them: on Windows the
+    collector's path carries the extended-length ``\\?\`` prefix, and
+    ``ntpath.realpath`` keeps that prefix when the input already has it and
+    strips it otherwise, so the two resolved strings never compare equal
+    (#2018). The kernel already knows which file each path names, so ask it.
+
+    A zero inode on the *target* declines every match. ``os.path.samestat``
+    compares ``st_ino`` and ``st_dev``, so two unusable stats compare *equal*,
+    and the basename pre-filter does not separate them — ``sys.modules`` holds
+    many entries sharing a basename, ``__init__.py`` most of all. Declining
+    costs a duplicate registration, which this repository detects. Accepting
+    costs a silently reused wrong module.
+
+    The guard is on the target only, because a matching guard on each candidate
+    would be unreachable: a zero target returns above before the loop runs, and
+    against a non-zero target a zero candidate already fails ``samestat``.
+
+    One hazard survives, unchanged from the comparison this replaces: a module
+    imported through a symlink whose basename differs from its target's is
+    rejected by the pre-filter before any comparison runs. The pre-filter is
+    explained at its call site below.
     """
     try:
-        target = Path(module_path).resolve()
+        # PTH116 prefers Path.stat(). os.stat is kept because the result is
+        # consumed by os.path.samestat, which has no pathlib equivalent —
+        # both halves of one comparison stay in one idiom.
+        target_stat = os.stat(module_path)  # noqa: PTH116
     except OSError:
         return None
-    target_name = target.name
+    if target_stat.st_ino == 0:
+        return None
+    target_name = os.path.basename(module_path)  # noqa: PTH119
     # list(...) snapshots the dict: a PEP 562 module __getattr__, reached via
     # the getattr below, can import and mutate sys.modules mid-iteration,
     # which raises RuntimeError: dictionary changed size during iteration
@@ -113,7 +136,7 @@ def already_imported(module_path: str) -> ModuleType | None:
         if name.startswith(_SYNTHETIC_PREFIX):
             continue
         file = getattr(module, "__file__", None)
-        # Basename first, so most candidates never reach the resolve() below.
+        # Basename first, so most candidates never reach the stat below.
         # os.path.basename ~165us/call against this repo's ~420-entry
         # sys.modules; Path(file).name ~1026us for the same string op, and
         # this runs once per collected or doctested module. PTH119 prefers
@@ -122,10 +145,11 @@ def already_imported(module_path: str) -> ModuleType | None:
         if file is None or os.path.basename(file) != target_name:  # noqa: PTH119
             continue
         try:
-            if Path(file).resolve() == target:
-                return module
+            candidate_stat = os.stat(file)  # noqa: PTH116 — see the target stat
         except OSError:
             continue
+        if os.path.samestat(candidate_stat, target_stat):
+            return module
     return None
 
 
