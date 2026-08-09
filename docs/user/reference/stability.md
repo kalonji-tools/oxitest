@@ -27,20 +27,22 @@ These surfaces will not change in backward-incompatible ways without a major ver
 
 - All `[tool.oxitest]` keys documented in the reference
 
-## Deprecated
+## Legacy — prefer the replacement
 
-Still covered by the stability guarantee until the version named. They keep
-working; they are no longer the documented way.
+Still covered by the stability guarantee. They keep working; they are no
+longer the documented way. No retirement version is named: this project does
+not schedule retirements while it has no users
+([ADR-0015](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0015-releases-are-cut-when-earned.md)).
 
-| Surface | Replacement | Retired at |
-|---|---|---|
-| `ctx: TestContext` parameter injection | `oxi.current_test()` | v4 |
-| `fx.oxi.ctx` | `oxi.current_test()` | v4 |
+| Surface | Prefer instead |
+|---|---|
+| `ctx: TestContext` parameter injection **on a test** | `oxi.current_test()` |
 
-Both spellings reach the same object. `oxi.current_test()` — and
-`TestContext.current()`, the classmethod it aliases — replace them because
-they are also reachable from a plain function the test calls, code that no
-injection mechanism can see (#1949).
+`oxi.current_test()` — and `TestContext.current()`, the classmethod it aliases
+— are preferred because they are also reachable from a plain function the test
+calls, code that no injection mechanism can see (#1949). On a fixture the
+parameter is not legacy; see
+[Built-in fixtures](python-api/builtins.md).
 
 ## Experimental
 

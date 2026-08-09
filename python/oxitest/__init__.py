@@ -46,8 +46,10 @@ mark       — Decorator namespace: mark.skip, mark.xfail, mark.timeout,
 
 TestContext — The running test's identity and imperative cleanup. Reach it
               with `oxi.current_test()` (or `TestContext.current()`), which
-              works from plain functions the test calls. The injected form
-              (`ctx: TestContext`) is legacy, retired at v4.
+              works from plain functions the test calls. On a test the
+              injected form (`ctx: TestContext`) is legacy; inside a fixture
+              body it is the documented route, because `current()` refuses
+              there by design.
 
 current_test — `oxi.current_test()` → the running test's TestContext. Alias
                for TestContext.current(); raises outside a test body.

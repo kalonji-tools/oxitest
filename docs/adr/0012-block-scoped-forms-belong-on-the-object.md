@@ -137,3 +137,21 @@ There is also a textual bar. Amendment 5 set its own boundary explicitly — *"I
 - **Six built-ins are re-confirmed as fixtures, on stated grounds rather than by inheritance.** Before Rule 4 the only recorded justification was "has a lifetime boundary", which is satisfied by any `with` statement and so justified nothing. Each now names the condition it meets. Two of the eight do not: `Patcher`, as above, and — since #1949 retracted condition 4 — `TestContext`, whose ambient accessor is now the justified route. Both stay registered under semver until v4.
 - **This ADR has no structural gate.** `docs/adr/` sits outside `mkdocs.yml`'s `docs_dir` (`docs/user`), so `mkdocs --strict` never validates its links, and no other check reads it. Its cross-references are maintained by reading, and a reader who finds one stale should treat that as expected maintenance rather than as evidence the decision moved.
 - **The user-facing statement lives in `docs/user/how-to/use-fixtures.md`**, where someone writing a fixture will meet it, and cites this ADR by absolute GitHub URL because `docs/adr/` is not published on the documentation site.
+
+## Amendments
+
+### Amendment 1 — the `Patcher` question is re-keyed from a version to its precondition (2026-08-09)
+
+Two Consequences above defer to a v4 gate:
+
+> removal is a major-version conversation on the same v4.0.0 gate as [#1720](https://github.com/kalonji-tools/oxitest/issues/1720), and nothing is gained by breaking it early. Recorded here so that a later reader does not mistake its survival for an endorsement, and so the question is already framed if that release comes.
+
+> Both stay registered under semver until v4.
+
+**That gate no longer exists.** [ADR-0015](0015-releases-are-cut-when-earned.md) records that releases are cut when earned rather than scheduled, and that this project does not schedule retirements while it has no users. There is no v4 conversation to hold the question for, and "until v4" names a boundary that decides nothing.
+
+The question itself was raised when v4.0.0 became imminent, and **it is not ripe**. Its own precondition is unmet: `Patcher.context()` does not exist. Measured on `2c375591` — `python/oxitest/_bridge/_builtins/_patch.py` defines `setattr`, `setenv`, `chdir` and `close`, and no `context`; [#1696](https://github.com/kalonji-tools/oxitest/issues/1696), which adds it, is open. An injected form cannot be a vestige while it is the only form.
+
+**The trigger is therefore re-keyed to the condition rather than to a version.** `Patcher`'s injected fixture form is reconsidered **when `Patcher.context()` ships (#1696)**, which is the event the original text was really waiting for. The same applies to `TestContext`: it stays registered, and its parameter form remains the documented route inside a fixture body — see [ADR-0009](0009-fixture-system-redesign.md) Amendment 12, which discharges the related v4 consequence recorded there.
+
+This replaces a date-shaped trigger nobody would re-read with a precondition that can be checked mechanically.
