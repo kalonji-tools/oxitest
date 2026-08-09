@@ -141,11 +141,13 @@ Assignment is **folded into `gh pr create`** (`fold-in`) — there is no separat
 
 **Every row carries evidence of the same kind as its claim.** Never a bare verdict — `Verified ✅` is free to write, `0/6` is not.
 
-| Claim is about | Admissible | Not admissible |
-|---|---|---|
-| runtime behaviour | a command and its real output | a source quote, however exact — reading code is not running it |
-| what a document says | the **whole quoted span** as it appears in your artifact | a prefix, a paraphrase, or a fragment proving only that the source discusses the topic |
-| a measured quantity | the measurement, with the command that produced it | a remembered or inherited figure |
+| Claim is about | Admissible | Also required | Not admissible |
+|---|---|---|---|
+| runtime behaviour | a command and its real output | **the environment it ran in** — OS, and any platform-dependent switch the claim turns on | a source quote, however exact — reading code is not running it |
+| what a document says | the **whole quoted span** as it appears in your artifact | — | a prefix, a paraphrase, or a fragment proving only that the source discusses the topic |
+| a measured quantity | the measurement, with the command that produced it | **the environment it was measured in** | a remembered or inherited figure |
+
+The environment column exists because a ledger can be complete, every row measured, and still authorise a defect the measuring environment cannot express. Three probe results on PR #2002 were measured on Linux for a change about Windows; two defects reached CI, and neither is reachable on Linux by construction. The full suite, `just preflight`, ruff, ty, strict mkdocs and four killed mutants all passed over the first one.
 
 The whole-span clause is not pedantry: a prefix-verified quote once passed its own ledger row and shipped fabricated, because the start of a quote is the part you remember correctly and the tail is where invention happens.
 
@@ -177,7 +179,8 @@ Three different operations in this stage get called "rebase" in ordinary speech.
 - Only `--rebase` merge is allowed. Never squash merge, never merge commits.
 - Every commit message title MUST include its related issue number: `feat: add Foo (#42)`
 - Multiple issues per commit are fine: `feat: add Bar and Baz (#43, #44)`
-- **PR closing keywords**: GitHub requires the keyword before EACH issue number. Write `Closes #1, Closes #2, Closes #3` — NOT `Closes #1, #2, #3` (only the first gets closed).
+- **A pull request title carries the issue numbers that PR closes**, same form as a commit title: `feat: add Foo (#42)`, or `feat: add Bar and Baz (#43, #44)`. `just merge-ready` compares this against the closures GitHub actually parsed, so a title that omits an issue the PR closes refuses the merge. Fix the title, not the check. Dependabot PRs name no issue and close none, so they match trivially.
+- **PR closing keywords**: GitHub requires the keyword before EACH issue number. Write `Closes #1, Closes #2, Closes #3` — NOT `Closes #1, #2, #3` (only the first gets closed). **The inverse fails silently and is the worse half**: GitHub's parser does not read negation, so a sentence disclaiming an issue still closes it. Write `does not address #N` — never `does not fix/close/resolve #N`. A bare `#N` with no keyword before it is an ordinary link and is safe to cite. `just merge-ready` checks this, because the wording rule cannot help a document that must quote the bad form in order to explain it — the pull request fixing this defect reproduced it that way at creation.
 - Run `just preflight` before pushing.
 
 **Commit regroup (`artifact`).** At the **first push of a multi-commit branch**, and again when stage 8 closes, regroup into coherent commits — or record in the PR why the existing grouping is already coherent. Either way it leaves a mark: a tick saying "already coherent" is a legitimate outcome, an absent tick is not.
@@ -314,7 +317,9 @@ Before believing any verdict:
 
 ### Gate coverage (`artifact`)
 
-**Name the gate that covers your change. If you cannot name one, verify it by hand and describe how in the PR.**
+**Name the gate that covers your change, and the environments it must be able to run in. If you cannot name one, verify it by hand and describe how in the PR.**
+
+Coverage and executability are different questions, and only the first is usually asked. #1974 installed two gates into three materially different environments — a local `git commit`, `just check`, and CI's prek job — and **both were unable to execute in CI as designed**: one imports PyYAML, which `uv sync --only-group lint --only-group typecheck --only-group test` does not install, and the other calls `actionlint`, which is absent from that job's `PATH`. Both failed loudly, so the cost was a wasted push-and-wait rather than a silent hole. Nothing in the pipeline asked.
 
 The `justfile` is authoritative for what the gates do; this file deliberately does not restate it. Gates get added — strict mkdocs, mdbook and `cargo doc` each entered preflight in separate changes — so any coverage table written here would have been wrong three times over.
 
