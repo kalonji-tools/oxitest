@@ -121,6 +121,8 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 **Wire Protocol v3** — The LDJSON protocol between workers and the Rust coordinator. Each stdout line has a `"type"` discriminator: `"result"` (test outcome), `"diagnostic"` (user-facing), or `"trace"` (developer). Missing `"type"` defaults to `"result"` for backwards compatibility.
 
+**Non-protocol line** — A line on a worker's stdout that is not JSON at all, so it is not the worker answering: a test, a C extension, or an uncaptured child process writing to fd 1, which is the same pipe. It is logged and dropped, and it does **not** count toward the results the coordinator expects (#2010). A line that is valid JSON but not a valid result is protocol traffic, and still counts. `docs/internals/src/worker-protocol.md` owns the full table.
+
 ## Execution Model
 
 **Worker** — A subprocess (`python -m oxitest._bridge.worker`) that receives test tasks over stdin and writes results to stdout as LDJSON (wire protocol v7). Persistent within a run. **Runs one Test Item at a time**: `run_task` iterates its items in a plain loop, so process-global state mutated by one test is never observed by a simultaneous one — only inherited by later ones. `Patcher`'s four surfaces and the CWD-liveness guard both rest on this. The reporter's `worker #N | concurrent: …` line counts node IDs in flight *across all workers*, including queued ones, and is not intra-Worker concurrency.
