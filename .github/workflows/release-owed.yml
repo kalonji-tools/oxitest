@@ -1,0 +1,82 @@
+name: Release owed
+
+# Reports when `main` has releasable commits that no tag carries yet, so an
+# earned release cannot sit unnoticed. Policy and rationale: ADR-0015.
+#
+# Reporting only — it gates nothing. It can still fail if it cannot compute an
+# answer, which is a different thing from a release being owed.
+
+on:
+  schedule:
+    # 09:00 UTC on Mondays. The state changes only when a releasable commit
+    # lands, so a daily run would mostly repeat itself.
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    name: Report whether a release is owed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # git-cliff reads the tag history to compute the bump, so a shallow
+          # clone would make every run report "no releasable commits".
+          fetch-depth: 0
+
+      - name: Install git-cliff
+        uses: taiki-e/install-action@v2.85.8
+        with:
+          tool: git-cliff
+
+      - name: Compare the computed bump against the released version
+        run: |
+          CURRENT=$(grep '^version' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          NEXT=$(git-cliff --bumped-version | sed 's/^v//')
+
+          # An empty NEXT means git-cliff failed. Without this the comparison
+          # below is false and the job reports "a release is owed: v3.0.0 → v".
+          if [ -z "$NEXT" ]; then
+            echo "::error::git-cliff produced no version — cannot tell whether a release is owed."
+            exit 1
+          fi
+
+          echo "Released \`v${CURRENT}\` · computed \`v${NEXT}\`" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$CURRENT" = "$NEXT" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "No release owed." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          {
+            echo ""
+            echo "**A release is owed: \`v${CURRENT}\` → \`v${NEXT}\`.**"
+            echo ""
+            echo "Run the \`Release\` workflow to cut it. The version is computed by"
+            echo "git-cliff; do not pass \`version_override\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # The tag can be missing or stop being an ancestor — rebase merges
+          # rewrite SHAs, which is why release.yml guards the same case. An
+          # unguarded `git log v${CURRENT}..HEAD` exits 128 there and would
+          # turn this reporter red for a reason that is not its subject.
+          if git merge-base --is-ancestor "v${CURRENT}" HEAD 2>/dev/null; then
+            {
+              echo ""
+              echo "Releasable commits since \`v${CURRENT}\`:"
+              echo ""
+              echo '```'
+              git log --oneline "v${CURRENT}..HEAD" | head -50
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo ""
+              echo "_\`v${CURRENT}\` is not an ancestor of HEAD, so the commit list is"
+              echo "omitted. The \`Release\` workflow's tag check explains this case._"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
