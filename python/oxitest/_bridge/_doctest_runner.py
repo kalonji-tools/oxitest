@@ -6,13 +6,11 @@ import doctest
 import hashlib
 import importlib
 import importlib.util
-import os
 import sys
-from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING
 
-from oxitest._bridge._loader import ModuleCache
+from oxitest._bridge._loader import ModuleCache, already_imported
 from oxitest._bridge.result import ErrorResult, FailedResult, PassedResult
 
 if TYPE_CHECKING:
@@ -47,66 +45,6 @@ def _doctest_module_name(module_path: str) -> str:
 # day it is added — an enumeration here was already missing two routes on the
 # day it was written (#1962). The compiled extension is `oxitest._oxitest`,
 # which does not start with the prefix and so is unaffected.
-_SYNTHETIC_PREFIX = "_oxitest_"
-
-
-def _already_imported(module_path: str) -> ModuleType | None:
-    """Return the module already imported from *module_path*, if any.
-
-    Executing a file that is already in ``sys.modules`` under its real dotted
-    name builds a second set of class objects for everything it defines. For
-    ``_builtins/*`` that re-fires ``BuiltinFixture.__init_subclass__`` into a
-    registry that is never evicted, so the duplicates accumulate for the life
-    of the worker (#1962).
-
-    Doctests execute against this canonical module rather than a private copy
-    when one exists — deliberate: it is what "one identity per module" means,
-    and it matches how pytest's own doctest collection behaves. The cost is
-    that a doctest which mutates module state now leaks into the rest of the
-    run; accepted.
-
-    ``conftest_loader`` also registers each conftest.py under the bare key
-    ``"conftest"``. That is a legitimate match — the comparison below is on
-    the resolved path, so it can never return the wrong file — but the key is
-    last-writer-wins across siblings, and which conftest wins varies with the
-    modules a run selects (``-k``, positional paths, ``--affected``). So in a
-    multi-conftest project one conftest's doctests get canonical reuse and its
-    siblings' get a fresh execution, and which is which is not fixed.
-
-    Resolution is not skippable: raw ``__file__`` strings can differ for the
-    same file (``/var`` vs ``/private/var`` and similar symlink spellings,
-    #1957), so only the resolved path is a safe comparison. The basename
-    pre-filter that avoids most of those resolutions is explained at its
-    call site below.
-    """
-    try:
-        target = Path(module_path).resolve()
-    except OSError:
-        return None
-    target_name = target.name
-    # list(...) snapshots the dict: a PEP 562 module __getattr__, reached via
-    # the getattr below, can import and mutate sys.modules mid-iteration,
-    # which raises RuntimeError: dictionary changed size during iteration
-    # over a live view.
-    for name, module in list(sys.modules.items()):
-        if name.startswith(_SYNTHETIC_PREFIX):
-            continue
-        file = getattr(module, "__file__", None)
-        # Basename first, so most candidates never reach the resolve() below.
-        # os.path.basename ~165us/call against this repo's ~420-entry
-        # sys.modules; Path(file).name ~1026us for the same string op, and
-        # this runs once per doctest item. PTH119 prefers pathlib; measured
-        # here, pathlib is the 6-8x slower way to read one string.
-        if file is None or os.path.basename(file) != target_name:  # noqa: PTH119
-            continue
-        try:
-            if Path(file).resolve() == target:
-                return module
-        except OSError:
-            continue
-    return None
-
-
 def _import_doctest_module(
     module_path: str, cache: ModuleCache
 ) -> ModuleType | ErrorResult:
@@ -115,7 +53,7 @@ def _import_doctest_module(
     Reused from *cache* when the module group already loaded it: executing the
     body again re-runs every class definition in it (#1962). Failing that,
     reused from ``sys.modules`` if the file is already imported under its
-    real dotted name — see ``_already_imported``.
+    real dotted name — see ``already_imported`` in ``_loader``.
 
     Returns the imported module on success, or an ErrorResult on failure.
     """
@@ -123,7 +61,7 @@ def _import_doctest_module(
     if cached is not None:
         return cached
 
-    canonical = _already_imported(module_path)
+    canonical = already_imported(module_path)
     if canonical is not None:
         cache.set(module_path, canonical, kind="doctest")
         return canonical
