@@ -261,6 +261,142 @@ pub fn filter_by_node_ids(
         .collect()
 }
 
+/// Literal node-ID Targets that match no collected item, in the order given.
+///
+/// Glob Targets are excluded: a glob asks to match what is present, so zero
+/// matches is a legitimate outcome. Only a literal Target asserts existence
+/// (#1797).
+///
+/// This deliberately uses [`matches_node_id_prefix`] rather than
+/// [`item_matches_node_ids`]. The latter passes an item through when its module
+/// is not a node-ID source file, which is right for *filtering* but wrong here:
+/// asking "did this Target match anything" would then be answered `true` by any
+/// item that arrived from a bare path, and no Target would ever look unmatched.
+///
+/// This cannot run before collection — a node ID names a function inside a
+/// module that has to be imported first. Path Targets are checked earlier, in
+/// [`crate::target`].
+#[must_use = "the caller decides the exit code from this list"]
+pub fn unmatched_literal_targets<'a>(
+    items: &[Arc<TestItem>],
+    node_ids: &'a [crate::types::NodeId],
+) -> Vec<&'a crate::types::NodeId> {
+    node_ids
+        .iter()
+        .filter(|id| !contains_glob_chars(id.as_ref()))
+        .filter(|id| {
+            let target = id.as_ref();
+            !items
+                .iter()
+                .any(|item| matches_node_id_prefix(item.node_id.as_ref(), target, false))
+        })
+        .collect()
+}
+
+/// Spell a node-ID Target for display, relative to `rootdir` where possible.
+///
+/// Node IDs are absolutised upstream, which is what lets a Target match an
+/// item at all. Echoing that spelling back would show the user a path they
+/// never typed, and the path half of Target validation prints the argument
+/// verbatim — so the two halves of one feature would disagree (#1797).
+///
+/// `rootdir` can be **empty**, and that is a pre-existing defect this function
+/// only works around. `partition_positionals` puts the file part of a node ID
+/// into `paths`, so `find_rootdir` is seeded with it; when that file sits
+/// directly in the working directory its parent is `""`, `canonicalize_utf8`
+/// fails on the empty path, and the `pyproject.toml` probe then succeeds
+/// against the working directory and returns `""`. The same happens for a plain
+/// `oxitest test_foo.py` run from a project root. Falling back to the process
+/// working directory keeps this message honest without changing rootdir
+/// inference, which #1797 deliberately does not touch.
+fn display_target(node_id: &str, base: &str) -> String {
+    let Some((path, rest)) = node_id.split_once("::") else {
+        return node_id.to_string();
+    };
+    relativise(path, base).map_or_else(|| node_id.to_string(), |rel| format!("{rel}::{rest}"))
+}
+
+/// The directory a Target is spelled relative to.
+///
+/// Normally the rootdir. When that is empty — the pre-existing `find_rootdir`
+/// defect described on [`display_target`] — the process working directory is the
+/// honest reference, because it is what the user's argument was relative to.
+/// Resolved once per refusal rather than once per Target, so the message costs
+/// one lookup however many Targets it names.
+fn display_base(rootdir: &camino::Utf8Path) -> String {
+    if !rootdir.as_str().is_empty() {
+        return rootdir.as_str().to_string();
+    }
+    std::env::current_dir()
+        .ok()
+        .and_then(|dir| camino::Utf8PathBuf::from_path_buf(dir).ok())
+        .map(|dir| dir.into_string())
+        .unwrap_or_default()
+}
+
+/// Drop Windows' extended-length `\\?\` prefix so two spellings of one path can
+/// be compared.
+///
+/// `std::fs::canonicalize` returns the prefixed form on Windows, which is what
+/// `canonicalize_node_ids` stores, while `std::env::current_dir` returns the
+/// plain form. Comparing them without this returns "no match" for two spellings
+/// of the same directory (#2018 records the same asymmetry for the collector).
+fn strip_verbatim_prefix(path: &str) -> &str {
+    path.strip_prefix(r"\\?\").unwrap_or(path)
+}
+
+/// Spell `path` relative to `base`, or `None` when it does not live under it.
+///
+/// String comparison rather than [`camino::Utf8Path::strip_prefix`], because the
+/// inputs can be Windows paths while the code runs on Unix: `Utf8Path` applies
+/// the *host* separator rules, so a `\`-separated path is one opaque component
+/// on Linux and every prefix test fails. Doing it on strings makes the Windows
+/// case assertable on every platform instead of only in a Windows CI job.
+fn relativise(path: &str, base: &str) -> Option<String> {
+    let path = strip_verbatim_prefix(path);
+    let base = strip_verbatim_prefix(base).trim_end_matches(['/', '\\']);
+    if base.is_empty() {
+        return None;
+    }
+    let tail = path.strip_prefix(base)?;
+    // A string prefix is not a path prefix: `/work/project` is a prefix of the
+    // string `/work/project2/test.py` while naming none of its directories.
+    // `Utf8Path::strip_prefix` rejects that case for free, and this function
+    // gave it up to compare Windows paths on Unix — so the component boundary
+    // has to be re-asserted here. Without it a sibling directory yields a
+    // mangled relative path such as `2/test.py`.
+    if !tail.is_empty() && !tail.starts_with(['/', '\\']) {
+        return None;
+    }
+    let rest = tail.trim_start_matches(['/', '\\']).to_string();
+    (!rest.is_empty()).then_some(rest)
+}
+
+/// Render the refusal for literal node-ID Targets that matched no item.
+///
+/// Deliberately no `did you mean` suggestion. Candidates could only come from
+/// the collected items, and prescan has already dropped the named module by the
+/// time this runs — so in the common case of a single mistyped Target there are
+/// no candidates at all, and a suggestion would appear only when some *other*
+/// Target happened to keep that module loaded. A hint that fires unpredictably
+/// reads as "there is no near match", which is worse than offering none.
+#[must_use]
+pub fn render_unmatched_targets(
+    unmatched: &[&crate::types::NodeId],
+    rootdir: &camino::Utf8Path,
+) -> String {
+    let base = display_base(rootdir);
+    let mut out = String::from("error: no such test\n");
+    for id in unmatched {
+        out.push_str(&format!("  {}\n", display_target(id.as_ref(), &base)));
+    }
+    out.push_str(
+        "\nA node ID that matches no test is a usage error, not an empty run.\n\
+         Nothing ran. See docs/user/reference/exit-codes.md.\n",
+    );
+    out
+}
+
 /// Group items by module path, preserving insertion order within each group.
 #[must_use = "returns grouped items; original is consumed"]
 pub fn group_by_module(items: &[Arc<TestItem>]) -> Vec<ModuleGroup> {
@@ -816,6 +952,167 @@ mod tests {
             "a canonicalized Windows node ID must contribute its file to the \
              source-file set; an empty set silently disables the bare-path \
              exemption and drops files the user asked for by name"
+        );
+    }
+
+    #[test]
+    fn relativise_matches_a_verbatim_path_against_a_plain_base() {
+        // The Windows shape that took `Test (Windows x86_64)` red: the node ID is
+        // canonicalised by `std::fs::canonicalize` and carries `\\?\`, while the
+        // fallback base comes from `std::env::current_dir` and does not.
+        let rel = relativise(r"\\?\C:\Users\r\proj\test_one.py", r"C:\Users\r\proj");
+
+        assert_eq!(
+            rel.as_deref(),
+            Some("test_one.py"),
+            "an extended-length path must relativise against a plain base — the two are the same directory, and treating them as different leaks an absolute path the user never typed into the refusal"
+        );
+    }
+
+    #[test]
+    fn relativise_matches_when_both_sides_are_verbatim() {
+        let rel = relativise(r"\\?\C:\proj\a\test_one.py", r"\\?\C:\proj");
+
+        assert_eq!(
+            rel.as_deref(),
+            Some(r"a\test_one.py"),
+            "two verbatim paths must relativise too — stripping the prefix from only one side would trade one mismatch for another"
+        );
+    }
+
+    #[test]
+    fn relativise_refuses_a_path_outside_the_base() {
+        let rel = relativise("/elsewhere/test_a.py", "/work/project");
+
+        assert!(
+            rel.is_none(),
+            "a path outside the base must not be relativised — silently truncating it would remove the only identifying information the message carries"
+        );
+    }
+
+    #[test]
+    fn relativise_refuses_a_sibling_whose_name_extends_the_base() {
+        // `/work/project` is a prefix of the *string* `/work/project2/...` while
+        // naming none of its directories. Comparing on strings rather than path
+        // components is what makes this reachable, so the boundary is asserted
+        // rather than inherited from `Utf8Path::strip_prefix`.
+        let sibling = relativise("/work/project2/test_a.py", "/work/project");
+        let longer = relativise("/work/projectile/x/test_a.py", "/work/project");
+
+        assert!(
+            sibling.is_none() && longer.is_none(),
+            "a sibling directory whose name extends the base must not relativise — accepting it produces a mangled path such as `2/test_a.py`, which reads as a real relative path and points at nothing. Got {sibling:?} and {longer:?}"
+        );
+    }
+
+    #[test]
+    fn relativise_accepts_the_base_directory_boundary() {
+        let rel = relativise("/work/project/sub/test_a.py", "/work/project");
+
+        assert_eq!(
+            rel.as_deref(),
+            Some("sub/test_a.py"),
+            "a genuine descendant must still relativise — the boundary check must reject a sibling without also rejecting a real subdirectory"
+        );
+    }
+
+    #[test]
+    fn relativise_refuses_an_empty_base() {
+        let rel = relativise("/work/project/test_a.py", "");
+
+        assert!(
+            rel.is_none(),
+            "an empty base must not match — every path starts with the empty string, so accepting it would strip nothing and report success"
+        );
+    }
+
+    #[test]
+    fn render_unmatched_targets_spells_the_target_relative_to_rootdir() {
+        let rootdir = camino::Utf8PathBuf::from("/work/project");
+        let target = crate::types::NodeId::from_raw("/work/project/tests/test_a.py::test_zzz");
+        let unmatched = vec![&target];
+
+        let rendered = render_unmatched_targets(&unmatched, &rootdir);
+
+        assert!(
+            rendered.contains("tests/test_a.py::test_zzz")
+                && !rendered.contains("/work/project/tests"),
+            "the refusal must spell the Target relative to rootdir — node IDs are absolutised upstream, and echoing that back shows the user a path they never typed while the path half of this feature prints the argument verbatim"
+        );
+    }
+
+    #[test]
+    fn render_unmatched_targets_keeps_a_target_outside_rootdir_verbatim() {
+        let rootdir = camino::Utf8PathBuf::from("/work/project");
+        let target = crate::types::NodeId::from_raw("/elsewhere/test_a.py::test_zzz");
+        let unmatched = vec![&target];
+
+        let rendered = render_unmatched_targets(&unmatched, &rootdir);
+
+        assert!(
+            rendered.contains("/elsewhere/test_a.py::test_zzz"),
+            "a Target that does not live under rootdir must be printed verbatim rather than mangled — stripping a prefix that is not there would silently truncate the only identifying information in the message"
+        );
+    }
+
+    #[test]
+    fn unmatched_literal_targets_ignores_globs() {
+        let items = vec![TestItem::builder("tests/test_a.py", "test_foo").arc()];
+        let targets = vec![
+            crate::types::NodeId::from_raw("tests/test_a.py::test_z*"),
+            crate::types::NodeId::from_raw("tests/test_a.py::test_absent"),
+        ];
+
+        let unmatched = unmatched_literal_targets(&items, &targets);
+
+        assert_eq!(
+            unmatched.iter().map(|id| id.as_ref()).collect::<Vec<_>>(),
+            vec!["tests/test_a.py::test_absent"],
+            "a glob that matches nothing is legitimate and must not be reported; only a literal Target asserts existence, so refusing a zero-match glob would break every script that globs defensively"
+        );
+    }
+
+    #[test]
+    fn unmatched_literal_targets_is_empty_when_every_literal_matches() {
+        let items = vec![TestItem::builder("tests/test_a.py", "test_foo").arc()];
+        let targets = vec![crate::types::NodeId::from_raw("tests/test_a.py::test_foo")];
+
+        let unmatched = unmatched_literal_targets(&items, &targets);
+
+        assert!(
+            unmatched.is_empty(),
+            "a literal Target that matches an item must never be reported — a false positive here refuses a valid run, which is worse than the defect being fixed"
+        );
+    }
+
+    #[test]
+    fn unmatched_literal_targets_matches_parametrized_variants() {
+        let items = vec![
+            TestItem::builder("tests/test_a.py", "test_foo")
+                .param_id("case1".to_string())
+                .arc(),
+        ];
+        let targets = vec![crate::types::NodeId::from_raw("tests/test_a.py::test_foo")];
+
+        let unmatched = unmatched_literal_targets(&items, &targets);
+
+        assert!(
+            unmatched.is_empty(),
+            "a bare Target must count as matched by its parametrized variants — the 3-way prefix rule is what makes `oxitest file.py::test_foo` select `test_foo[case1]`, and reporting it unmatched would refuse a working invocation"
+        );
+    }
+
+    #[test]
+    fn unmatched_literal_targets_reports_a_target_whose_module_has_no_items() {
+        let items = vec![TestItem::builder("tests/test_a.py", "test_foo").arc()];
+        let targets = vec![crate::types::NodeId::from_raw("tests/test_b.py::test_foo")];
+
+        let unmatched = unmatched_literal_targets(&items, &targets);
+
+        assert_eq!(
+            unmatched.len(),
+            1,
+            "a Target naming another module must be reported — `item_matches_node_ids` would pass this through because the item came from a bare path, which is why this function uses the prefix rule directly"
         );
     }
 
