@@ -163,6 +163,7 @@ from oxitest._bridge._plugin_config import (
 )
 from oxitest._bridge._raises import raises as raises
 from oxitest._bridge._read_fixtures import _FixturesProxy as _FixturesProxy
+from oxitest._bridge._streams import force_utf8_streams
 from oxitest._bridge._warns import warns as warns
 from oxitest._bridge.parametrize import (
     parametrize as parametrize,
@@ -228,4 +229,9 @@ fixtures = _FixturesProxy()
 
 
 def main() -> None:
+    # Both `python -m oxitest` and the `oxitest` console script land here
+    # (pyproject.toml declares `oxitest = "oxitest:main"`), so this is the only
+    # CLI-side site. Before run(), because the Rust reporter already writes
+    # UTF-8 to fd 1 directly and the Python half has to agree with it (#2004).
+    force_utf8_streams()
     sys.exit(run(sys.argv[1:]))
