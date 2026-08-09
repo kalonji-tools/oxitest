@@ -638,6 +638,26 @@ def test_read_only(config: Fixture[AppConfig]):
 
 ---
 
+```text
+[warning] <fixture> — <fixture> (lifetime="package") co-locates <count> modules onto one worker — parallelism is disabled for <dir>. Narrow the fixture's package, or drop to lifetime="module".
+```
+
+**Cause:** A `package` fixture exists exactly once per run, and oxitest
+guarantees that by scheduling every test under the declaring package onto a
+single worker. When that package holds more than one test module, the
+guarantee costs parallelism for the whole subtree — see
+[Choose a lifetime](../how-to/use-fixtures.md#choose-a-lifetime).
+
+This is a **diagnostic**, not an error — every test still runs and the results
+are unaffected. A declaring package that holds a single test module costs no
+parallelism and stays silent.
+
+**Fix:** Narrow the fixture's package to keep exactness with a smaller serial
+subtree, or drop to `lifetime="module"` to keep parallelism at one instance
+per module.
+
+---
+
 ## Execution errors
 
 Execution errors occur while tests are running.

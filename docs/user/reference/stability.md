@@ -50,6 +50,16 @@ These may change in minor releases:
 - Query DSL syntax may expand (backward-compatible additions only)
 - `--collection-profile` output format
 
+**The fixture declaration API**
+
+- `@oxi.fixture` and its required `lifetime` keyword
+- The four `lifetime` values — `"function"`, `"module"`, `"package"`, `"process"`
+- The declaration file `__fixtures__.py`, and fixture declarations in
+  `__init__.py` or inline in a test module
+
+Newer than any released version, and still being amended. `Fixtures` keeps its
+Stable guarantee until it is retired.
+
 ## Internal (no guarantee)
 
 - `oxitest._bridge.*` modules (underscore-prefixed)

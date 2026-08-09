@@ -217,3 +217,64 @@ Use the bare `TempDir` type annotation instead — `TempDir` is decorated with
 ```python
 --8<-- "python/tests/docs/how-to/test_troubleshooting.py:tempdir-path-workaround"
 ```
+
+## AttributeError: module 'oxitest' has no attribute 'helpers'
+
+The helper registry is retired. Three spellings raised until it was removed, and
+all three now raise a plain `AttributeError`:
+
+```console
+AttributeError: module 'oxitest' has no attribute 'helpers'
+AttributeError: module 'oxitest' has no attribute 'Helpers'
+AttributeError: module 'oxitest' has no attribute 'helper'
+```
+
+There is no replacement API. A stateless utility is a plain function reached by
+an ordinary import.
+
+**Before** — the utility was registered on a `Helpers()` instance, whose
+variable name supplied the namespace, and read through the `helpers` accessor:
+
+```python
+# conftest.py
+from oxitest import Helpers
+
+utils = Helpers()
+
+
+@utils.helper
+def make_thing() -> Thing:
+    return Thing(name="default")
+
+
+# test_thing.py
+from oxitest import helpers
+
+
+def test_thing() -> None:
+    thing = helpers.utils.make_thing()
+    assert thing.name == "default", "the factory should apply its default name"
+```
+
+**After** — the utility is a plain function in a module beside your tests:
+
+```python
+# tests/utils.py
+def make_thing() -> Thing:
+    return Thing(name="default")
+
+
+# tests/test_thing.py
+from tests.utils import make_thing
+
+
+def test_thing() -> None:
+    thing = make_thing()
+    assert thing.name == "default", "the factory should apply its default name"
+```
+
+The import also type-checks at the call site, which the proxy could not do — it
+resolved through `__getattr__` to `Any`.
+
+If the value *does* need a lifetime the framework manages, it is a fixture
+rather than a utility: see [Use fixtures](use-fixtures.md).

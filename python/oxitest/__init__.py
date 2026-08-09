@@ -2,7 +2,19 @@
 
 Public API
 ----------
-Fixtures   — Instance-based fixture registry. Create one per conftest.py:
+fixture    — Declare a fixture: the framework owns when the value is built and
+             when it is disposed. `lifetime` is required, and is one of
+             "function", "module", "package" or "process". Declare in
+             `__fixtures__.py` or `__init__.py`, or inline in a test module —
+             an inline declaration may not exceed "module":
+
+    # tests/__fixtures__.py
+    @oxi.fixture(lifetime="function")
+    def tenant() -> str:
+        return "acme"
+
+Fixtures   — Legacy instance-based fixture registry, one per conftest.py.
+             Superseded by @oxi.fixture; still supported:
 
     fixtures = Fixtures()
 
