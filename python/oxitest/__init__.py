@@ -44,10 +44,13 @@ TempDir        — Injected bare (`tmp: TempDir`); unique temp dir deleted after
 TempDirFactory — Session-scoped factory; `factory.mktemp("label")` → TempDir.
 StdCapture     — Capture `sys.stdout`/`sys.stderr`; `cap.readouterr()`
                  → CaptureResult.
-FdCapture      — Capture at fd level (C extensions); same readouterr() API.
+FdCapture      — Capture at fd level (C extensions); `cap.readouterr()`
+                 → FdCaptureResult.
 Patcher        — Temp overrides: `patch.setattr`, `patch.setenv`,
                  `patch.delenv`, `patch.chdir`.
 CaptureResult  — `out` and `err` strings returned by `readouterr()`.
+FdCaptureResult — a CaptureResult that also carries `out_bytes` and
+                 `err_bytes`, the undecoded descriptor bytes.
 LogCapture     — Capture logging records; `log.records`, `log.text`,
                  `log.set_level()`.
 WarnCapture    — Capture all warnings.warn() calls during a test:
@@ -118,6 +121,7 @@ from oxitest._bridge._async_backend import (
 from oxitest._bridge._builtins import (
     CaptureResult as CaptureResult,
     FdCapture as FdCapture,
+    FdCaptureResult as FdCaptureResult,
     LogCapture as LogCapture,
     Patcher as Patcher,
     StdCapture as StdCapture,
@@ -194,6 +198,7 @@ __all__ = [
     "DebuggerBackend",
     "ExitCode",
     "FdCapture",
+    "FdCaptureResult",
     "Fixture",
     "FixtureRef",
     "Fixtures",

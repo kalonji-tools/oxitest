@@ -84,6 +84,14 @@ keep_tmp = "failed"
       show_root_toc_entry: false
       heading_level: 3
 
+## FdCaptureResult
+
+::: oxitest._bridge._builtins._capture.FdCaptureResult
+    options:
+      show_root_heading: false
+      show_root_toc_entry: false
+      heading_level: 3
+
 ## Patcher
 
 ::: oxitest._bridge._builtins._patch.Patcher
