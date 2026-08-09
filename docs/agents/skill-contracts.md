@@ -63,7 +63,17 @@ ISSUE=$(git branch --show-current | grep -oP '(?<=#|issue-?|/)\d+' | head -1)
 
 **What this repo does.** Branches are `<type>/<issue>-<slug>`, which the regex resolves correctly.
 
-**The failure mode is `head -1`, not a missing number.** A branch with *no* number is handled well — the skill asks which issue to use. But a branch naming **two** issues silently keeps only the first, and this repo routinely uses those. Measured against the regex above:
+**The dependency inverts the drawn stage order.** `CLAUDE.md` draws `Spec (4) → Draft PR (5)`, and stage 5 is the first stage that assumes a branch — so at stage 4 there is normally none for the skill to read. Detection returns empty, and the skill falls back to its question:
+
+> If no number is found (e.g. branch is `feat/capture-environment`), ask the user: "What GitHub issue number does this branch relate to? (or 'none' to skip)" and use their answer.
+
+So the step is not blocked; it is **downgraded to a prompt** that an unattended stage-4 agent cannot answer, and that costs more turns than posting the comment yourself.
+
+Post the spec yourself: write it directly and post it with `gh issue comment <N>`. The issue number is known at stage 4 — it is what the spec is about.
+
+Do **not** create the branch early to satisfy the skill — that reorders the pipeline around a skill's implementation detail.
+
+**The second failure mode is `head -1`, not a missing number.** A branch with *no* number is handled well — the skill asks which issue to use. But a branch naming **two** issues silently keeps only the first, and this repo routinely uses those. Measured against the regex above:
 
 | Branch | Resolves to | |
 |---|---|---|
@@ -74,7 +84,7 @@ ISSUE=$(git branch --show-current | grep -oP '(?<=#|issue-?|/)\d+' | head -1)
 
 The last row is the branch this file was written on. On a multi-issue branch, post the second and later issues' spec sections by hand — stage 4 otherwise looks satisfied because a spec was written.
 
-**Where it is enforced.** `CLAUDE.md` stage 5 states the convention. Nothing checks it, and nothing catches the `head -1` case.
+**Where it is enforced.** `CLAUDE.md` stage 4 points here for the stage-order inversion, and stage 5 states the branch-name convention. Nothing checks either, and nothing catches the `head -1` case.
 
 ## E — A plan is a lead, not a specification
 

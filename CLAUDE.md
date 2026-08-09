@@ -96,7 +96,7 @@ At creation, apply exactly one **category** label, **one or more** `area:` label
 
 **3. Triage issues.** Every issue gets a **state label** reflecting its triage status. See `docs/agents/triage-labels.md` for the state vocabulary. Triage is also where `priority:` and `size:` are applied — they are judgements, not facts known at filing time, and a guessed `size: M` is worse than no label at all.
 
-**4. Spec every issue.** By the time a PR is created, every issue in that PR MUST have a design spec — written when the issue is picked up or ahead of time, but never skipped. If no issue exists yet for the work being specced, create one first: every spec needs a home issue. Use the `superpowers:brainstorming` skill for spec design. Post each issue's spec section as a comment on that issue. When issues share a grouped spec, post only the section relevant to each issue — not the entire spec on every issue.
+**4. Spec every issue.** By the time a PR is created, every issue in that PR MUST have a design spec — written when the issue is picked up or ahead of time, but never skipped. If no issue exists yet for the work being specced, create one first: every spec needs a home issue. Use the `superpowers:brainstorming` skill for spec design. Post each issue's spec section as a comment on that issue. When issues share a grouped spec, post only the section relevant to each issue — not the entire spec on every issue. The skill posts by reading the issue number out of a branch that stage 5 has not created yet; `docs/agents/skill-contracts.md`, cause D, says what to do instead.
 
 **The spec opens with a claims audit** (`artifact` — the spec format begins with it, so there is no separate step to skip). Before writing the spec, re-verify the issue's own factual claims against the tree, and record them as a table: the claim, the verdict, and evidence of the kind the claim demands. An issue's framing is a premise, and this is the first stage that rests on it.
 
@@ -118,7 +118,7 @@ git push --force-with-lease
 
 **Concurrent sessions are detected, not prevented.** `.config/wt.toml`'s `pre-start` hook warns at `wt switch --create` when another branch or open PR already touches this branch's issue numbers. It is advisory and never blocks. **It cannot see triage-stage collisions** — those happen before a worktree exists, and two of the four recorded incidents were exactly that. Assume it covers implementation and merge, nothing earlier.
 
-**Branch names are `<type>/<issue>-<slug>`** — `refactor/1777-process-lifetime-tier`, `fix/1863-1864-exitcode-ord-ctrf-name-docs`. This is not only style: `superpowers:brainstorming` reads the issue number out of the branch name to post its spec to the right issue, and a branch without one fails silently — no spec reaches the issue, and stage 4 still looks satisfied because a spec was written. See `docs/agents/skill-contracts.md`, cause D.
+**Branch names are `<type>/<issue>-<slug>`** — `refactor/1777-process-lifetime-tier`, `fix/1863-1864-exitcode-ord-ctrf-name-docs`. This is not only style: `superpowers:brainstorming` reads the issue number out of the branch name to post its spec to the right issue. The ways that goes wrong are in `docs/agents/skill-contracts.md`, cause D.
 
 `--force-with-lease` rather than `--force`: it refuses if the remote moved since your last fetch, so a force-push can never silently discard someone else's work.
 
