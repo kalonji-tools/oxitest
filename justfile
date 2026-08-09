@@ -64,6 +64,22 @@ check-locks: (_log _blue "Checking lock files...")
     uv lock --check
     cargo metadata --locked --format-version 1 --quiet > /dev/null
 
+# Refuse to merge while any review thread is unresolved (stage 9, position 4).
+# Deliberately NOT part of `preflight`, which runs earlier in the merge sequence
+# than findings are meant to be resolved.
+merge-ready *args: (_log _blue "Checking review-thread dispositions...")
+    python scripts/check_review_threads.py {{ args }}
+
+# Post one stage-8 review pass as anchored review threads (stage 8). Validates
+# the whole spec against the diff before writing anything.
+review-post spec *args: (_log _blue "Posting review findings...")
+    python scripts/post_review_findings.py '{{ spec }}' {{ args }}
+
+# Record a stage-8 finding's disposition (stage 8). Only `Fixed` is resolved by
+# the agent; every other verb posts its reply and leaves the button to you.
+review-dispose slug id verb reason *args: (_log _blue "Recording disposition...")
+    python scripts/dispose_finding.py '{{ slug }}' '{{ id }}' '{{ verb }}' '{{ reason }}' {{ args }}
+
 # A mutant applied over uncommitted work is destroyed with that work by the
 # `git checkout -- <file>` that reverts it. That revert cannot touch untracked
 # files, so untracked content is not a reason to refuse — refusing on it made
