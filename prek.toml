@@ -145,6 +145,20 @@ pass_filenames = false
 files = "^(python|scripts)/.*\\.py$"
 
 [[repos.hooks]]
+id = "justfile-quoting"
+name = "justfile quoting"
+language = "system"
+# `'{{ x }}'` and `"{{ x }}"` do not quote a just substitution — they put the
+# value between two quote characters, so a quote of the same kind inside the
+# value closes the pair early. The value is then silently altered, or the recipe
+# dies on the remainder (#2015). The justfile is otherwise ungated entirely.
+#
+# No `stages:` key, so it also runs in CI.
+entry = "python scripts/check_justfile_quoting.py"
+pass_filenames = false
+files = "^justfile$"
+
+[[repos.hooks]]
 id = "affected-tests"
 name = "affected tests"
 language = "system"

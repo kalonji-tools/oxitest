@@ -34,6 +34,11 @@ jobs:
               # only ever runs locally reads as CI coverage it does not have
               # (#1939)
               - 'scripts/**'
+              # Same reasoning one line up, for the gate added by #2015: a PR
+              # that edits only the justfile is exactly the change that can
+              # reintroduce a quoted interpolation, and without this entry it
+              # is the one change CI never checks.
+              - 'justfile'
               - 'Cargo.*'
               - 'rust-toolchain.toml'
               - 'pyproject.toml'
