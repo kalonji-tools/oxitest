@@ -93,9 +93,15 @@ class StdCapture(_CaptureBase):
     **not** capture output from C extensions or subprocesses that write
     directly to file descriptors — use :class:`FdCapture` for that.
 
+    Line endings: this fixture intercepts *above* Python's text layer, so
+    ``print()`` output arrives with ``\n`` on every platform, Windows
+    included. :class:`FdCapture` taps below that layer and reports
+    ``\r\n`` there — see its docstring.
+
     See Also:
         - :class:`FdCapture` — fd-level capture for C-extension and
-          subprocess output.
+          subprocess output. Reports a different line ending on Windows;
+          the two are not interchangeable.
         - :class:`CaptureResult` — return type of ``readouterr()``.
 
     Examples:
@@ -159,12 +165,23 @@ class FdCapture(_CaptureBase):
 
     Redirects the underlying OS file descriptors, so output from C
     extensions, subprocesses, and any code that writes directly to fd 1
-    or fd 2 is captured. Use :class:`StdCapture` when you only need to
-    capture ``print()``-style Python output — it's cheaper.
+    or fd 2 is captured. :class:`StdCapture` is cheaper and enough for
+    ``print()``-style Python output, but it is not the same measurement
+    — see Line endings below before treating one as a substitute for
+    the other.
+
+    Line endings: this fixture reports the bytes that reached the file
+    descriptor. On Windows, Python's text layer translates ``\n`` to
+    ``\r\n`` before ``print()`` output gets there, so ``readouterr()``
+    returns ``"text\r\n"`` where :class:`StdCapture` returns
+    ``"text\n"``. Bytes written with ``os.write`` bypass that layer and
+    arrive unchanged. On POSIX both fixtures return ``\n``, which is why
+    the difference only appears in CI.
 
     See Also:
         - :class:`StdCapture` — Python-stream-level capture (cheaper,
-          misses C/subprocess output).
+          misses C/subprocess output, and returns ``\n`` on Windows
+          where this fixture returns ``\r\n``).
         - :class:`CaptureResult` — return type of ``readouterr()``.
 
     Examples:

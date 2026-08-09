@@ -8,6 +8,7 @@ import shutil
 import sys
 import types
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -507,6 +508,69 @@ def test_fdcapture_teardown_restores_fds() -> None:
         )
     finally:
         os.close(saved_fd)
+
+
+# ── Capture line breaks (#2009) ───────────────────────────────────────────────
+
+_IS_WINDOWS = sys.platform == "win32"
+
+
+@dataclass(frozen=True, slots=True)
+class NewlineCase:
+    """One capture level's line-break contract, on one family of platforms."""
+
+    fixture: type[_StdCaptureFixture | _FdCaptureFixture]
+    expected: str
+    windows: bool | None = None
+
+    def skip_off_platform(self) -> None:
+        """Skip when this case states a contract for a different platform."""
+        if self.windows not in (None, _IS_WINDOWS):
+            oxitest.skip(
+                f"this case states the "
+                f"{'Windows' if self.windows else 'POSIX'} contract"
+            )
+
+
+@oxitest.parametrize(
+    stream_level=NewlineCase(fixture=_StdCaptureFixture, expected="line\n"),
+    fd_level_posix=NewlineCase(
+        fixture=_FdCaptureFixture, expected="line\n", windows=False
+    ),
+    fd_level_windows=NewlineCase(
+        fixture=_FdCaptureFixture, expected="line\r\n", windows=True
+    ),
+)
+def test_print_line_break_by_capture_level(case: NewlineCase) -> None:
+    r"""The two capture levels tap above and below Python's text layer.
+
+    On Windows the text layer translates ``\n`` to ``\r\n`` before the bytes
+    reach fd 1, so the level a fixture taps at decides what it returns.
+    """
+    # Arrange
+    case.skip_off_platform()
+    ctx, teardowns = _make_builtin_ctx()
+    cap = case.fixture().create(ctx=ctx)
+
+    # Act
+    print("line")  # noqa: T201
+    print("line", file=sys.stderr)  # noqa: T201
+    result = cap.readouterr()
+    teardowns[0]()
+
+    # Assert
+    assert result.out == case.expected, (
+        f"{case.fixture.__name__} taps at a fixed level of the stream stack, so "
+        f"its line break is a contract users compare literals against; a change "
+        f"here silently breaks every such assertion on this platform. Expected "
+        f"{case.expected!r}, got {result.out!r}"
+    )
+    assert result.err == case.expected, (
+        f"stderr crosses the same text layer as stdout, so {case.fixture.__name__} "
+        f"must report the same line break on both streams; a difference here means "
+        f"one stream is being translated and the other is not. Expected "
+        f"{case.expected!r}, got {result.err!r}"
+    )
 
 
 # ── Patcher ───────────────────────────────────────────────────────────────────
