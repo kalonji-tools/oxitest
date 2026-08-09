@@ -60,14 +60,15 @@ No hidden scripts, no magic incantations.
 
 ### Pre-commit and pre-push hooks
 
-[prek](https://prek.j178.dev/) runs the full quality suite on every
-commit and push:
+[prek](https://prek.j178.dev/) runs the quality suite on every commit, and CI runs
+the pre-push stage on every pull request:
 
 - **Pre-commit:** formatting (cargo fmt, ruff format), linting (ruff check), type
   checking (ty), codespell, trailing whitespace, TOML/YAML validation, bridge sync
   verification.
-- **Pre-push:** cargo clippy (catches dead code and lint errors that `cargo test`
-  does not), lock file consistency, tag-version matching.
+- **Pre-push stage:** cargo clippy (catches dead code and lint errors that `cargo test`
+  does not), `cargo doc`, and lock file consistency. No pre-push shim is installed
+  locally — `just preflight` is the local gate, and CI runs these hooks on the PR.
 - **Branch protection:** a `no-commit-to-branch` hook prevents direct commits to main.
   Every change goes through a PR.
 
