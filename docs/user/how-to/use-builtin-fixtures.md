@@ -66,7 +66,11 @@ code under test writes directly to the OS file descriptors (e.g. C extensions,
 --8<-- "python/tests/docs/how-to/test_builtin_fixtures.py:fdcapture"
 ```
 
-The API is identical to `StdCapture`.
+The API is identical to `StdCapture`, but the output is not. `FdCapture` reports
+the bytes that reached the file descriptor, and on Windows Python's text layer
+turns `print()`'s `\n` into `\r\n` before they get there. The same `print()`
+therefore gives you `"text\r\n"` here and `"text\n"` from `StdCapture`. Bytes
+written with `os.write`, as above, bypass that layer and arrive unchanged.
 
 ## Patcher — attributes, env vars, and directories
 
