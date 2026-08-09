@@ -15,7 +15,7 @@ use crate::config::Config;
 ///
 /// Resolves `.`, `..`, and symlinks via `std::fs::canonicalize`.
 /// Falls back to the original path if canonicalization fails.
-fn normalize_path(path: &Utf8Path, _canonical_rootdir: &Utf8Path) -> Utf8PathBuf {
+fn normalize_path(path: &Utf8Path) -> Utf8PathBuf {
     match std::fs::canonicalize(path.as_std_path()) {
         Ok(p) => Utf8PathBuf::from_path_buf(p).unwrap_or_else(|_| path.to_owned()),
         Err(_) => path.to_owned(),
@@ -61,7 +61,7 @@ pub fn collect_files_in(
     // testpaths point to a subdirectory and conftest.py lives at the project root).
     let rootdir_conftest = config.rootdir.join("conftest.py");
     if rootdir_conftest.exists() {
-        conftest_set.insert(normalize_path(&rootdir_conftest, &config.rootdir));
+        conftest_set.insert(normalize_path(&rootdir_conftest));
     }
 
     for testpath in roots {
@@ -214,7 +214,7 @@ fn collect_from(
         if let Some(filename) = path.file_name()
             && glob_set.is_match(filename)
         {
-            out.push(normalize_path(path, &config.rootdir));
+            out.push(normalize_path(path));
         }
         // Walk from the file's directory up to rootdir, collecting conftest.py at each level.
         // This ensures intermediate conftests (e.g. tests/conftest.py between rootdir and
@@ -223,7 +223,7 @@ fn collect_from(
         while let Some(d) = dir {
             let conftest = d.join("conftest.py");
             if conftest.exists() {
-                conftests.insert(normalize_path(&conftest, &config.rootdir));
+                conftests.insert(normalize_path(&conftest));
             }
             if d == config.rootdir {
                 break;
@@ -258,7 +258,7 @@ fn collect_from(
             if conftest_std.exists() {
                 match Utf8PathBuf::from_path_buf(conftest_std) {
                     Ok(utf8) => {
-                        conftests.insert(normalize_path(&utf8, &config.rootdir));
+                        conftests.insert(normalize_path(&utf8));
                     }
                     Err(p) => tracing::warn!(path = ?p, "skipping non-UTF-8 conftest path"),
                 }
@@ -267,7 +267,7 @@ fn collect_from(
             let filename = entry.file_name();
             if glob_set.is_match(filename) {
                 match Utf8PathBuf::from_path_buf(entry.into_path()) {
-                    Ok(utf8) => out.push(normalize_path(&utf8, &config.rootdir)),
+                    Ok(utf8) => out.push(normalize_path(&utf8)),
                     Err(p) => tracing::warn!(path = ?p, "skipping non-UTF-8 test file path"),
                 }
             }
