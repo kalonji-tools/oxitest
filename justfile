@@ -32,7 +32,7 @@ default:
 
 [private]
 _log color msg:
-    @printf '\033[{{color}}m→ %s\033[0m\n' '{{msg}}'
+    @printf '\033[{{color}}m→ %s\033[0m\n' {{ quote(msg) }}
 
 # Build the Rust extension
 build *args: (_log _green "Building extension...")
@@ -79,7 +79,7 @@ merge-ready *args: (_log _blue "Checking merge readiness...")
 # Only the line directly above a recipe becomes its `just --list` description.
 # Post one stage-8 review pass as anchored review threads (stage 8)
 review-post spec *args: (_log _blue "Posting review findings...")
-    python scripts/post_review_findings.py '{{ spec }}' {{ args }}
+    python scripts/post_review_findings.py {{ quote(spec) }} {{ args }}
 
 # Only `Fixed` is resolved by the agent; every other verb posts its reply and
 # leaves the button to you.
@@ -87,7 +87,7 @@ review-post spec *args: (_log _blue "Posting review findings...")
 # Only the line directly above a recipe becomes its `just --list` description.
 # Record a stage-8 finding's disposition (stage 8)
 review-dispose slug id verb reason *args: (_log _blue "Recording disposition...")
-    python scripts/dispose_finding.py '{{ slug }}' '{{ id }}' '{{ verb }}' '{{ reason }}' {{ args }}
+    python scripts/dispose_finding.py {{ quote(slug) }} {{ quote(id) }} {{ quote(verb) }} {{ quote(reason) }} {{ args }}
 
 # A mutant applied over uncommitted work is destroyed with that work by the
 # `git checkout -- <file>` that reverts it. That revert cannot touch untracked
@@ -128,12 +128,12 @@ mutate path old new *test_cmd: mutation-guard
     #!/usr/bin/env bash
     set -uo pipefail
 
-    if ! git ls-files --error-unmatch '{{ path }}' > /dev/null 2>&1; then
+    if ! git ls-files --error-unmatch {{ quote(path) }} > /dev/null 2>&1; then
         just _log {{ _red }} "MUTANT NOT APPLIED — {{ path }} is not tracked, so the revert would have nothing to restore"
         exit 1
     fi
 
-    python3 scripts/apply_mutant.py '{{ path }}' '{{ old }}' '{{ new }}'
+    python3 scripts/apply_mutant.py {{ quote(path) }} {{ quote(old) }} {{ quote(new) }}
     applied=$?
 
     # 9 is the applier's own "this mutant cannot be applied"; anything else
@@ -148,36 +148,39 @@ mutate path old new *test_cmd: mutation-guard
 
     # From here the mutant is on disk, so every exit path owes a revert. The
     # recipe runs under `set -uo pipefail` without `-e`, so a shell syntax error
-    # inside an eval-ed test_cmd — an unbalanced quote is the recorded case —
-    # aborts before the explicit revert below and strands the mutant (#2005).
+    # inside an eval-ed test_cmd aborts before the explicit revert below and
+    # strands the mutant (#2005). Since #2015 this is an `eval` failure only:
+    # test_cmd reaches the shell through `quote()`, so a quote in it can no
+    # longer break the assignment — but `eval` still interprets the value as a
+    # command, so a test_cmd that is not a valid command still fails here.
     # The explicit reverts stay: this is the backstop for the paths that never
     # reach them, and a second checkout of an already-clean file is a no-op.
     # Installed here rather than earlier because before the applier runs there is
     # nothing to revert, and the MUTANT NOT APPLIED path must leave the tree
     # exactly as it found it.
-    mutant_path='{{ path }}'
+    mutant_path={{ quote(path) }}
     trap 'git checkout -- "$mutant_path"' EXIT
 
     just _log {{ _blue }} "Mutant applied:"
-    git --no-pager diff -- '{{ path }}'
+    git --no-pager diff -- {{ quote(path) }}
 
     just build
     built=$?
     if [ "$built" -ne 0 ]; then
         # No rebuild here: a failed build installed nothing, so the extension on
         # disk is still the pre-mutant one.
-        git checkout -- '{{ path }}'
+        git checkout -- {{ quote(path) }}
         just _log {{ _red }} "VOID: BUILD FAILED (exit $built) — no test result can be read from a stale binary; mutant reverted"
         exit 2
     fi
 
-    test_cmd='{{ test_cmd }}'
+    test_cmd={{ quote(test_cmd) }}
     [ -z "$test_cmd" ] && test_cmd='just test-python'
     just _log {{ _blue }} "Testing the mutant with: $test_cmd"
     eval "$test_cmd"
     tested=$?
 
-    git checkout -- '{{ path }}'
+    git checkout -- {{ quote(path) }}
     if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
         just _log {{ _red }} "REVERT INCOMPLETE — tracked changes remain after reverting {{ path }}:"
         git status --porcelain --untracked-files=no
