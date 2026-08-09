@@ -10,16 +10,20 @@ skips the rewrite the test route depends on.
 
 from __future__ import annotations
 
+import os
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
+import oxitest as oxi
 import oxitest._bridge._loader as _loader_module
-from oxitest import TempDir, TestContext, parametrize
-from oxitest._bridge._builtins import _tempdir
+from oxitest import Patcher, TempDir, TestContext, parametrize
+from oxitest._bridge._builtins import _capture, _tempdir
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._doctest_runner import _doctest_module_name, _import_doctest_module
-from oxitest._bridge._loader import ModuleCache
+from oxitest._bridge._loader import ModuleCache, already_imported
 from oxitest._bridge.importer import _import_test_module, collect_module
 from oxitest._bridge.result import ErrorResult
 from tests import helpers
@@ -369,4 +373,203 @@ def test_collecting_a_module_outside_the_package_still_rewrites_asserts() -> Non
         "a module outside the oxitest package was reused instead of loaded, so "
         "its asserts were never rewritten; every assertion in it would report "
         "without operand detail and nothing would announce the loss"
+    )
+
+
+@dataclass(frozen=True)
+class _FakeStat:
+    """The two fields ``os.path.samestat`` reads, and nothing else.
+
+    A real ``os.stat_result`` cannot be built with an arbitrary inode without
+    reconstructing all ten fields, and only these two decide identity.
+    """
+
+    st_ino: int
+    st_dev: int
+
+
+def _stat_with_zero_inode(
+    real_stat: Callable[..., Any], target_name: str
+) -> Callable[..., Any]:
+    """Return an ``os.stat`` that reports a zero inode for *target_name* only.
+
+    Delegating for every other path keeps the patch from reaching the test
+    runner's own stat calls, which happen while this patch is installed.
+    """
+
+    def fake(path: Any, *args: Any, **kwargs: Any) -> Any:
+        info = real_stat(path, *args, **kwargs)
+        if Path(str(path)).name == target_name:
+            return _FakeStat(st_ino=0, st_dev=info.st_dev)
+        return info
+
+    return fake
+
+
+def test_an_unusable_inode_declines_the_match(patch: Patcher) -> None:
+    """A zero inode must decline, not compare equal to every sibling.
+
+    ``os.path.samestat`` is ``st_ino == st_ino and st_dev == st_dev``, so two
+    zero-inode stats compare **equal**. The basename pre-filter does not save
+    us: ``sys.modules`` holds many entries sharing a basename. Without this
+    guard a filesystem that reports no inode would make ``already_imported``
+    return the first same-named module it walks past, and the collection route
+    would reuse the wrong module and skip its AST rewrite (#2018).
+    """
+    # Arrange
+    target = str(Path(_tempdir.__file__))
+    patch.setattr(os, "stat", _stat_with_zero_inode(os.stat, Path(target).name))
+
+    # Act
+    found = already_imported(target)
+
+    # Assert
+    assert found is None, (
+        "a zero inode was treated as a usable identity, so any module sharing "
+        "this basename could be returned in place of the right one — the "
+        "silent wrong-module reuse this guard exists to prevent"
+    )
+
+
+def test_two_files_sharing_a_basename_do_not_match(tmp: TempDir) -> None:
+    """Identity must discriminate, not accept anything the pre-filter allowed.
+
+    The pre-filter passes every ``sys.modules`` entry whose basename matches,
+    so the comparison after it is the only thing separating one file from a
+    same-named other. Nothing else in this file asserts a **negative** match,
+    which is what lets a mutant replacing the comparison with ``True`` survive
+    (#2018).
+    """
+    # Arrange — a real, different file with the same basename as an imported one
+    imported = Path(_tempdir.__file__)
+    impostor = tmp.path / imported.name
+    impostor.write_text("# not the module oxitest imported\n", encoding="utf-8")
+
+    # Act
+    found = already_imported(str(impostor))
+
+    # Assert
+    assert found is None, (
+        f"a different file named {imported.name!r} was accepted as the "
+        f"imported module; reusing it would run the wrong source and skip the "
+        f"AST rewrite the test route depends on"
+    )
+
+
+# ── The Windows spelling (#2018) ──────────────────────────────────────────────
+#
+# Rust hands Python the output of std::fs::canonicalize, which on Windows is an
+# extended-length path. Nothing else in this file exercises that spelling: every
+# other test feeds a module's own __file__, so both sides of the comparison
+# always agree and the tests pass on Windows while the defect is live.
+#
+# The three tests below construct the spelling rather than capture it. If
+# #1767 makes normalize_path stop emitting the prefix, this reconstruction goes
+# stale and these tests keep passing — they assert the comparison tolerates the
+# spelling, not that the collector still produces it.
+
+_IS_WINDOWS = sys.platform == "win32"
+_NOT_WINDOWS_REASON = (
+    "the extended-length path prefix exists only on Windows; on POSIX "
+    "resolve() reconciles every spelling, so there is no divergence to "
+    "reproduce (#2018)"
+)
+
+
+def _as_rust_spells_it(module_file: str) -> str:
+    """Return *module_file* spelled the way std::fs::canonicalize returns it."""
+    return "\\\\?\\" + str(Path(module_file).resolve())
+
+
+@oxi.mark.skip(when=not _IS_WINDOWS, reason=_NOT_WINDOWS_REASON)
+def test_already_imported_matches_a_verbatim_spelled_path() -> None:
+    r"""The collector's own spelling must find the module the process imported.
+
+    ``ntpath.realpath`` keeps the ``\\?\`` prefix when the input carries it and
+    strips it otherwise, so comparing two resolved strings can never match
+    here. Comparing file identity does (#2018).
+    """
+    # Arrange
+    target = _as_rust_spells_it(str(_capture.__file__))
+
+    # Act
+    found = already_imported(target)
+
+    # Assert
+    assert found is _capture, (
+        "the collector's own path spelling did not find the module oxitest "
+        "already imported, so both load routes will execute a second copy and "
+        "every BuiltinFixture in it registers twice"
+    )
+
+
+@oxi.mark.skip(when=not _IS_WINDOWS, reason=_NOT_WINDOWS_REASON)
+def test_collecting_a_builtin_via_a_verbatim_path_adds_no_duplicates() -> None:
+    """The collection route, driven the way the collector drives it.
+
+    The sibling test above this section drives ``collect_module`` with the
+    module's own ``__file__``, which cannot reproduce the divergence. This one
+    supplies the spelling Rust actually sends (#2018).
+    """
+    # Arrange
+    before = sorted(cls.__name__ for cls in BuiltinFixture.registered_types())
+
+    # Act
+    collect_module(_as_rust_spells_it(str(_capture.__file__)))
+
+    # Assert
+    after = sorted(cls.__name__ for cls in BuiltinFixture.registered_types())
+    assert after == before, (
+        "collecting a built-in through the collector's own path spelling "
+        "registered its classes a second time; BuiltinFixture.for_type() "
+        "resolves by class identity, so which object a caller gets would "
+        "depend on which route loaded the module"
+    )
+
+
+@oxi.mark.skip(when=not _IS_WINDOWS, reason=_NOT_WINDOWS_REASON)
+def test_the_doctest_route_reuses_a_builtin_given_a_verbatim_path() -> None:
+    """The doctest route's reuse branch, exercised on Windows for the first time.
+
+    That branch reuses whatever ``already_imported`` returns, with no
+    package-scope rule — deliberately, because it never rewrites. Since
+    ``already_imported`` has always returned ``None`` on Windows, the branch
+    has never executed there. A green Windows run cannot tell *correct* from
+    *not exercised*, so this asserts the outcome instead (#2018).
+    """
+    # Arrange
+    cache = ModuleCache()
+
+    # Act
+    result = _import_doctest_module(_as_rust_spells_it(str(_capture.__file__)), cache)
+
+    # Assert
+    assert result is _capture, (
+        "the doctest route built its own copy of the module instead of "
+        "reusing the imported one, so every BuiltinFixture class in it exists "
+        "twice and BuiltinFixture.for_type() resolves to whichever won"
+    )
+
+
+def test_a_path_that_does_not_exist_declines_rather_than_raising(
+    tmp: TempDir,
+) -> None:
+    """A missing file must return None, not raise out of the loader.
+
+    ``Path.resolve()`` with ``strict=False`` never raised, so this branch was
+    unreachable in practice before identity replaced it. ``os.stat`` raises for
+    every path that is not there, which is an ordinary input — a source file
+    deleted between collection and load. An ``OSError`` escaping here would
+    surface as a collection failure rather than a cache miss (#2018).
+    """
+    # Arrange
+    missing = tmp.path / "never_written.py"
+
+    # Act
+    found = already_imported(str(missing))
+
+    # Assert
+    assert found is None, (
+        "a path with no file behind it must decline quietly; the caller "
+        "treats None as 'not already imported' and loads the module itself"
     )
