@@ -70,6 +70,16 @@ ignore = [
 # ── Source code ─────────────────────────────────────────────────────────
 "python/oxitest/_bridge/worker.py" = ["PLC0415"]
 
+# ── Review tooling ──────────────────────────────────────────────────────
+# These shell out to `gh`, which must be resolved from PATH rather than by
+# absolute path — the devenv shell is what puts it there, and hard-coding a
+# store path would break on every rebuild. Every argument is repo-controlled,
+# never user input. Listed per file rather than as `scripts/*` so a future
+# script that shells out has to justify itself here (#2007).
+"scripts/check_review_threads.py" = ["S603", "S607"]
+"scripts/post_review_findings.py" = ["S603", "S607"]
+"scripts/dispose_finding.py" = ["S603", "S607"]
+
 # ── Test data projects ──────────────────────────────────────────────────
 "python/tests/data/**" = ["D100", "D103", "D104"]
 
