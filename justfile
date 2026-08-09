@@ -64,22 +64,28 @@ check-locks: (_log _blue "Checking lock files...")
     uv lock --check
     cargo metadata --locked --format-version 1 --quiet > /dev/null
 
-# Refuse to merge while any review thread is unresolved, or while the merge
-# would close an issue the title does not name (stage 9, position 4).
 # Deliberately NOT part of `preflight`, which runs earlier in the merge sequence
 # than findings are meant to be resolved. Both checks accept `--pr`, so `args`
 # reaches each unchanged.
+#
+# Only the line directly above a recipe becomes its `just --list` description.
+# Refuse the merge on unresolved threads or unnamed closures (stage 9, step 4)
 merge-ready *args: (_log _blue "Checking merge readiness...")
     python scripts/check_review_threads.py {{ args }}
     python scripts/check_closing_issues.py {{ args }}
 
-# Post one stage-8 review pass as anchored review threads (stage 8). Validates
-# the whole spec against the diff before writing anything.
+# Validates the whole spec against the diff before writing anything.
+#
+# Only the line directly above a recipe becomes its `just --list` description.
+# Post one stage-8 review pass as anchored review threads (stage 8)
 review-post spec *args: (_log _blue "Posting review findings...")
     python scripts/post_review_findings.py '{{ spec }}' {{ args }}
 
-# Record a stage-8 finding's disposition (stage 8). Only `Fixed` is resolved by
-# the agent; every other verb posts its reply and leaves the button to you.
+# Only `Fixed` is resolved by the agent; every other verb posts its reply and
+# leaves the button to you.
+#
+# Only the line directly above a recipe becomes its `just --list` description.
+# Record a stage-8 finding's disposition (stage 8)
 review-dispose slug id verb reason *args: (_log _blue "Recording disposition...")
     python scripts/dispose_finding.py '{{ slug }}' '{{ id }}' '{{ verb }}' '{{ reason }}' {{ args }}
 
@@ -105,6 +111,17 @@ mutation-guard:
 # (measured — `false` followed by an `echo` exits 0), which is how a void run
 # reads as a pass.
 #
+# Two inputs produce a correct VOID that reads like a tooling fault (#2005):
+#
+#   1. A mutant that orphans a binding. Inverting `if !x.is_terminal()` to
+#      `if false` leaves `use std::io::IsTerminal` unused, which fails the build
+#      under `warnings = "deny"` and exits 2. That is the recipe working. Invert
+#      the condition rather than deleting the call. Recorded twice before being
+#      written down here, at a cost of one cycle each time.
+#   2. A test_cmd that is a bare file path. test_cmd is evaluated as a whole
+#      shell command, so a path exits 126 and a typo exits 127; both mean no
+#      test ran. Pass a runnable command, such as: just test-python <file>.
+#
 # Only the line directly above a recipe becomes its `just --list` description.
 # Run one mutant end to end: apply, build, test, revert (#1939)
 mutate path old new *test_cmd: mutation-guard
@@ -128,6 +145,18 @@ mutate path old new *test_cmd: mutation-guard
         just _log {{ _red }} "VOID: scripts/apply_mutant.py failed (exit $applied) — 127 means python3 is not on PATH, so run inside the devenv shell; 2 means it could not read an anchor, and <old>/<new> are file paths rather than inline text. The docstring in that script documents the rest."
         exit 2
     fi
+
+    # From here the mutant is on disk, so every exit path owes a revert. The
+    # recipe runs under `set -uo pipefail` without `-e`, so a shell syntax error
+    # inside an eval-ed test_cmd — an unbalanced quote is the recorded case —
+    # aborts before the explicit revert below and strands the mutant (#2005).
+    # The explicit reverts stay: this is the backstop for the paths that never
+    # reach them, and a second checkout of an already-clean file is a no-op.
+    # Installed here rather than earlier because before the applier runs there is
+    # nothing to revert, and the MUTANT NOT APPLIED path must leave the tree
+    # exactly as it found it.
+    mutant_path='{{ path }}'
+    trap 'git checkout -- "$mutant_path"' EXIT
 
     just _log {{ _blue }} "Mutant applied:"
     git --no-pager diff -- '{{ path }}'
@@ -162,6 +191,21 @@ mutate path old new *test_cmd: mutation-guard
     if [ "$rebuilt" -ne 0 ]; then
         just _log {{ _red }} "BINARY STILL MUTATED — source reverted but the rebuild failed (exit $rebuilt); run 'just build' before trusting any later test run"
         exit 5
+    fi
+
+    # 126 and 127 are the shell saying it never ran the command: found but not
+    # executable, and not found at all. Both are non-zero, so without this they
+    # read as KILLED — the one word this pipeline treats as proof that a test is
+    # real (#2005).
+    #
+    # Keep an EVEN number of apostrophes in every _log message: _log renders the
+    # message inside a single-quoted printf argument, so an odd count leaves
+    # that literal unterminated and the recipe dies with "unexpected EOF" and
+    # exit 2 — which is also a legitimate VOID code, so it reads exactly like
+    # the guard below firing correctly. Measured while writing this guard.
+    if [ "$tested" -eq 126 ] || [ "$tested" -eq 127 ]; then
+        just _log {{ _red }} "VOID: THE TEST COMMAND NEVER RAN (exit $tested) — 126 means it was found but is not executable, 127 means it was not found at all. A bare test-file path is the usual cause: test_cmd is evaluated as a whole shell command, so pass a runnable one such as: just test-python <file>. No test result can be read from this."
+        exit 2
     fi
 
     if [ "$tested" -ne 0 ]; then
