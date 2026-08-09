@@ -64,11 +64,14 @@ check-locks: (_log _blue "Checking lock files...")
     uv lock --check
     cargo metadata --locked --format-version 1 --quiet > /dev/null
 
-# Refuse to merge while any review thread is unresolved (stage 9, position 4).
+# Refuse to merge while any review thread is unresolved, or while the merge
+# would close an issue the title does not name (stage 9, position 4).
 # Deliberately NOT part of `preflight`, which runs earlier in the merge sequence
-# than findings are meant to be resolved.
-merge-ready *args: (_log _blue "Checking review-thread dispositions...")
+# than findings are meant to be resolved. Both checks accept `--pr`, so `args`
+# reaches each unchanged.
+merge-ready *args: (_log _blue "Checking merge readiness...")
     python scripts/check_review_threads.py {{ args }}
+    python scripts/check_closing_issues.py {{ args }}
 
 # Post one stage-8 review pass as anchored review threads (stage 8). Validates
 # the whole spec against the diff before writing anything.
