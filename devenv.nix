@@ -108,6 +108,14 @@ in
       just build
     fi
 
-    just health
+    # Report tool health only when a human is watching. The banner reached every
+    # agent command through `direnv exec`, defeating `cmd 2>&1 | tail -N` and
+    # hiding the verdict of the command being run (#2003). When silent the check
+    # still runs, and a missing tool still fails the shell entry.
+    if [ -t 2 ]; then
+      just health
+    else
+      just health >/dev/null 2>&1 || just health
+    fi
   '';
 }
