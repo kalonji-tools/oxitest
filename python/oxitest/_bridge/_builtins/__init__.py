@@ -31,6 +31,7 @@ from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._builtins._capture import (
     CaptureResult as CaptureResult,
     FdCapture,
+    FdCaptureResult as FdCaptureResult,
     StdCapture,
     _FdCaptureFixture as _FdCaptureFixture,
     _StdCaptureFixture as _StdCaptureFixture,
@@ -66,6 +67,7 @@ __all__ = [
     "BuiltinFixture",
     "CaptureResult",
     "FdCapture",
+    "FdCaptureResult",
     "LogBackend",
     "LogCapture",
     "Patcher",

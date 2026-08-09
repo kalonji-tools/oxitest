@@ -72,6 +72,29 @@ turns `print()`'s `\n` into `\r\n` before they get there. The same `print()`
 therefore gives you `"text\r\n"` here and `"text\n"` from `StdCapture`. Bytes
 written with `os.write`, as above, bypass that layer and arrive unchanged.
 
+### Output that is not UTF-8
+
+`readouterr()` decodes the descriptor as UTF-8 and replaces anything it cannot
+decode. That is correct for output your test wrote, because oxitest declares
+UTF-8 on its own streams — but a C extension or a subprocess may have written in
+another encoding, and those bytes come back as `�`.
+
+For that case `FdCapture` returns an [`FdCaptureResult`](../reference/python-api/builtins.md#fdcaptureresult),
+which carries the undecoded bytes alongside the decoded text. Decode them with
+the encoding you know applies:
+
+```python
+def test_c_extension_in_the_ansi_codepage(cap: FdCapture) -> None:
+    write_via_c_extension()          # writes cp1252 bytes to fd 1
+    result = cap.readouterr()
+    assert result.out_bytes.decode("cp1252") == "café\n"
+```
+
+oxitest does not guess that encoding. One capture can hold your UTF-8 `print()`
+output and a C extension's cp1252 bytes at the same time, so no single decode is
+right for all of it. `StdCapture` has no equivalent: it replaces `sys.stdout`
+with a `StringIO`, so a foreign writer never reaches it.
+
 ## Patcher — attributes, env vars, and directories
 
 `Patcher` provides four patching helpers that are automatically restored after

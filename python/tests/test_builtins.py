@@ -26,7 +26,11 @@ from oxitest._bridge._builtins import (
     TempDirFactory,
 )
 from oxitest._bridge._builtins._base import BuiltinFixture
-from oxitest._bridge._builtins._capture import _FdCaptureFixture, _StdCaptureFixture
+from oxitest._bridge._builtins._capture import (
+    FdCaptureResult,
+    _FdCaptureFixture,
+    _StdCaptureFixture,
+)
 from oxitest._bridge._builtins._logcapture import (
     StdlibLogBackend,
     _Installed,
@@ -570,6 +574,72 @@ def test_print_line_break_by_capture_level(case: NewlineCase) -> None:
         f"must report the same line break on both streams; a difference here means "
         f"one stream is being translated and the other is not. Expected "
         f"{case.expected!r}, got {result.err!r}"
+    )
+
+
+# ── Capture bytes (#2009) ─────────────────────────────────────────────────────
+
+# cp1252 for "é". Not valid UTF-8, so a UTF-8 decode must replace it. This
+# stands in for a C extension that writes in the Windows ANSI code page.
+_FOREIGN_BYTES = b"\xe9\n"
+
+
+def test_fdcapture_keeps_the_bytes_a_utf8_decode_cannot_represent() -> None:
+    """FdCapture hands back the descriptor's bytes, not only a lossy decode."""
+    # Arrange
+    ctx, teardowns = _make_builtin_ctx()
+    cap = _FdCaptureFixture().create(ctx=ctx)
+
+    # Act
+    os.write(1, _FOREIGN_BYTES)
+    os.write(2, _FOREIGN_BYTES)
+    result = cap.readouterr()
+    teardowns[0]()
+
+    # Assert
+    assert result.out_bytes == _FOREIGN_BYTES, (
+        "FdCapture must return the descriptor's bytes unchanged; a caller who "
+        "knows the writer's encoding has no other way to recover them, which is "
+        "the whole reason this field exists. Expected "
+        f"{_FOREIGN_BYTES!r}, got {result.out_bytes!r}"
+    )
+    assert result.err_bytes == _FOREIGN_BYTES, (
+        "stderr must carry its bytes for the same reason as stdout; a fixture "
+        "that exposed only one of the two would send a caller back to reading "
+        f"the descriptor itself. Expected {_FOREIGN_BYTES!r}, got {result.err_bytes!r}"
+    )
+    assert result.out_bytes.decode("cp1252") == "é\n", (
+        "the point of exposing bytes is that the caller can apply the encoding "
+        "oxitest cannot know; if this fails the bytes were altered on the way "
+        f"out. Got {result.out_bytes!r}"
+    )
+    assert result.out == "�\n", (
+        "the decoded view stays UTF-8 with replacement, and that is deliberate: "
+        "it is predictable and safe to print, where surrogates would raise "
+        f"UnicodeEncodeError in the assertion renderer. Got {result.out!r}"
+    )
+
+
+def test_stdcapture_result_carries_no_bytes() -> None:
+    """StdCapture returns the base CaptureResult, which has no bytes field."""
+    # Arrange
+    ctx, teardowns = _make_builtin_ctx()
+    cap = _StdCaptureFixture().create(ctx=ctx)
+
+    # Act
+    print("line")  # noqa: T201
+    result = cap.readouterr()
+    teardowns[0]()
+
+    # Assert
+    assert not isinstance(result, FdCaptureResult), (
+        "StdCapture replaces sys.stdout with a StringIO, so no foreign writer "
+        "ever reaches it and it has no bytes to expose; returning the fd result "
+        "type here would promise a fidelity this fixture cannot provide"
+    )
+    assert not hasattr(result, "out_bytes"), (
+        "the base CaptureResult must stay free of byte fields; adding them here "
+        "would force StdCapture to synthesise bytes it never received"
     )
 
 

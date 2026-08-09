@@ -3,6 +3,7 @@ from __future__ import annotations
 __all__ = [
     "CaptureResult",
     "FdCapture",
+    "FdCaptureResult",
     "StdCapture",
     "_CaptureBase",
     "_FdCaptureFixture",
@@ -53,6 +54,53 @@ class CaptureResult:
 
     out: str
     err: str
+
+
+@dataclass(frozen=True, slots=True)
+class FdCaptureResult(CaptureResult):
+    r"""A :class:`CaptureResult` that also carries the undecoded bytes.
+
+    Returned by :meth:`FdCapture.readouterr`. ``out`` and ``err`` are the
+    descriptor's bytes decoded as UTF-8 with ``errors="replace"``, which is
+    correct for anything this process wrote and lossy for anything else.
+    ``out_bytes`` and ``err_bytes`` are those same bytes, undecoded.
+
+    Foreign bytes carry no encoding tag. A C extension using the Windows
+    ANSI code page, or a subprocess that chose its own encoding, writes to
+    the same descriptor as ``print()``, so one capture can hold a mixture
+    and no single decode is right for all of it. Rather than guess, this
+    type hands back the bytes and lets the caller decode with the encoding
+    only the caller knows.
+
+    Attributes:
+        out: stdout, decoded as UTF-8 with replacement.
+        err: stderr, decoded as UTF-8 with replacement.
+        out_bytes: exactly the bytes that reached fd 1.
+        err_bytes: exactly the bytes that reached fd 2.
+
+    See Also:
+        - :class:`FdCapture` — the fixture that produces this.
+        - :class:`CaptureResult` — the base type, returned by
+          :class:`StdCapture`, which has no bytes to expose.
+
+    Examples:
+        A C extension writes ``é`` in the Windows ANSI code page. Those
+        bytes are not valid UTF-8, so ``out`` replaces them and
+        ``out_bytes`` keeps them:
+
+        >>> from oxitest import FdCaptureResult
+        >>> result = FdCaptureResult(
+        ...     out="�\n", err="", out_bytes=b"\xe9\n", err_bytes=b""
+        ... )
+        >>> result.out
+        '�\n'
+        >>> result.out_bytes.decode("cp1252")
+        'é\n'
+
+    """
+
+    out_bytes: bytes
+    err_bytes: bytes
 
 
 class _CaptureBase(ABC):
@@ -178,11 +226,19 @@ class FdCapture(_CaptureBase):
     arrive unchanged. On POSIX both fixtures return ``\n``, which is why
     the difference only appears in CI.
 
+    Encoding: ``readouterr()`` decodes the descriptor as UTF-8 with
+    ``errors="replace"``. That is correct for anything this process
+    wrote, because oxitest declares UTF-8 on its own streams, and lossy
+    for a C extension or subprocess that used another encoding. The
+    returned :class:`FdCaptureResult` carries the undecoded bytes in
+    ``out_bytes`` and ``err_bytes`` for those cases.
+
     See Also:
         - :class:`StdCapture` — Python-stream-level capture (cheaper,
           misses C/subprocess output, and returns ``\n`` on Windows
           where this fixture returns ``\r\n``).
-        - :class:`CaptureResult` — return type of ``readouterr()``.
+        - :class:`FdCaptureResult` — return type of ``readouterr()``,
+          a :class:`CaptureResult` that also carries the raw bytes.
 
     Examples:
         Injected by parameter type — declare ``cap: FdCapture`` on the
@@ -216,18 +272,26 @@ class FdCapture(_CaptureBase):
         os.dup2(self._stdout_tmp.fileno(), 1)
         os.dup2(self._stderr_tmp.fileno(), 2)
 
-    def readouterr(self) -> CaptureResult:
+    def readouterr(self) -> FdCaptureResult:
         sys.stdout.flush()
         sys.stderr.flush()
         self._stdout_tmp.seek(0)
-        out = self._stdout_tmp.read().decode(errors="replace")
+        out_bytes = self._stdout_tmp.read()
         self._stdout_tmp.truncate(0)
         self._stdout_tmp.seek(0)
         self._stderr_tmp.seek(0)
-        err = self._stderr_tmp.read().decode(errors="replace")
+        err_bytes = self._stderr_tmp.read()
         self._stderr_tmp.truncate(0)
         self._stderr_tmp.seek(0)
-        return CaptureResult(out=out, err=err)
+        # The bytes ride on the result rather than on a second accessor: the
+        # reads above truncate, so a later readouterr_bytes() would return
+        # empty whenever it ran second (#2009).
+        return FdCaptureResult(
+            out=out_bytes.decode(errors="replace"),
+            err=err_bytes.decode(errors="replace"),
+            out_bytes=out_bytes,
+            err_bytes=err_bytes,
+        )
 
     def _suspend(self) -> None:
         os.dup2(self._old_stdout_fd, 1)
