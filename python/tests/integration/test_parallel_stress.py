@@ -120,16 +120,14 @@ def test_maxfail_stops_early_under_load(tmp: TempDir) -> None:
 def test_shared_fixture_created_once_across_workers(tmp: TempDir) -> None:
     """A shared fixture writes a counter file; parallel run creates it exactly once."""
     # Arrange: conftest with a shared fixture that increments a file counter.
-    (tmp / "conftest.py").write_text(
+    (tmp / "__fixtures__.py").write_text(
         "import os\n"
         "import oxitest as oxi\n"
-        "from oxitest import Fixture\n"
-        "\n"
-        "fx = oxi.Fixtures()\n"
+        "from oxitest import Fixture, fixture\n"
         "\n"
         "COUNTER_FILE = os.path.join(os.path.dirname(__file__), '.fixture_counter')\n"
         "\n"
-        "@fx.fixture(shared=True)\n"
+        "@fixture(lifetime='package')\n"
         "def shared_resource() -> str:\n"
         "    # Atomically increment a counter file each time the fixture runs.\n"
         "    count = 0\n"

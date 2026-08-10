@@ -10,10 +10,9 @@ from tests.integration import helpers as integ
 def test_strict_abort_unused_fixture(tmp: TempDir) -> None:
     """Unused fixture in strict=abort mode exits non-zero with 'unused' in output."""
     # Arrange — conftest defines a fixture that no test uses
-    (tmp / "conftest.py").write_text(
-        "import oxitest as oxi\n"
-        "fx = oxi.Fixtures()\n"
-        "@fx.fixture\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n"
+        "@fixture(lifetime='function')\n"
         "def unused_db() -> str:\n"
         "    return 'connection'\n",
         encoding="utf-8",
@@ -36,10 +35,9 @@ def test_strict_abort_unused_fixture(tmp: TempDir) -> None:
 def test_strict_abort_missing_return_annotation(tmp: TempDir) -> None:
     """Fixture missing return annotation in strict=abort mode exits non-zero."""
     # Arrange — conftest defines a fixture without return type annotation
-    (tmp / "conftest.py").write_text(
-        "import oxitest as oxi\n"
-        "fx = oxi.Fixtures()\n"
-        "@fx.fixture\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n"
+        "@fixture(lifetime='function')\n"
         "def db():\n"
         "    return 'connection'\n",
         encoding="utf-8",
@@ -69,22 +67,31 @@ def test_fixture_shadow_warning_in_output(tmp: TempDir) -> None:
     # Arrange — root conftest defines 'db', sub/ conftest overrides it
     root = tmp / "proj"
     root.mkdir()
-    (root / "conftest.py").write_text(
-        "import oxitest as oxi\n"
-        "fx = oxi.Fixtures()\n"
-        "@fx.fixture\n"
+    (root / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n"
+        "@fixture(lifetime='function')\n"
         "def db() -> str:\n"
         "    return 'root_db'\n",
         encoding="utf-8",
     )
     sub = root / "sub"
     sub.mkdir()
-    (sub / "conftest.py").write_text(
-        "import oxitest as oxi\n"
-        "fx = oxi.Fixtures()\n"
-        "@fx.fixture\n"
+    (sub / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n"
+        "@fixture(lifetime='function')\n"
         "def db() -> str:\n"
         "    return 'child_db'\n",
+        encoding="utf-8",
+    )
+    # A test at the root as well as in sub/: the rootdir package is the
+    # deepest directory covering every test, so with tests only in sub/ the
+    # fold lands on sub/ and the root declaration is never in scope — no
+    # shadowing to report, and the assertion below would fail for a reason
+    # that has nothing to do with the diagnostic (#1720).
+    (root / "test_root.py").write_text(
+        "from oxitest import Fixture\n"
+        "def test_root_db(db: Fixture[str]):\n"
+        "    assert db == 'root_db'\n",
         encoding="utf-8",
     )
     (sub / "test_shadow.py").write_text(
@@ -105,11 +112,9 @@ def test_fixture_shadow_warning_in_output(tmp: TempDir) -> None:
 def test_teardown_warning_includes_test_name(tmp: TempDir) -> None:
     """Teardown error diagnostic includes the test node_id for attribution."""
     # Arrange — yield fixture that raises during teardown
-    (tmp / "conftest.py").write_text(
-        "import oxitest as oxi\n"
-        "from oxitest import Yields\n"
-        "fx = oxi.Fixtures()\n"
-        "@fx.fixture\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import Yields, fixture\n"
+        "@fixture(lifetime='function')\n"
         "def exploding() -> Yields[str]:\n"
         "    yield 'value'\n"
         "    raise RuntimeError('boom in teardown')\n",

@@ -9,13 +9,12 @@ _TREE_ARGS = ("query", "fixtures", "--tree")
 
 def test_tree_basic_output(tmp: TempDir) -> None:
     """`fixtures --tree` shows fixture dependency tree and exits 0."""
-    (tmp / "conftest.py").write_text(
-        "from oxitest import Fixture, Fixtures\n\n"
-        "fx = Fixtures()\n\n"
-        "@fx.fixture\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import Fixture, fixture\n\n"
+        "@fixture(lifetime='function')\n"
         "def config() -> dict:\n"
         "    return {'host': 'localhost'}\n\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "def db(config: Fixture[dict]) -> str:\n"
         "    return f'connected to {config}'\n",
         encoding="utf-8",
@@ -29,10 +28,9 @@ def test_tree_basic_output(tmp: TempDir) -> None:
 
 def test_tree_shared_fixture(tmp: TempDir) -> None:
     """`query fixtures --tree` includes shared fixtures."""
-    (tmp / "conftest.py").write_text(
-        "from oxitest import Fixtures\n\n"
-        "fx = Fixtures()\n\n"
-        "@fx.fixture(shared=True)\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n\n"
+        "@fixture(lifetime='package')\n"
         "def db() -> str:\n"
         "    return 'db'\n",
         encoding="utf-8",
@@ -45,13 +43,12 @@ def test_tree_shared_fixture(tmp: TempDir) -> None:
 
 def test_tree_cycle_exits_failure(tmp: TempDir) -> None:
     """`fixtures --tree` detects circular deps and exits 1."""
-    (tmp / "conftest.py").write_text(
-        "from oxitest import Fixture, Fixtures\n\n"
-        "fx = Fixtures()\n\n"
-        "@fx.fixture\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import Fixture, fixture\n\n"
+        "@fixture(lifetime='function')\n"
         "def a(b: Fixture[str]) -> str:\n"
         "    return 'a'\n\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "def b(a: Fixture[str]) -> str:\n"
         "    return 'b'\n",
         encoding="utf-8",

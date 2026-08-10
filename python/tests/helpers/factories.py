@@ -6,6 +6,7 @@ helper registry (#1700). Import them via ``from tests import helpers``.
 
 from __future__ import annotations
 
+import importlib.util
 from collections.abc import Callable
 from typing import TypeVar
 
@@ -17,6 +18,7 @@ from oxitest._bridge._fixture_registry import (
     FixtureScope,
 )
 from oxitest._bridge._fixture_session import FixtureSession
+from oxitest._bridge._module_source_registrar import register_module_source_fixtures
 from oxitest._bridge._test_kind import from_wire
 from oxitest._bridge._test_meta import TestMeta
 from oxitest._bridge.plugin_loader import PluginRegistry
@@ -93,6 +95,33 @@ def make_session(*defs: FixtureDef) -> FixtureSession:
 def make_session_with(name: str, factory: Callable[..., object]) -> FixtureSession:
     """Shortcut: single-fixture session for quick tests."""
     return make_session(make_fixture_def(name, factory, conftest_path="/conftest.py"))
+
+
+def session_from_declarations(
+    declarations: object, *, anchor_package_path: str
+) -> FixtureSession:
+    """Build a session from a written ``__fixtures__.py``, as the pipeline does.
+
+    Imports the declaration file, registers it against its anchor, and hands the
+    resulting defs to a session. This is the ``@oxi.fixture`` counterpart of
+    ``conftest_loader.create_session``, which takes conftest paths and goes with
+    ``conftest.py`` (#1720).
+
+    Args:
+        declarations: Path to the written declaration file.
+        anchor_package_path: The directory the declarations are scoped to.
+    """
+    spec = importlib.util.spec_from_file_location("__fixtures__", str(declarations))
+    if spec is None or spec.loader is None:
+        msg = f"declaration file is not loadable: {declarations}"
+        raise AssertionError(msg)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    registry = FixtureRegistry()
+    register_module_source_fixtures(
+        registry, module, anchor_package_path=anchor_package_path
+    )
+    return FixtureSession(list(registry.all()), PluginRegistry())
 
 
 def make_meta(

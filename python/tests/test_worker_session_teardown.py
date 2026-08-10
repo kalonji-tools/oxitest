@@ -237,25 +237,26 @@ def test_tempdir_factory_cleaned_up_in_parallel(tmp: TempDir) -> None:
 
 
 def test_shared_fixture_teardown_runs_in_worker(tmp: TempDir) -> None:
-    """A shared=True fixture must be torn down once per worker session.
+    """A ``lifetime="process"`` fixture must be torn down once per worker.
 
-    ``auto_arrange = false`` is required: modules using a shared fixture are
-    normally pinned to the main process by the arrange stage, which masks this
-    entirely. Disabling arrangement is what pushes them into workers.
+    Was a ``shared=True`` fixture with ``auto_arrange = false``, which the
+    docstring explained was required: modules using a shared fixture were
+    pinned to the main process by the arrange stage, masking this entirely.
+    Neither is needed now. ``process`` is per worker process by definition, so
+    there is no inference to disable — #1720 retires both the tier and the key.
     """
     root = Path(tmp) / "proj"
     root.mkdir()
     log = Path(tmp) / "events.log"
     pkg = root / "pkg"
     pkg.mkdir()
-    (pkg / "conftest.py").write_text(
+    (pkg / "__fixtures__.py").write_text(
         "import os\n"
         "import pathlib\n"
-        "from oxitest import Fixtures\n\n"
-        "fx = Fixtures()\n"
+        "from oxitest import fixture\n\n"
         f"LOG = pathlib.Path({str(log)!r})\n"
         "SHARD = pathlib.Path(f'{LOG}.{os.getpid()}')\n\n\n"
-        "@fx.fixture(shared=True)\n"
+        "@fixture(lifetime='process')\n"
         "def resource() -> str:\n"
         "    with SHARD.open('a', encoding='utf-8') as fh:\n"
         "        fh.write(f'SETUP {os.getpid()}\\n')\n"
@@ -274,10 +275,7 @@ def test_shared_fixture_teardown_runs_in_worker(tmp: TempDir) -> None:
             ]
         (pkg / f"test_{mod}.py").write_text("\n".join(body), encoding="utf-8")
     (root / "pyproject.toml").write_text(
-        "[tool.oxitest]\n"
-        'testpaths = ["pkg"]\n'
-        'python_files = ["test_*.py"]\n'
-        "auto_arrange = false\n",
+        '[tool.oxitest]\ntestpaths = ["pkg"]\npython_files = ["test_*.py"]\n',
         encoding="utf-8",
     )
 

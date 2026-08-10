@@ -10,7 +10,6 @@ from types import MappingProxyType
 
 from oxitest import FixtureRef, TempDir, parametrize, partial, raises
 from oxitest._bridge._fn_metadata import get_metadata
-from oxitest._bridge.conftest_loader import create_session
 from oxitest._bridge.importer import collect_module
 from oxitest._bridge.parametrize import ComposedCases, DataclassCases, DictCases
 from tests import helpers
@@ -412,12 +411,10 @@ def test_executor_composed_parametrize_failure(tmp: TempDir) -> None:
 
 def test_executor_composed_with_fixture(tmp: TempDir) -> None:
     """Composed partial cases combine correctly with injected Fixture[T] parameters."""
-    conftest = tmp / "conftest.py"
-    conftest.write_text(
-        "import oxitest\n"
-        "fixtures = oxitest.Fixtures()\n"
-        "@fixtures.fixture\n"
-        "def multiplier():\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n"
+        "@fixture(lifetime='function')\n"
+        "def multiplier() -> int:\n"
         "    return 10\n",
         encoding="utf-8",
     )
@@ -437,7 +434,9 @@ def test_executor_composed_with_fixture(tmp: TempDir) -> None:
         "    assert x * multiplier == expected\n",
         encoding="utf-8",
     )
-    session, _, _diags = create_session([str(conftest)])
+    session = helpers.session_from_declarations(
+        tmp / "__fixtures__.py", anchor_package_path=str(tmp)
+    )
     result = helpers.run_test(str(f), "test_mul", session=session, param_id="a-c")
     assert result.status == "passed", (
         "composed partial fields and Fixture[T] parameters must coexist; the executor"
@@ -472,12 +471,10 @@ def test_executor_composed_compact_mode(tmp: TempDir) -> None:
 
 def test_executor_composed_with_fixture_ref(tmp: TempDir) -> None:
     """FixtureRef inside a composed partial case resolves the fixture at execution."""
-    conftest = tmp / "conftest.py"
-    conftest.write_text(
-        "import oxitest\n"
-        "fixtures = oxitest.Fixtures()\n"
-        "@fixtures.fixture\n"
-        "def pg_db():\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n"
+        "@fixture(lifetime='function')\n"
+        "def pg_db() -> str:\n"
         "    return 'postgres'\n",
         encoding="utf-8",
     )
@@ -486,10 +483,9 @@ def test_executor_composed_with_fixture_ref(tmp: TempDir) -> None:
         "from __future__ import annotations\n"
         "from dataclasses import dataclass\n"
         "import oxitest\n"
-        "from oxitest import Fixture, FixtureRef, partial\n"
-        "_fixtures = oxitest.Fixtures()\n"
-        "@_fixtures.fixture\n"
-        "def pg_db(): return 'postgres'\n"
+        "from oxitest import Fixture, FixtureRef, fixture, partial\n"
+        "@fixture(lifetime='function')\n"
+        "def pg_db() -> str: return 'postgres'\n"
         "@dataclass\n"
         "class Case:\n"
         "    db: FixtureRef[str]\n"
@@ -500,7 +496,9 @@ def test_executor_composed_with_fixture_ref(tmp: TempDir) -> None:
         "    assert db == expected\n",
         encoding="utf-8",
     )
-    session, _, _diags = create_session([str(conftest)])
+    session = helpers.session_from_declarations(
+        tmp / "__fixtures__.py", anchor_package_path=str(tmp)
+    )
     result = helpers.run_test(str(f), "test_db", session=session, param_id="pg-check")
     assert result.status == "passed", (
         "FixtureRef fields inside composed partials must be resolved via the fixture"

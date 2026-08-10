@@ -58,11 +58,10 @@ def test_strict_enforce_with_fixtures_and_clean_asserts(tmp: TempDir) -> None:
             [tool.oxitest]
             strict = "enforce"
         """,
-        conftest="""\
-            import oxitest as oxi
-            fx = oxi.Fixtures()
+        declarations="""\
+            from oxitest import fixture
 
-            @fx.fixture
+            @fixture(lifetime="function")
             def db() -> str:
                 return "connected"
         """,

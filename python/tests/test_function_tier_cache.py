@@ -184,18 +184,17 @@ def test_autouse_instance_is_what_the_test_observes(tmp: TempDir) -> None:
     """
     # Arrange
     log = Path(tmp) / "events.log"
-    (Path(tmp) / "conftest.py").write_text(
+    (Path(tmp) / "__fixtures__.py").write_text(
         "from __future__ import annotations\n"
         "import itertools\n"
         "import pathlib\n"
-        "from oxitest import Fixtures\n\n"
-        "fixtures = Fixtures()\n"
+        "from oxitest import fixture\n\n"
         f"LOG = pathlib.Path({str(log)!r})\n"
         "_COUNTER = itertools.count(1)\n\n\n"
         "class Stamp:\n"
         "    def __init__(self, seq: int) -> None:\n"
         "        self.seq = seq\n\n\n"
-        "@fixtures.fixture(autouse=True)\n"
+        "@fixture(lifetime='function', autouse=True)\n"
         "def stamp() -> Stamp:\n"
         "    instance = Stamp(next(_COUNTER))\n"
         "    with LOG.open('a', encoding='utf-8') as fh:\n"
@@ -358,11 +357,15 @@ def test_consecutive_tests_get_distinct_instances(tmp: TempDir) -> None:
 
 
 def test_wider_tiers_keep_their_build_counts(tmp: TempDir) -> None:
-    """Shared / module / package / session builds are untouched by the fix.
+    """Module / package / session builds are untouched by the fix.
 
     Four tests across two modules touch every wider tier through both routes.
     The function-tier cache lives in ``_scope_for``'s final fallthrough; this
     pins that no wider branch was disturbed on the way there.
+
+    Covered the legacy ``shared`` tier too, via a ``conftest.py`` scaffolded
+    beside the declarations. That half is gone with the tier (#1720); the three
+    tiers a ``@oxi.fixture`` can declare are what remain.
     """
     # Arrange
     root = Path(tmp) / "proj"
@@ -398,49 +401,30 @@ def test_wider_tiers_keep_their_build_counts(tmp: TempDir) -> None:
         "    _record('SESSION-SETUP')\n"
         "    return SessRes()\n"
     )
-    conftest = (
-        "from __future__ import annotations\n"
-        "import pathlib\n"
-        "from oxitest import Fixtures\n\n"
-        "fixtures = Fixtures()\n"
-        f"LOG = pathlib.Path({str(log)!r})\n\n\n"
-        "@fixtures.fixture(shared=True)\n"
-        "def shared_res() -> str:\n"
-        "    with LOG.open('a', encoding='utf-8') as fh:\n"
-        "        fh.write('SHARED-SETUP\\n')\n"
-        "    return 'shared'\n"
-    )
 
     def _test_module(mod: str) -> str:
         return (
             "from __future__ import annotations\n"
             "from oxitest import Fixture, Fixtures\n"
             "from suite._kinds import ModRes\n\n\n"
-            f"def test_{mod}_one(\n"
-            "    mod_res: Fixture[ModRes], shared_res: Fixture[str], fx: Fixtures\n"
-            ") -> None:\n"
+            f"def test_{mod}_one(mod_res: Fixture[ModRes], fx: Fixtures) -> None:\n"
             "    assert fx.suite.mod_res is mod_res, (\n"
             "        'module tier already unified both routes before #1775 — "
             "that must not change'\n"
             "    )\n"
-            "    assert shared_res == 'shared', (\n"
-            "        'shared tier must inject by param too'\n"
-            "    )\n"
             "    assert fx.suite.pkg_res is not None, 'package tier must inject'\n"
             "    assert fx.suite.sess_res is not None, 'session tier must inject'\n"
-            "    assert fx.shared_res is not None, 'shared tier must inject'\n\n\n"
+            "\n\n"
             f"def test_{mod}_two(fx: Fixtures) -> None:\n"
             "    assert fx.suite.mod_res is not None, 'module tier must inject'\n"
             "    assert fx.suite.pkg_res is not None, 'package tier must inject'\n"
             "    assert fx.suite.sess_res is not None, 'session tier must inject'\n"
-            "    assert fx.shared_res is not None, 'shared tier must inject'\n"
         )
 
     _scaffold(
         root,
         {
             "pyproject.toml": _PYPROJECT,
-            "conftest.py": conftest,
             "suite/__init__.py": "",
             "suite/_kinds.py": kinds,
             "suite/__fixtures__.py": fixtures_module,
@@ -459,7 +443,6 @@ def test_wider_tiers_keep_their_build_counts(tmp: TempDir) -> None:
         "MODULE-SETUP": 2,  # one per module
         "PACKAGE-SETUP": 1,  # one per anchor subtree
         "SESSION-SETUP": 1,  # one per worker; --serial means one worker
-        "SHARED-SETUP": 1,  # one per session
     }
     for tag, expected in counts.items():
         actual = sum(1 for e in events if e == tag)

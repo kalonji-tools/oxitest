@@ -7,14 +7,12 @@ from tests.integration import helpers as integ
 
 def test_shared_fixture_with_parametrize(tmp: TempDir) -> None:
     """shared=True fixture is instantiated once across all parametrize cases."""
-    (tmp / "conftest.py").write_text(
-        "import oxitest as oxi\n"
-        "from oxitest import Fixture\n"
-        "fx = oxi.Fixtures()\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import Fixture, fixture\n"
         "\n"
         "call_count = 0\n"
         "\n"
-        "@fx.fixture(shared=True)\n"
+        "@fixture(lifetime='package')\n"
         "def db() -> str:\n"
         "    global call_count\n"
         "    call_count += 1\n"
@@ -43,18 +41,16 @@ def test_shared_fixture_with_parametrize(tmp: TempDir) -> None:
 
 def test_shared_and_autouse_both_apply(tmp: TempDir) -> None:
     """shared=True fixture combined with autouse fixture — both are injected."""
-    (tmp / "conftest.py").write_text(
-        "import oxitest as oxi\n"
-        "from oxitest import Fixture\n"
-        "fx = oxi.Fixtures()\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import Fixture, fixture\n"
         "\n"
         "log = []\n"
         "\n"
-        "@fx.fixture(shared=True)\n"
+        "@fixture(lifetime='package')\n"
         "def db() -> str:\n"
         "    return 'shared-conn'\n"
         "\n"
-        "@fx.fixture(autouse=True)\n"
+        "@fixture(lifetime='function', autouse=True)\n"
         "def setup():\n"
         "    log.append('setup')\n",
         encoding="utf-8",
@@ -74,79 +70,40 @@ def test_shared_and_autouse_both_apply(tmp: TempDir) -> None:
     integ.assert_passed(out, rc, count=2)
 
 
-def test_legacy_conftest_autouse_fires_for_sibling_package(tmp: TempDir) -> None:
-    """autouse=True in alpha/conftest.py is run-wide ambient: beta/ gets it too."""
-    # Arrange — the empirical baseline from #1774: legacy conftest autouse is
-    # documented as "runs for every test" and must survive B1 filtering.
-    (tmp / "alpha").mkdir()
-    (tmp / "beta").mkdir()
-    (tmp / "alpha" / "conftest.py").write_text(
-        "from pathlib import Path\n"
-        "import oxitest as oxi\n"
-        "fx = oxi.Fixtures()\n"
-        "\n"
-        "@fx.fixture(autouse=True)\n"
-        "def record_firing() -> None:\n"
-        "    log = Path(__file__).resolve().parent.parent / 'firings.txt'\n"
-        "    with log.open('a') as fh:\n"
-        "        fh.write('fired\\n')\n",
-        encoding="utf-8",
-    )
-    (tmp / "alpha" / "test_alpha.py").write_text(
-        "def test_in_alpha():\n    assert True, 'placeholder'\n", encoding="utf-8"
-    )
-    (tmp / "beta" / "test_beta.py").write_text(
-        "def test_in_beta():\n    assert True, 'placeholder'\n", encoding="utf-8"
-    )
-
-    # Act
-    out, _, rc = helpers.run_oxitest(tmp)
-
-    # Assert
-    integ.assert_passed(out, rc, count=2)
-    firings = (tmp / "firings.txt").read_text(encoding="utf-8").splitlines()
-    assert len(firings) == 2, (
-        "legacy conftest autouse is exempt from B1 (unanchored sources are "
-        "ambient); if the sibling-package firing disappears, #1774's filter "
-        "broke documented run-wide behaviour instead of only anchored sources"
-    )
-
-
 def test_yield_fixture_teardown_lifo(tmp: TempDir) -> None:
     """Yield fixtures tear down in LIFO order (reverse of setup)."""
-    (tmp / "conftest.py").write_text(
-        "import oxitest as oxi\n"
-        "from oxitest import Fixture, Yields\n"
-        "fx = oxi.Fixtures()\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import Fixture, Yields, fixture\n"
         "\n"
-        "order = []\n"
+        "from state import order\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "def first() -> Yields[str]:\n"
         "    order.append('setup-first')\n"
         "    yield 'first'\n"
         "    order.append('teardown-first')\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "def second(first: Fixture[str]) -> Yields[str]:\n"
         "    order.append('setup-second')\n"
         "    yield f'{first}+second'\n"
         "    order.append('teardown-second')\n",
         encoding="utf-8",
     )
+    (tmp / "state.py").write_text("order = []\n", encoding="utf-8")
     (tmp / "test_ordering.py").write_text(
         "from oxitest import Fixture\n"
-        "import conftest\n"
+        "import state\n"
         "\n"
         "def test_uses_both(second: Fixture[str]):\n"
         "    assert second == 'first+second'\n"
         "\n"
         "def test_teardown_was_lifo():\n"
         "    # After test_uses_both tears down, order should show LIFO\n"
-        "    assert conftest.order == [\n"
+        "    assert state.order == [\n"
         "        'setup-first', 'setup-second',\n"
         "        'teardown-second', 'teardown-first',\n"
-        "    ], f'unexpected order: {conftest.order}'\n",
+        "    ], f'unexpected order: {state.order}'\n",
         encoding="utf-8",
     )
 

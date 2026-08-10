@@ -16,7 +16,6 @@ from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge._read_fixtures import _fixtures_registry_var, _FixturesProxy
 from oxitest._bridge._test_meta import TestMeta
-from oxitest._bridge.conftest_loader import load_fixtures_from_conftest
 from oxitest._bridge.proxy import FrozenProxy
 from oxitest._bridge.proxy_ns import FixturesProxy, NamespaceProxy, OxiNamespaceProxy
 from oxitest._bridge.result import PassedResult
@@ -355,37 +354,42 @@ def test_oxi_proxy_caches_builtin_on_repeated_access(
 
 
 def test_full_pipeline_fx_namespace_access(tmp: TempDir) -> None:
-    """Full pipeline: namespaced fixtures in conftest, accessed via fx.db.conn."""
-    conftest = tmp / "conftest.py"
-    conftest.write_text(
-        "import oxitest\n"
-        "db = oxitest.Fixtures()\n"
-        "@db.fixture\n"
+    """Full pipeline: a namespaced declaration is reachable as ``fx.db.conn``.
+
+    The namespace was the ``Fixtures()`` variable name until #1720. It is the
+    anchor directory's basename now (ADR-0009 Rule 5), so the declaration lives
+    in ``db/__fixtures__.py`` and the test sits inside that anchor to see it.
+    """
+    pkg = tmp / "db"
+    pkg.mkdir()
+    declarations = pkg / "__fixtures__.py"
+    declarations.write_text(
+        "from oxitest import fixture\n"
+        "@fixture(lifetime='function')\n"
         "def conn() -> str:\n"
         "    return 'connected'\n",
         encoding="utf-8",
     )
 
-    test_file = tmp / "test_ns.py"
+    test_file = pkg / "test_ns.py"
     test_file.write_text(
         "import oxitest\n"
         "def test_access(fx: oxitest.Fixtures) -> None:\n"
-        "    assert fx.db.conn == 'connected'\n",
+        "    assert fx.db.conn == 'connected', 'namespaced access must resolve'\n",
         encoding="utf-8",
     )
 
-    defs = load_fixtures_from_conftest(str(conftest))
-    reg = FixtureRegistry()
-    for d in defs:
-        reg.register(d)
-    session = FixtureSession(reg)
+    session = helpers.session_from_declarations(
+        declarations, anchor_package_path=str(pkg)
+    )
 
     result = helpers.run_test(str(test_file), "test_access", session)
     helpers.assert_result(
         result,
         PassedResult,
-        why="fx.<namespace>.<fixture> must resolve end to end, from the conftest"
-        " namespace declaration through the registry to the test body",
+        why="fx.<namespace>.<name> must reach a declaration anchored at that"
+        " directory -- the namespace is derived from the anchor, not from a"
+        " registrar variable",
     )
 
 
@@ -414,47 +418,59 @@ def test_full_pipeline_fx_oxi_tmp(
 
 
 def test_full_pipeline_two_namespaces_same_fixture_name(tmp: TempDir) -> None:
-    """Two namespaces with the same fixture name are independent."""
-    conftest = tmp / "conftest.py"
-    conftest.write_text(
-        "import oxitest\n"
-        "db = oxitest.Fixtures()\n"
-        "@db.fixture\n"
+    """Two namespaces may hold the same fixture name and stay independent.
+
+    The anchors are nested rather than siblings, and that is forced: a
+    namespace is an anchor directory's basename, and the B1 boundary makes a
+    fixture visible only inside its own anchor. Two siblings could never both
+    be visible to one test, so the pair this asserts on can only exist as
+    ``db/`` and ``db/cache/`` with the test in the inner one.
+    """
+    outer = tmp / "db"
+    outer.mkdir()
+    inner = outer / "cache"
+    inner.mkdir()
+    outer_decls = outer / "__fixtures__.py"
+    outer_decls.write_text(
+        "from oxitest import fixture\n"
+        "@fixture(lifetime='function')\n"
         "def url() -> str:\n"
-        "    return 'postgres://localhost'\n"
-        "\n"
-        "cache = oxitest.Fixtures()\n"
-        "@cache.fixture\n"
+        "    return 'postgres://localhost'\n",
+        encoding="utf-8",
+    )
+    inner_decls = inner / "__fixtures__.py"
+    inner_decls.write_text(
+        "from oxitest import fixture\n"
+        "@fixture(lifetime='function')\n"
         "def url() -> str:\n"
         "    return 'redis://localhost'\n",
         encoding="utf-8",
     )
 
-    test_file = tmp / "test_two_ns.py"
+    test_file = inner / "test_two_ns.py"
     test_file.write_text(
         "import oxitest\n"
         "def test_two_namespaces(fx: oxitest.Fixtures) -> None:\n"
-        "    assert fx.db.url == 'postgres://localhost'\n"
-        "    assert fx.cache.url == 'redis://localhost'\n",
+        "    assert fx.db.url == 'postgres://localhost', 'outer anchor'\n"
+        "    assert fx.cache.url == 'redis://localhost', 'inner anchor'\n",
         encoding="utf-8",
     )
 
-    defs = load_fixtures_from_conftest(str(conftest))
     reg = FixtureRegistry()
-    for d in defs:
-        reg.register(d)
+    for decls, anchor in ((outer_decls, outer), (inner_decls, inner)):
+        for defn in helpers.session_from_declarations(
+            decls, anchor_package_path=str(anchor)
+        ).registry.all():
+            reg.register(defn)
     session = FixtureSession(reg)
 
     result = helpers.run_test(str(test_file), "test_two_namespaces", session)
     helpers.assert_result(
         result,
         PassedResult,
-        why="two namespaces declaring the same fixture name must stay independent --"
-        " fx.db.url and fx.cache.url must not collapse onto a single value",
+        why="same fixture name under two namespaces must stay independent --"
+        " one shadowing the other would make the qualified path meaningless",
     )
-
-
-# ── ContextVar proxies (_FixturesProxy) ─────────────────────────────────────
 
 
 def test_fixtures_proxy_resolves_namespace_and_accessor(
