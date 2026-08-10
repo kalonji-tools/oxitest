@@ -11,10 +11,10 @@ from oxitest._bridge._errors import (
     FixtureNotFoundError,
 )
 from oxitest._bridge._fixture_registry import (
-    ConftestSource,
     FixtureDef,
     FixtureRegistry,
     FixtureScope,
+    FrameworkSource,
     ModuleSource,
     PluginModuleSource,
     PluginSource,
@@ -38,7 +38,7 @@ def test_registry_get_returns_none_for_unknown() -> None:
 
 def test_registry_register_and_get() -> None:
     """Registering a FixtureDef and calling get() returns the same object."""
-    defn = helpers.make_fixture_def("db", conftest_path="/c.py")
+    defn = helpers.make_fixture_def("db", declaration_path="/c.py")
     reg = helpers.make_registry(defn)
     assert reg.get("db") is defn, (
         "FixtureRegistry.get('db') should return the exact FixtureDef that was "
@@ -48,9 +48,11 @@ def test_registry_register_and_get() -> None:
 
 def test_registry_most_local_wins() -> None:
     """When the same fixture name is in two conftests, the leaf-most wins."""
-    root = helpers.make_fixture_def("db", lambda: 1, conftest_path="/root/conftest.py")
+    root = helpers.make_fixture_def(
+        "db", lambda: 1, declaration_path="/root/conftest.py"
+    )
     leaf = helpers.make_fixture_def(
-        "db", lambda: 2, conftest_path="/root/tests/conftest.py"
+        "db", lambda: 2, declaration_path="/root/tests/conftest.py"
     )
     reg = helpers.make_registry(root, leaf)
     assert reg.get("db") is leaf, (
@@ -61,8 +63,8 @@ def test_registry_most_local_wins() -> None:
 
 def test_registry_get_autouse_returns_only_autouse() -> None:
     """get_autouse() yields only fixtures registered with autouse=True."""
-    auto = helpers.make_fixture_def("setup", autouse=True, conftest_path="/c.py")
-    manual = helpers.make_fixture_def("db", conftest_path="/c.py")
+    auto = helpers.make_fixture_def("setup", autouse=True, declaration_path="/c.py")
+    manual = helpers.make_fixture_def("db", declaration_path="/c.py")
     reg = helpers.make_registry(auto, manual)
     result = list(reg.get_autouse(None))
     assert len(result) == 1, (
@@ -90,7 +92,7 @@ def test_register_returns_violation_for_untyped_fixture() -> None:
     # Arrange
     reg = FixtureRegistry()
     defn = helpers.make_fixture_def(
-        "db", lambda: None, conftest_path="/project/conftest.py"
+        "db", lambda: None, declaration_path="/project/conftest.py"
     )
 
     # Act
@@ -122,7 +124,7 @@ def test_register_returns_empty_for_typed_fixture() -> None:
         return 42
 
     defn = helpers.make_fixture_def(
-        "val", typed_fixture, conftest_path="/project/conftest.py"
+        "val", typed_fixture, declaration_path="/project/conftest.py"
     )
 
     # Act
@@ -144,8 +146,8 @@ def test_register_duplicate_name_warns(
     """Registering the same name from two conftests emits a shadow diagnostic."""
     # Arrange
     reg = FixtureRegistry()
-    parent_def = helpers.make_fixture_def("db", conftest_path="conftest.py")
-    child_def = helpers.make_fixture_def("db", conftest_path="tests/conftest.py")
+    parent_def = helpers.make_fixture_def("db", declaration_path="conftest.py")
+    child_def = helpers.make_fixture_def("db", declaration_path="tests/conftest.py")
 
     # Act
     reg.register(parent_def)
@@ -176,7 +178,7 @@ def test_register_first_fixture_no_shadow_diagnostic(
     """First registration of a fixture name never emits a shadow diagnostic."""
     # Arrange
     reg = FixtureRegistry()
-    defn = helpers.make_fixture_def("db", conftest_path="conftest.py")
+    defn = helpers.make_fixture_def("db", declaration_path="conftest.py")
 
     # Act
     reg.register(defn)
@@ -195,8 +197,8 @@ def test_register_same_conftest_no_shadow_diagnostic(
     """Re-registering a fixture from the same conftest emits no shadow diagnostic."""
     # Arrange
     reg = FixtureRegistry()
-    first = helpers.make_fixture_def("db", conftest_path="conftest.py")
-    second = helpers.make_fixture_def("db", conftest_path="conftest.py")
+    first = helpers.make_fixture_def("db", declaration_path="conftest.py")
+    second = helpers.make_fixture_def("db", declaration_path="conftest.py")
 
     # Act
     reg.register(first)
@@ -252,7 +254,7 @@ def test_fixture_not_found_error_without_namespace() -> None:
 def test_fixture_def_has_namespace_field() -> None:
     """FixtureDef stores the namespace name passed at construction."""
     defn = helpers.make_fixture_def(
-        "conn", namespace="db", conftest_path="/path/conftest.py"
+        "conn", namespace="db", declaration_path="/path/conftest.py"
     )
     assert defn.namespace == "db", (
         f"FixtureDef(namespace='db') should store namespace='db', got "
@@ -345,7 +347,7 @@ def test_registry_has_namespace_empty_registry() -> None:
 def test_registry_contains_registered_name() -> None:
     """__contains__ returns True for a fixture name that has been registered."""
     reg = helpers.make_registry(
-        helpers.make_fixture_def("db", conftest_path="conftest.py")
+        helpers.make_fixture_def("db", declaration_path="conftest.py")
     )
     assert "db" in reg, "__contains__ should return True for a registered fixture name"
 
@@ -361,8 +363,8 @@ def test_registry_contains_returns_false_for_unknown() -> None:
 def test_registry_iter_yields_registered_names() -> None:
     """__iter__ yields all registered fixture names."""
     reg = helpers.make_registry(
-        helpers.make_fixture_def("a", conftest_path="conftest.py"),
-        helpers.make_fixture_def("b", conftest_path="conftest.py"),
+        helpers.make_fixture_def("a", declaration_path="conftest.py"),
+        helpers.make_fixture_def("b", declaration_path="conftest.py"),
     )
     assert set(reg) == {"a", "b"}, "__iter__ should yield all registered fixture names"
 
@@ -377,20 +379,20 @@ def test_registry_all_defs_returns_all_entries() -> None:
     """all_defs() returns all FixtureDefs for a name in registration order."""
     reg = helpers.make_registry(
         helpers.make_fixture_def(
-            "db", lambda: "root", conftest_path="root/conftest.py"
+            "db", lambda: "root", declaration_path="root/conftest.py"
         ),
         helpers.make_fixture_def(
-            "db", lambda: "leaf", conftest_path="root/sub/conftest.py"
+            "db", lambda: "leaf", declaration_path="root/sub/conftest.py"
         ),
     )
     defs = reg.all_defs("db")
     assert len(defs) == 2, (
         "all_defs should return all registered FixtureDefs for a name"
     )
-    assert defs[0].conftest_path == "root/conftest.py", (
+    assert defs[0].declaration_path == "root/conftest.py", (
         "first entry should be the root conftest definition"
     )
-    assert defs[1].conftest_path == "root/sub/conftest.py", (
+    assert defs[1].declaration_path == "root/sub/conftest.py", (
         "second entry should be the leaf conftest definition"
     )
 
@@ -417,7 +419,7 @@ class AuthToken:
 def test_registry_resolve_by_type_unique() -> None:
     """Single fixture for a type resolves regardless of qualifier."""
     defn = helpers.make_fixture_def(
-        "db_session", DBSession, conftest_path="/c.py", fixture_type=DBSession
+        "db_session", DBSession, declaration_path="/c.py", fixture_type=DBSession
     )
     reg = helpers.make_registry(defn)
 
@@ -431,10 +433,10 @@ def test_registry_resolve_by_type_unique() -> None:
 def test_registry_resolve_by_type_ambiguous_with_qualifier() -> None:
     """Two fixtures of same type -- qualifier disambiguates."""
     dev = helpers.make_fixture_def(
-        "dev_db", DBSession, conftest_path="/c.py", fixture_type=DBSession
+        "dev_db", DBSession, declaration_path="/c.py", fixture_type=DBSession
     )
     prod = helpers.make_fixture_def(
-        "prod_db", DBSession, conftest_path="/c.py", fixture_type=DBSession
+        "prod_db", DBSession, declaration_path="/c.py", fixture_type=DBSession
     )
     reg = helpers.make_registry(dev, prod)
 
@@ -445,10 +447,10 @@ def test_registry_resolve_by_type_ambiguous_with_qualifier() -> None:
 def test_registry_resolve_ambiguous_no_match() -> None:
     """Two fixtures of same type, unknown qualifier -- AmbiguousFixtureError."""
     dev = helpers.make_fixture_def(
-        "dev_db", DBSession, conftest_path="/c.py", fixture_type=DBSession
+        "dev_db", DBSession, declaration_path="/c.py", fixture_type=DBSession
     )
     prod = helpers.make_fixture_def(
-        "prod_db", DBSession, conftest_path="/c.py", fixture_type=DBSession
+        "prod_db", DBSession, declaration_path="/c.py", fixture_type=DBSession
     )
     reg = helpers.make_registry(dev, prod)
 
@@ -467,15 +469,18 @@ def test_registry_resolve_no_match() -> None:
 def test_registry_override_precedence() -> None:
     """Last registered fixture of same type wins (leaf conftest overrides root)."""
     root = helpers.make_fixture_def(
-        "db", lambda: "root", conftest_path="/conftest.py", fixture_type=DBSession
+        "db", lambda: "root", declaration_path="/conftest.py", fixture_type=DBSession
     )
     leaf = helpers.make_fixture_def(
-        "db", lambda: "leaf", conftest_path="/tests/conftest.py", fixture_type=DBSession
+        "db",
+        lambda: "leaf",
+        declaration_path="/tests/conftest.py",
+        fixture_type=DBSession,
     )
     reg = helpers.make_registry(root, leaf)
 
     result = reg.resolve(DBSession)
-    assert result.conftest_path == "/tests/conftest.py", (
+    assert result.declaration_path == "/tests/conftest.py", (
         "leaf conftest should override root"
     )
 
@@ -614,7 +619,7 @@ def test_an_anchored_shadower_reports_the_subtree_it_shadows_within(
     # Arrange
     registry = FixtureRegistry()
     conftest = helpers.make_fixture_def(
-        "thing", namespace="db", conftest_path="/t/conftest.py"
+        "thing", namespace="db", declaration_path="/t/conftest.py"
     )
 
     # Act
@@ -641,9 +646,9 @@ def test_an_unanchored_shadower_reports_no_subtree(
     registry = FixtureRegistry()
 
     # Act
-    registry.register(helpers.make_fixture_def("db", conftest_path="/t/conftest.py"))
+    registry.register(helpers.make_fixture_def("db", declaration_path="/t/conftest.py"))
     registry.register(
-        helpers.make_fixture_def("db", conftest_path="/t/unit/conftest.py")
+        helpers.make_fixture_def("db", declaration_path="/t/unit/conftest.py")
     )
 
     # Assert
@@ -699,7 +704,7 @@ def test_a_conftest_chain_reports_consecutive_pairs_only(
 
     # Act
     for path in ("/t/conftest.py", "/t/unit/conftest.py", "/t/unit/api/conftest.py"):
-        registry.register(helpers.make_fixture_def("db", conftest_path=path))
+        registry.register(helpers.make_fixture_def("db", declaration_path=path))
 
     # Assert
     notices = _registration_notices(diag_collector)
@@ -789,13 +794,13 @@ def test_unanchored_defs_keep_last_registered_wins() -> None:
         name="conn",
         fixture_type=object,
         scope=FixtureScope.EACH,
-        source=ConftestSource(func=lambda: None, conftest_path="/t/conftest.py"),
+        source=FrameworkSource(func=lambda: None, origin="/t/conftest.py"),
     )
     second = FixtureDef(
         name="conn",
         fixture_type=object,
         scope=FixtureScope.EACH,
-        source=ConftestSource(func=lambda: None, conftest_path="/t/api/conftest.py"),
+        source=FrameworkSource(func=lambda: None, origin="/t/api/conftest.py"),
     )
     registry.register(first)
     registry.register(second)
@@ -876,7 +881,7 @@ def test_unanchored_autouse_yielded_regardless_of_module_path() -> None:
     """Conftest and plugin autouse defs are ambient — they fire run-wide."""
     # Arrange
     conftest_def = helpers.make_fixture_def(
-        "legacy_setup", autouse=True, conftest_path="/t/alpha/conftest.py"
+        "legacy_setup", autouse=True, declaration_path="/t/alpha/conftest.py"
     )
     plugin_def = FixtureDef(
         name="plugin_setup",
@@ -905,7 +910,9 @@ def test_autouse_enumeration_and_resolution_agree_on_multi_def_names() -> None:
     registry = FixtureRegistry()
     anchored = _module_def("setup", "api", "/t/api", autouse=True)
     registry.register(anchored)
-    registry.register(helpers.make_fixture_def("setup", conftest_path="/t/conftest.py"))
+    registry.register(
+        helpers.make_fixture_def("setup", declaration_path="/t/conftest.py")
+    )
     module_path = "/t/api/test_a.py"
 
     # Act
@@ -926,7 +933,7 @@ def test_autouse_full_catalog_mode_uses_last_registered() -> None:
     registry = FixtureRegistry()
     registry.register(_module_def("api_setup", "api", "/t/api", autouse=True))
     registry.register(
-        helpers.make_fixture_def("legacy_setup", autouse=True, conftest_path="/c.py")
+        helpers.make_fixture_def("legacy_setup", autouse=True, declaration_path="/c.py")
     )
 
     # Act
@@ -946,7 +953,7 @@ def test_autouse_suppression_by_an_anchored_def_is_boundary_local() -> None:
     # implementation sees a non-autouse def and suppresses the name run-wide.
     registry = FixtureRegistry()
     ambient = helpers.make_fixture_def(
-        "setup", autouse=True, conftest_path="/t/conftest.py"
+        "setup", autouse=True, declaration_path="/t/conftest.py"
     )
     registry.register(ambient)
     registry.register(_module_def("setup", "api", "/t/api"))
@@ -1204,7 +1211,7 @@ def test_module_source_declarations_excludes_non_module_sources() -> None:
     """Conftest and plugin fixtures are not ADR-0009 declarations."""
     # Arrange
     registry = helpers.make_registry(
-        helpers.make_fixture_def("db", conftest_path="/c.py")
+        helpers.make_fixture_def("db", declaration_path="/c.py")
     )
 
     # Act
@@ -1213,7 +1220,7 @@ def test_module_source_declarations_excludes_non_module_sources() -> None:
     # Assert
     assert declarations == (), (
         f"only ModuleSource carries an anchor and a declared lifetime; counting "
-        f"a ConftestSource here would apply a home-kind rule to a source that "
+        f"a FrameworkSource here would apply a home-kind rule to a source that "
         f"has no home; got {declarations!r}"
     )
 
@@ -1328,11 +1335,11 @@ def test_plugin_module_source_loses_to_the_shallowest_user_declaration() -> None
     )
 
 
-def test_plugin_module_source_conftest_path_names_the_plugin() -> None:
-    """conftest_path renders as <plugin:module>, not the site-packages path."""
+def test_plugin_module_source_declaration_path_names_the_plugin() -> None:
+    """declaration_path renders as <plugin:module>, not the site-packages path."""
     defn = _make_plugin_def()
 
-    assert defn.conftest_path == "<plugin:oxi_pg>", (
+    assert defn.declaration_path == "<plugin:oxi_pg>", (
         "this string is what the shadow NOTICE prints; a 90-character "
         "site-packages path makes 'shadows definition in ...' unreadable"
     )

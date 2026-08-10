@@ -28,7 +28,7 @@ def test_function_scope_new_instance_per_resolve() -> None:
         return len(calls)
 
     session = helpers.make_session(
-        helpers.make_fixture_def("val", factory, conftest_path="/c.py")
+        helpers.make_fixture_def("val", factory, declaration_path="/c.py")
     )
 
     def fn(val: Fixture[int]) -> None:
@@ -57,7 +57,7 @@ def test_yield_fixture_function_scope_teardown() -> None:
         torn_down.append(True)
 
     session = helpers.make_session(
-        helpers.make_fixture_def("val", factory, conftest_path="/c.py")
+        helpers.make_fixture_def("val", factory, declaration_path="/c.py")
     )
 
     def fn(val: Fixture[str]) -> None:
@@ -91,7 +91,7 @@ def test_addfinalizer_runs_in_teardown() -> None:
         return "val"
 
     session = helpers.make_session(
-        helpers.make_fixture_def("thing", factory, conftest_path="/c.py")
+        helpers.make_fixture_def("thing", factory, declaration_path="/c.py")
     )
 
     def fn(thing: Fixture[str]) -> None:
@@ -124,8 +124,8 @@ def test_dag_fixture_depending_on_fixture() -> None:
         return base * 2
 
     session = helpers.make_session(
-        helpers.make_fixture_def("base", lambda: 10, conftest_path="/c.py"),
-        helpers.make_fixture_def("derived", derived, conftest_path="/c.py"),
+        helpers.make_fixture_def("base", lambda: 10, declaration_path="/c.py"),
+        helpers.make_fixture_def("derived", derived, declaration_path="/c.py"),
     )
 
     def fn(derived: Fixture[int]) -> None:
@@ -149,7 +149,7 @@ def test_autouse_runs_side_effects_without_being_in_kwargs() -> None:
         calls.append(1)
 
     session = helpers.make_session(
-        helpers.make_fixture_def("setup", setup, autouse=True, conftest_path="/c.py")
+        helpers.make_fixture_def("setup", setup, autouse=True, declaration_path="/c.py")
     )
 
     def fn() -> None:
@@ -175,7 +175,7 @@ def test_autouse_teardown_still_runs() -> None:
         torn_down.append(True)
 
     session = helpers.make_session(
-        helpers.make_fixture_def("setup", setup, autouse=True, conftest_path="/c.py")
+        helpers.make_fixture_def("setup", setup, autouse=True, declaration_path="/c.py")
     )
 
     def fn() -> None:
@@ -265,7 +265,7 @@ def test_setup_error_raises_fixture_setup_error() -> None:
         raise ValueError(msg)
 
     session = helpers.make_session(
-        helpers.make_fixture_def("bad", bad, conftest_path="/c.py")
+        helpers.make_fixture_def("bad", bad, declaration_path="/c.py")
     )
 
     def fn(bad: Fixture[None]) -> None:
@@ -295,7 +295,7 @@ def test_fixture_marker_param_resolved_by_name() -> None:
         return 42
 
     session = helpers.make_session(
-        helpers.make_fixture_def("val", factory, conftest_path="/c.py")
+        helpers.make_fixture_def("val", factory, declaration_path="/c.py")
     )
 
     def fn(val: Fixture[int]) -> None:
@@ -347,8 +347,8 @@ def test_fixture_dep_resolved_via_annotation() -> None:
         return base * 3
 
     session = helpers.make_session(
-        helpers.make_fixture_def("base", lambda: 10, conftest_path="/c.py"),
-        helpers.make_fixture_def("derived", derived, conftest_path="/c.py"),
+        helpers.make_fixture_def("base", lambda: 10, declaration_path="/c.py"),
+        helpers.make_fixture_def("derived", derived, declaration_path="/c.py"),
     )
 
     def fn(derived: Fixture[int]) -> None:
@@ -370,7 +370,7 @@ def test_autouse_not_double_invoked_when_explicitly_requested() -> None:
         return len(calls)
 
     session = helpers.make_session(
-        helpers.make_fixture_def("setup", setup, autouse=True, conftest_path="/c.py")
+        helpers.make_fixture_def("setup", setup, autouse=True, declaration_path="/c.py")
     )
 
     def fn(setup: Fixture[int]) -> None:

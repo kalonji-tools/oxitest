@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
-    ConftestSource,
     FixtureSource,
+    FrameworkSource,
     ModuleSource,
     PluginSource,
 )
@@ -40,7 +40,7 @@ def test_fixture_source_union_includes_module_source() -> None:
         anchor_package_path="",
         lifetime=Lifetime.FUNCTION,
     )
-    src = ConftestSource(func=str, conftest_path="")
+    src = FrameworkSource(func=str, origin="")
     src = BuiltinSource(impl_cls=type)
     src = PluginSource(provider=None, plugin_module="")
     assert src is not None, "sanity — union type accepts all four variants"

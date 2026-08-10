@@ -6,10 +6,10 @@ import oxitest
 from oxitest import Fixture, LogCapture, Patcher, StdCapture, TempDir
 from oxitest._bridge._errors import BoundaryError, FixtureNotFoundError
 from oxitest._bridge._fixture_registry import (
-    ConftestSource,
     FixtureDef,
     FixtureRegistry,
     FixtureScope,
+    FrameworkSource,
     ModuleSource,
 )
 from oxitest._bridge._fixture_session import FixtureSession
@@ -487,7 +487,7 @@ def test_fixtures_proxy_resolves_namespace_and_accessor(
             name="conn",
             fixture_type=str,
             scope=FixtureScope.EACH,
-            source=ConftestSource(func=_db, conftest_path="/conftest.py"),
+            source=FrameworkSource(func=_db, origin="/conftest.py"),
             namespace="db",
         )
     )

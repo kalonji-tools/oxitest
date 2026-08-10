@@ -12,10 +12,10 @@ from typing import TypeVar
 
 from oxitest._bridge._boundary import safe_type_hints
 from oxitest._bridge._fixture_registry import (
-    ConftestSource,
     FixtureDef,
     FixtureRegistry,
     FixtureScope,
+    FrameworkSource,
 )
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._module_source_registrar import register_module_source_fixtures
@@ -32,7 +32,7 @@ def make_fixture_def(  # noqa: PLR0913 — test helper, all kwargs have defaults
     shared: bool = False,
     autouse: bool = False,
     is_async: bool = False,
-    conftest_path: str = "",
+    declaration_path: str = "",
     doc: str = "",
     depends_on: tuple[tuple[str, type], ...] = (),
     fixture_type: type | None = None,
@@ -58,7 +58,7 @@ def make_fixture_def(  # noqa: PLR0913 — test helper, all kwargs have defaults
 
         _fn.__name__ = name
         _fn.__doc__ = doc or None
-        _fn.__module__ = "conftest" if conftest_path else "oxitest._bridge._builtins"
+        _fn.__module__ = "conftest" if declaration_path else "oxitest._bridge._builtins"
         factory = _fn
     # Explicit fixture_type overrides annotation extraction
     if fixture_type is not None:
@@ -71,7 +71,7 @@ def make_fixture_def(  # noqa: PLR0913 — test helper, all kwargs have defaults
         name=name,
         fixture_type=ft,
         scope=FixtureScope.SESSION if shared else FixtureScope.EACH,
-        source=ConftestSource(func=factory, conftest_path=conftest_path),
+        source=FrameworkSource(func=factory, origin=declaration_path),
         autouse=autouse,
         namespace=namespace,
         is_async=is_async,
@@ -94,7 +94,9 @@ def make_session(*defs: FixtureDef) -> FixtureSession:
 
 def make_session_with(name: str, factory: Callable[..., object]) -> FixtureSession:
     """Shortcut: single-fixture session for quick tests."""
-    return make_session(make_fixture_def(name, factory, conftest_path="/conftest.py"))
+    return make_session(
+        make_fixture_def(name, factory, declaration_path="/conftest.py")
+    )
 
 
 def session_from_declarations(

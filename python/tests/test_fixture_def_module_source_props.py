@@ -1,6 +1,6 @@
-"""Tests for FixtureDef .func and .conftest_path with ModuleSource backing.
+"""Tests for FixtureDef .func and .declaration_path with ModuleSource backing.
 
-Task 5 of the fixture-redesign slice-1 plan. .conftest_path branch was
+Task 5 of the fixture-redesign slice-1 plan. .declaration_path branch was
 added defensively in Task 4 (see 9059aa59); this file provides the test
 coverage the Task-4 review flagged as missing, plus covers Task 5's own
 .func branch addition.
@@ -9,9 +9,9 @@ coverage the Task-4 review flagged as missing, plus covers Task 5's own
 from __future__ import annotations
 
 from oxitest._bridge._fixture_registry import (
-    ConftestSource,
     FixtureDef,
     FixtureScope,
+    FrameworkSource,
     ModuleSource,
 )
 from oxitest._bridge._lifetime import Lifetime
@@ -46,11 +46,11 @@ def test_func_property_returns_module_source_func() -> None:
     )
 
 
-def test_conftest_path_property_returns_defining_module_path() -> None:
-    """FixtureDef.conftest_path returns module path for ModuleSource."""
+def test_declaration_path_property_returns_defining_module_path() -> None:
+    """FixtureDef.declaration_path returns module path for ModuleSource."""
     defn = _make_module_backed_def()
-    assert defn.conftest_path == "/pkg/__fixtures__.py", (
-        "conftest_path backward-compat property must return the fixture's "
+    assert defn.declaration_path == "/pkg/__fixtures__.py", (
+        "declaration_path backward-compat property must return the fixture's "
         "module path — diagnostics rely on this to locate the declaration"
     )
 
@@ -105,7 +105,7 @@ def test_module_source_exposes_its_anchor_and_other_sources_do_not() -> None:
         name="legacy",
         fixture_type=object,
         scope=FixtureScope.EACH,
-        source=ConftestSource(func=lambda: None, conftest_path="/t/conftest.py"),
+        source=FrameworkSource(func=lambda: None, origin="/t/conftest.py"),
     )
 
     # Act

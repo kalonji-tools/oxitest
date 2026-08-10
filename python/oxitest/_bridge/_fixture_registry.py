@@ -3,11 +3,11 @@ from __future__ import annotations
 __all__ = [
     "LIFETIME_SCOPES",
     "BuiltinSource",
-    "ConftestSource",
     "FixtureDef",
     "FixtureRegistry",
     "FixtureScope",
     "FixtureSource",
+    "FrameworkSource",
     "ModuleSource",
     "PluginModuleSource",
     "PluginSource",
@@ -88,7 +88,7 @@ LIFETIME_SCOPES: Final = MappingProxyType(
 #: Autouse firing order — widest lifetime first (#1716).
 #:
 #: Keyed on ``FixtureScope`` rather than ``Lifetime`` because legacy
-#: ``ConftestSource`` and ``PluginSource`` defs carry no lifetime, and both
+#: ``FrameworkSource`` and ``PluginSource`` defs carry no lifetime, and both
 #: regimes coexist until #1720. ``SHARED`` sits between ``PACKAGE`` and
 #: ``MODULE``: a task group is one module unless a ``package`` declaration
 #: merges a subtree, so it is wider than a module and narrower than a package.
@@ -112,9 +112,22 @@ _SCOPE_RANK: Final = MappingProxyType(
 
 
 @dataclass(frozen=True, slots=True)
-class ConftestSource:
+class FrameworkSource:
+    """A fixture the framework itself declares, carrying a function.
+
+    Was ``FrameworkSource``. When #1720 retired ``conftest.py`` the variant
+    had one user left — the ``task_group`` builtin — which had always worn
+    it with a sentinel path because nothing else fitted: ``BuiltinSource``
+    holds an ``impl_cls`` and ``task_group`` is a factory function.
+
+    Renamed rather than deleted, because what it holds is a callable plus a
+    label for where it came from, and that is what ``task_group`` needs.
+    ``origin`` replaces ``declaration_path``: it is a display string, not a
+    path.
+    """
+
     func: ConftestFunc
-    conftest_path: str
+    origin: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,7 +173,7 @@ class ModuleSource:
 
 
 FixtureSource = (
-    ConftestSource | PluginSource | PluginModuleSource | BuiltinSource | ModuleSource
+    FrameworkSource | PluginSource | PluginModuleSource | BuiltinSource | ModuleSource
 )
 
 
@@ -177,8 +190,8 @@ class FixtureDef(Generic[T]):
 
     @property
     def func(self) -> Callable[..., T]:
-        """Backward-compat: user-fixture callable (ConftestSource + ModuleSource)."""
-        if isinstance(self.source, (ConftestSource, ModuleSource, PluginModuleSource)):
+        """Backward-compat: user-fixture callable (FrameworkSource + ModuleSource)."""
+        if isinstance(self.source, (FrameworkSource, ModuleSource, PluginModuleSource)):
             return self.source.func
         msg = (
             f"FixtureDef '{self.name}' has no func "
@@ -187,10 +200,10 @@ class FixtureDef(Generic[T]):
         raise AttributeError(msg)
 
     @property
-    def conftest_path(self) -> str:
+    def declaration_path(self) -> str:
         """Backward-compat: return a path-like string for any source variant."""
         match self.source:
-            case ConftestSource(conftest_path=p):
+            case FrameworkSource(origin=p):
                 return p
             case PluginSource(plugin_module=m) | PluginModuleSource(plugin_module=m):
                 # Deliberately not `defining_module_path`: this string is what
@@ -459,7 +472,7 @@ def _shadowing_pairs(
     overlapping = [
         (_shadow_order(prior, index), prior)
         for index, prior in enumerate(existing)
-        if prior.conftest_path != incoming.conftest_path
+        if prior.declaration_path != incoming.declaration_path
         and _can_see_both(prior, incoming)
     ]
     incoming_order = _shadow_order(incoming, len(existing))
@@ -528,8 +541,8 @@ class FixtureRegistry:
             emit_diagnostic(
                 DiagnosticSeverity.NOTICE,
                 "fixture registration",
-                f"fixture '{defn.name}' in {shadower.conftest_path} "
-                f"shadows definition in {shadowed.conftest_path}{scope}{suppressed}",
+                f"fixture '{defn.name}' in {shadower.declaration_path} "
+                f"shadows definition in {shadowed.declaration_path}{scope}{suppressed}",
             )
         self._by_name.setdefault(defn.name, []).append(defn)
         self._by_type.setdefault(defn.fixture_type, []).append(defn)
@@ -539,9 +552,9 @@ class FixtureRegistry:
             self._namespace_defs.setdefault(defn.namespace, []).append(defn)
 
         # Only check return annotation for conftest fixtures with real paths
-        if not isinstance(defn.source, ConftestSource):
+        if not isinstance(defn.source, FrameworkSource):
             return []
-        if defn.conftest_path.startswith("<"):
+        if defn.declaration_path.startswith("<"):
             return []
 
         violations: list[CollectedViolation] = []
@@ -549,7 +562,7 @@ class FixtureRegistry:
         if "return" not in hints:
             violations.append(
                 CollectedViolation(
-                    node_id=defn.conftest_path,
+                    node_id=defn.declaration_path,
                     kind=ViolationKind.MISSING_RETURN_ANNOTATION,
                     detail=defn.name,
                 )
@@ -673,16 +686,16 @@ class FixtureRegistry:
         raw = getattr(func, "_fa_func", func)
         for defn in defs:
             # Every source variant that carries a declaring function, not just
-            # the conftest one. Matching ConftestSource alone returned None for
+            # the conftest one. Matching FrameworkSource alone returned None for
             # every @oxi.fixture declaration, so the namespace-qualified branch
             # in executor.py never fired for them and resolution fell back to
             # flat, name-only lookup — which returns the deepest visible
             # fixture, i.e. the wrong one whenever two namespaces share a name
-            # (#1720). Retiring ConftestSource would have left that branch
+            # (#1720). Retiring FrameworkSource would have left that branch
             # unreachable rather than merely unused.
             if (
                 isinstance(
-                    defn.source, (ConftestSource, ModuleSource, PluginModuleSource)
+                    defn.source, (FrameworkSource, ModuleSource, PluginModuleSource)
                 )
                 and defn.source.func is raw
             ):

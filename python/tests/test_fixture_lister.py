@@ -22,7 +22,7 @@ def test_tree_empty_registry_shows_builtins() -> None:
 def test_tree_single_no_deps() -> None:
     """A leaf fixture with no dependencies renders without tree branch characters."""
     reg = FixtureRegistry()
-    reg.register(helpers.make_fixture_def("db", conftest_path="conftest.py"))
+    reg.register(helpers.make_fixture_def("db", declaration_path="conftest.py"))
     result = tree_fixtures_from_registry(reg, verbosity=0, use_color=False)
     assert "db" in result, f"fixture name missing: {result!r}"
     # No tree branches for a leaf fixture
@@ -45,13 +45,13 @@ def test_tree_linear_chain() -> None:
 
     reg = FixtureRegistry()
     reg.register(
-        helpers.make_fixture_def("config", factory=_config, conftest_path="c.py")
+        helpers.make_fixture_def("config", factory=_config, declaration_path="c.py")
     )
     reg.register(
         helpers.make_fixture_def(
             "connection",
             factory=_connection,
-            conftest_path="c.py",
+            declaration_path="c.py",
             depends_on=(("config", object),),
         )
     )
@@ -59,7 +59,7 @@ def test_tree_linear_chain() -> None:
         helpers.make_fixture_def(
             "db",
             factory=_db,
-            conftest_path="c.py",
+            declaration_path="c.py",
             depends_on=(("connection", object),),
         )
     )
@@ -87,12 +87,14 @@ def test_tree_diamond() -> None:
         pass
 
     reg = FixtureRegistry()
-    reg.register(helpers.make_fixture_def("base", factory=_base, conftest_path="c.py"))
+    reg.register(
+        helpers.make_fixture_def("base", factory=_base, declaration_path="c.py")
+    )
     reg.register(
         helpers.make_fixture_def(
             "left",
             factory=_left,
-            conftest_path="c.py",
+            declaration_path="c.py",
             depends_on=(("base", object),),
         )
     )
@@ -100,7 +102,7 @@ def test_tree_diamond() -> None:
         helpers.make_fixture_def(
             "right",
             factory=_right,
-            conftest_path="c.py",
+            declaration_path="c.py",
             depends_on=(("base", object),),
         )
     )
@@ -108,7 +110,7 @@ def test_tree_diamond() -> None:
         helpers.make_fixture_def(
             "top",
             factory=_top,
-            conftest_path="c.py",
+            declaration_path="c.py",
             depends_on=(("left", object), ("right", object)),
         )
     )
@@ -134,12 +136,12 @@ def test_tree_cycle_detection() -> None:
     reg = FixtureRegistry()
     reg.register(
         helpers.make_fixture_def(
-            "a", factory=_a, conftest_path="c.py", depends_on=(("b", object),)
+            "a", factory=_a, declaration_path="c.py", depends_on=(("b", object),)
         )
     )
     reg.register(
         helpers.make_fixture_def(
-            "b", factory=_b, conftest_path="c.py", depends_on=(("a", object),)
+            "b", factory=_b, declaration_path="c.py", depends_on=(("a", object),)
         )
     )
     result = tree_fixtures_from_registry(reg, verbosity=0, use_color=False)
@@ -159,13 +161,13 @@ def test_tree_keyword_filter() -> None:
 
     reg = FixtureRegistry()
     reg.register(
-        helpers.make_fixture_def("config", factory=_config, conftest_path="c.py")
+        helpers.make_fixture_def("config", factory=_config, declaration_path="c.py")
     )
     reg.register(
         helpers.make_fixture_def(
             "db",
             factory=_db,
-            conftest_path="c.py",
+            declaration_path="c.py",
             depends_on=(("config", object),),
         )
     )
@@ -190,7 +192,7 @@ def test_tree_verbosity_1_shows_tags() -> None:
     The [shared] tag went with the tier it named (#1720).
     """
     reg = FixtureRegistry()
-    reg.register(helpers.make_fixture_def("db", conftest_path="c.py", is_async=True))
+    reg.register(helpers.make_fixture_def("db", declaration_path="c.py", is_async=True))
     result = tree_fixtures_from_registry(reg, verbosity=1, use_color=False)
     assert "async" in result, f"async tag missing: {result!r}"
 
@@ -198,6 +200,6 @@ def test_tree_verbosity_1_shows_tags() -> None:
 def test_tree_verbosity_2_shows_origin() -> None:
     """Verbosity 2 includes the conftest.py path where each fixture was defined."""
     reg = FixtureRegistry()
-    reg.register(helpers.make_fixture_def("db", conftest_path="tests/conftest.py"))
+    reg.register(helpers.make_fixture_def("db", declaration_path="tests/conftest.py"))
     result = tree_fixtures_from_registry(reg, verbosity=2, use_color=False)
     assert "tests/conftest.py" in result, f"origin missing: {result!r}"

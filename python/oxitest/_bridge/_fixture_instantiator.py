@@ -55,8 +55,8 @@ from oxitest._bridge._fixture_context import (
 )
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
-    ConftestSource,
     FixtureScope,
+    FrameworkSource,
     ModuleSource,
     PluginModuleSource,
     PluginSource,
@@ -104,7 +104,7 @@ class DispatchContext:
     Fields:
         meta: forwarded to BuiltinSource injection
         fn_teardowns: accumulator for PluginSource teardown lambdas
-        resolve_user_fixture: cycle-safe resolver for ConftestSource
+        resolve_user_fixture: cycle-safe resolver for FrameworkSource
         owner_scope: tier of the fixture whose dependencies are being
             resolved, or None at test level. Only ``PROCESS`` changes
             anything — see ``resolve_by_source`` (#1777).
@@ -480,11 +480,11 @@ class FixtureInstantiator:
         # real callable declared with @oxi.fixture, so it needs cycle detection
         # and scope caching, which resolve_by_source bypasses (#1717).
         if not isinstance(
-            defn.source, (ConftestSource, ModuleSource, PluginModuleSource)
+            defn.source, (FrameworkSource, ModuleSource, PluginModuleSource)
         ):
             return True, self.resolve_by_source(defn, ctx)
 
-        # For ConftestSource/ModuleSource: prefer name-based (preserves cycle
+        # For FrameworkSource/ModuleSource: prefer name-based (preserves cycle
         # detection), fall back to type-resolved name.
         resolve_name = (
             param_name if self._registry.get(param_name) is not None else defn.name
@@ -500,7 +500,7 @@ class FixtureInstantiator:
 
         Dispatches per ``FixtureSource`` variant:
 
-        - ``ConftestSource`` / ``ModuleSource``: routes through
+        - ``FrameworkSource`` / ``ModuleSource``: routes through
           ``ctx.resolve_user_fixture`` to preserve cycle detection and scope
           caching.  Slice 1: both variants behave identically here; divergence
           appears in slices 2 (module-lifetime scope cache), 6 (B1 boundary
@@ -510,7 +510,7 @@ class FixtureInstantiator:
         - ``BuiltinSource``: delegates to ``inject_builtin`` with function scope.
         """
         match defn.source:
-            case ConftestSource() | ModuleSource() | PluginModuleSource():
+            case FrameworkSource() | ModuleSource() | PluginModuleSource():
                 return ctx.resolve_user_fixture(defn.name)
             case PluginSource(provider=provider):
                 value = provider.create(ctx=None)

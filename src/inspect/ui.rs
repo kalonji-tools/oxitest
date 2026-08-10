@@ -415,13 +415,13 @@ fn build_overview_content(
         lines.push(Line::from(""));
     }
 
-    // Conftests section
-    if !sections.conftests.is_empty() {
+    // Declarations section
+    if !sections.declarations.is_empty() {
         lines.push(Line::from(Span::styled(
-            " Conftests",
+            " Declarations",
             Style::default().fg(Color::Yellow),
         )));
-        for entry in &sections.conftests {
+        for entry in &sections.declarations {
             let text = format!("  C  {} ({} fixtures)", entry.path, entry.fixture_count);
             if cursor == selected {
                 cursor_line_idx = Some(lines.len());

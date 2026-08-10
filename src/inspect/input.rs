@@ -320,7 +320,7 @@ fn nav_push(app: &mut InspectApp) {
         Screen::Overview { selected } => {
             let g = app.overview_sections.gravity.len();
             let m = app.overview_sections.marks.len();
-            let c = app.overview_sections.conftests.len();
+            let c = app.overview_sections.declarations.len();
             if selected >= g + m + c {
                 // Signal range: navigate to affected node(s)
                 let sig_idx = selected - g - m - c;
@@ -905,7 +905,7 @@ mod tests {
             query: String::new(),
         };
         // Use Global scope since three_test_graph() has only test nodes, which
-        // do not appear in overview sections (gravity/marks/conftests are empty).
+        // do not appear in overview sections (gravity/marks/declarations are empty).
         app.search.scope_mode = ScopeMode::Global;
         // Type "login" — should match only test_login
         for c in "login".chars() {
@@ -1045,7 +1045,7 @@ mod tests {
         for c in "login".chars() {
             handle_key(&mut app, key(KeyCode::Char(c)));
         }
-        // Overview has no marks/gravity/conftests for this graph, so context
+        // Overview has no marks/gravity/declarations for this graph, so context
         // candidates are empty → no results in context mode.
         let context_results = app.search.results.len();
 
@@ -1069,7 +1069,7 @@ mod tests {
         // mode must find the consumer test; searching "db" must find nothing
         // (the fixture itself is not a selectable edge of itself).
         use crate::inspect::app::ScopeMode;
-        use crate::inspect::graph::nodes::{ConftestNode, FixtureNode, TestNode};
+        use crate::inspect::graph::nodes::{DeclarationNode, FixtureNode, TestNode};
         use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef as GraphNodeRef};
         use crate::inspect::nav::Screen;
 
@@ -1099,7 +1099,7 @@ mod tests {
             fixture_deps: vec![0],
             marks: vec![],
         });
-        graph.conftests.push(ConftestNode {
+        graph.declarations.push(DeclarationNode {
             path: "conftest.py".to_string(),
             fixtures: vec![0],
         });
@@ -1351,7 +1351,7 @@ mod tests {
 
     #[test]
     fn s_key_enters_source_view_for_fixture() {
-        use crate::inspect::graph::nodes::{ConftestNode, FixtureNode};
+        use crate::inspect::graph::nodes::{DeclarationNode, FixtureNode};
         use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef as GraphNodeRef};
         use crate::inspect::nav::Screen;
 
@@ -1368,7 +1368,7 @@ mod tests {
             conftest_idx: Some(0),
             plugin_idx: None,
         });
-        graph.conftests.push(ConftestNode {
+        graph.declarations.push(DeclarationNode {
             path: "tests/conftest.py".to_string(),
             fixtures: vec![0],
         });
@@ -1473,7 +1473,7 @@ mod tests {
 
     #[test]
     fn e_key_sets_editor_request() {
-        use crate::inspect::graph::nodes::{ConftestNode, FixtureNode};
+        use crate::inspect::graph::nodes::{DeclarationNode, FixtureNode};
         use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef as GraphNodeRef};
         use crate::inspect::nav::Screen;
 
@@ -1490,7 +1490,7 @@ mod tests {
             conftest_idx: Some(0),
             plugin_idx: None,
         });
-        graph.conftests.push(ConftestNode {
+        graph.declarations.push(DeclarationNode {
             path: "tests/conftest.py".to_string(),
             fixtures: vec![0],
         });

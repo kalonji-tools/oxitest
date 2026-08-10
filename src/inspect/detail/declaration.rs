@@ -6,8 +6,8 @@ use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef};
 
 use super::styles::{connection_line, field_line, preview_edges, section_header, sigil_style};
 
-pub fn render_conftest<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
-    let conftest = &graph.conftests[node_ref.index];
+pub fn render_declaration<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
+    let conftest = &graph.declarations[node_ref.index];
     let mut lines = vec![
         Line::from(vec![
             Span::styled("C", sigil_style()),
@@ -29,8 +29,8 @@ pub fn render_conftest<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line
     lines
 }
 
-pub fn preview_conftest<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
-    let conftest = &graph.conftests[node_ref.index];
+pub fn preview_declaration<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
+    let conftest = &graph.declarations[node_ref.index];
     let mut lines = vec![
         Line::from(vec![
             Span::styled("C", sigil_style()),
@@ -56,7 +56,7 @@ pub fn preview_conftest<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Lin
 }
 
 pub fn collect_edges(graph: &InspectGraph, node: &NodeRef) -> Vec<NodeRef> {
-    let c = &graph.conftests[node.index];
+    let c = &graph.declarations[node.index];
     c.fixtures
         .iter()
         .map(|&idx| NodeRef::new(NodeKind::Fixture, idx))

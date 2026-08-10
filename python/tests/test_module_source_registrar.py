@@ -15,10 +15,10 @@ from oxitest import TempDir, raises
 from oxitest._bridge._errors import UsageError
 from oxitest._bridge._fixture_decorator import fixture
 from oxitest._bridge._fixture_registry import (
-    ConftestSource,
     FixtureDef,
     FixtureRegistry,
     FixtureScope,
+    FrameworkSource,
     ModuleSource,
 )
 from oxitest._bridge._lifetime import Lifetime
@@ -55,7 +55,7 @@ def test_registers_decorated_functions(tmp: TempDir) -> None:
         "fixture must land in the registry after register_module_source_fixtures"
     )
     assert isinstance(defn.source, ModuleSource), (
-        "registered fixture must have ModuleSource, not ConftestSource"
+        "registered fixture must have ModuleSource, not FrameworkSource"
     )
     assert defn.source.lifetime is Lifetime.FUNCTION, (
         "ModuleSource must retain the lifetime tier passed to the decorator"
@@ -143,9 +143,9 @@ def test_collision_with_conftest_source_is_loud(tmp: TempDir) -> None:
             name="conn",
             fixture_type=object,
             scope=FixtureScope.EACH,
-            source=ConftestSource(
+            source=FrameworkSource(
                 func=_existing_conn,
-                conftest_path=str(tmp / "slice1_pkg" / "conftest.py"),
+                origin=str(tmp / "slice1_pkg" / "conftest.py"),
             ),
             namespace="slice1_pkg",
         )
@@ -270,7 +270,7 @@ def test_a_conftest_declaration_still_clashes_with_any_anchor() -> None:
             name="conn",
             fixture_type=object,
             scope=FixtureScope.EACH,
-            source=ConftestSource(func=lambda: None, conftest_path="/t/conftest.py"),
+            source=FrameworkSource(func=lambda: None, origin="/t/conftest.py"),
             namespace="v1",
         )
     )

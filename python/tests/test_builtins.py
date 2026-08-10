@@ -880,7 +880,7 @@ def test_testcontext_still_works_via_builtin_dispatch() -> None:
         return "ok"
 
     reg = FixtureRegistry()
-    reg.register(helpers.make_fixture_def("thing", factory, conftest_path="/c.py"))
+    reg.register(helpers.make_fixture_def("thing", factory, declaration_path="/c.py"))
     session = FixtureSession(reg)
 
     def fn(thing: Fixture[str]) -> None:

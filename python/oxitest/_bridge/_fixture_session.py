@@ -44,10 +44,10 @@ from oxitest._bridge._fixture_instantiator import (
 )
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
-    ConftestSource,
     FixtureDef,
     FixtureRegistry,
     FixtureScope,
+    FrameworkSource,
     ModuleSource,
     PluginSource,
     _fixture_inner_type,
@@ -444,9 +444,7 @@ class FixtureSession:
                 name="task_group",
                 fixture_type=object,
                 scope=FixtureScope.EACH,
-                source=ConftestSource(
-                    func=_task_group_factory, conftest_path="<builtin>"
-                ),
+                source=FrameworkSource(func=_task_group_factory, origin="<builtin>"),
                 autouse=False,
                 is_async=True,
             )
@@ -881,7 +879,7 @@ class FixtureSession:
         self,
         items: list[dict[str, Any]],
     ) -> list[tuple[str, str]]:
-        """Return (conftest_path, fixture_name) pairs for unused fixtures.
+        """Return (declaration_path, fixture_name) pairs for unused fixtures.
 
         A fixture is unused if:
         - It is not autouse

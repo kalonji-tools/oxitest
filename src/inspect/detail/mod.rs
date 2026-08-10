@@ -4,7 +4,7 @@
 //! five node types has a dedicated renderer that shows its fields and
 //! navigable connections.
 
-mod conftest;
+mod declaration;
 mod fixture;
 mod mark;
 mod plugin;
@@ -32,7 +32,7 @@ pub fn render_detail<'a>(graph: &InspectGraph, node_ref: Option<&NodeRef>) -> Ve
         NodeKind::Fixture => fixture::render_fixture(graph, node_ref),
         NodeKind::Test => test::render_test(graph, node_ref),
         NodeKind::Mark => mark::render_mark(graph, node_ref),
-        NodeKind::Conftest => conftest::render_conftest(graph, node_ref),
+        NodeKind::Declaration => declaration::render_declaration(graph, node_ref),
         NodeKind::Plugin => plugin::render_plugin(graph, node_ref),
     }
 }
@@ -46,7 +46,7 @@ pub fn render_preview<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<
         NodeKind::Fixture => fixture::preview_fixture(graph, node_ref),
         NodeKind::Test => test::preview_test(graph, node_ref),
         NodeKind::Mark => mark::preview_mark(graph, node_ref),
-        NodeKind::Conftest => conftest::preview_conftest(graph, node_ref),
+        NodeKind::Declaration => declaration::preview_declaration(graph, node_ref),
         NodeKind::Plugin => plugin::preview_plugin(graph, node_ref),
     }
 }
@@ -59,7 +59,7 @@ fn collect_selectable_edges(graph: &InspectGraph, node: &NodeRef) -> Vec<NodeRef
         NodeKind::Fixture => fixture::collect_edges(graph, node),
         NodeKind::Test => test::collect_edges(graph, node),
         NodeKind::Mark => mark::collect_edges(graph, node),
-        NodeKind::Conftest => conftest::collect_edges(graph, node),
+        NodeKind::Declaration => declaration::collect_edges(graph, node),
         NodeKind::Plugin => plugin::collect_edges(graph, node),
     }
 }
@@ -192,7 +192,7 @@ mod tests {
             fixture_deps: vec![0],
             marks: vec![],
         });
-        graph.conftests.push(ConftestNode {
+        graph.declarations.push(DeclarationNode {
             path: "tests/conftest.py".to_string(),
             fixtures: vec![0],
         });
@@ -337,7 +337,7 @@ mod tests {
             conftest_idx: Some(0),
             plugin_idx: None,
         });
-        graph.conftests.push(ConftestNode {
+        graph.declarations.push(DeclarationNode {
             path: "tests/conftest.py".to_string(),
             fixtures: vec![0, 1],
         });
@@ -503,10 +503,10 @@ mod tests {
     }
 
     #[test]
-    fn render_detail_conftest_shows_fixtures() {
+    fn render_detail_declaration_shows_fixtures() {
         let graph = conftest_graph();
         let node_ref = NodeRef {
-            kind: NodeKind::Conftest,
+            kind: NodeKind::Declaration,
             index: 0,
         };
         let lines = render_detail(&graph, Some(&node_ref));
@@ -769,10 +769,10 @@ mod tests {
     }
 
     #[test]
-    fn preview_conftest_shows_fixtures() {
+    fn preview_declaration_shows_fixtures() {
         let graph = conftest_graph();
         let node_ref = NodeRef {
-            kind: NodeKind::Conftest,
+            kind: NodeKind::Declaration,
             index: 0,
         };
         let lines = render_preview(&graph, &node_ref);
@@ -836,7 +836,7 @@ mod tests {
         assert_eq!(
             edge_node_at(&graph, &node_ref, 1),
             Some(NodeRef {
-                kind: NodeKind::Conftest,
+                kind: NodeKind::Declaration,
                 index: 0
             }),
             "second edge should be the conftest owner"
@@ -932,7 +932,7 @@ mod tests {
     fn conftest_edges_include_fixtures() {
         let graph = conftest_graph();
         let node_ref = NodeRef {
-            kind: NodeKind::Conftest,
+            kind: NodeKind::Declaration,
             index: 0,
         };
         // conftest_graph conftest has fixtures=[0, 1]
@@ -1067,7 +1067,7 @@ mod snapshot_tests {
             fixture_deps: vec![0],
             marks: vec![],
         });
-        graph.conftests.push(ConftestNode {
+        graph.declarations.push(DeclarationNode {
             path: "tests/conftest.py".to_string(),
             fixtures: vec![0],
         });
@@ -1194,7 +1194,7 @@ mod snapshot_tests {
     }
 
     #[test]
-    fn snap_detail_conftest() {
+    fn snap_detail_declaration() {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
             name: "db".to_string(),
@@ -1208,7 +1208,7 @@ mod snapshot_tests {
             conftest_idx: Some(0),
             plugin_idx: None,
         });
-        graph.conftests.push(ConftestNode {
+        graph.declarations.push(DeclarationNode {
             path: "tests/conftest.py".to_string(),
             fixtures: vec![0],
         });
@@ -1216,12 +1216,12 @@ mod snapshot_tests {
         app.terminal_width = 120;
         app.nav.push(Screen::NodeFocus {
             node: NodeRef {
-                kind: NodeKind::Conftest,
+                kind: NodeKind::Declaration,
                 index: 0,
             },
             selected: 0,
         });
-        assert_snapshot!("detail_conftest", render_to_string(&app, 120, 24));
+        assert_snapshot!("detail_declaration", render_to_string(&app, 120, 24));
     }
 
     #[test]

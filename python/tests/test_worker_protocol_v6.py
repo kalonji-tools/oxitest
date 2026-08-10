@@ -17,7 +17,7 @@ def _task(**overrides: Any) -> dict[str, Any]:
     task: dict[str, Any] = {
         "protocol_version": PROTOCOL_VERSION,
         "modules": [],
-        "conftest_paths": [],
+        "declaration_paths": [],
         "fixture_modules": [],
         "timeout_secs": None,
         "keep_tmp": "cleanup",
