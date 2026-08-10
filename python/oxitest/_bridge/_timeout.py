@@ -34,7 +34,12 @@ from typing import Any
 
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import OxitestTimeoutError
-from oxitest._bridge.result import DiagnosticSeverity, TimeoutResult
+from oxitest._bridge.result import (
+    DiagnosticSeverity,
+    StatusKind,
+    TimeoutResult,
+    WarnedResult,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -384,10 +389,22 @@ def make_timeout_wrapper(
                 # invisible on any platform whose arm keeps the full wrapper.
                 return next_fn()
             with ctx:
-                return next_fn()
+                result = next_fn()
         except OxitestTimeoutError:
             return TimeoutResult(
                 message=_timeout_message(ctx.effective_seconds, seconds)
             )
+        if ctx.deadline_taken and result.status is StatusKind.PASSED:
+            # Only a pass is rewritten. oxitest did not observe a failure — it
+            # observed that it could not observe — so the outcome states that
+            # rather than manufacturing a failure from an absence. A result that
+            # already carries its own message keeps it (#2001).
+            return WarnedResult(
+                message=(
+                    f"the {seconds}s deadline was cleared during this test,"
+                    " so the test did not run under a deadline"
+                )
+            )
+        return result
 
     return wrapper
