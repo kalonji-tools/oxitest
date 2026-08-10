@@ -6,9 +6,7 @@ No page under ``docs/user/`` sources a ``--8<--`` snippet from this file — #17
 deletes it, so an example anchored here would take its page down with it (#1869).
 """
 
-from oxitest import Fixtures
-
-fx = Fixtures()
+import oxitest
 
 
 class _StubConnection:
@@ -24,19 +22,19 @@ class _StubConnection:
         return self._rows
 
 
-@fx.fixture
+@oxitest.fixture(lifetime="function")
 def db_conn() -> _StubConnection:
     """Real DB stub — returns 3 rows."""
     return _StubConnection(rows=[1, 2, 3])
 
 
-@fx.fixture
+@oxitest.fixture(lifetime="function")
 def mock_db() -> _StubConnection:
     """Mock DB stub — returns 0 rows."""
     return _StubConnection(rows=[])
 
 
-@fx.fixture
+@oxitest.fixture(lifetime="function")
 def real_db() -> _StubConnection:
     """Real DB stub — alias for db_conn pattern."""
     return _StubConnection(rows=[1, 2, 3])

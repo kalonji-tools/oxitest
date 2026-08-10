@@ -26,17 +26,14 @@ def _connect() -> _Connection:
     return _Connection()
 
 
-fx = oxitest.Fixtures()
-
-
-@fx.fixture
+@oxitest.fixture(lifetime="function")
 def db() -> _Connection:
     return _connect()
 
 
 # fmt: off
 # --8<-- [start:autouse-fixture]
-@fx.fixture(autouse=True)
+@oxitest.fixture(lifetime="function", autouse=True)
 def reset_database(db: Fixture[_Connection]) -> Generator[None, None, None]:
     yield
     db.execute("DELETE FROM users")

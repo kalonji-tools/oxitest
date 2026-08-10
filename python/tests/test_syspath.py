@@ -21,8 +21,8 @@ from typing import Any
 
 import oxitest
 from oxitest import Patcher, TempDir, Yields, fixture
+from oxitest._bridge._session_factory import create_session
 from oxitest._bridge._syspath import ensure_rootdir_importable
-from oxitest._bridge.conftest_loader import create_session
 
 
 @fixture(lifetime="function")
@@ -171,7 +171,7 @@ def test_symlinked_argument_is_appended_in_its_resolved_form(
 def test_create_session_without_rootdir_leaves_sys_path_alone(
     tmp: TempDir, patch: Patcher
 ) -> None:
-    """The existing create_session([...]) call sites must stay side-effect free.
+    """The existing create_session() call sites must stay side-effect free.
 
     ``patch.chdir`` moves into a fresh directory first so cwd is not already
     on ``sys.path`` (it is, via an existing entry, when this test runs from
@@ -181,7 +181,7 @@ def test_create_session_without_rootdir_leaves_sys_path_alone(
     """
     patch.chdir(tmp.path)
     before = list(sys.path)
-    create_session([])
+    create_session()
     assert sys.path == before, (
         "a leaked entry here changes import resolution for everything that "
         f"runs next in the same process; sys.path changed by "
@@ -192,7 +192,7 @@ def test_create_session_without_rootdir_leaves_sys_path_alone(
 @oxitest.arrange("_restore_sys_path")
 def test_create_session_with_rootdir_appends(tmp: TempDir) -> None:
     """create_session(rootdir=...) is the seam all three entry points share."""
-    create_session([], rootdir=str(tmp.path))
+    create_session(rootdir=str(tmp.path))
     assert str(tmp.path.resolve()) in sys.path, (
         "create_session(rootdir=...) is the seam the serial path, the "
         "workers and the inspect TUI all go through — if it does not "
@@ -203,10 +203,10 @@ def test_create_session_with_rootdir_appends(tmp: TempDir) -> None:
 def test_create_session_rootdir_is_keyword_only() -> None:
     """The rootdir parameter must stay keyword-only — a settled decision (#1780).
 
-    Keyword-only keeps the existing create_session([...]) call sites
+    Keyword-only keeps the existing create_session() call sites
     source-compatible and matches the #1305 convention already applied
     across the plugin protocols; a positional call must be rejected.
     """
     create_session_any: Any = create_session
     with oxitest.raises(TypeError, match="positional"):
-        create_session_any([], "some/rootdir")
+        create_session_any("some/rootdir")

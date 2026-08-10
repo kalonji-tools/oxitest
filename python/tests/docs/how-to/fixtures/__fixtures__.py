@@ -54,17 +54,16 @@ def load_config(path: str) -> dict:
 
 # fmt: off
 # --8<-- [start:declare-registry]
-fx = oxitest.Fixtures()
 # --8<-- [end:declare-registry]
 
 # --8<-- [start:simple-fixture]
-@fx.fixture
+@oxitest.fixture(lifetime="function")
 def sample_data() -> list[int]:
     return [1, 2, 3, 4, 5]
 # --8<-- [end:simple-fixture]
 
 # --8<-- [start:yield-fixture]
-@fx.fixture
+@oxitest.fixture(lifetime="function")
 def temp_db() -> Generator[Connection, None, None]:
     conn = connect("sqlite:///:memory:")
     conn.execute("CREATE TABLE t (id INTEGER)")
@@ -73,7 +72,7 @@ def temp_db() -> Generator[Connection, None, None]:
 # --8<-- [end:yield-fixture]
 
 # --8<-- [start:imperative-teardown]
-@fx.fixture
+@oxitest.fixture(lifetime="function")
 def managed_file(ctx: TestContext) -> Path:
     fd, name = tempfile.mkstemp()
     import os
@@ -85,14 +84,14 @@ def managed_file(ctx: TestContext) -> Path:
 # --8<-- [end:imperative-teardown]
 
 # --8<-- [start:fixture-depends-on-fixture]
-@fx.fixture
+@oxitest.fixture(lifetime="function")
 def user(db: Fixture[Connection]) -> User:
     db.execute("INSERT INTO users VALUES (1, 'Alice')")
     return User(id=1, name="Alice")
 # --8<-- [end:fixture-depends-on-fixture]
 
 # --8<-- [start:shared-fixture]
-@fx.fixture(shared=True)
+@oxitest.fixture(lifetime="package")
 def app_config() -> dict:
     return load_config("config.yaml")
 # --8<-- [end:shared-fixture]

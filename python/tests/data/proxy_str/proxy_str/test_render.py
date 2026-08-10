@@ -4,7 +4,7 @@ from oxitest import Fixtures
 
 
 def test_shared_fixture_renders_its_value(fx: Fixtures) -> None:
-    dsn = fx.proxy_str_shared.dsn
+    dsn = fx.proxy_str.dsn
 
     rendered = f"{dsn}"
 

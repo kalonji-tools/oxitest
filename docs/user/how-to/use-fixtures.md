@@ -377,7 +377,7 @@ The test asks only for the outer fixture; the chain resolves behind it:
     cleanup callbacks. Finalizers run in reverse registration order after the test.
 
     ```python
-    --8<-- "python/tests/docs/how-to/fixtures/conftest.py:imperative-teardown"
+    --8<-- "python/tests/docs/how-to/fixtures/__fixtures__.py:imperative-teardown"
     ```
 
 ## Narrow a fixture to a block
@@ -576,9 +576,9 @@ Create one `Fixtures()` instance (or more — all are discovered automatically)
 in `conftest.py` and decorate your factory functions with `@fx.fixture`.
 
 ```python
---8<-- "python/tests/docs/how-to/fixtures/conftest.py:declare-registry"
+--8<-- "python/tests/docs/how-to/fixtures/__fixtures__.py:declare-registry"
 
---8<-- "python/tests/docs/how-to/fixtures/conftest.py:simple-fixture"
+--8<-- "python/tests/docs/how-to/fixtures/__fixtures__.py:simple-fixture"
 ```
 
 Injection works exactly as it does for `@oxi.fixture` declarations — annotate a
@@ -594,13 +594,13 @@ oxitest finds the fixture by its return type `list[int]`.
 ### Yield teardown on a legacy fixture
 
 ```python
---8<-- "python/tests/docs/how-to/fixtures/conftest.py:yield-fixture"
+--8<-- "python/tests/docs/how-to/fixtures/__fixtures__.py:yield-fixture"
 ```
 
 ### Depend on another legacy fixture
 
 ```python
---8<-- "python/tests/docs/how-to/fixtures/conftest.py:fixture-depends-on-fixture"
+--8<-- "python/tests/docs/how-to/fixtures/__fixtures__.py:fixture-depends-on-fixture"
 ```
 
 ### Share a fixture across all tests with shared
@@ -615,7 +615,7 @@ declaration merges a subtree. The value is immutable — any attribute or item
 write raises `SharedFixtureMutationError` at runtime.
 
 ```python
---8<-- "python/tests/docs/how-to/fixtures/conftest.py:shared-fixture"
+--8<-- "python/tests/docs/how-to/fixtures/__fixtures__.py:shared-fixture"
 ```
 
 Use `shared=True` for read-only resources that are safe to rebuild, such as
@@ -632,7 +632,7 @@ A `Fixtures()` fixture with `autouse=True` runs for every test without being
 explicitly requested:
 
 ```python
---8<-- "python/tests/docs/how-to/fixtures/autouse/conftest.py:autouse-fixture"
+--8<-- "python/tests/docs/how-to/fixtures/autouse/__fixtures__.py:autouse-fixture"
 ```
 
 This is the **legacy** route's autouse, and it differs from
@@ -684,7 +684,7 @@ Create multiple `Fixtures()` instances — one per concern. Each variable name b
 namespace, and it must not be a Python keyword or builtin:
 
 ```python
---8<-- "python/tests/docs/how-to/fixtures/conftest.py:namespace-fixtures"
+--8<-- "python/tests/docs/how-to/fixtures/__fixtures__.py:namespace-fixtures"
 ```
 
 Access all of them through a single `fx: Fixtures` parameter. Fixtures resolve lazily —
