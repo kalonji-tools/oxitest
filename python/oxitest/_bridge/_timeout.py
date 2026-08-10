@@ -78,9 +78,10 @@ class _ActiveHandler:
     #: Seconds left on the enclosing deadline when this context armed, or 0.0
     #: when nothing was pending. Restoring it is what makes the context nestable.
     enclosing_remaining: float
-    #: What was actually armed — the requested value, or the enclosing remaining
-    #: when that was tighter.
-    effective: float
+    #: The enclosing timer's repeat interval. ``getitimer`` returns two values
+    #: and a periodic ITIMER_REAL carries a non-zero second one; restoring only
+    #: the first would silently turn a repeating timer into a one-shot.
+    enclosing_interval: float
     entered_at: float
 
 
@@ -147,7 +148,7 @@ class _UnixTimeoutContext:
 
     def __enter__(self) -> None:
         old = signal.signal(signal.SIGALRM, self._raise)
-        enclosing = signal.getitimer(signal.ITIMER_REAL)[0]
+        enclosing, interval = signal.getitimer(signal.ITIMER_REAL)
         effective = float(self._seconds)
         if 0.0 < enclosing < effective:
             effective = enclosing
@@ -157,7 +158,7 @@ class _UnixTimeoutContext:
         self._state = _ActiveHandler(
             old_handler=old,
             enclosing_remaining=enclosing,
-            effective=effective,
+            enclosing_interval=interval,
             entered_at=time.monotonic(),
         )
 
@@ -176,7 +177,7 @@ class _UnixTimeoutContext:
         # made it undetectable: elapsed 5s against a 3s deadline predicts 0,
         # which is exactly what a cleared slot reads. Left unclamped, that same
         # case predicts -2 against a slot of 0 and is caught.
-        predicted = state.effective - elapsed
+        predicted = self._effective_seconds - elapsed
         self._deadline_taken = (
             not fired and abs(remaining - predicted) > _READ_SKEW_SECONDS
         )
@@ -194,7 +195,11 @@ class _UnixTimeoutContext:
         # unaffected and fires normally (#2001).
         if state.enclosing_remaining > 0.0:
             rest = state.enclosing_remaining - elapsed
-            signal.setitimer(signal.ITIMER_REAL, max(rest, _MIN_REARM_SECONDS))
+            signal.setitimer(
+                signal.ITIMER_REAL,
+                max(rest, _MIN_REARM_SECONDS),
+                state.enclosing_interval,
+            )
         else:
             signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, state.old_handler)
@@ -236,7 +241,6 @@ class _WindowsTimeoutContext:
 
     def __init__(self, seconds: int) -> None:
         self._seconds = seconds
-        self._effective_seconds: float = float(seconds)
         self._state: _WindowsTimerState = _IdleTimer()
         # Guards the state transition against the timer thread. Timer.cancel()
         # is only `self.finished.set()`, and Timer.run() checks `is_set()`
@@ -254,7 +258,7 @@ class _WindowsTimeoutContext:
     @property
     def effective_seconds(self) -> float:
         """The deadline actually armed. Never capped — see ``deadline_taken``."""
-        return self._effective_seconds
+        return float(self._seconds)
 
     @property
     def deadline_taken(self) -> bool:
