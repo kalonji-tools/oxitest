@@ -847,11 +847,16 @@ class FixtureSession:
         return self._registry
 
     def shared_fixture_names(self) -> tuple[str, ...]:
-        """Return sorted names of fixtures with effective (most-local) shared=True."""
+        """Return sorted names of the fixtures Auto-Arrangement treats as inputs.
+
+        That is the ``lifetime="module"`` tier since #1720. See
+        :meth:`FixtureRegistry.shared_names` for why the name still says
+        ``shared``.
+        """
         return self._registry.shared_names()
 
     def shared_fixture_groups(self) -> tuple[tuple[str, ...], ...]:
-        """Return connected components of shared fixture dependencies."""
+        """Return connected components of arranging-fixture dependencies."""
         return self._registry.shared_fixture_groups()
 
     def process_lifetime_fixture_names(self) -> tuple[str, ...]:

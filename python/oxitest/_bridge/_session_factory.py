@@ -13,26 +13,14 @@ ones, so it needs a home that outlives that module — this one.
 
 from __future__ import annotations
 
-__all__ = ["SessionResult", "create_session"]
+__all__ = ["create_session"]
 
-from typing import TYPE_CHECKING, NamedTuple
 
 from oxitest._bridge._fixture_session import FixtureSession
 from oxitest._bridge._syspath import ensure_rootdir_importable
 
-if TYPE_CHECKING:
-    from oxitest._bridge.result import CollectedViolation, Diagnostic
 
-
-class SessionResult(NamedTuple):
-    """What a session build returns: the session, violations, diagnostics."""
-
-    session: FixtureSession
-    violations: list[CollectedViolation]
-    diagnostics: list[Diagnostic]
-
-
-def create_session(*, rootdir: str | None = None) -> SessionResult:
+def create_session(*, rootdir: str | None = None) -> FixtureSession:
     """Build an empty session and make *rootdir* importable.
 
     Args:
@@ -43,5 +31,4 @@ def create_session(*, rootdir: str | None = None) -> SessionResult:
     """
     if rootdir is not None:
         ensure_rootdir_importable(rootdir)
-    session = FixtureSession([])
-    return SessionResult(session, [], list(session.diagnostics))
+    return FixtureSession([])

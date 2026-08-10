@@ -50,16 +50,16 @@ class FixtureScope(StrEnum):
 
 
 #: Declared tier → caching vocabulary. ``Lifetime`` is what users write;
-#: ``FixtureScope`` is what the caching machinery reads. The two stay separate
-#: until slice 13 retires the old ``Fixtures()`` API, so this is the single
-#: translation point. Membership doubles as "is this tier implemented yet",
-#: which is how ``@oxi.fixture`` gates declarations.
+#: ``FixtureScope`` is what the caching machinery reads. This is the single
+#: translation point between them. Membership doubles as "is this tier
+#: implemented yet", which is how ``@oxi.fixture`` gates declarations.
 #:
-#: ``PACKAGE`` is a member of its own rather than a reuse of ``SHARED``:
-#: ``SHARED`` belongs to the legacy ``Fixtures(shared=True)`` API and is still
-#: live (see :attr:`FixtureDef.shared`, ``_fixtures.py``, ``fixture_lister.py``).
-#: Reusing it would make every legacy shared fixture look package-scoped to the
-#: scheduler, collapsing parallelism for suites that never asked for the tier.
+#: ``PACKAGE`` is a member of its own rather than a reuse of ``SESSION``.
+#: #1720 removed ``SHARED``, which the retired ``Fixtures(shared=True)`` API
+#: owned, and folded it into ``SESSION``. The two kept separate rungs because
+#: collapsing ``PACKAGE`` into either would make a package-scoped fixture look
+#: wider to the scheduler than it is, and that costs parallelism for suites
+#: that never asked for the tier.
 #:
 #: ``PROCESS`` is a member of its own for the same reason, one tier up, and the
 #: bucket it is *not* reusing is ``SESSION`` (#1777). ``SESSION`` is where the
@@ -87,11 +87,8 @@ LIFETIME_SCOPES: Final = MappingProxyType(
 
 #: Autouse firing order — widest lifetime first (#1716).
 #:
-#: Keyed on ``FixtureScope`` rather than ``Lifetime`` because legacy
-#: ``FrameworkSource`` and ``PluginSource`` defs carry no lifetime, and both
-#: regimes coexist until #1720. ``SHARED`` sits between ``PACKAGE`` and
-#: ``MODULE``: a task group is one module unless a ``package`` declaration
-#: merges a subtree, so it is wider than a module and narrower than a package.
+#: Keyed on ``FixtureScope`` rather than ``Lifetime`` because
+#: ``FrameworkSource`` and ``PluginSource`` defs carry no lifetime.
 #:
 #: Setup order is the mirror of a teardown order that is already tier-nested by
 #: the scope stacks, so a narrower autouse fixture can rely on a wider one
@@ -105,8 +102,8 @@ _SCOPE_RANK: Final = MappingProxyType(
         FixtureScope.PROCESS: 0,
         FixtureScope.SESSION: 1,
         FixtureScope.PACKAGE: 2,
-        FixtureScope.MODULE: 4,
-        FixtureScope.EACH: 5,
+        FixtureScope.MODULE: 3,
+        FixtureScope.EACH: 4,
     }
 )
 
@@ -758,7 +755,13 @@ class FixtureRegistry:
         return _merge_components(shared_ancestors)
 
     def shared_names(self) -> tuple[str, ...]:
-        """Return sorted names of fixtures with effective (most-local) shared=True."""
+        """Return sorted names of the fixtures Auto-Arrangement treats as inputs.
+
+        That is the ``lifetime="module"`` tier, via :attr:`FixtureDef.arranges`.
+        The name says ``shared`` because #1720 re-pointed the reader without
+        renaming the method — the Rust caller reaches it by name through
+        ``bridge.rs``.
+        """
         return tuple(
             sorted(
                 name

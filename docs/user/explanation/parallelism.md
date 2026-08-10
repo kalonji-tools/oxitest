@@ -62,7 +62,7 @@ dispatching to workers:
    and run on the main process. These tests need access to resources (e.g. a
    debugger, global state) that do not survive serialization to a worker.
 
-2. **Auto-arranged tests** — tests that inject `shared=True` fixtures are grouped
+2. **Auto-arranged tests** — tests that inject `lifetime="module"` fixtures are grouped
    by fixture affinity. oxitest computes connected components of the fixture
    dependency graph and assigns each component to the main process. This prevents
    shared fixture values from being serialized across process boundaries.

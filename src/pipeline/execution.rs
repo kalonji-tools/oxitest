@@ -508,7 +508,7 @@ fn emit_shared_fixture_warning(
         "shared {noun} will be rebuilt once per task group, not once per run; \
          a task group is a single module unless a `package` declaration merges a \
          subtree, so a run can build more instances than it has workers — \
-         use --serial to run them once, or remove shared=True from fixtures \
+         use --serial to run them once, or narrow the lifetime of fixtures \
          that can be function-scoped"
     );
 }

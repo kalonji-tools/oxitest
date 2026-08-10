@@ -65,12 +65,9 @@ impl FixtureSession {
         let kwargs = pyo3::types::PyDict::new(py);
         kwargs.set_item("rootdir", rootdir.as_str())?;
         let result = factory.call_method("create_session", (), Some(&kwargs))?;
-        let (session, violations, _diagnostics): (
-            Bound<'_, PyAny>,
-            Vec<RawViolation>,
-            Bound<'_, PyAny>,
-        ) = result.extract()?;
-        Ok((Self(session.into()), violations))
+        // No violations: an empty session has nothing to report. The Vec
+        // stays in the signature because callers destructure it (#1720).
+        Ok((Self(result.into()), Vec::new()))
     }
 
     /// Signal that all tests in the module have finished; runs module teardowns.
@@ -145,8 +142,10 @@ impl FixtureSession {
         Ok(())
     }
 
-    /// Returns sorted names of all fixtures marked with `shared=True` in the registry.
-    /// Returns an empty Vec on any Python error (treated as "no shared fixtures").
+    /// Returns sorted names of the fixtures Auto-Arrangement treats as inputs,
+    /// which is the `lifetime="module"` tier since #1720. The method name still
+    /// says `shared` because the Python side is reached by name.
+    /// Returns an empty Vec on any Python error (treated as "none arrange").
     /// Unlike `end_module`/`end_task`, errors are absorbed here because this
     /// method is advisory-only; a failure must not abort the run.
     pub fn shared_fixture_names(&self, py: Python<'_>) -> Vec<String> {

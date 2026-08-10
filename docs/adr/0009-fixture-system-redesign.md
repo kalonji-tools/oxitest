@@ -315,8 +315,8 @@ The redesign retires the following surface. Each entry names what goes and why.
 > (`docs/user/explanation/provisional-apis.md:22`, `:26`) and pinned by conformance tests
 > (`python/tests/docs/how-to/test_write_plugins.py:353`, `:382`). **`registrar-in-test-module` belongs on the
 > documented side too** — the kebab-case id is absent from `docs/user/`, but the rule is documented under its prose
-> name at `docs/user/explanation/strict-mode.md:182`, inside the section "The nine checks" (`:21`), which retiring it
-> makes stale. Sharpest of all: **`docs/user/reference/stability.md:11` lists `Fixtures` as semver-protected**, and
+> name at `docs/user/explanation/strict-mode.md`, inside the section that states the check count, which retiring it
+> makes stale. **Done in #1720** — the section is gone and the heading reads "The eight checks". Sharpest of all: **`docs/user/reference/stability.md:11` lists `Fixtures` as semver-protected**, and
 > `:16` extends that to "`Plugin` dataclass and protocol interfaces" — so two entries here are surfaces the project
 > has promised not to remove outside a major version. `Helpers` is *not* on that list, so the pair does not carry the
 > same promise. **And `Fixtures` is not removed but *repurposed*** — Rule 5 reuses the name as a proxy type
@@ -947,3 +947,17 @@ Two shipped documents disagreed about the scope of one deprecation, and the ADR'
 So a fixture keeps its route to `TestContext`, `yield` is not its only cleanup mechanism, and no design change was needed — a one-line qualification resolved it.
 
 **Retirement is also no longer keyed to a version.** Per [ADR-0015](0015-releases-are-cut-when-earned.md) this project does not schedule retirements while it has no users, so the `Retired at` column is gone from `stability.md`. `fx.oxi.ctx`, the other spelling that note names, is **removed** rather than deprecated.
+
+### Amendment 13 — the retirement is executed (2026-08-10)
+
+**Issue:** [#1720](https://github.com/kalonji-tools/oxitest/issues/1720), slice 13. Executes Rule 8's retirements and amends Rules 2 and 5.
+
+Rule 8 listed what the retirement would remove. This records what it removed, and the three places the list was wrong.
+
+**`Fixtures` is repurposed, not freed.** Rule 5 reuses the name for the `fx:` injection annotation, and injection matches it **by identity** — `hint is Fixtures`. The class object therefore had to survive; only the registry behaviour went. Calling it raises a migration error naming `@oxi.fixture`, a declaration file, and the guide.
+
+**`ConftestSource` is renamed, not deleted.** It had one user left that was never a conftest: the `task_group` builtin, which wore it with a `<builtin>` sentinel because `BuiltinSource` holds an `impl_cls` and `task_group` is a factory function. What the variant holds is a callable plus a label for where it came from, so it became `FrameworkSource(func, origin)`. The union neither grew nor shrank, and nothing in the model names `conftest.py`.
+
+**The `shared` tier collapsed into `session` rather than being deleted.** They always shared a rate — both built once per task group — which is why this glossary said they stayed separate only until this slice. `'shared'` also stopped being a legal `FixtureProvider` scope; that narrowing was safe because no provider anywhere declared it.
+
+**Auto-Arrangement survives, re-pointed.** Rule 8 implied the arrange stage went with the tier that fed it. It does not: arrangement is the only thing that gives the coordinator a second execution phase, and #1777's acceptance project needs one to tell a per-phase drain from a once-per-run drain. Its input moved to `lifetime="module"`, chosen by measurement — `package` is refused inside a package holding an `inprocess` test, and `process` survives a phase boundary by design.

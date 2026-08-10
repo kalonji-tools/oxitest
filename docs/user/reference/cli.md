@@ -276,7 +276,7 @@ vary by resource but the syntax is consistent:
 | `source(pat)` | tests, fixtures | file path or node ID contains `pat` |
 | `mark(name)` | tests | test has the given mark |
 | `async()` | tests, fixtures | test or fixture is an async function |
-| `shared()` | fixtures | fixture is declared `shared=True` |
+| `shared()` | fixtures | fixture is declared `lifetime="module"` |
 | `autouse()` | fixtures | fixture is declared `autouse=True` |
 | `uses(name)` | tests, fixtures | test uses fixture `name`, or fixture depends on fixture `name` |
 | `used_in(id)` | marks | mark is applied to a test matching `id` |

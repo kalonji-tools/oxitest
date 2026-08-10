@@ -198,14 +198,12 @@ impl Pipeline {
         //
         // `run_query` does the same for the paths that reach it; this transition
         // is the other entry point, and `--tree` reaches only this one.
-        let (errors, _diagnostics, _modules) =
-            crate::pipeline::collection::register_declaration_homes_for_files(
-                py,
-                session,
-                &self.shared.cfg,
-                &self.shared.test_files,
-            );
-        if let Some(first) = errors.into_iter().next() {
+        if let Some(first) = crate::pipeline::collection::register_declaration_homes_for_files(
+            py,
+            session,
+            &self.shared.cfg,
+            &self.shared.test_files,
+        ) {
             eprintln!("error: {first:?}");
             return Ok(ExitCode::Failure);
         }

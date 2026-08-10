@@ -365,7 +365,7 @@ def build_session(task: WorkerTask) -> Any:
     # task dict without mutating the interpreter's sys.path. The coordinator
     # always sends it.
     rootdir: str | None = task.get("rootdir")
-    session, _violations, _diagnostics = create_session(rootdir=rootdir)
+    session = create_session(rootdir=rootdir)
     # Plugins before fixture modules, mirroring the serial order in
     # FixtureSession.__init__ (builtins → plugins → conftest): a user's own
     # declaration must be able to shadow a plugin's, which requires the

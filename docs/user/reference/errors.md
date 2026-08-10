@@ -55,11 +55,11 @@ Python 2 syntax in a Python 3 file.
 "<name>" is a Python keyword and cannot be used as a namespace name.
 ```
 
-**Cause:** A `Fixtures()` variable name (or directory name)
+**Cause:** An anchor directory name
 used as a namespace matches a Python reserved keyword
 (e.g. `class`, `for`, `match`).
 
-**Fix:** Rename the `Fixtures()` variable, or rename the directory.
+**Fix:** Rename the anchor directory.
 
 ---
 
@@ -67,10 +67,10 @@ used as a namespace matches a Python reserved keyword
 "<name>" is a Python builtin and cannot be used as a namespace name.
 ```
 
-**Cause:** A `Fixtures()` variable name (or directory name)
+**Cause:** An anchor directory name
 matches a Python builtin name (e.g. `int`, `list`, `print`).
 
-**Fix:** Rename the `Fixtures()` variable, or rename the directory.
+**Fix:** Rename the anchor directory.
 
 ---
 
@@ -452,12 +452,10 @@ clarity and type safety.
 **Fix:** Add a return type annotation to the fixture function:
 
 ```python
-from oxitest import Fixtures, Yields
-
-fixtures = Fixtures()
+from oxitest import Yields, fixture
 
 
-@fixtures.fixture
+@fixture(lifetime="function")
 def db_connection() -> Yields[Connection]:
     conn = Connection()
     yield conn

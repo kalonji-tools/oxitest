@@ -724,19 +724,17 @@ fn register_homes_in_chain(
 /// homes through its per-file loop; this is the same walk over a file set that
 /// is already known, for the surfaces that do not run a collection (#1720).
 ///
-/// Returns the accumulators rather than reporting them: a query run decides for
-/// itself whether an unimportable declaration file is worth a diagnostic, and
-/// the caller owns that judgement.
+/// Returns the first error, if any. A query answers from the registry, so an
+/// unimportable declaration file makes the answer wrong rather than merely
+/// incomplete — and `no results` is indistinguishable from a correct empty
+/// answer. Diagnostics are warnings about files that *were* read, so they do
+/// not make the answer wrong and are dropped here.
 pub fn register_declaration_homes_for_files(
     py: pyo3::Python<'_>,
     session: &bridge::FixtureSession,
     cfg: &config::Config,
     test_files: &[camino::Utf8PathBuf],
-) -> (
-    Vec<types::CollectError>,
-    Vec<crate::reporter::stats::DiagnosticEntry>,
-    Vec<types::FixtureModule>,
-) {
+) -> Option<types::CollectError> {
     // Same derivation as the collection loop, and for the same reason: the
     // rootdir package is a property of the project, not of the run.
     let (declared_dirs, root_provenance) = if cfg.paths.declared_testpaths.is_empty() {
@@ -774,7 +772,7 @@ pub fn register_declaration_homes_for_files(
         }
     }
 
-    (errors, diagnostics, fixture_modules)
+    errors.into_iter().next()
 }
 
 fn register_declaration_home(

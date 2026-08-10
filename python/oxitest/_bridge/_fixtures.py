@@ -1,14 +1,15 @@
-"""User-facing fixture registration API.
+"""The ``fx:`` injection annotation, and the accessor it hands back.
 
-``Fixtures`` is the instance-based fixture registry that users create in
-``conftest.py``.  ``FixtureAccessor`` is the lazy proxy returned by
-``Fixtures.__getattr__``, supporting both ``FixtureRef`` usage in
-``@oxitest.parametrize`` and attribute-proxying inside test/fixture bodies.
+``Fixtures`` is the annotation a test writes as ``fx: Fixtures`` to read
+fixtures through a namespace. It was the instance-based registry until #1720
+retired that role; calling it now raises and names the replacement.
+``FixtureAccessor`` is the lazy proxy ``Fixtures.__getattr__`` returns,
+supporting both ``FixtureRef`` usage in ``@oxitest.parametrize`` and
+attribute-proxying inside test/fixture bodies.
 
-These classes depend on ``_fixture_context`` (for ContextVar access) and
-``_fixture_registry`` (for ``FixtureDef``).  They do **not** import from
-``_fixture_session`` — the session module re-exports them for backward
-compatibility.
+These classes depend on ``_fixture_context`` (for ContextVar access). They do
+**not** import from ``_fixture_session`` — the session module re-exports them
+for backward compatibility.
 """
 
 from __future__ import annotations
@@ -18,15 +19,11 @@ __all__ = [
     "Fixtures",
 ]
 
-import inspect
 from collections.abc import Callable
-from typing import Any, TypeVar, overload
+from typing import Any
 
 from oxitest._bridge._fixture_context import _fixture_context
-from oxitest._bridge._fixture_registry import FixtureDef, FixtureScope, FrameworkSource
-from oxitest._bridge._fn_metadata import _update, get_metadata
-
-_F = TypeVar("_F", bound=Callable[..., Any])
+from oxitest._bridge._fn_metadata import get_metadata
 
 
 class FixtureAccessor:
@@ -43,19 +40,17 @@ class FixtureAccessor:
 
     Example::
 
-        # conftest.py
-        kvault = Fixtures()
-
-        @kvault.fixture
+        # tests/kvault/__fixtures__.py
+        @oxi.fixture(lifetime="function")
         def store() -> KVault: ...
 
-        @kvault.fixture
-        def ns() -> Namespace:
-            return kvault.store.namespace("test")  # lazy: resolves live store
+        @oxi.fixture(lifetime="function")
+        def ns(fx: Fixtures) -> Namespace:
+            return fx.kvault.store.namespace("test")  # lazy: resolves live store
 
-        # test_query.py
+        # tests/kvault/test_query.py
         @oxitest.parametrize(
-            memory=BackendCase(backend=kvault.store, ...),  # FixtureRef
+            memory=BackendCase(backend=fx.kvault.store, ...),  # FixtureRef
         )
         def test_foo(backend: Fixture[KVault]) -> None: ...
     """
@@ -181,109 +176,6 @@ class Fixtures:
     def namespace_name(self, value: str) -> None:
         self._namespace_name = value
 
-    @property
-    def defs(self) -> tuple[FixtureDef[Any], ...]:
-        return tuple(self._defs)
-
-    @property
-    def source_line(self) -> int:
-        """Line number where this Fixtures() was instantiated."""
-        return self._source_line
-
-    @overload
-    def fixture(self, fn: _F) -> _F: ...
-
-    @overload
-    def fixture(
-        self,
-        fn: None = None,
-        *,
-        autouse: bool = False,
-        name: str | None = None,
-        shared: bool = False,
-    ) -> Callable[[_F], _F]: ...
-
-    def fixture(
-        self,
-        fn: _F | None = None,
-        *,
-        autouse: bool = False,
-        name: str | None = None,
-        shared: bool = False,
-    ):
-        """Register a fixture function with this registry.
-
-        Usage (bare decorator)::
-
-            @fixtures.fixture
-            def my_db() -> Database:
-                return Database()
-
-        Usage (with options)::
-
-            @fixtures.fixture(autouse=False)
-            def my_client(my_db: Fixture[Database]) -> Client:
-                return Client(my_db)
-
-        **Teardown:** Yield once to provide the fixture value. Code **after** the
-        yield runs as teardown — it executes after every test that used this fixture,
-        regardless of pass or fail::
-
-            @fixtures.fixture
-            def workspace(tmp: TempDir) -> Generator[Path, None, None]:
-                yield tmp_path          # setup: value given to the test
-                shutil.rmtree(tmp_path) # teardown: runs after the test
-
-        **Return types:** Prefer a typed return over a plain dict for fixtures that
-        produce multiple values. A `dict` return is opaque at the call site —
-        `Fixture[dict]` tells a reader nothing about available keys. A dataclass
-        or TypedDict makes the contract visible::
-
-            from dataclasses import dataclass
-
-            @dataclass
-            class WorkspaceEnv:
-                root: Path
-                log: Path
-
-            @fixtures.fixture
-            def workspace_env(tmp: TempDir) -> WorkspaceEnv:
-                return WorkspaceEnv(root=tmp, log=tmp / "run.log")
-
-        At the call site, `workspace_env: Fixture[WorkspaceEnv]` gives IDE
-        completion on `workspace_env.root` and `workspace_env.log`, and
-        type checkers enforce the field types without a plugin.
-
-        Args:
-            fn: The fixture function (when used as a bare decorator).
-            autouse: If `True`, fixture runs for every test without being
-                explicitly requested.
-            name: Override the fixture name. Defaults to the function name.
-            shared: If `True`, fixture is session-lifetime and immutable
-                (wrapped with `FrozenProxy`).
-
-        """
-
-        def _register(f: _F) -> _F:
-            fixture_name = name or getattr(f, "__name__", repr(f))
-            _update(f, fixture_name=fixture_name)
-            is_async = inspect.iscoroutinefunction(f) or inspect.isasyncgenfunction(f)
-            if autouse and not shared and is_async:
-                pass  # unreachable: Fixtures() refuses construction (#1720)
-            defn = FixtureDef(
-                name=fixture_name,
-                fixture_type=object,  # placeholder — overwritten by conftest_loader
-                scope=FixtureScope.SESSION if shared else FixtureScope.EACH,
-                source=FrameworkSource(func=f, origin=""),
-                autouse=autouse,
-                is_async=is_async,
-            )
-            self._defs.append(defn)
-            self._defs_by_name[fixture_name] = defn
-            return f
-
-        return _register(fn) if fn is not None else _register
-
     def __getattr__(self, name: str) -> Any:
         """Return a FixtureAccessor for the named fixture.
 
@@ -296,17 +188,21 @@ class Fixtures:
         Returns ``Any`` because this class name also annotates the access proxy
         (``fx: Fixtures``), where the runtime object is a ``FixturesProxy`` and
         a top-level attribute is three-valued — sub-proxy, fixture value, or
-        awaitable handle. No single class models that. Splitting the annotation
-        from the registry belongs to #1720, which retires the registry role.
+        awaitable handle. No single class models that, and #1720 kept the name
+        on the annotation rather than splitting it.
+
+        The registry lookup this used to do is gone with the registry (#1720).
+        ``__init__`` raises, so no instance ever carried ``_defs_by_name``; the
+        only instance that exists is the attribute shell
+        ``_read_fixtures`` builds, and it carries ``namespace_name`` alone.
+        The method stays because ``ty`` resolves ``fx.<ns>`` through it.
         """
         if name.startswith("_"):
             raise AttributeError(name)
-        defn = self._defs_by_name.get(name)
-        if defn is not None:
-            return FixtureAccessor(name, self, defn.func)
-        available = [d.name for d in self._defs]
         msg = (
-            f"'{type(self).__name__}' has no registered fixture '{name}'. "
-            f"Available: {available}"
+            f"'{type(self).__name__}' has no attribute '{name}'. "
+            f"Fixtures is the injection annotation, not a registry — declare "
+            f"fixtures with @oxi.fixture and read them through a 'fx: Fixtures' "
+            f"parameter."
         )
         raise AttributeError(msg)

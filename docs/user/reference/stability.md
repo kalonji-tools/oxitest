@@ -24,7 +24,7 @@ These surfaces will not change in backward-incompatible ways without a major ver
 
 **Python API**
 
-- `Fixtures`, `Fixture[T]`, `FixtureRef[T]`, `Yields[T]`
+- `Fixture[T]`, `FixtureRef[T]`, `Yields[T]`
 - `@oxi.parametrize`, `@oxi.partial`
 - `mark.skip`, `mark.xfail`, `mark.timeout`, custom marks
 - Built-in fixtures: `TempDir`, `TempDirFactory`, `StdCapture`, `FdCapture`, `Patcher`, `LogCapture`, `WarnCapture`, `TestContext`
@@ -75,8 +75,9 @@ These may change in minor releases:
 - The declaration file `__fixtures__.py`, and fixture declarations in
   `__init__.py` or inline in a test module
 
-Newer than any released version, and still being amended. `Fixtures` keeps its
-Stable guarantee until it is retired.
+Newer than any released version, and still being amended. `Fixtures` was
+retired as a registry in #1720; the name survives as the `fx:` injection
+annotation, and calling it raises.
 
 ## Internal (no guarantee)
 
