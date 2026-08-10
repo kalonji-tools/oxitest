@@ -285,10 +285,9 @@ def test_fixture_scope_values() -> None:
     assert FixtureScope.EACH == "each", "EACH should be 'each'"
     assert FixtureScope.MODULE == "module", "MODULE should be 'module'"
     assert FixtureScope.PACKAGE == "package", "PACKAGE should be 'package'"
-    assert FixtureScope.SHARED == "shared", "SHARED should be 'shared'"
     assert FixtureScope.SESSION == "session", "SESSION should be 'session'"
     assert FixtureScope.PROCESS == "process", "PROCESS should be 'process'"
-    assert len(FixtureScope) == 6, "FixtureScope should have exactly 6 members"
+    assert len(FixtureScope) == 5, "FixtureScope should have exactly 5 members"
 
 
 # ── Source variants ──────────────────────────────────────────────────────────

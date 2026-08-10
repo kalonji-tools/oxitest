@@ -48,8 +48,6 @@ class TreeRenderer:
 
         # Verbosity 1: name + tags
         parts: list[str] = []
-        if defn.shared:
-            parts.append("shared")
         if defn.is_async:
             parts.append("async")
         if defn.autouse:
@@ -143,12 +141,16 @@ def _builtin_defs() -> list[FixtureDef[Any]]:
         _stub.__name__ = name
         _stub.__doc__ = doc
         _stub.__module__ = "oxitest._bridge._builtins"
-        is_shared = getattr(impl_cls, "scope", "function") == "session"
+        # The same predicate the real registration uses
+        # (_fixture_session.py, "1. Builtins"), and it must reach the same
+        # answer. It said SHARED here and SESSION there, so a session-scoped
+        # builtin listed as shared — a tier it never had (#1720).
+        is_session = getattr(impl_cls, "scope", "function") == "session"
         defs.append(
             FixtureDef(
                 name=name,
                 fixture_type=fixture_type,
-                scope=FixtureScope.SHARED if is_shared else FixtureScope.EACH,
+                scope=FixtureScope.SESSION if is_session else FixtureScope.EACH,
                 source=BuiltinSource(impl_cls=impl_cls),
                 autouse=False,
                 is_async=False,

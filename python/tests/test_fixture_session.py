@@ -258,7 +258,7 @@ def test_register_plugin_fixtures_stamps_correct_fields() -> None:
     provider = _FakeFixtureProvider(
         name="plugin_db",
         fixture_type=_MinimalType,
-        scope="shared",
+        scope="session",
         autouse=False,
     )
     session = _session_with(provider)
@@ -270,8 +270,9 @@ def test_register_plugin_fixtures_stamps_correct_fields() -> None:
     assert defn.fixture_type is _MinimalType, (
         "registered fixture type should match the provider's fixture_type"
     )
-    assert defn.scope == FixtureScope.SHARED, (
-        "registered scope should match the provider's scope='shared'"
+    assert defn.scope == FixtureScope.SESSION, (
+        "registered scope should match the provider's scope='session'; "
+        "'shared' stopped being a legal provider scope with the tier (#1720)"
     )
     assert isinstance(defn.source, PluginSource), (
         "registered source should be PluginSource, not ConftestSource"

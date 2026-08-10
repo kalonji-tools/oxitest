@@ -45,7 +45,6 @@ class FixtureScope(StrEnum):
     EACH = auto()
     MODULE = auto()
     PACKAGE = auto()
-    SHARED = auto()
     SESSION = auto()
     PROCESS = auto()
 
@@ -106,7 +105,6 @@ _SCOPE_RANK: Final = MappingProxyType(
         FixtureScope.PROCESS: 0,
         FixtureScope.SESSION: 1,
         FixtureScope.PACKAGE: 2,
-        FixtureScope.SHARED: 3,
         FixtureScope.MODULE: 4,
         FixtureScope.EACH: 5,
     }
@@ -206,11 +204,6 @@ class FixtureDef(Generic[T]):
             case _:
                 msg = f"unhandled FixtureSource variant: {self.source!r}"
                 raise AssertionError(msg)
-
-    @property
-    def shared(self) -> bool:
-        """Backward-compat: True when scope is SHARED."""
-        return self.scope == FixtureScope.SHARED
 
     @property
     def arranges(self) -> bool:
