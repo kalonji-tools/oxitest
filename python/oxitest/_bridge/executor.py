@@ -87,6 +87,7 @@ from oxitest._bridge._middleware import (
     build_pipeline,
     resolve_strategy,
 )
+from oxitest._bridge._module_identity import dotted_name_for
 from oxitest._bridge._runners import (
     NO_DEBUG,
     DebugContext,
@@ -204,8 +205,9 @@ def _load_and_resolve(
         module = _cached
         sys.modules[unique_name] = module
     else:
+        spec_name = dotted_name_for(meta.module_path, session.rootdir)
         try:
-            module = _load_module(meta.module_path, unique_name)
+            module = _load_module(meta.module_path, unique_name, spec_name=spec_name)
         except _LoadError as e:
             return e.result
         _cache.set(meta.module_path, module, kind="test")

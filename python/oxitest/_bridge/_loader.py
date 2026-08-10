@@ -57,12 +57,52 @@ class ModuleCache:
         self._modules[(module_path, kind)] = module
 
     def evict(self, module_path: str) -> None:
-        """Drop every kind for *module_path*."""
+        """Drop every kind for *module_path*, and its dotted registration.
+
+        The dotted name has to go with the module (#1680). This cache is the
+        module-state boundary — ``end_module`` evicts it so one module group
+        does not observe the previous group's module-level state — and a
+        surviving ``sys.modules`` entry would hand that state to anything
+        importing the module by name, which is the boundary the eviction
+        exists to draw.
+
+        Only an entry that still refers to *this* module object is removed. If
+        something else has since claimed the name, it owns it now.
+        """
         for key in [k for k in self._modules if k[0] == module_path]:
-            del self._modules[key]
+            _unregister_dotted(self._modules.pop(key))
 
 
 _SYNTHETIC_PREFIX = "_oxitest_"
+
+# Marks a module object this loader built, whatever key it is registered under.
+#
+# The prefix above was always a proxy for "oxitest made this module", and it
+# stops being a reliable one once a module is also registered under its real
+# dotted name (#1680). The marker states the same fact directly, so the skip in
+# ``already_imported`` no longer depends on how the module happens to be spelled
+# in ``sys.modules``.
+_OXITEST_LOADED = "__oxitest_loaded__"
+
+
+def _unregister_dotted(module: Any) -> None:
+    """Remove *module*'s dotted ``sys.modules`` entry, if it owns one.
+
+    Three guards, each declining rather than deleting:
+
+    * a module with no dotted name has nothing to remove — its ``__name__`` is
+      the synthetic key, which its own caller owns;
+    * a module this loader did not build is not ours to unregister;
+    * an entry that no longer refers to this object belongs to whoever
+      replaced it.
+    """
+    name = getattr(module, "__name__", "")
+    if not name or name.startswith(_SYNTHETIC_PREFIX):
+        return
+    if not getattr(module, _OXITEST_LOADED, False):
+        return
+    if sys.modules.get(name) is module:
+        del sys.modules[name]
 
 
 def already_imported(module_path: str) -> ModuleType | None:
@@ -135,6 +175,13 @@ def already_imported(module_path: str) -> ModuleType | None:
     for name, module in list(sys.modules.items()):
         if name.startswith(_SYNTHETIC_PREFIX):
             continue
+        if getattr(module, _OXITEST_LOADED, False):
+            # A module this loader built, reachable under its real dotted name
+            # (#1680). Returning it would hand a caller the AST-rewritten copy
+            # as though it were the canonical import, which is what the prefix
+            # skip above exists to prevent — the dotted registration simply
+            # gives the same module a second, unprefixed spelling.
+            continue
         file = getattr(module, "__file__", None)
         # Basename first, so most candidates never reach the stat below.
         # os.path.basename ~165us/call against this repo's ~420-entry
@@ -153,15 +200,36 @@ def already_imported(module_path: str) -> ModuleType | None:
     return None
 
 
-def _load_module(module_path: str, unique_name: str) -> Any:
+def _load_module(
+    module_path: str, unique_name: str, *, spec_name: str | None = None
+) -> Any:
     """Load a Python file with AST assertion rewriting applied.
 
     Returns the loaded module.
     Raises _LoadError if the file cannot be read, parsed, or executed.
     unique_name is used as the sys.modules key; caller is responsible for cleanup.
+
+    *spec_name* is the module's own identity — its ``__name__``, and the
+    ``__package__`` derived from it. ``None`` keeps the older behaviour, where
+    the identity and the ``sys.modules`` key are one synthetic string.
+
+    The two are separate because they answer different questions (#1680). The
+    identity should be the real dotted name wherever one is truthful, because
+    relative imports and caller-identity introspection both read it.
+
+    When *spec_name* is given the module is registered under **both** keys, and
+    ``already_imported`` skips it by the ``_OXITEST_LOADED`` marker rather than
+    by the ``_oxitest_`` key prefix. #1962's duplicate-registration fix is
+    preserved that way: the fact it needs is "oxitest built this module", which
+    the marker states directly and the prefix only ever approximated.
+
+    It is passed to ``spec_from_file_location`` rather than assigned to
+    ``module.__package__`` afterwards: CPython compares ``__package__`` against
+    ``__spec__.parent`` during a relative import and warns when they disagree —
+    ``ImportWarning`` on 3.11, ``DeprecationWarning`` on 3.12 through 3.14.
     """
     path = Path(module_path)
-    spec = importlib.util.spec_from_file_location(unique_name, path)
+    spec = importlib.util.spec_from_file_location(spec_name or unique_name, path)
     if spec is None or spec.loader is None:
         raise _LoadError(_error_result(f"Cannot load module from {module_path}"))
 
@@ -179,11 +247,47 @@ def _load_module(module_path: str, unique_name: str) -> Any:
     module.__dict__["_OxitestAssertionError"] = _OxitestAssertionError
     module.__dict__["_oxitest_no_rhs"] = _OXITEST_NO_RHS
     module.__dict__["_oxitest_bare_asserts"] = bare_asserts
+    module.__dict__[_OXITEST_LOADED] = True
     sys.modules[unique_name] = module
+    # What the dotted key held before this call, so a failed load can put it
+    # back. The key is not necessarily free: a relative import from a sibling
+    # registers a module under exactly this name through the ordinary import
+    # system, so popping it on error would delete a module this call did not
+    # create. Absence and a stored ``None`` are different states, hence the
+    # membership test rather than a ``get`` with a default.
+    # Held as a mapping rather than a value: an empty one means "the key was
+    # free", which a `None` value cannot say — `sys.modules[name] = None` is a
+    # legal import-blocking entry, so absence and a stored `None` are
+    # different states. Restoring is then `update`, and it is a no-op when the
+    # key was free.
+    displaced = {
+        key: sys.modules[key]
+        for key in (spec_name,)
+        if key is not None and key in sys.modules
+    }
+    if spec_name is not None:
+        # The dotted name has to be a live sys.modules key, not only the
+        # module's __name__. The standard library resolves a class's module by
+        # looking its __module__ up here and dereferencing without a guard —
+        # `dataclasses._is_type` does `sys.modules.get(cls.__module__).__dict__`
+        # — and `typing.get_type_hints` reads the same mapping to evaluate
+        # string annotations after the module body has finished. Registering
+        # only the synthetic key took this repository's own suite to 46
+        # collection errors, because 49 of its test files define a dataclass
+        # and `from __future__ import annotations` makes the annotations
+        # strings.
+        #
+        # Both keys point at one module object, so this is a second spelling
+        # rather than a second import. `already_imported` skips it by the
+        # marker above.
+        sys.modules[spec_name] = module
     try:
         exec(code, module.__dict__)  # noqa: S102 — exec required for AST-rewritten module loading
     except Exception as exc:
         sys.modules.pop(unique_name, None)
+        if spec_name is not None:
+            sys.modules.pop(spec_name, None)
+            sys.modules.update(displaced)
         raise _LoadError(_error_result(traceback.format_exc())) from exc
     return module
 

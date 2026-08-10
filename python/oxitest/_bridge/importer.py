@@ -29,6 +29,7 @@ from oxitest._bridge._fn_metadata import _update, get_metadata
 from oxitest._bridge._loader import _load_module, _LoadError, already_imported
 from oxitest._bridge._mark_api import MarkInfo, _append_mark
 from oxitest._bridge._metadata import get_marks
+from oxitest._bridge._module_identity import dotted_name_for
 from oxitest._bridge._module_source_registrar import (
     register_module_source_fixtures,
     register_plugin_source_fixtures,
@@ -451,8 +452,9 @@ def _import_test_module(
     if canonical is not None and canonical.__name__.startswith("oxitest."):
         module = canonical
     else:
+        spec_name = dotted_name_for(path, getattr(session, "rootdir", None))
         try:
-            module = _load_module(path, unique_name)
+            module = _load_module(path, unique_name, spec_name=spec_name)
         except _LoadError as e:
             result = e.result
             if not isinstance(result, ErrorResult):

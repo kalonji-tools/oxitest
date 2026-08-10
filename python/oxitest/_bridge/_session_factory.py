@@ -31,4 +31,4 @@ def create_session(*, rootdir: str | None = None) -> FixtureSession:
     """
     if rootdir is not None:
         ensure_rootdir_importable(rootdir)
-    return FixtureSession([])
+    return FixtureSession([], rootdir=rootdir)

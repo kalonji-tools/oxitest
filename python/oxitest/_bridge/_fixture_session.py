@@ -90,6 +90,9 @@ class _SessionProtocol(Protocol):
     @property
     def async_backend(self) -> AsyncBackend: ...
 
+    @property
+    def rootdir(self) -> str | None: ...
+
     def resolve_for_test(
         self,
         fn: Callable[..., Any],
@@ -348,8 +351,11 @@ class FixtureSession:
         conftest_defs: list[FixtureDef] | FixtureRegistry,
         plugin_registry: PluginRegistry | None = None,
         async_backend: AsyncBackend | None = None,
+        *,
+        rootdir: str | None = None,
     ) -> None:
         BuiltinFixture.ensure_registered()
+        self._rootdir = rootdir
         self._registry = FixtureRegistry()
         self._plugin_registry = plugin_registry or PluginRegistry()
         self._async_mgr = SharedAsyncManager(async_backend or AsyncioBackend())
@@ -599,6 +605,17 @@ class FixtureSession:
     @property
     def async_backend(self) -> AsyncBackend:
         return self._async_mgr.backend
+
+    @property
+    def rootdir(self) -> str | None:
+        """The project rootdir, or ``None`` when the session has no project.
+
+        Held so both load routes can derive a module's dotted name from it
+        (#1680). ``ensure_rootdir_importable`` consumes the same value to put
+        the directory on ``sys.path`` (#1780) — the two uses are one fact, and
+        the round trip in ``_module_identity`` is what checks they agree.
+        """
+        return self._rootdir
 
     @async_backend.setter
     def async_backend(self, value: AsyncBackend) -> None:
