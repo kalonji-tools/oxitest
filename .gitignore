@@ -227,9 +227,6 @@ junit.xml
 docs/superpowers/
 plans/
 
-# Graphify (generated dependency graph output)
-graphify-out/
-
 # MkDocs build output
 docs/site/
 docs/internals/book/
