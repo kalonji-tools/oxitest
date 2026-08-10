@@ -1,6 +1,8 @@
 """Cross-platform test timeout enforcement.
 
-Unix/macOS: uses signal.alarm (SIGALRM) — main thread only, zero overhead.
+Unix/macOS: uses signal.setitimer (ITIMER_REAL/SIGALRM) — main thread only,
+zero overhead. The process has exactly one ITIMER_REAL slot, so this arm does
+not own its timer exclusively; it saves and restores what it found (#2001).
 Windows: uses ctypes.pythonapi.PyThreadState_SetAsyncExc via threading.Timer —
 best-effort; fires at the next Python bytecode boundary after the deadline.
 C extensions holding the GIL without yielding may delay the Windows interrupt.
@@ -25,6 +27,7 @@ __all__ = [
 import ctypes
 import signal
 import threading
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -67,9 +70,27 @@ class _IdleHandler:
 @dataclass(frozen=True, slots=True)
 class _ActiveHandler:
     old_handler: Any
+    #: Seconds left on the enclosing deadline when this context armed, or 0.0
+    #: when nothing was pending. Restoring it is what makes the context nestable.
+    enclosing_remaining: float
+    #: What was actually armed — the requested value, or the enclosing remaining
+    #: when that was tighter.
+    effective: float
+    entered_at: float
 
 
 _UnixHandlerState = _IdleHandler | _ActiveHandler
+
+#: Slack between the ``getitimer`` read and the ``monotonic`` read in
+#: ``__exit__``. Both measure the same wall-clock interval, so a run nobody
+#: interfered with reports zero drift; this absorbs the gap between two
+#: syscalls only, and is not a tuned tolerance (#2001).
+_READ_SKEW_SECONDS = 0.25
+
+#: Re-armed instead of 0 when the enclosing deadline has already expired.
+#: ``setitimer(0)`` means *cancel*, which would silently drop an expired
+#: enclosing deadline instead of letting it fire.
+_MIN_REARM_SECONDS = 0.000001
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,10 +107,15 @@ _WindowsTimerState = _IdleTimer | _ActiveTimer
 
 
 class _UnixTimeoutContext:
-    """Timeout context manager using SIGALRM (Unix/macOS only).
+    """Timeout context manager using ITIMER_REAL/SIGALRM (Unix/macOS only).
 
-    Must be called from the main thread — signal.alarm and signal.signal
+    Must be called from the main thread — signal.setitimer and signal.signal
     raise ValueError when called from a non-main thread.
+
+    The process has exactly one ITIMER_REAL slot, so this context does not own
+    it exclusively. It saves the enclosing deadline on entry and restores it on
+    exit, caps its own deadline at whatever the enclosing one has left, and
+    reports when something else wrote the slot while it was held (#2001).
     """
 
     #: SIGALRM interrupts a blocking C call: measured, ``time.sleep(5)`` under a
@@ -101,17 +127,56 @@ class _UnixTimeoutContext:
     def __init__(self, seconds: int) -> None:
         self._seconds = seconds
         self._state: _UnixHandlerState = _IdleHandler()
+        self._effective_seconds: float = float(seconds)
+        self._deadline_taken = False
+
+    @property
+    def effective_seconds(self) -> float:
+        """The deadline actually armed, which the enclosing one may have capped."""
+        return self._effective_seconds
+
+    @property
+    def deadline_taken(self) -> bool:
+        """True when something else wrote the timer while this context held it."""
+        return self._deadline_taken
 
     def __enter__(self) -> None:
         old = signal.signal(signal.SIGALRM, self._raise)
-        self._state = _ActiveHandler(old_handler=old)
-        signal.alarm(self._seconds)
+        enclosing = signal.getitimer(signal.ITIMER_REAL)[0]
+        effective = float(self._seconds)
+        if 0.0 < enclosing < effective:
+            effective = enclosing
+        signal.setitimer(signal.ITIMER_REAL, effective)
+        self._effective_seconds = effective
+        self._deadline_taken = False
+        self._state = _ActiveHandler(
+            old_handler=old,
+            enclosing_remaining=enclosing,
+            effective=effective,
+            entered_at=time.monotonic(),
+        )
 
-    def __exit__(self, *_: object) -> None:
-        signal.alarm(0)
-        if isinstance(self._state, _ActiveHandler):
-            signal.signal(signal.SIGALRM, self._state.old_handler)
-            self._state = _IdleHandler()
+    def __exit__(self, exc_type: object = None, *_: object) -> None:
+        state = self._state
+        if not isinstance(state, _ActiveHandler):
+            return
+        remaining = signal.getitimer(signal.ITIMER_REAL)[0]
+        elapsed = time.monotonic() - state.entered_at
+        # The in-flight exception is the honest signal that the deadline fired.
+        # A deadline that fired and one that was cancelled both leave the slot
+        # at 0.0, so arithmetic alone cannot tell them apart (#2001).
+        fired = exc_type is OxitestTimeoutError
+        predicted = max(state.effective - elapsed, 0.0)
+        self._deadline_taken = (
+            not fired and abs(remaining - predicted) > _READ_SKEW_SECONDS
+        )
+        if state.enclosing_remaining > 0.0:
+            rest = state.enclosing_remaining - elapsed
+            signal.setitimer(signal.ITIMER_REAL, max(rest, _MIN_REARM_SECONDS))
+        else:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, state.old_handler)
+        self._state = _IdleHandler()
 
     @staticmethod
     def _raise(_signum: int, _frame: object) -> None:
@@ -149,6 +214,7 @@ class _WindowsTimeoutContext:
 
     def __init__(self, seconds: int) -> None:
         self._seconds = seconds
+        self._effective_seconds: float = float(seconds)
         self._state: _WindowsTimerState = _IdleTimer()
         # Guards the state transition against the timer thread. Timer.cancel()
         # is only `self.finished.set()`, and Timer.run() checks `is_set()`
@@ -163,6 +229,22 @@ class _WindowsTimeoutContext:
         # the very leak this guard exists to prevent.
         self._armed_thread_id: int | None = None
 
+    @property
+    def effective_seconds(self) -> float:
+        """The deadline actually armed. Never capped — see ``deadline_taken``."""
+        return self._effective_seconds
+
+    @property
+    def deadline_taken(self) -> bool:
+        """Always False: a per-instance timer has no shared slot to lose (#2001).
+
+        Nesting on this arm runs two independent timers and the first to fire
+        wins, which reaches the same ``min`` invariant the Unix arm reaches by
+        capping. There is no process-global slot for other code to write, so
+        there is nothing to detect.
+        """
+        return False
+
     def __enter__(self) -> None:
         thread_id = threading.get_ident()
         timer = threading.Timer(self._seconds, lambda: self._inject(thread_id))
@@ -172,7 +254,13 @@ class _WindowsTimeoutContext:
             self._armed_thread_id = thread_id
         timer.start()
 
-    def __exit__(self, *_: object) -> None:
+    def __exit__(self, exc_type: object = None, *_: object) -> None:
+        # `exc_type` is unread here and named only to keep one __exit__ signature
+        # across both arms: `_TimeoutContext` is a union the wrapper dispatches
+        # over, so a divergent signature is a Liskov violation ty refuses. The
+        # Unix arm reads it to tell a fired deadline from a cancelled one; this
+        # arm has no shared slot, so it has nothing to tell apart (#2001).
+        del exc_type
         with self._lock:
             if isinstance(self._state, _ActiveTimer):
                 self._state.timer.cancel()

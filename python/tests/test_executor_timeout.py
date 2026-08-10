@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import signal
 import threading
 import time
 from collections.abc import AsyncGenerator
@@ -242,8 +243,12 @@ def test_async_test_keeps_an_arm_that_can_bound_blocking_calls() -> None:
         def __enter__(self) -> None:
             entered.append("armed")
 
-        def __exit__(self, *_: object) -> None:
-            return
+        def __exit__(self, exc_type: object = None, *_: object) -> None:
+            # Signature tracks the base class, which grew `exc_type` in #2001 to
+            # tell a fired deadline from a cancelled one. Unread here for the
+            # same reason __enter__ does not call super(): this probe records a
+            # dispatch decision and never arms a real timer.
+            del exc_type
 
     wrapper = make_timeout_wrapper(60, is_async=True, context_cls=_Probe)
     wrapper(PassedResult)
@@ -461,3 +466,77 @@ def test_a_fired_timer_whose_test_finished_reports_passed() -> None:
     assert isinstance(result, PassedResult), (
         "a completed body must not be relabelled as a timeout by a late timer"
     )
+
+
+# ── #2001: the deadline is unowned ───────────────────────────────────────────
+#
+# `_UnixTimeoutContext` shares one process-global ITIMER_REAL slot with every
+# other writer in the process. These pin that it saves what it found, caps
+# itself to the enclosing deadline, and restores on the way out.
+
+
+def test_nested_unix_context_restores_the_enclosing_deadline() -> None:
+    """A nested context must hand the enclosing deadline back, not zero it.
+
+    Before #2001 the inner ``__exit__`` called ``signal.alarm(0)``, so the
+    enclosing test finished with no deadline at all.
+    """
+    if not hasattr(signal, "alarm"):
+        return
+    outer = _UnixTimeoutContext(seconds=30)
+    outer.__enter__()
+    try:
+        inner = _UnixTimeoutContext(seconds=1)
+        inner.__enter__()
+        inner.__exit__(None, None, None)
+        remaining = signal.getitimer(signal.ITIMER_REAL)[0]
+        assert remaining > 25, (
+            "the enclosing 30s deadline must survive an inner context;"
+            f" the slot holds {remaining}s, so the enclosing test would run unguarded"
+        )
+    finally:
+        outer.__exit__(None, None, None)
+
+
+def test_nested_unix_context_caps_at_the_enclosing_remaining() -> None:
+    """An inner deadline longer than the enclosing one must not extend it.
+
+    Arming the inner value as asked would silently grant the enclosing test more
+    time than its own deadline allows.
+    """
+    if not hasattr(signal, "alarm"):
+        return
+    outer = _UnixTimeoutContext(seconds=5)
+    outer.__enter__()
+    try:
+        inner = _UnixTimeoutContext(seconds=60)
+        inner.__enter__()
+        try:
+            armed = signal.getitimer(signal.ITIMER_REAL)[0]
+            assert armed <= 5, (
+                "an inner 60s deadline inside a 5s enclosing deadline must cap at 5s;"
+                f" the slot holds {armed}s, which breaks the enclosing promise"
+            )
+            assert inner.effective_seconds <= 5, (
+                "the context must report the value it armed, because the wrapper"
+                " reads it to build the timeout message"
+            )
+        finally:
+            inner.__exit__(None, None, None)
+    finally:
+        outer.__exit__(None, None, None)
+
+
+def test_unaffected_unix_context_arms_what_it_was_asked() -> None:
+    """With no enclosing deadline nothing is capped -- the common case."""
+    if not hasattr(signal, "alarm"):
+        return
+    ctx = _UnixTimeoutContext(seconds=7)
+    ctx.__enter__()
+    try:
+        assert ctx.effective_seconds == 7, (
+            "a context with no enclosing deadline must arm exactly what it was asked,"
+            " or every ordinary test would report the wrong limit"
+        )
+    finally:
+        ctx.__exit__(None, None, None)
