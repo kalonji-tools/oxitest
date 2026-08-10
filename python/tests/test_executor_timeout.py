@@ -781,3 +781,30 @@ def test_a_cleared_slot_is_detected_when_the_test_overruns() -> None:
         "a test that cleared its deadline and then ran past it must be detected;"
         " this is the shape of the real defect, where the overrun is the harm"
     )
+
+
+def test_a_periodic_enclosing_timer_keeps_its_interval() -> None:
+    """``getitimer`` returns two values, and both belong to the enclosing timer.
+
+    Restoring only the time left turns a repeating ITIMER_REAL into a one-shot.
+    The module docstring and ADR-0016 both say the arm restores what it found,
+    so restoring half of it would make those statements wider than the code.
+    """
+    if not hasattr(signal, "alarm"):
+        return
+    # This test writes the process timer, which is exactly what voids a
+    # Deadline. Its own Deadline -- the suite's ambient one -- is therefore
+    # borrowed, and it has to be handed back, or oxitest correctly reports this
+    # test as `warned` for doing what the feature exists to detect.
+    borrowed_value, borrowed_interval = signal.getitimer(signal.ITIMER_REAL)
+    try:
+        signal.setitimer(signal.ITIMER_REAL, 30.0, 5.0)
+        with _UnixTimeoutContext(seconds=1):
+            pass
+        _, interval = signal.getitimer(signal.ITIMER_REAL)
+        assert interval == 5.0, (
+            "the enclosing timer repeats every 5s; a context that hands back only"
+            f" the time left leaves it a one-shot. Interval is now {interval}"
+        )
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, borrowed_value, borrowed_interval)
