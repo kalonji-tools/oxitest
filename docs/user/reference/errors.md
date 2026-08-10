@@ -665,10 +665,10 @@ Execution errors occur while tests are running.
 ---
 
 ```text
-TimeoutError: test exceeded <N>s timeout
+Timed out after <N>s
 ```
 
-**Cause:** A test ran longer than the configured timeout. The timeout may come
+**Cause:** A test ran longer than its deadline. The deadline may come
 from the `--timeout` CLI flag, the `timeout` key in `pyproject.toml`, or a
 per-test `@mark.timeout(N)` decorator.
 
@@ -686,6 +686,38 @@ import oxitest
 def test_slow_operation():
     ...
 ```
+
+---
+
+```text
+Timed out after <N>s (the requested <M>s was capped by an enclosing deadline)
+```
+
+**Cause:** The test runs inside another test that already has a deadline, and
+the enclosing deadline had less time left than this one asked for. The
+effective deadline is always the shortest of the live deadlines, so a nested
+deadline can never extend one that is already running (ADR-0016).
+
+**Fix:** Raise the enclosing deadline, not this one. Raising the nested value
+alone changes nothing, because the enclosing deadline is what cut the test.
+
+---
+
+```text
+the <N>s deadline was cleared during this test, so the test did not run under a deadline
+```
+
+**Cause:** The test is reported `warned` rather than `passed`. On Unix a
+deadline is delivered by one process-global timer. Code in the test wrote that
+timer — with `signal.alarm` or `signal.setitimer`, or through a library that
+uses one — which voids the deadline oxitest armed.
+
+oxitest does not lock the timer, because the timer is not oxitest's to lock. It
+reports the loss instead: the test passed, but it did not pass under the
+deadline it declared.
+
+**Fix:** Stop the test from writing the process timer, or accept the report. A
+test that needs its own timer cannot also have an oxitest deadline enforced.
 
 ---
 

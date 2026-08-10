@@ -80,6 +80,23 @@ def test_fast_path() -> None:
     A project-wide default timeout can be set in ``pyproject.toml`` under
     ``[tool.oxitest] timeout = N``. ``mark.timeout`` overrides it per test.
 
+!!! warning "One `mark.timeout` per test"
+
+    A second `mark.timeout` on the same test raises `ValueError` at import
+    time. Two deadlines on one test is an authoring mistake: the effective
+    deadline is the shorter of the two, so the other one never applies, and
+    which one survives depends on decorator order.
+
+    ```python
+    @oxitest.mark.timeout(seconds=2)
+    @oxitest.mark.timeout(seconds=20)   # ValueError at import
+    def test_two_deadlines() -> None:
+        ...
+    ```
+
+    A module-level `oxi_mark` timeout does not collide with a per-test one.
+    The per-test mark wins and the module mark is not applied.
+
 ---
 
 ## mark.parametrize
