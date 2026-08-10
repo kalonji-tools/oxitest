@@ -22,7 +22,12 @@ from oxitest._bridge._timeout import (
     _WindowsTimeoutContext,
     make_timeout_wrapper,
 )
-from oxitest._bridge.result import PassedResult, TimeoutResult
+from oxitest._bridge.result import (
+    FailedResult,
+    PassedResult,
+    TimeoutResult,
+    WarnedResult,
+)
 from tests import helpers
 
 
@@ -637,4 +642,46 @@ def test_an_undisturbed_context_is_not_reported_as_taken() -> None:
     assert not ctx.deadline_taken, (
         "finishing just inside the deadline must stay clean, or every slow test"
         " near its limit would be reported as interfered with"
+    )
+
+
+def test_a_taken_deadline_downgrades_a_pass_to_warned() -> None:
+    """A test that ran unguarded must not report a clean pass.
+
+    oxitest did not observe a failure. It observed that it could not observe,
+    and that is what the report has to say (#2001).
+    """
+    if not hasattr(signal, "alarm"):
+        return
+    wrapper = make_timeout_wrapper(5, context_cls=_UnixTimeoutContext)
+
+    def body_that_cancels_the_timer() -> PassedResult:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        return PassedResult()
+
+    result = wrapper(body_that_cancels_the_timer)
+    helpers.assert_result(
+        result,
+        WarnedResult,
+        why="a pass earned without a live deadline is not the same claim as a pass,"
+        " and only a result variant attributes that to the test in default output",
+    )
+
+
+def test_a_taken_deadline_does_not_rewrite_a_failure() -> None:
+    """A test that failed on its own keeps its failure -- the deadline is moot."""
+    if not hasattr(signal, "alarm"):
+        return
+    wrapper = make_timeout_wrapper(5, context_cls=_UnixTimeoutContext)
+
+    def failing_body_that_cancels_the_timer() -> FailedResult:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        return FailedResult(message="boom")
+
+    result = wrapper(failing_body_that_cancels_the_timer)
+    helpers.assert_result(
+        result,
+        FailedResult,
+        why="the deadline is irrelevant to a test that failed on its own; rewriting"
+        " it to warned would hide a real failure behind a warning",
     )
