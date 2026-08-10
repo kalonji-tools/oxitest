@@ -22,7 +22,6 @@ import inspect
 from collections.abc import Callable
 from typing import Any, TypeVar, overload
 
-from oxitest._bridge._errors import AutouseRegistrationError
 from oxitest._bridge._fixture_context import _fixture_context
 from oxitest._bridge._fixture_registry import ConftestSource, FixtureDef, FixtureScope
 from oxitest._bridge._fn_metadata import _update, get_metadata
@@ -117,54 +116,62 @@ class FixtureAccessor:
 
 
 class Fixtures:
-    """Instance-based fixture registry. Create one per conftest.py.
+    """The ``fx:`` injection annotation. Not a registry — see :meth:`__init__`.
 
-    Fixtures are setup routines that produce values injected into tests via
-    the :class:`Fixture` annotation. Register a callable with
-    :meth:`fixture` — either as a bare decorator or with options
-    (``autouse``, ``shared``, ``name``) — and the registered function
-    becomes discoverable at test-collection time.
+    A bare ``fx: Fixtures`` parameter injects the namespace accessor, so
+    ``fx.db.conn`` reads the fixture ``conn`` declared under the anchor ``db``.
+    Injection matches this class by identity, which is why the name survives
+    ADR-0009 Rule 5's retirement rather than being freed (#1720).
 
-    The optional ``name`` parameter on ``Fixtures()`` sets the namespace
-    name used when accessing fixtures via ``fx: Fixtures`` (e.g.
-    ``fx.db.conn``). If omitted, the name is derived from the variable
-    name in conftest.py (``db = Fixtures()`` → namespace ``"db"``).
+    Calling it raises. Fixtures are declared with ``@oxi.fixture`` in a
+    ``__fixtures__.py``, an ``__init__.py``, or inline in a test module.
 
     See Also:
-        - :class:`Fixture` — the injection-signal annotation.
-        - :class:`Yields` — return-type annotation for yield fixtures.
+        - :class:`Fixture` — the per-parameter injection annotation.
+        - ``docs/user/how-to/migrate-from-old-oxitest.md`` — the full mapping.
 
     Examples:
-        Register fixtures on a module-level ``fixtures`` instance in
-        ``conftest.py``:
+        Calling it refuses, and the message names the replacement:
 
-        >>> from oxitest import Fixtures
-        >>> fixtures = Fixtures()
-        >>> @fixtures.fixture
-        ... def db() -> str:
-        ...     return "db://test"
-        >>> len(fixtures.defs)
-        1
-        >>> fixtures.defs[0].name
-        'db'
-
-        A custom name overrides the function name at registration:
-
-        >>> @fixtures.fixture(name="cache")
-        ... def _redis_client() -> str:
-        ...     return "redis://localhost"
-        >>> [d.name for d in fixtures.defs]
-        ['db', 'cache']
+        >>> from oxitest import Fixtures, raises
+        >>> with raises(TypeError) as caught:
+        ...     Fixtures()
+        >>> "@oxi.fixture" in str(caught.value)
+        True
 
     """
 
     def __init__(self, name: str | None = None) -> None:
-        self._defs: list[FixtureDef[Any]] = []
-        self._defs_by_name: dict[str, FixtureDef[Any]] = {}
-        self._namespace_name: str = name or ""
-        frame = inspect.currentframe()
-        caller = frame.f_back if frame is not None else None
-        self._source_line: int = caller.f_lineno if caller is not None else 0
+        """Refuse the call. ``Fixtures`` is an annotation now, not a registry.
+
+        ADR-0009 Rule 5 reuses this name for the ``fx:`` injection annotation
+        rather than freeing it, so ``fixtures = oxitest.Fixtures()`` would
+        otherwise fail as a call on a name that means something else. The
+        message is what turns that into a migration (#1720).
+
+        Raised from ``__init__`` rather than ``__new__`` on purpose:
+        ``_read_fixtures`` builds an attribute shell with
+        ``Fixtures.__new__(Fixtures)``, which never reaches here.
+        """
+        del name
+        msg = (
+            "Fixtures() is no longer a registry.\n"
+            "\n"
+            "  Declare fixtures with @oxi.fixture in a __fixtures__.py, an\n"
+            "  __init__.py, or inline in a test module:\n"
+            "\n"
+            "      from oxitest import fixture\n"
+            "\n"
+            "      @fixture(lifetime='function')\n"
+            "      def db() -> Database:\n"
+            "          return Database()\n"
+            "\n"
+            "  The name Fixtures is now the proxy type annotation, so a bare\n"
+            "  'fx: Fixtures' parameter still injects the namespace accessor.\n"
+            "\n"
+            "  Migration guide: docs/user/how-to/migrate-from-old-oxitest.md"
+        )
+        raise TypeError(msg)
 
     @property
     def namespace_name(self) -> str:
@@ -262,7 +269,7 @@ class Fixtures:
             _update(f, fixture_name=fixture_name)
             is_async = inspect.iscoroutinefunction(f) or inspect.isasyncgenfunction(f)
             if autouse and not shared and is_async:
-                raise AutouseRegistrationError(f)
+                pass  # unreachable: Fixtures() refuses construction (#1720)
             defn = FixtureDef(
                 name=fixture_name,
                 fixture_type=object,  # placeholder — overwritten by conftest_loader

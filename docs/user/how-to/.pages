@@ -2,6 +2,7 @@ nav:
   - Filter tests: filter-tests.md
   - Configure testpaths: configure-testpaths.md
   - Migrate from pytest: migrate-from-pytest.md
+  - Migrate from the old fixture API: migrate-from-old-oxitest.md
   - Use markers: use-markers.md
   - Use parametrize: use-parametrize.md
   - Use fixtures: use-fixtures.md

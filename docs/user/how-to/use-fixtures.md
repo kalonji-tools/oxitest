@@ -652,7 +652,6 @@ new route's equivalent is [Async autouse](#async-autouse) above.
 | --- | --- |
 | sync factory, any scope | legal, unchanged |
 | async factory, `shared=True` | legal — applies to sync AND async tests |
-| async factory, `shared=False` (default) | **AutouseRegistrationError** |
 
 **Why the third row is refused.** A function-scope async autouse would
 only fire on async tests, silently skipping sync tests in the same suite
@@ -676,7 +675,7 @@ async def db_pool():
     yield
 ```
 
-See `AutouseRegistrationError` in the [error reference](../reference/errors.md).
+The refusal is reported as a collection violation naming the fixture.
 
 ### Use multiple namespaces
 

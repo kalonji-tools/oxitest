@@ -153,7 +153,6 @@ from oxitest._bridge._debugger import (
 )
 from oxitest._bridge._errors import (
     ArrangeError as ArrangeError,
-    AutouseRegistrationError as AutouseRegistrationError,
     BoundaryError as BoundaryError,
     SharedFixtureMutationError as SharedFixtureMutationError,
     TestContextUnavailableError as TestContextUnavailableError,
@@ -199,7 +198,6 @@ __all__ = [
     "ArrangeError",
     "AsyncBackend",
     "AsyncSession",
-    "AutouseRegistrationError",
     "Both",
     "BoundaryError",
     "CaptureResult",
