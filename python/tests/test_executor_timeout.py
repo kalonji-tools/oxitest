@@ -7,6 +7,7 @@ import threading
 import time
 from collections.abc import AsyncGenerator
 from types import MappingProxyType
+from typing import Any
 
 from oxitest import TempDir
 from oxitest._bridge._errors import OxitestTimeoutError
@@ -25,6 +26,7 @@ from oxitest._bridge._timeout import (
 from oxitest._bridge.result import (
     FailedResult,
     PassedResult,
+    TestResult,
     TimeoutResult,
     WarnedResult,
 )
@@ -572,7 +574,7 @@ def test_a_capped_deadline_reports_the_limit_it_enforced() -> None:
     """End to end: the wrapper reads the context, not its own argument."""
     if not hasattr(signal, "alarm"):
         return
-    inner_results: list[object] = []
+    inner_results: list[TestResult] = []
     inner_wrapper = make_timeout_wrapper(60, context_cls=_UnixTimeoutContext)
     outer_wrapper = make_timeout_wrapper(1, context_cls=_UnixTimeoutContext)
 
@@ -685,3 +687,59 @@ def test_a_taken_deadline_does_not_rewrite_a_failure() -> None:
         why="the deadline is irrelevant to a test that failed on its own; rewriting"
         " it to warned would hide a real failure behind a warning",
     )
+
+
+def test_both_arms_enforce_the_shorter_of_two_live_deadlines() -> None:
+    """The effective deadline is the minimum of the live deadlines, on both arms.
+
+    The Unix arm reaches this by capping to one timer; the Windows arm by two
+    independent timers where the first to fire wins. Pinning both means a later
+    change cannot make the platforms disagree without a test saying so.
+
+    WARNING: `context_cls` proves which arm is DISPATCHED, not that the arm
+    delivers on its own OS. Passing here on Linux is not coverage for Windows.
+    """
+    for context_cls in (_UnixTimeoutContext, _WindowsTimeoutContext):
+        if context_cls is _UnixTimeoutContext and not hasattr(signal, "alarm"):
+            continue
+        inner_results: list[TestResult] = []
+        inner_wrapper = make_timeout_wrapper(60, context_cls=context_cls)
+        outer_wrapper = make_timeout_wrapper(1, context_cls=context_cls)
+
+        def slow_body() -> PassedResult:
+            # A spin loop, not time.sleep: the ctypes arm fires only at a Python
+            # bytecode boundary, so a blocking C call is not bounded there
+            # (bounds_blocking_calls = False). Using sleep here would measure
+            # that documented difference instead of the min invariant, and the
+            # Windows arm would take the full 5s.
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                pass
+            return PassedResult()
+
+        def enclosing_body(
+            wrap: Any = inner_wrapper, sink: list[TestResult] = inner_results
+        ) -> PassedResult:
+            # Bound as defaults so each loop iteration captures its own wrapper.
+            sink.append(wrap(slow_body))
+            return PassedResult()
+
+        started = time.monotonic()
+        outer_wrapper(enclosing_body)
+        elapsed = time.monotonic() - started
+
+        assert inner_results, (
+            f"{context_cls.__name__}: the nested run must return a result, not let"
+            " the enclosing deadline escape as an exception"
+        )
+        helpers.assert_result(
+            inner_results[0],
+            TimeoutResult,
+            why=f"{context_cls.__name__} must enforce the enclosing 1s deadline over"
+            " the nested 60s one, or nesting silently extends a running deadline",
+        )
+        assert elapsed < 3, (
+            f"{context_cls.__name__} took {elapsed:.2f}s; the 1s enclosing deadline"
+            " must cut the 5s body, so anything near 5s means the shorter deadline"
+            " was not the one enforced"
+        )
