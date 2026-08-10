@@ -9,7 +9,6 @@ __all__ = [
     "ArrangeError",
     "AsyncDependencyError",
     "AsyncFixtureAccessError",
-    "AutouseRegistrationError",
     "BackendNotFoundError",
     "BoundaryError",
     "BroadFixtureTypeError",
@@ -460,63 +459,6 @@ def _relpath(path: str) -> str:
         return os.path.relpath(path)
     except ValueError:
         return path
-
-
-# Design rationale: see #1535 (Q5) and #1538.
-class AutouseRegistrationError(TypeError):
-    """Raised at decorator time on an illegal async-each autouse registration.
-
-    When it fires:
-        ``Fixtures.fixture`` registers a factory with the illegal combination
-        ``autouse=True`` + ``shared=False`` + async factory. This has no legal
-        semantics: it would only fire on async tests, silently skipping sync
-        ones. oxitest is strict — refuses the combination at registration so
-        the intent is stated up front.
-
-    How to fix:
-        Two supported options:
-
-        - Drop ``autouse=True`` and use ``@arrange(name)`` on the async tests
-          that need the fixture.
-        - Pass ``shared=True`` — a shared-scope async autouse applies to
-          both sync and async tests.
-
-    See Also:
-        - ``Fixtures.fixture`` for scope and autouse configuration.
-        - ``arrange`` for opt-in per-test fixture attachment.
-
-    Examples:
-        Registering an async function-scope autouse fixture raises this
-        at decorator time:
-
-        >>> from oxitest import Fixtures, AutouseRegistrationError, raises
-        >>> fx = Fixtures()
-        >>> with raises(AutouseRegistrationError):
-        ...     @fx.fixture(autouse=True, shared=False)
-        ...     async def bad() -> int:
-        ...         return 1
-
-    """
-
-    def __init__(self, func: Any) -> None:
-        code = func.__code__
-        defined_at = f"{_relpath(code.co_filename)}:{code.co_firstlineno}"
-        message = (
-            f"cannot register async fixture {func.__name__!r} as "
-            f"function-scope autouse.\n"
-            f"  Defined at:  {defined_at}\n"
-            f"  Scope:       each  (autouse=True)\n"
-            f"  Why:         a function-scope async autouse would only fire on\n"
-            f"               async tests; silently skipping sync tests hides the\n"
-            f"               mismatch. oxitest is strict: refuse the combination\n"
-            f"               at registration so the intent is stated up front.\n"
-            f"  Two ways forward:\n"
-            f"    1. Drop autouse=True and use @arrange({func.__name__!r}) on\n"
-            f"       the async tests that need it.\n"
-            f"    2. Pass shared=True — a shared-scope async autouse\n"
-            f"       applies to both sync and async tests.\n"
-        )
-        super().__init__(message)
 
 
 # ─── Arrange errors ──────────────────────────────────────────────────────────

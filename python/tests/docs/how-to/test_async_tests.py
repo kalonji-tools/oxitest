@@ -4,9 +4,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 
 import oxitest
-from oxitest import Fixture, Fixtures
-
-fx = Fixtures()
+from oxitest import Fixture, fixture
 
 
 # fmt: off
@@ -34,7 +32,7 @@ async def create_pool(url: str) -> _StubPool:
 
 # fmt: off
 # --8<-- [start:shared-async-fixture]
-@fx.fixture(shared=True)
+@fixture(lifetime="module")
 async def db_pool() -> AsyncGenerator[object, None]:
     pool = await create_pool("postgresql://localhost/testdb")
     yield pool
