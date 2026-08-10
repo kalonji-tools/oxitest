@@ -108,6 +108,30 @@ oxitest stops the test and reports it with status `timeout` if it exceeds the li
     returns. A test that sleeps for 5 seconds under a 1-second timeout is
     reported as a timeout on Windows, but only after the full 5 seconds.
 
+!!! warning "A deadline can be taken away from oxitest on Unix"
+
+    "Bounded" above assumes oxitest still holds the timer. On Unix the deadline
+    is delivered by **one process-global timer**, and oxitest does not own it
+    exclusively. A test that writes that timer — directly with `signal.alarm` or
+    `signal.setitimer`, or through a library that does — voids its own deadline:
+
+    ```python
+    def test_writes_the_timer():
+        signal.alarm(1)
+        signal.alarm(0)   # the test's own deadline is gone with it
+        time.sleep(30)    # no longer bounded by anything
+    ```
+
+    oxitest cannot prevent this — the timer is not oxitest's to lock. It reports
+    it instead: a test whose deadline was taken is reported as **warned** rather
+    than passed, because it did not run under the deadline it declared. Windows
+    is unaffected: it uses a per-test timer with no shared slot.
+
+    Nesting is different from interference and is handled. A test that runs
+    another test — through oxitest's own in-process API — keeps its deadline,
+    and the nested deadline is capped so it can never extend the enclosing one.
+    The effective deadline is always the shortest of the live deadlines.
+
 ## Apply marks to every test in a file
 
 Set the `oxi_mark` module-level variable to apply one or more marks to every

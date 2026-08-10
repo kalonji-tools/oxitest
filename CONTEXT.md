@@ -103,7 +103,9 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 **xfail** — Mark that declares a test as expected to fail. An xfail test that passes is an "xpass."
 
-**timeout** — Mark that sets a per-test deadline in seconds. A property of one test, chosen by its author. Distinct from the **watchdog**.
+**Deadline** — The time limit one test runs under, in seconds. Declared by the **timeout** mark, or ambiently for every test by the `timeout` key in `[tool.oxitest]`; a mark wins over the ambient value. Enforced in the worker, in the process that runs the test. Where more than one Deadline is live at once — a test that runs another test — the effective Deadline is the **shortest** of them, so nesting never extends a Deadline that is already running (ADR-0016). Distinct from the **watchdog**. On Unix a Deadline is delivered by a process-global timer that oxitest does not own exclusively: other code that writes that timer voids the Deadline, and the test is then reported as **warned** rather than counted as a pass it did not earn.
+
+**timeout** — The Mark that declares a **Deadline** on one test, `@oxi.mark.timeout(seconds=N)`. Exactly one is allowed per test; a second is refused where it is written. The `timeout` config key declares the same Deadline for every test without a Mark.
 
 **watchdog** — The coordinator's per-result silence budget for a worker. A worker that emits nothing for the budget is killed and every test in flight on it is reported as an error. Infrastructure, not a user-facing deadline: no test declares it, and exceeding it says nothing about how long any individual test ran.
 
