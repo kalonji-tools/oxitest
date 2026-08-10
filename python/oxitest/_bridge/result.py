@@ -503,7 +503,6 @@ class ViolationKind(StrEnum):
     INVALID_MODULE_MARK = "invalid_module_mark"
     MISSING_MARK_REASON = "missing_mark_reason"
     MISSING_RETURN_ANNOTATION = "missing_return_annotation"
-    REGISTRAR_IN_TEST_MODULE = "registrar_in_test_module"
     SINGLE_CASE_PARAMETRIZE = "single_case_parametrize"
     BROAD_FIXTURE_TYPE = "broad_fixture_type"
     UNUSED_FIXTURE = "unused_fixture"

@@ -18,7 +18,7 @@ excluded.
 Strict mode makes oxitest enforce conventions that experienced teams apply manually,
 automatically, and at the point where violations are cheapest to fix: before the test suite runs.
 
-## The nine checks
+## The eight checks
 
 ### Bare assert
 
@@ -176,36 +176,6 @@ fixtures are excluded from this check.
 Flagged when a fixture parameter uses a broad type like `object` or `Any`. These
 types defeat type checking and obscure what the fixture provides. Use the specific
 concrete type instead.
-
-Detected during test collection.
-
-### Registrar in test module
-
-=== "Triggers"
-
-    ```python
-    # tests/test_users.py
-    fx = oxitest.Fixtures()  # registrar in a test module, not conftest
-
-    @fx.fixture
-    def db() -> Database:
-        return Database()
-    ```
-
-=== "Clean"
-
-    ```python
-    # conftest.py
-    fx = oxitest.Fixtures()  # registrar belongs in conftest
-
-    @fx.fixture
-    def db() -> Database:
-        return Database()
-    ```
-
-Flagged when a `Fixtures()` registrar appears in a test module
-instead of `conftest.py`. Registrars in test modules are not visible to other
-test modules and indicate a structural mistake.
 
 Detected during test collection.
 

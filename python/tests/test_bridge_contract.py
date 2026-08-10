@@ -724,3 +724,27 @@ def test_no_debug_matches_default_debug_context() -> None:
     assert DebugContext() == NO_DEBUG, (
         "NO_DEBUG must remain the canonical default DebugContext instance"
     )
+
+
+def test_strict_mode_documents_one_section_per_violation_kind() -> None:
+    """The strict-mode guide's check count must match ViolationKind.
+
+    Retiring a check without editing the guide leaves readers looking for a
+    section that no longer exists, and the heading itself states a count
+    (#1720). Nothing else compares the two.
+    """
+    doc = (
+        pathlib.Path(__file__).resolve().parents[2]
+        / "docs"
+        / "user"
+        / "explanation"
+        / "strict-mode.md"
+    )
+    text = doc.read_text(encoding="utf-8")
+    sections = [ln for ln in text.splitlines() if ln.startswith("### ")]
+    kinds = list(ViolationKind)
+    assert len(sections) == len(kinds), (
+        f"strict-mode.md documents {len(sections)} checks but ViolationKind has "
+        f"{len(kinds)} — a reader sent to a retired check finds nothing, and the "
+        f"'The N checks' heading above them states the count outright"
+    )

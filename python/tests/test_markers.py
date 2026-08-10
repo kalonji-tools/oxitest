@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import time
+import unittest
 from collections.abc import Callable
 from types import MappingProxyType
 from typing import Any
@@ -791,3 +792,45 @@ def test_stacked_timeout_marks_are_refused_at_decoration() -> None:
         @oxitest.mark.timeout(seconds=20)
         def test_two_deadlines() -> None:
             pass
+
+
+# ── skip() and bare mark access ─────────────────────────────────────────────
+#
+# Moved from test_fixtures_dsl.py, which #1720 deletes. These four never had
+# anything to do with the Fixtures() registry that file was named for.
+
+
+def test_skip_raises_skip_test() -> None:
+    """oxitest.skip() raises SkipTest with the provided reason message."""
+    with raises(unittest.SkipTest) as exc_info:
+        oxitest.skip("not ready")
+    assert str(exc_info.value) == "not ready", (
+        f"oxitest.skip('not ready') should produce message 'not ready', got "
+        f"{str(exc_info.value)!r}"
+    )
+
+
+def test_skip_no_reason() -> None:
+    """oxitest.skip() with no argument still raises SkipTest."""
+    with raises(unittest.SkipTest):
+        oxitest.skip()
+
+
+def test_mark_attribute_callable_without_error() -> None:
+    """Mark attributes are callable with arbitrary args and don't raise on access."""
+    oxitest.mark.skip(reason="reason")
+    _ = oxitest.mark.xfail
+    oxitest.mark.anything("value")
+
+
+def test_mark_used_as_decorator_returns_function() -> None:
+    """Mark used as a bare decorator passes through the decorated function unchanged."""
+
+    @oxitest.mark.skip
+    def fn() -> None:
+        pass
+
+    assert callable(fn), (
+        "@oxitest.mark.skip used as decorator should return the original callable, got "
+        "non-callable"
+    )

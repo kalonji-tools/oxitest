@@ -13,16 +13,13 @@ import inspect
 import itertools
 import sys
 from collections.abc import Callable, Iterable
-from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Annotated, Any, cast, get_args, get_origin
 
-from oxitest._bridge._allow_comment import parse_allow_rules
 from oxitest._bridge._boundary import safe_call, safe_type_hints
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import CollectionError
 from oxitest._bridge._fixture_registry import (
-    ConftestSource,
     FixtureRegistry,
     _fixture_inner_type,
 )
@@ -477,75 +474,6 @@ def _import_test_module(
     return module
 
 
-def _check_module_registrars(
-    module: ModuleType,
-    path: str,
-    session: Any | None,
-) -> list[CollectedViolation]:
-    """Scan module for registrar instances — block or allow via comments.
-
-    Registrars are only valid in conftest.py. Finding them in test modules
-    is a strict-mode violation unless the instance line has an
-    ``# oxitest: allow[registrar-in-test-module]`` comment.
-
-    Without the allow comment: emit violation, do NOT register.
-    With the allow comment: register silently, no violation.
-    """
-    registry = getattr(session, "_registry", None) if session else None
-    violations: list[CollectedViolation] = []
-
-    # Read source file once for line lookups
-    try:
-        source_lines = (
-            Path(path)
-            .read_text(encoding="utf-8")
-            .splitlines(
-                keepends=True,
-            )
-        )
-    except OSError:
-        source_lines = []
-
-    for attr_name in vars(module):
-        obj = getattr(module, attr_name)
-        if not isinstance(obj, Fixtures):
-            continue
-
-        source_line_num = getattr(obj, "_source_line", 0)
-
-        # Check for allow comment on the instance line
-        allowed = False
-        if source_line_num > 0 and source_line_num <= len(source_lines):
-            line = source_lines[source_line_num - 1]
-            allowed = "registrar-in-test-module" in parse_allow_rules(line)
-
-        if allowed:
-            # Authorized — register silently
-            if registry is not None:
-                for defn in obj.defs:
-                    registry.register(
-                        dataclasses.replace(
-                            defn,
-                            source=ConftestSource(
-                                func=defn.source.func, conftest_path=path
-                            ),
-                        )
-                    )
-        else:
-            # Blocked — emit violation, do NOT register
-            violations.append(
-                CollectedViolation(
-                    node_id=path,
-                    kind=ViolationKind.REGISTRAR_IN_TEST_MODULE,
-                    detail=f"Fixtures() instance '{attr_name}' — "
-                    f"move to conftest.py or add "
-                    f"# oxitest: allow[registrar-in-test-module]",
-                )
-            )
-
-    return violations
-
-
 def _collect_items(
     members: Iterable[tuple[str, object]],
     path: str,
@@ -628,10 +556,9 @@ def collect_module(
     unique_name = f"_oxitest_collect_{digest.hexdigest()[:12]}"
     module = _import_test_module(path, unique_name, session)
     _register_inline_fixtures(module, path, session)
-    fixture_violations = _check_module_registrars(module, path, session)
     module_marks, mark_violations = _extract_module_marks(module, path)
     items: list[CollectedItem] = []
-    violations: list[CollectedViolation] = list(mark_violations) + fixture_violations
+    violations: list[CollectedViolation] = list(mark_violations)
     for discover in (_module_members, _class_members):
         members = list(discover(module))
         _apply_module_marks(members, module_marks)

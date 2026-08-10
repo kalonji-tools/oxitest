@@ -44,10 +44,6 @@ pub enum PerTestViolation {
         node_id: NodeId,
         fixture_name: String,
     },
-    RegistrarInTestModule {
-        node_id: NodeId,
-        detail: String,
-    },
     SingleCaseParametrize {
         node_id: NodeId,
     },
@@ -66,7 +62,6 @@ impl PerTestViolation {
             | Self::InvalidModuleMark { node_id, .. }
             | Self::MissingMarkReason { node_id, .. }
             | Self::MissingReturnAnnotation { node_id, .. }
-            | Self::RegistrarInTestModule { node_id, .. }
             | Self::SingleCaseParametrize { node_id }
             | Self::UnusedFixture { node_id, .. } => node_id,
         }
@@ -171,12 +166,6 @@ pub fn check_collected(raw: Vec<RawViolation>) -> Vec<StrictViolation> {
                         fixture_name: r.detail,
                     },
                 )),
-                ViolationKind::RegistrarInTestModule => Some(StrictViolation::PerTest(
-                    PerTestViolation::RegistrarInTestModule {
-                        node_id,
-                        detail: r.detail,
-                    },
-                )),
                 ViolationKind::SingleCaseParametrize => Some(StrictViolation::PerTest(
                     PerTestViolation::SingleCaseParametrize { node_id },
                 )),
@@ -266,14 +255,6 @@ impl std::fmt::Display for PerTestViolation {
                     fixture_name
                 )
             }
-            Self::RegistrarInTestModule { node_id, detail } => {
-                write!(
-                    f,
-                    "{:<60}  registrar-in-test-module   {}",
-                    node_id.as_ref(),
-                    detail
-                )
-            }
             Self::SingleCaseParametrize { node_id } => {
                 write!(f, "{:<60}  single-case-parametrize", node_id.as_ref())
             }
@@ -352,9 +333,6 @@ pub fn per_test_error(v: &PerTestViolation) -> TestOutcome {
         }
         PerTestViolation::MissingReturnAnnotation { fixture_name, .. } => {
             format!("strict: fixture '{fixture_name}' is missing a return type annotation")
-        }
-        PerTestViolation::RegistrarInTestModule { detail, .. } => {
-            format!("strict: registrar in test module — {detail}")
         }
         PerTestViolation::SingleCaseParametrize { .. } => {
             "strict: @parametrize with a single case — use a plain test instead".to_string()
