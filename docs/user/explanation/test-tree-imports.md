@@ -52,20 +52,47 @@ resolvable. It cannot change a resolution that already succeeds. Enabling
 this feature therefore cannot change which code your existing suite runs —
 only what new imports become possible.
 
-## Absolute imports only
+## Relative imports
 
-`from .helpers import x` does **not** work from a test module. Test modules
-are loaded under synthetic names (`_bridge/_loader.py:50`) rather than their
-dotted package path, so they have no parent package for a relative import to
-resolve against.
+`from .helpers import x` works from a test module, and so does anything that
+reads the calling module's `__name__` — a logging library deciding whether to
+silence a caller, for instance.
 
-Absolute imports work because the rootdir on `sys.path` lets Python resolve
-`tests.helpers` (or whatever the package path is) from scratch, independent of
-how the importing module itself was loaded.
+Both work because a test module is loaded under the dotted name it would have
+if you imported it normally. oxitest derives that name from the file's path
+relative to the rootdir, then checks it: the name is used only when it resolves,
+through the current `sys.path`, back to that same file.
 
-Inside a *helper* module — one reached via such an absolute import, not
-loaded directly by oxitest — relative imports work normally, because that
-module is imported through the regular package machinery.
+When the name does not check out, the module keeps an internal name instead and
+relative imports from it do not resolve. Three things cause that:
+
+- **another `sys.path` entry owns the name** — an installed distribution that
+  also provides a top-level `tests`, say. The rootdir is *appended* to
+  `sys.path`, so the installed copy wins;
+- **the rootdir is not importable** — nothing on `sys.path` provides the
+  top-level name at all;
+- **a directory in the path cannot appear in a dotted name** — `my-tests`, for
+  example.
+
+In all three, the absolute spelling still works: `from tests.helpers import x`
+resolves through `sys.path` from scratch, independent of how the importing
+module was loaded.
+
+### A relatively-imported sibling is loaded twice
+
+This is worth knowing before it surprises you.
+
+`from .helpers import x` resolves through Python's ordinary import machinery,
+which builds its **own** copy of `helpers` — a different object from the one
+oxitest builds when it collects that file. oxitest's copy has its assertions
+rewritten, so failures report operand detail; the copy your relative import
+receives does not.
+
+It only matters when the sibling holds tests as well as helpers. oxitest runs
+its own rewritten copy, so your test results are unaffected; the module-level
+code in that file simply runs twice. This matches pytest's default import mode,
+and reconciling the two copies would mean claiming a name the fix deliberately
+leaves alone.
 
 ## Known boundary: nested projects
 
