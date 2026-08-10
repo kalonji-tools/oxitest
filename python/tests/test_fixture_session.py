@@ -493,9 +493,14 @@ def test_get_fixture_by_type_raises_on_unknown_type() -> None:
         "@oxi.arrange(MyType) users need to know plugin-provided types are "
         "one of three valid registration routes"
     )
-    assert "conftest" in msg, (
-        "@oxi.arrange(MyType) users need to know conftest fixtures with "
-        "matching return annotations are one of three valid registration routes"
+    assert "@oxi.fixture" in msg, (
+        "@oxi.arrange(MyType) users need to know an @oxi.fixture declaration "
+        "with a matching return annotation is one of three valid registration "
+        "routes — #1720 retired the conftest route this used to name"
+    )
+    assert "conftest" not in msg, (
+        "the conftest route is gone (#1720), so naming it sends the reader to "
+        "a file oxitest no longer reads for fixtures"
     )
     assert "Fixture[" not in msg, (
         "error message must NOT mention 'Fixture[<type>]' — that hint applies to "

@@ -16,7 +16,7 @@ PREDICATES:
   name()     Primary identifier match         [all resources]
   source()   Source file path match           [all resources]
   mark()     Has matching mark                [tests]
-  shared()   Is shared fixture                [fixtures]
+  shared()   Has lifetime=\"module\"            [fixtures]
   autouse()  Is autouse fixture               [fixtures]
   async()    Is async                         [tests, fixtures]
   protocol() Implements protocol              [plugins]

@@ -239,29 +239,6 @@ If a fixture needs the test's identity, declare `ctx: TestContext` on the
 **test** — where the four fields are real — and hand the value to the fixture
 from the test body.
 
-#### Legacy: the same fixture on a `Fixtures()` registrar
-
-!!! warning "Supported, but no longer the primary route"
-    This still works and is not deprecated. It is scheduled for removal in
-    [#1720](https://github.com/kalonji-tools/oxitest/issues/1720), at which
-    point `Fixtures()` and `conftest.py` discovery both go away together. New
-    fixtures belong in a `__fixtures__.py`.
-
-```python
-# conftest.py
-import oxitest as oxi
-from oxitest import TestContext
-
-fixtures = oxi.Fixtures()
-
-@fixtures.fixture
-def db_schema(ctx: TestContext) -> str:
-    schema = "test_schema"
-    create_schema(schema)
-    ctx.addfinalizer(lambda: drop_schema(schema))
-    return schema
-```
-
 ## See also
 
 - [Use built-in fixtures](../../how-to/use-builtin-fixtures.md) — how-to guide with examples

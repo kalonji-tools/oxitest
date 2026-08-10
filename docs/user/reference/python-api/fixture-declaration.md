@@ -165,7 +165,7 @@ def test_b(schema: Fixture[str]) -> None: ...     # refused: nothing is named `s
 
 `test_b` is refused **at collection**, before any test executes, however well its
 type matches. The same name-based pass validates both declaration routes — a
-`@oxi.fixture` in a declaration file and a legacy `Fixtures()` registrar are not
+`@oxi.fixture` in a declaration file and the retired `Fixtures()` registrar were not
 matched differently.
 
 !!! note "Why the name and not the type"

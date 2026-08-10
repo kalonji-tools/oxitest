@@ -381,6 +381,22 @@ mod tests {
     }
 
     #[test]
+    fn classify_init_file_is_a_declaration_too() {
+        let changed = vec![
+            "tests/api/__init__.py".to_string(),
+            "src/foo.py".to_string(),
+        ];
+        let (result, _) = classify_changed_files_with_diagnostics(changed);
+        assert_eq!(
+            result.declaration_files,
+            vec!["tests/api/__init__.py"],
+            "__init__.py is a declaration home (ADR-0009), so a change to one must \
+             select its subtree. Classified as source it would go to the import \
+             graph instead, and a fixture declared there would select nothing"
+        );
+    }
+
+    #[test]
     fn classify_non_python_ignored() {
         let changed = vec!["README.md".to_string(), "Cargo.toml".to_string()];
         let result = classify_changed_files_with_diagnostics(changed).0;

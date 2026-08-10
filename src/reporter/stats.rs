@@ -22,8 +22,7 @@ impl FixtureCacheStats {
     /// Format the fixture cache summary line.
     ///
     /// Labelled "fixture cache", not "shared fixture cache": these numbers
-    /// cover every cached tier, which since ADR-0009 slice 2 means
-    /// `lifetime="module"` fixtures as well as `shared=True` ones.
+    /// cover every cached tier, not one of them.
     pub(crate) fn summary(&self) -> String {
         let total = self.hits + self.misses;
         if total == 0 {
@@ -509,7 +508,7 @@ mod tests {
         assert_eq!(
             s, "fixture cache: no fixtures used",
             "the zero case must divide by nothing and must not say 'shared' — \
-             these numbers cover every cached tier, not just shared=True"
+             these numbers cover every cached tier, not one of them"
         );
     }
 

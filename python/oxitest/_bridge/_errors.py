@@ -68,8 +68,8 @@ def _default_fixture_not_found_message(name: str, namespace: str) -> str:
         return (
             f"fixture '{name}' not found in namespace '{namespace}'.\n"
             f"  Hint: check that '{namespace}' declares a fixture named "
-            f"'{name}' — in its package's __fixtures__.py, or in a Fixtures() "
-            f"instance of that name — or verify the spelling.\n"
+            f"'{name}' — in the __fixtures__.py or __init__.py of the anchor "
+            f"directory '{namespace}' — or verify the spelling.\n"
             f"  If '{name}' is declared inline in another test module it is "
             f"capped at 'module' lifetime and cannot be used here; move it to "
             f"__fixtures__.py to share it."
@@ -109,15 +109,18 @@ class FixtureTypeNotFoundError(FixtureNotFoundError):
     """Raised by get_fixture_by_type when no fixture is registered for the given type.
 
     Message names the three registration routes (BuiltinFixture, plugin
-    FixtureProvider, conftest return annotation) instead of the by-name hint.
+    FixtureProvider, declared fixture return annotation) instead of the
+    by-name hint. ``FixtureProvider`` is deliberate: Q21 kept it out of
+    #1720's scope, so it is still the route for a fixture whose value a
+    plugin entry point computes.
     """
 
     def __init__(self, type_name: str) -> None:
         msg = (
             f"no fixture registered for type '{type_name}' — must be a "
             f"BuiltinFixture, a plugin-provided FixtureProvider with matching "
-            f"fixture_type, or a conftest fixture with '{type_name}' as its "
-            f"return annotation."
+            f"fixture_type, or an @oxi.fixture declaration with '{type_name}' "
+            f"as its return annotation."
         )
         super().__init__(type_name, message=msg)
 
@@ -317,14 +320,14 @@ class SharedFixtureMutationError(RuntimeError, OxitestError):
         ``x.attr += y`` — on such a proxy raises.
 
     How to fix:
-        If per-test mutation is intentional, switch to a function-scope
-        fixture (``@Fixtures.fixture`` with ``shared=False``, the default)
-        so each test gets its own value. If it is unintentional, treat the
-        fixture value as read-only — build a fresh derived value instead
-        of writing to the shared one.
+        If per-test mutation is intentional, declare the fixture
+        ``@oxi.fixture(lifetime="function")`` so each test gets its own
+        value. If it is unintentional, treat the fixture value as
+        read-only — build a fresh derived value instead of writing to the
+        cached one.
 
     See Also:
-        - ``Fixtures.fixture`` for scope configuration.
+        - ``oxitest.fixture`` for the lifetime tiers.
 
     Examples:
         Mutating a shared-fixture proxy raises this error:

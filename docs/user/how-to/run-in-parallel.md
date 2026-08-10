@@ -86,10 +86,10 @@ See [Use markers](use-markers.md) for details.
 
 ## Understand session-scoped fixture behaviour in parallel runs
 
-Fixtures declared with `shared=True` are intended to run once per test session.
+Fixtures declared with `lifetime="process"` are intended to run once per worker.
 They do not. A worker does not build one fixture session and keep it: it pops
 **task groups** off a shared queue until the queue drains, and builds a fresh
-fixture session for each one. A `shared=True` fixture is therefore rebuilt once
+fixture session for each one. A `lifetime="module"` fixture is therefore rebuilt once
 **per task group** — not once per run, and not once per worker process.
 
 A task group is a single module unless a `lifetime="package"` declaration merges
@@ -106,7 +106,7 @@ is emitted only when auto-arrange is **disabled** (`auto_arrange = false`). With
 the default `fmt` log layer and `RUST_LOG=warn`:
 
 ```console
-WARN _oxitest::pipeline::execution: shared fixture will be rebuilt once per task group, not once per run; a task group is a single module unless a `package` declaration merges a subtree, so a run can build more instances than it has workers — use --serial to run them once, or remove shared=True from fixtures that can be function-scoped fixtures=my_db fixture_count=1 workers=2
+WARN _oxitest::pipeline::execution: shared fixture will be rebuilt once per task group, not once per run; a task group is a single module unless a `package` declaration merges a subtree, so a run can build more instances than it has workers — use --serial to run them once, or narrow the lifetime of fixtures that can be function-scoped fixtures=my_db fixture_count=1 workers=2
 ```
 
 To resolve it, choose one of these options:
@@ -117,8 +117,8 @@ To resolve it, choose one of these options:
     $ oxitest --serial
     ```
 
-2. **Remove `shared=True`** from fixtures that do not need true session scope. The
-   default (`shared=False`) sets up the fixture once per test, which is safe across
+2. **Narrow the lifetime** of fixtures that do not need a wide one.
+   `lifetime="function"` builds the fixture once per test, which is safe across
    workers.
 
 Cross-process fixture sharing (e.g. via sockets or shared memory) is explicitly

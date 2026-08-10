@@ -57,21 +57,21 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 ## Fixtures
 
-**Fixture** — A reusable value injected into test functions, or read through the `fx` proxy. Resolved primarily by type via `Fixture[T]` annotation. Sources: `@oxi.fixture` declarations in a `__fixtures__.py`, `__init__.py`, or inline in a `test_*.py`; conftest definitions; plugin providers; and builtins.
+**Fixture** — A reusable value injected into test functions, or read through the `fx` proxy. Resolved primarily by type via `Fixture[T]` annotation. Sources: `@oxi.fixture` declarations in a `__fixtures__.py`, `__init__.py`, or inline in a `test_*.py`; plugin providers; and builtins.
 
 **Fixture[T]** — Type annotation that signals oxitest to inject a fixture whose binding type is `T`. Resolution: match by type first; if ambiguous, the parameter name acts as a qualifier.
 
-**Binding Type** — The type a fixture provides, used as the primary key for resolution. For conftest fixtures, the return annotation. For plugins, `FixtureProvider.fixture_type`. For builtins, the registered `fixture_type`.
+**Binding Type** — The type a fixture provides, used as the primary key for resolution. For a declaration, the return annotation. For plugins, `FixtureProvider.fixture_type`. For builtins, the registered `fixture_type`.
 
 **Qualifier** — The parameter name used to disambiguate when multiple fixtures share the same binding type. Only consulted when type-based resolution yields more than one candidate.
 
 **FixtureRef[T]** — Type annotation on a dataclass field indicating the field holds a reference to a fixture function, not a literal value. Resolved at execution time.
 
-**Fixtures (registry)** — An instance-based registry (`fixtures = Fixtures()`) that collects fixture definitions via the `@fixtures.fixture` decorator.
+**Fixtures (annotation)** — The bare `fx: Fixtures` parameter annotation, which injects the namespace accessor. Injection matches it by identity. Calling it raises: it was an instance-based registry until #1720, and ADR-0009 Rule 5 reuses the name rather than freeing it.
 
-**Namespace** — The qualifier in `fx.<namespace>.<name>`. Two sources: the basename of a fixture's anchor directory (`tests/api/__fixtures__.py` → `api`), or the name of a `Fixtures()` instance, which is rejected if it is a Python keyword or builtin. Directory-derived namespaces are **not unique in a tree** — `tests/api/v1/` and `tests/admin/v1/` both derive `v1` — so `fx.v1.conn` means whichever declaration is visible from the reading test, and resolution picks the deepest visible anchor.
+**Namespace** — The qualifier in `fx.<namespace>.<name>`. The basename of a fixture's anchor directory (`tests/api/__fixtures__.py` → `api`). Directory-derived namespaces are **not unique in a tree** — `tests/api/v1/` and `tests/admin/v1/` both derive `v1` — so `fx.v1.conn` means whichever declaration is visible from the reading test, and resolution picks the deepest visible anchor.
 
-**Anchor** — The directory a fixture is scoped to: the package holding its `__fixtures__.py`, or, for an inline declaration, the test module itself. Conftest, plugin, and builtin fixtures have no anchor.
+**Anchor** — The directory a fixture is scoped to: the package holding its `__fixtures__.py`, or, for an inline declaration, the test module itself. Plugin, framework, and builtin fixtures have no anchor.
 
 **B1 boundary** — ADR-0009 Rule 3: a fixture is usable only by tests in its anchor package or a descendant of it. Enforced at access time on both resolution routes (`fx.` proxy and `Fixture[T]` injection), and again when a fixture resolves its own dependencies — those are governed by the fixture's anchor, not by the location of whichever test triggered resolution. On the `fx.` proxy a violation raises `BoundaryError` (diagnostic code `fixture-boundary`), which is distinct from `FixtureNotFoundError`: the fixture exists, elsewhere. The `Fixture[T]` route resolves by bare name and has no namespace segment to attribute, so it reports the invisible fixture as `FixtureNotFoundError`. A violation on **either** route sets the run's exit code to `UsageError` (4) without stopping the run — every test still reports (#1761). Both error types vote, because both are the same violation seen from different routes.
 
@@ -81,19 +81,13 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 **Lifetime** — What a `@oxi.fixture` declaration writes: `"function"` (per test), `"module"` (per test module), `"package"` (per anchor package — exactly once per run, which collapses the subtree onto one worker), or `"process"` (per worker process, so as many instances as `-n`; legal only in a rootdir package). Renamed from `"session"` by #1777, which is no longer accepted. Required keyword; there is no default. Capped by the declaration site (ADR-0009 Rule 4): inline declarations may not exceed `module`, enforced during registration rather than by the static prescan (#1859).
 
-**Scope** — The caching vocabulary `Lifetime` translates into, via `LIFETIME_SCOPES`. Six members: `each`, `module`, `package`, `process`, `session`, plus `shared`. `session` and `shared` are the tiers no `Lifetime` maps to — `session` holds the builtins and drains at the task boundary, `shared` is the legacy `Fixtures(shared=True)` tier — and both stay separate until #1720 retires the old API.
+**Scope** — The caching vocabulary `Lifetime` translates into, via `LIFETIME_SCOPES`. Five members: `each`, `module`, `package`, `process`, `session`. `session` is the one tier no `Lifetime` maps to — it holds the builtins and drains at the task boundary. The legacy `shared` tier collapsed into it in #1720; they always shared a rate.
 
-**Autouse** — A fixture that runs for every test in its B1 boundary without being requested, for its side effects; the value is discarded unless the test also requests it, in which case both routes share one instance. How often it runs follows its Lifetime, and where several apply they run widest-Lifetime-first. Legacy `conftest.py` autouse fixtures are ambient and run run-wide, exempt from B1 like the rest of that regime, until #1720 retires it.
+**Autouse** — A fixture that runs for every test in its B1 boundary without being requested, for its side effects; the value is discarded unless the test also requests it, in which case both routes share one instance. How often it runs follows its Lifetime, and where several apply they run widest-Lifetime-first.
 
 **Yield Fixture** — A fixture that uses `yield` to separate setup from teardown. Return type annotated `Yields[T]`.
 
 **Setup Completed** — Said of a yield fixture whose body has reached its `yield`, as distinct from one whose body merely *began*. Only a fixture whose setup completed is torn down: one interrupted before its `yield` has no post-`yield` half to run, and one that was never started would have its setup executed by the attempt. The distinction is load-bearing because a teardown is registered *before* the body is allowed to run — otherwise an interrupt arriving between the two would strand a set-up fixture with nothing to dispose it (ADR-0009 Amendment 11). The cost is deliberate and matches `contextlib.contextmanager`: a resource acquired before the `yield` and interrupted leaks, and a fixture that cannot accept that writes its own `try`/`finally` inside the body.
-
-## Conftest
-
-**conftest.py** — A reserved filename discovered by walking from rootdir to the test file's directory. Holds fixtures. Unlike pytest — and unlike `@oxi.fixture` declarations — its fixtures are registered **run-wide**, not scoped to the containing subtree, so they are exempt from the B1 boundary. Two visibility regimes therefore run side by side until `conftest.py` support is retired (#1720); the gap is tracked as #1760.
-
-**Allow Comment** — Inline comment `# oxitest: allow[rule-name]` that authorizes behavior that would otherwise be a strict-mode violation. Used to opt in to `Fixtures()` in test modules.
 
 ## Marks
 
@@ -143,9 +137,9 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 ## Auto-Arrangement
 
-**Auto-Arrangement** — Automatic grouping of tests onto the same worker based on shared fixture dependencies. Tests that transitively depend on the same `shared=True` fixture(s) are co-located on a single worker so the fixture is created once, not per-worker.
+**Auto-Arrangement** — Automatic grouping of tests onto the same worker based on wide-tier fixture dependencies. Tests that transitively depend on the same `lifetime="module"` fixture are co-located on a single worker so the fixture is created once, not per-worker. The input was `shared=True` until #1720 retired that tier.
 
-**Connected Component** — A set of fixture names linked by transitive dependency. If fixture A depends on shared fixture B, and fixture C also depends on B, then {A, B, C} form one connected component. All tests depending on any member land on the same worker.
+**Connected Component** — A set of fixture names linked by transitive dependency. If fixture A depends on an arrangement-input fixture B, and fixture C also depends on B, then {A, B, C} form one connected component. All tests depending on any member land on the same worker.
 
 **Arrangement Threshold** — The percentage of parallel-eligible tests beyond which the largest connected component triggers a fallback to serial execution. Controlled via `--auto-arrange[=THRESHOLD]`.
 
@@ -153,7 +147,7 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 **Subcommand** — A top-level operation that determines what oxitest does: `run` (execute tests, default), `debug` (interactive debugger), `query` (filter and print test artifacts), `inspect` (interactive TUI explorer), `env` (print environment). Each subcommand has its own flag set.
 
-**Inspect Node** — A navigable entity in the `inspect` TUI. One of five built-in kinds: Fixture, Test, Mark, Conftest, Plugin. Plugins may add extension node kinds. Each node has fields, edges to other nodes, and a detail view.
+**Inspect Node** — A navigable entity in the `inspect` TUI. One of five built-in kinds: Fixture, Test, Mark, Declaration, Plugin. Plugins may add extension node kinds. Each node has fields, edges to other nodes, and a detail view.
 
 **Overview** — The cartographic landing screen of `inspect`. Shows curated sections (e.g., Fixture Gravity, Marks, Signals) that reveal the shape and hotspots of the test suite. Sections populate progressively as phase-2 data arrives.
 
@@ -163,7 +157,7 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 **Edge** — A typed, directed connection between two inspect nodes (e.g., "depends on", "consumer of", "defined in"). Edges are followable — selecting one navigates to the target node.
 
-**Section** — A titled group of ranked items on the overview (e.g., Fixture Gravity, Marks, Conftests, Signals). Pluggable — plugins can contribute additional sections via `InspectSectionProvider`.
+**Section** — A titled group of ranked items on the overview (e.g., Fixture Gravity, Marks, Declarations, Signals). Pluggable — plugins can contribute additional sections via `InspectSectionProvider`.
 
 **ScopeMode** — Controls which nodes are searched in inspect's search mode. `Context` restricts candidates to the nodes visible on the current screen (e.g., edges on a Node Focus, items on the Overview). `Global` searches all nodes in the entire graph. Toggle between scopes with `Tab` while in search mode.
 

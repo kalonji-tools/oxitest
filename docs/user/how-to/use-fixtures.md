@@ -7,10 +7,9 @@
     See [PyO3 Bridge Contract](../../../internals/book/bridge.html) for how fixture lifecycle is managed across the Rust/Python boundary.
 
 Fixtures are declared with `@oxi.fixture` in a `__fixtures__.py` beside the
-tests that use them. An older route — a `Fixtures()` instance in `conftest.py`
-— is still fully supported and is documented in
-[Legacy: `Fixtures()` in `conftest.py`](#legacy-fixtures-in-conftestpy) at the
-bottom of this page.
+tests that use them. An older route — a `Fixtures()` instance in a
+`conftest.py` — was retired; see
+[Migrate from the old fixture API](migrate-from-old-oxitest.md).
 
 ## Decide whether you need a fixture
 
@@ -261,8 +260,7 @@ def engine() -> Iterator[Engine]:
     once per run — a schema migration, a shared artifact build — belongs at
     rootdir `package` and pays the parallelism cost. See
     [Run in parallel](run-in-parallel.md#understand-session-scoped-fixture-behaviour-in-parallel-runs)
-    for the subprocess model behind this, described there for the legacy
-    `shared=True` tier, which is rebuilt per task group for the same reason.
+    for the subprocess model behind this.
 
 ## Understand fixture visibility: the B1 boundary
 
@@ -436,9 +434,9 @@ under short names. Mix custom and built-in fixtures through the same `fx` parame
     test calls (#1949). Inside a fixture body, declare `ctx: TestContext` as a
     parameter instead.
 
-!!! warning "Reserved name"
-    Using `oxi` as a `Fixtures()` variable name is reserved and raises a `ValueError`
-    at load time.
+!!! warning "Reserved namespace"
+    `oxi` is reserved for the built-in namespace, so an anchor directory named
+    `oxi` is refused at load time.
 
 ## Inject fixtures without a parameter
 
@@ -556,183 +554,6 @@ A function-lifetime autouse fires for *every* test in the boundary, sync ones
 included, so an async factory there would be unusable for tests that never
 asked for it. The error names the declaration rather than failing once per sync
 test in scope.
-
-## Legacy: `Fixtures()` in `conftest.py`
-
-!!! warning "Supported, but no longer the primary route"
-    Everything in this section still works and is not deprecated. It is
-    scheduled for removal in
-    [#1720](https://github.com/kalonji-tools/oxitest/issues/1720), at which
-    point `Fixtures()` and `conftest.py` discovery both go away
-    together. New fixtures belong in a `__fixtures__.py`.
-
-    The two routes differ in one user-visible way beyond syntax: `conftest.py`
-    fixtures are registered run-wide and are exempt from
-    [the B1 boundary](#understand-fixture-visibility-the-b1-boundary).
-
-### Declare a Fixtures registry
-
-Create one `Fixtures()` instance (or more — all are discovered automatically)
-in `conftest.py` and decorate your factory functions with `@fx.fixture`.
-
-```python
---8<-- "python/tests/docs/how-to/fixtures/__fixtures__.py:declare-registry"
-
---8<-- "python/tests/docs/how-to/fixtures/__fixtures__.py:simple-fixture"
-```
-
-Injection works exactly as it does for `@oxi.fixture` declarations — annotate a
-test parameter with `Fixture[T]`:
-
-```python
---8<-- "python/tests/docs/how-to/fixtures/test_fixtures.py:inject-fixture"
-```
-
-The parameter name `data` doesn't need to match the fixture name `sample_data` —
-oxitest finds the fixture by its return type `list[int]`.
-
-### Yield teardown on a legacy fixture
-
-```python
---8<-- "python/tests/docs/how-to/fixtures/__fixtures__.py:yield-fixture"
-```
-
-### Depend on another legacy fixture
-
-```python
---8<-- "python/tests/docs/how-to/fixtures/__fixtures__.py:fixture-depends-on-fixture"
-```
-
-### Share a fixture across all tests with shared
-
-!!! note
-    "Shared" means cached beyond a single test, and frozen (immutable) to prevent cross-test interference. It does **not** mean one instance per run — see the parallel-mode note below.
-
-A fixture with `shared=True` is created once per **task group** and shared across
-every test in that group. In a serial run that is the whole run; under parallel
-execution a task group is a single test module unless a `lifetime="package"`
-declaration merges a subtree. The value is immutable — any attribute or item
-write raises `SharedFixtureMutationError` at runtime.
-
-```python
---8<-- "python/tests/docs/how-to/fixtures/__fixtures__.py:shared-fixture"
-```
-
-Use `shared=True` for read-only resources that are safe to rebuild, such as
-loaded configurations, compiled schemas, or database connection pools where
-mutation would cause cross-test interference. In parallel mode a worker builds a
-fresh fixture session for every task group it picks up, so a `shared=True`
-fixture is rebuilt once **per task group** — not once per run, and not once per
-worker. See
-[Run in parallel](run-in-parallel.md#understand-session-scoped-fixture-behaviour-in-parallel-runs).
-
-### Run legacy fixtures automatically with autouse
-
-A `Fixtures()` fixture with `autouse=True` runs for every test without being
-explicitly requested:
-
-```python
---8<-- "python/tests/docs/how-to/fixtures/autouse/__fixtures__.py:autouse-fixture"
-```
-
-This is the **legacy** route's autouse, and it differs from
-[the new one](#run-fixtures-automatically-with-autouse) in more than syntax: a
-`conftest.py` fixture is registered run-wide and is exempt from the B1
-boundary, so `autouse=True` here really does mean every test in the run. A
-`@oxi.fixture` declaration fires only within its own anchor's subtree.
-
-### Async autouse — legal combinations
-
-Not every `autouse` × `async` combination has legal semantics. The table
-below shows what registers and what is refused at decorator time. It describes
-the **legacy** `Fixtures()` route, whose tiers are `shared=True`/`False`; the
-new route's equivalent is [Async autouse](#async-autouse) above.
-
-| autouse × scope × async factory | Registers? |
-| --- | --- |
-| sync factory, any scope | legal, unchanged |
-| async factory, `shared=True` | legal — applies to sync AND async tests |
-
-**Why the third row is refused.** A function-scope async autouse would
-only fire on async tests, silently skipping sync tests in the same suite
-— a divergence that hides itself. oxitest's `strict = "abort"` DNA refuses
-that ambiguity at registration.
-
-**Two ways forward if you hit this:**
-
-```python
-# Option 1: drop autouse=True and @arrange on the tests that need it.
-@fx.fixture
-async def each_txn():
-    yield
-
-@arrange("each_txn")
-async def test_async_write(): ...
-
-# Option 2: change to shared scope — applies to both test kinds.
-@fx.fixture(autouse=True, shared=True)
-async def db_pool():
-    yield
-```
-
-The refusal is reported as a collection violation naming the fixture.
-
-### Use multiple namespaces
-
-Create multiple `Fixtures()` instances — one per concern. Each variable name becomes a
-namespace, and it must not be a Python keyword or builtin:
-
-```python
---8<-- "python/tests/docs/how-to/fixtures/__fixtures__.py:namespace-fixtures"
-```
-
-Access all of them through a single `fx: Fixtures` parameter. Fixtures resolve lazily —
-only what the test accesses is created:
-
-```python
---8<-- "python/tests/docs/how-to/fixtures/test_fixtures.py:namespace-test"
-```
-
-If two namespaces define a fixture with the same name, `fx.db.conn` and `fx.http.conn`
-are always independent — no name collisions.
-
-### Understand conftest.py loading
-
-oxitest discovers `conftest.py` files by walking up the directory tree from each
-test file to the rootdir. Every `conftest.py` found along the way is loaded, and
-its `Fixtures()` instances are registered in the fixture session.
-
-```text
-project/
-  conftest.py          ← loaded for all tests
-  tests/
-    conftest.py        ← loaded for tests in tests/ and below
-    test_api.py
-    unit/
-      conftest.py      ← loaded for tests in tests/unit/ only
-      test_helpers.py
-```
-
-**Loading order:** conftest files are loaded from the rootdir inward — outermost
-first. A fixture defined in `tests/conftest.py` can depend on one from
-`project/conftest.py`.
-
-**Name precedence:** when two conftest files at different levels define a fixture
-with the same name, the innermost (closest to the test file) wins. A fixture in
-`tests/unit/conftest.py` shadows a same-named fixture in `tests/conftest.py` for
-tests inside `tests/unit/`.
-
-**Eager loading:** all conftest files on the path are loaded at session start,
-before any tests run. This means import errors in conftest files are reported as
-collection errors (exit code 3).
-
-**Registration is run-wide.** Which conftest files load is decided by the
-walk-up, but once loaded, their fixtures live in a single flat registry for the
-run. A fixture from `tests/unit/conftest.py` is therefore resolvable from
-`tests/integration/test_x.py` whenever both directories contribute tests to the
-same run — oxitest is more permissive here than pytest, and more permissive
-than the B1 boundary that governs `@oxi.fixture`. Tracked as
-[#1760](https://github.com/kalonji-tools/oxitest/issues/1760).
 
 ## See also
 

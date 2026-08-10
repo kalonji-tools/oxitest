@@ -55,7 +55,7 @@ two sibling packages, or two test modules each declaring the name inline.
 **Type**: `RuntimeError`
 
 Raised when code attempts to mutate a shared fixture value. Shared fixtures
-(declared with `shared=True`) are wrapped in a `FrozenProxy` that intercepts
+(declared above `function` lifetime) are wrapped in a `FrozenProxy` that intercepts
 attribute assignment and item assignment, raising this error to prevent
 cross-test contamination.
 

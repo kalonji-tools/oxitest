@@ -98,8 +98,3 @@ declaration is visible from the reading test.
 If the namespace's name matches a package segment beside it, the segment wins in
 the shortcut form. Access the fixture without the qualifier from inside its own
 anchor, or use the full path.
-
-## Related
-
-- [Use fixtures](use-fixtures.md) — the full guide to the current API
-- [Fixture errors](../reference/errors.md) — what each failure means

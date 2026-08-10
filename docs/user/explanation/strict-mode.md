@@ -85,9 +85,7 @@ Detected when configuration is loaded.
 === "Triggers"
 
     ```python
-    fx = oxitest.Fixtures()
-
-    @fx.fixture
+    @oxi.fixture(lifetime="function")
     def db_conn():
         return Connection()
     ```
@@ -95,9 +93,7 @@ Detected when configuration is loaded.
 === "Clean"
 
     ```python
-    fx = oxitest.Fixtures()
-
-    @fx.fixture
+    @oxi.fixture(lifetime="function")
     def db_conn() -> Connection:
         return Connection()
     ```
@@ -131,10 +127,8 @@ Strict mode flags these — either add more cases or inline the value.
 === "Triggers"
 
     ```python
-    # conftest.py
-    fx = oxitest.Fixtures()
-
-    @fx.fixture
+    # __fixtures__.py
+    @oxi.fixture(lifetime="function")
     def unused_helper() -> str:
         return "never injected"
     ```
