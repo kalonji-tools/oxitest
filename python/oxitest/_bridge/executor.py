@@ -44,6 +44,7 @@ from oxitest._bridge._errors import (
     FixtureCycleError,
     FixtureNotFoundError,
     FixtureSetupError,
+    is_usage_error,
 )
 from oxitest._bridge._fixture_context import (
     TestRunContext,
@@ -254,7 +255,11 @@ def _load_and_resolve(
                     fixture_name, meta.module_path, fn_teardowns
                 )
     except (FixtureSetupError, FixtureNotFoundError) as exc:
-        return _error_result(str(exc))
+        # The Fixture[T] injection route. A fixture the test cannot see reports
+        # as FixtureNotFoundError here rather than as BoundaryError, because a
+        # bare name has no namespace segment to attribute (CONTEXT.md, B1
+        # boundary) — so both B1 routes reach the vote, not just the proxy one.
+        return _error_result(str(exc), usage_error=is_usage_error(exc))
 
     all_kwargs: dict[str, Any] = {**fixture_kwargs, **param_kwargs}
     return _ResolvedTest(module, fn_raw, fn, meta.fn_name, all_kwargs, fn_teardowns)
@@ -579,7 +584,9 @@ def _run_arrange_phase(
         AmbiguousFixtureError,
         FixtureCycleError,
     ) as exc:
-        return ArrangeFailed(error=_error_result(str(exc)))
+        return ArrangeFailed(
+            error=_error_result(str(exc), usage_error=is_usage_error(exc))
+        )
     return cell
 
 

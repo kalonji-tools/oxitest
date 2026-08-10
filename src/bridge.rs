@@ -1095,12 +1095,19 @@ fn extract_outcome(py_result: &Bound<'_, PyAny>) -> PyResult<TestOutcome> {
             let raw_frames: Vec<crate::worker_result::RawFrame> =
                 py_result.getattr("frames")?.extract()?;
             let frames: Vec<Frame> = raw_frames.into_iter().map(Into::into).collect();
+            // This arm also serves result types that carry no usage flag, so a
+            // missing attribute reads as false rather than aborting the run.
+            let usage_error: bool = py_result
+                .getattr("usage_error")
+                .and_then(|value| value.extract())
+                .unwrap_or(false);
             Ok(RawOutcome::Error {
                 message,
                 file: Utf8PathBuf::from(file),
                 lineno: LineNo::new(lineno),
                 source_line,
                 frames,
+                usage_error,
             }
             .into_test_outcome())
         }

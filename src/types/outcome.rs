@@ -40,6 +40,18 @@ pub struct FailureDiagnostic {
     pub frames: Vec<Frame>,
     /// Comparison operands for assertion failures; `None` for errors.
     pub comparison: Option<ComparisonDetail>,
+    /// True when this error means the suite is wired wrong rather than that the
+    /// test failed — a fixture the test cannot see, or a fixture dependency
+    /// whose lifetime cannot hold.
+    ///
+    /// Raises the run's exit code to
+    /// [`ExitCode::UsageError`](crate::types::ExitCode::UsageError) without
+    /// stopping the run, so every test still reports (#1761). Exit 4 is defined
+    /// by the class of the error, not by when it is detected (ADR-0014).
+    ///
+    /// Always `false` on a `Failed` outcome: an assertion failure is what the
+    /// code exists to be distinguished *from*.
+    pub usage_error: bool,
 }
 
 impl FailureDiagnostic {
@@ -58,6 +70,7 @@ impl FailureDiagnostic {
             source_line,
             frames,
             comparison: None,
+            usage_error: false,
         }
     }
 
@@ -348,6 +361,7 @@ mod outcome_tests {
                 op: "==".to_string(),
                 field_diffs: vec![],
             }),
+            usage_error: false,
         }));
         if let TestOutcome::Failed(d) = o {
             assert_eq!(d.lineno, LineNo::new(7));
@@ -763,6 +777,7 @@ mod outcome_tests {
                 op: "==".to_string(),
                 field_diffs: vec![],
             }),
+            usage_error: false,
         }));
         let diag = outcome.diagnostic().expect("Failed should return Some");
         assert_eq!(diag.file.as_str(), "tests/test_foo.py");

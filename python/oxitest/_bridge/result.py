@@ -222,6 +222,15 @@ class ErrorResult:
     source_line: str = ""
     exc_type: str = ""
     frames: tuple[Frame, ...] = ()
+    #: True when this error means the suite is wired wrong rather than that the
+    #: test failed. Raises the run's exit code to ``ExitCode::UsageError`` (4)
+    #: without stopping the run — every test still reports (#1761).
+    #:
+    #: Emitted on the wire only when true. The coordinator defaults a missing
+    #: key to false, which is what makes a version skew fail to a *failure*
+    #: rather than to a success: a worker built before #1761 sends no key and
+    #: its run stays at exit 1.
+    usage_error: bool = False
 
     @property
     def status(self) -> StatusKind:
@@ -251,6 +260,8 @@ class ErrorResult:
         )
         if self.frames:
             output["frames"] = [asdict(f) for f in self.frames]
+        if self.usage_error:
+            output["usage_error"] = True
         return output
 
 
@@ -407,13 +418,19 @@ TestResult = (
 
 
 def _error_result(
-    msg: str, file: str = "", lineno: int = 0, source_line: str = ""
+    msg: str,
+    file: str = "",
+    lineno: int = 0,
+    source_line: str = "",
+    *,
+    usage_error: bool = False,
 ) -> ErrorResult:
     return ErrorResult(
         message=msg,
         file=file,
         lineno=lineno,
         source_line=source_line,
+        usage_error=usage_error,
     )
 
 

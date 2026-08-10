@@ -163,6 +163,15 @@ pub enum WireResult {
         source_line: String,
         #[serde(default)]
         frames: Vec<RawFrame>,
+        /// The suite is wired wrong rather than the test having failed (#1761).
+        ///
+        /// Absent on any worker built before #1761. `default` is what makes a
+        /// version skew fail to a *failure*: no key means `false`, so the run
+        /// stays at exit 1 rather than dropping to 0. A fourth
+        /// `DiagnosticSeverity` would have failed the other way — `from_wire`
+        /// maps an unknown severity to a notice, and a run of notices exits 0.
+        #[serde(default)]
+        usage_error: bool,
     },
     #[serde(rename = "skipped")]
     Skipped {

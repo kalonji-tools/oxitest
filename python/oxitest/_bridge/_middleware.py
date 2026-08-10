@@ -202,7 +202,10 @@ class AsyncDepGuardMiddleware:
                         f"async fixture '{k}' cannot be used by sync test "
                         f"'{plan.fn_name}' — make the test async def"
                     )
-                    return lambda: _error_result(_msg)
+                    # ADR-0006's illegal cell. Stated rather than derived:
+                    # this guard builds a message instead of raising, so there
+                    # is no exception for is_usage_error to read (#1761).
+                    return lambda: _error_result(_msg, usage_error=True)
         return next_fn
 
 

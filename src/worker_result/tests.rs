@@ -2,6 +2,59 @@ use super::*;
 use crate::types::{self, Frame, LineNo, TestOutcome};
 use camino::Utf8PathBuf;
 
+mod usage_error_wire_tests {
+    use super::*;
+
+    #[test]
+    fn absent_usage_error_key_defaults_to_false() {
+        // A worker built before #1761 emits no `usage_error` key. The
+        // coordinator must read that as "not a usage error" and leave the run
+        // at exit 1 — failing to a failure. Defaulting the other way would make
+        // every ordinary error in a mixed-version run exit 4.
+        let line = r#"{"type":"result","node_id":"t.py::test_a","outcome":"error","duration_ms":1.0,"message":"boom"}"#;
+        let parsed: WireResult = serde_json::from_str(line).expect("a v7 error line must parse");
+        match parsed {
+            WireResult::Error { usage_error, .. } => assert!(
+                !usage_error,
+                "an absent usage_error key must default to false; a worker predating #1761 would otherwise turn every error it reports into a usage error"
+            ),
+            _ => panic!("the outcome tag says error, so serde must select the Error variant"),
+        }
+    }
+
+    #[test]
+    fn usage_error_key_is_read_when_present() {
+        let line = r#"{"type":"result","node_id":"t.py::test_a","outcome":"error","duration_ms":1.0,"message":"boundary","usage_error":true}"#;
+        let parsed: WireResult = serde_json::from_str(line).expect("a v7 error line must parse");
+        match parsed {
+            WireResult::Error { usage_error, .. } => assert!(
+                usage_error,
+                "the parallel path carries the vote only on this key — drop it and a `-n 2` run silently keeps exit 1 while the same suite run serially reports 4"
+            ),
+            _ => panic!("the outcome tag says error, so serde must select the Error variant"),
+        }
+    }
+
+    #[test]
+    fn the_flag_survives_conversion_to_a_test_outcome() {
+        let raw = RawOutcome::Error {
+            message: "BoundaryError: not visible from this test".to_string(),
+            file: Utf8PathBuf::from("mod.py"),
+            lineno: LineNo::new(7),
+            source_line: "_ = fx.api.conn".to_string(),
+            frames: vec![],
+            usage_error: true,
+        };
+        match raw.into_test_outcome() {
+            TestOutcome::Error(diagnostic) => assert!(
+                diagnostic.usage_error,
+                "the conversion is the single path both transports share; dropping the flag here would disable the vote on the PyO3 path and the worker path at once"
+            ),
+            _ => panic!("a RawOutcome::Error must convert to TestOutcome::Error"),
+        }
+    }
+}
+
 mod frame_tests {
     use super::*;
 
@@ -1043,6 +1096,7 @@ mod raw_outcome_tests {
             lineno: LineNo::new(7),
             source_line: "raise RuntimeError".to_string(),
             frames: vec![],
+            usage_error: false,
         }
         .into_test_outcome();
         match outcome {
@@ -1085,6 +1139,7 @@ mod raw_outcome_tests {
                     locals: vec![],
                 },
             ],
+            usage_error: false,
         }
         .into_test_outcome();
         match outcome {
@@ -1108,6 +1163,7 @@ mod raw_outcome_tests {
             lineno: LineNo::new(1),
             source_line: String::new(),
             frames: vec![],
+            usage_error: false,
         }
         .into_test_outcome();
         match outcome {

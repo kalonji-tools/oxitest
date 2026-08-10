@@ -177,6 +177,20 @@ pub struct RunStats {
     pub(crate) timings: Vec<TimingEntry>,
     pub(crate) fixture_cache: Option<FixtureCacheStats>,
     pub(crate) fixture_timings: Vec<FixtureTimingEntry>,
+    /// Tests that errored because the suite is wired wrong, rather than because
+    /// an assertion failed.
+    ///
+    /// A non-empty set makes the run exit
+    /// [`ExitCode::UsageError`](crate::types::ExitCode::UsageError) (#1761).
+    ///
+    /// Node ids rather than a flag or a count, because a retry that passes must
+    /// clear **only its own** violation. `record_flaky` also clears the ordinary
+    /// failure counters, but those are per-kind totals, so clearing them needs
+    /// no identity. This does: a run can hold one test's wiring error and a
+    /// different test's ordinary error, and if the second goes flaky it must not
+    /// cancel the first. A flag cannot express that, and a count would decrement
+    /// the wrong violation.
+    pub(crate) usage_error_ids: std::collections::HashSet<NodeId>,
 }
 
 /// Return the `n` items with the largest key, sorted descending.
@@ -209,6 +223,7 @@ impl RunStats {
             timings: Vec::new(),
             fixture_cache: None,
             fixture_timings: Vec::new(),
+            usage_error_ids: std::collections::HashSet::new(),
         }
     }
 
@@ -233,7 +248,10 @@ impl RunStats {
     ///
     /// The `original` kind identifies which counter was incremented during
     /// the initial run so we decrement the correct one.
-    pub(crate) const fn record_flaky(&mut self, original: OutcomeKind) {
+    ///
+    /// `node_id` clears this test's usage-error record, if it had one. Only its
+    /// own: another test's wiring error must survive this one passing (#1761).
+    pub(crate) fn record_flaky(&mut self, node_id: &NodeId, original: OutcomeKind) {
         self.counts.increment(OutcomeKind::Flaky);
         match original {
             OutcomeKind::Failed | OutcomeKind::Error | OutcomeKind::Timeout => {
@@ -241,6 +259,7 @@ impl RunStats {
             }
             _ => {}
         }
+        self.usage_error_ids.remove(node_id);
     }
 
     pub(crate) const fn record_skipped(&mut self) {
@@ -275,7 +294,14 @@ impl RunStats {
                 self.record_passed(item, tips.as_deref().map_or(&[], |v| v));
             }
             TestOutcome::Failed(..) => self.record_failed(),
-            TestOutcome::Error(..) => self.record_errored(),
+            TestOutcome::Error(diagnostic) => {
+                self.record_errored();
+                // Recorded, not short-circuited: the run continues and every
+                // remaining test still reports (#1761).
+                if diagnostic.usage_error {
+                    self.usage_error_ids.insert(item.node_id.clone());
+                }
+            }
             TestOutcome::Skipped { .. } => self.record_skipped(),
             TestOutcome::Warned { reason, tips } => {
                 self.record_warned(item, reason, tips.as_deref().map_or(&[], |v| v));
@@ -283,7 +309,9 @@ impl RunStats {
             TestOutcome::XFailed { .. } => self.record_xfailed(),
             TestOutcome::XPassed { strict } => self.record_xpassed(*strict),
             TestOutcome::Timeout { .. } => self.record_timeout(),
-            TestOutcome::Flaky { original, .. } => self.record_flaky(*original),
+            TestOutcome::Flaky { original, .. } => {
+                self.record_flaky(&item.node_id, *original);
+            }
         }
     }
 
@@ -340,7 +368,7 @@ mod tests {
     #[test]
     fn test_record_flaky_increments_counter() {
         let mut stats = RunStats::new();
-        stats.record_flaky(OutcomeKind::Failed);
+        stats.record_flaky(&NodeId::from_raw("t.py::test_a"), OutcomeKind::Failed);
         assert_eq!(stats.counts.get(OutcomeKind::Flaky), 1);
         assert_eq!(stats.counts.get(OutcomeKind::Failed), 0);
     }
@@ -353,7 +381,7 @@ mod tests {
         let mut stats = RunStats::new();
         stats.record_failed(); // unrelated failure from another test
         stats.record_timeout(); // THIS test timed out, then passed on retry
-        stats.record_flaky(OutcomeKind::Timeout);
+        stats.record_flaky(&NodeId::from_raw("t.py::test_a"), OutcomeKind::Timeout);
         // Timeout decremented, failed left alone
         assert_eq!(stats.counts.get(OutcomeKind::Timeout), 0);
         assert_eq!(stats.counts.get(OutcomeKind::Failed), 1); // must NOT be decremented
@@ -366,7 +394,7 @@ mod tests {
         let mut stats = RunStats::new();
         stats.record_failed(); // unrelated failure
         stats.record_errored(); // THIS test errored, then passed on retry
-        stats.record_flaky(OutcomeKind::Error);
+        stats.record_flaky(&NodeId::from_raw("t.py::test_a"), OutcomeKind::Error);
         assert_eq!(stats.counts.get(OutcomeKind::Error), 0);
         assert_eq!(stats.counts.get(OutcomeKind::Failed), 1); // untouched
         assert_eq!(stats.counts.get(OutcomeKind::Flaky), 1);
