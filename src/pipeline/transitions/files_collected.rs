@@ -43,7 +43,7 @@ impl Pipeline {
                             diag.affected_count,
                             diag.total_tests,
                             diag.direct_matches.len(),
-                            diag.conftest_matches.len(),
+                            diag.declaration_matches.len(),
                             diag.import_analysis.iter().filter(|a| a.affected).count(),
                             diag.base_ref,
                         );
@@ -201,7 +201,7 @@ fn render_full_diagnostics(diag: &affected::AffectedDiagnostics) {
     eprintln!();
 
     eprintln!("Stage 2: Classification");
-    eprintln!("  conftest.py: {}", diag.conftest_files.len());
+    eprintln!("  declaration files: {}", diag.declaration_files.len());
     eprintln!(
         "  Python source: {}{}",
         diag.source_files.len(),
@@ -225,10 +225,10 @@ fn render_full_diagnostics(diag: &affected::AffectedDiagnostics) {
     eprintln!();
 
     eprintln!("Stage 4: Conftest Impact");
-    if diag.conftest_matches.is_empty() {
+    if diag.declaration_matches.is_empty() {
         eprintln!("  (no conftest files changed)");
     } else {
-        for m in &diag.conftest_matches {
+        for m in &diag.declaration_matches {
             eprintln!("  \u{2713} {m}");
         }
     }
@@ -261,7 +261,7 @@ fn render_full_diagnostics(diag: &affected::AffectedDiagnostics) {
     eprintln!(
         "  Direct: {}, Conftest: {}, Import: {}",
         diag.direct_matches.len(),
-        diag.conftest_matches.len(),
+        diag.declaration_matches.len(),
         diag.import_analysis.iter().filter(|a| a.affected).count(),
     );
 }

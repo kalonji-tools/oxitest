@@ -1,7 +1,7 @@
 //! Git-aware test selection for `--affected`.
 //!
 //! Runs `git diff --name-only` to discover changed files, classifies them
-//! (test files, conftest, source, pyproject.toml), and filters the test file
+//! (test files, declaration files, source, pyproject.toml), and filters the test file
 //! list to only affected files.
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -98,9 +98,9 @@ pub fn git_changed_files(
 pub struct ChangedFiles {
     /// `pyproject.toml` was changed — must run all tests.
     pub run_all: bool,
-    /// Changed `conftest.py` files (relative paths).
-    pub conftest_files: Vec<String>,
-    /// Changed `.py` source files that are NOT conftest (relative paths).
+    /// Changed declaration files — `__fixtures__.py`, `__init__.py` (relative paths).
+    pub declaration_files: Vec<String>,
+    /// Changed `.py` source files that are not declaration files (relative paths).
     pub source_files: Vec<String>,
 }
 
@@ -116,14 +116,14 @@ pub struct AffectedDiagnostics {
     pub total_changed: usize,
     /// Number of changed files that are not `.py` (ignored by affected).
     pub non_python_count: usize,
-    /// Changed conftest.py files.
-    pub conftest_files: Vec<String>,
-    /// Changed Python source files (non-conftest).
+    /// Changed declaration files.
+    pub declaration_files: Vec<String>,
+    /// Changed Python source files that are not declaration files.
     pub source_files: Vec<String>,
     /// Test files selected because they themselves changed.
     pub direct_matches: Vec<String>,
-    /// Test files selected because a conftest in their subtree changed.
-    pub conftest_matches: Vec<String>,
+    /// Test files selected because a declaration file in their subtree changed.
+    pub declaration_matches: Vec<String>,
     /// Per-test-file import analysis results (for -vv).
     pub import_analysis: Vec<ImportAnalysis>,
     /// Total test files in the project.
@@ -147,7 +147,7 @@ pub struct ImportAnalysis {
 pub fn classify_changed_files_with_diagnostics(changed: Vec<String>) -> (ChangedFiles, usize) {
     let mut result = ChangedFiles {
         run_all: false,
-        conftest_files: Vec::new(),
+        declaration_files: Vec::new(),
         source_files: Vec::new(),
     };
     let mut non_python = 0usize;
@@ -161,8 +161,8 @@ pub fn classify_changed_files_with_diagnostics(changed: Vec<String>) -> (Changed
             non_python += 1;
             continue;
         }
-        if path.ends_with("conftest.py") {
-            result.conftest_files.push(path);
+        if path.ends_with("__fixtures__.py") || path.ends_with("__init__.py") {
+            result.declaration_files.push(path);
         } else {
             result.source_files.push(path);
         }
@@ -171,25 +171,25 @@ pub fn classify_changed_files_with_diagnostics(changed: Vec<String>) -> (Changed
     (result, non_python)
 }
 
-/// Insert into `affected` test files that live in the directory subtree of any changed conftest.
-fn conftest_affected_tests(
+/// Insert into `affected` test files in the subtree of any changed declaration file.
+fn declaration_affected_tests(
     test_files: &[Utf8PathBuf],
-    changed_conftests: &[String],
+    changed_declarations: &[String],
     rootdir: &Utf8Path,
     affected: &mut std::collections::HashSet<Utf8PathBuf>,
 ) {
-    let mut conftest_dirs: Vec<Utf8PathBuf> = changed_conftests
+    let mut declaration_dirs: Vec<Utf8PathBuf> = changed_declarations
         .iter()
         .filter_map(|c| {
             let abs = rootdir.join(c);
             abs.parent().map(|p| p.to_owned())
         })
         .collect();
-    conftest_dirs.sort_unstable();
-    conftest_dirs.dedup();
+    declaration_dirs.sort_unstable();
+    declaration_dirs.dedup();
 
     for tf in test_files {
-        if conftest_dirs.iter().any(|dir| tf.starts_with(dir)) {
+        if declaration_dirs.iter().any(|dir| tf.starts_with(dir)) {
             affected.insert(tf.clone());
         }
     }
@@ -216,7 +216,12 @@ fn directly_changed_tests(
 ///
 /// Returns:
 /// - `Ok(Some(filtered))` — filtered list of affected test files.
-/// - `Ok(None)` — `pyproject.toml` changed or root conftest changed; run all.
+/// - `Ok(None)` — `pyproject.toml` changed; run all.
+///
+/// A rootdir declaration file selects every test too, but through the
+/// subtree rule rather than through `run_all` — its subtree is the whole
+/// tree. The old wording claimed a root-conftest trigger that never existed
+/// in the code (#1720).
 /// - `Err(e)` — git error or import analysis error.
 pub fn filter_affected_test_files(
     test_files: &[Utf8PathBuf],
@@ -250,7 +255,7 @@ pub fn filter_affected_with_diagnostics(
 
     let (classified, non_python) = classify_changed_files_with_diagnostics(changed);
     diag.non_python_count = non_python;
-    diag.conftest_files = classified.conftest_files.clone();
+    diag.declaration_files = classified.declaration_files.clone();
     diag.source_files = classified.source_files.clone();
 
     if classified.run_all {
@@ -271,18 +276,18 @@ pub fn filter_affected_with_diagnostics(
     diag.direct_matches.sort();
 
     // Stage 4: Conftest matches
-    conftest_affected_tests(
+    declaration_affected_tests(
         test_files,
-        &classified.conftest_files,
+        &classified.declaration_files,
         &repo_root,
         &mut affected,
     );
-    diag.conftest_matches = affected
+    diag.declaration_matches = affected
         .iter()
         .filter(|p| !diag.direct_matches.contains(&p.to_string()))
         .map(|p| p.to_string())
         .collect();
-    diag.conftest_matches.sort();
+    diag.declaration_matches.sort();
 
     // Stage 5: Import graph
     let remaining: Vec<Utf8PathBuf> = test_files
@@ -360,10 +365,18 @@ mod tests {
     }
 
     #[test]
-    fn classify_conftest_detected() {
-        let changed = vec!["tests/conftest.py".to_string(), "src/foo.py".to_string()];
+    fn classify_declaration_file_detected() {
+        let changed = vec![
+            "tests/__fixtures__.py".to_string(),
+            "src/foo.py".to_string(),
+        ];
         let result = classify_changed_files_with_diagnostics(changed).0;
-        assert_eq!(result.conftest_files, vec!["tests/conftest.py"]);
+        assert_eq!(
+            result.declaration_files,
+            vec!["tests/__fixtures__.py"],
+            "a declaration file must classify as one, not as ordinary source — \
+             classified as source it selects nothing and its dependents run untested"
+        );
         assert_eq!(result.source_files, vec!["src/foo.py"]);
     }
 
@@ -372,7 +385,7 @@ mod tests {
         let changed = vec!["README.md".to_string(), "Cargo.toml".to_string()];
         let result = classify_changed_files_with_diagnostics(changed).0;
         assert!(!result.run_all);
-        assert!(result.conftest_files.is_empty());
+        assert!(result.declaration_files.is_empty());
         assert!(result.source_files.is_empty());
     }
 
@@ -380,11 +393,11 @@ mod tests {
     fn classify_empty_input() {
         let result = classify_changed_files_with_diagnostics(vec![]).0;
         assert!(!result.run_all);
-        assert!(result.conftest_files.is_empty());
+        assert!(result.declaration_files.is_empty());
         assert!(result.source_files.is_empty());
     }
 
-    // ── conftest_affected_tests ──────────────────────────────────────
+    // ── declaration_affected_tests ──────────────────────────────────────
 
     #[test]
     fn conftest_subtree_includes_tests_below() {
@@ -393,10 +406,10 @@ mod tests {
             Utf8PathBuf::from("/project/tests/sub/test_b.py"),
             Utf8PathBuf::from("/project/other/test_c.py"),
         ];
-        let changed_conftests = vec!["tests/conftest.py".to_string()];
+        let changed_declarations = vec!["tests/conftest.py".to_string()];
         let rootdir = Utf8Path::new("/project");
         let mut affected = std::collections::HashSet::new();
-        conftest_affected_tests(&test_files, &changed_conftests, rootdir, &mut affected);
+        declaration_affected_tests(&test_files, &changed_declarations, rootdir, &mut affected);
         assert_eq!(affected.len(), 2);
         assert!(affected.contains(&Utf8PathBuf::from("/project/tests/test_a.py")));
         assert!(affected.contains(&Utf8PathBuf::from("/project/tests/sub/test_b.py")));
@@ -408,20 +421,20 @@ mod tests {
             Utf8PathBuf::from("/project/tests/test_a.py"),
             Utf8PathBuf::from("/project/other/test_b.py"),
         ];
-        let changed_conftests = vec!["conftest.py".to_string()];
+        let changed_declarations = vec!["conftest.py".to_string()];
         let rootdir = Utf8Path::new("/project");
         let mut affected = std::collections::HashSet::new();
-        conftest_affected_tests(&test_files, &changed_conftests, rootdir, &mut affected);
+        declaration_affected_tests(&test_files, &changed_declarations, rootdir, &mut affected);
         assert_eq!(affected.len(), 2);
     }
 
     #[test]
     fn conftest_subtree_no_match() {
         let test_files = vec![Utf8PathBuf::from("/project/other/test_a.py")];
-        let changed_conftests = vec!["tests/conftest.py".to_string()];
+        let changed_declarations = vec!["tests/conftest.py".to_string()];
         let rootdir = Utf8Path::new("/project");
         let mut affected = std::collections::HashSet::new();
-        conftest_affected_tests(&test_files, &changed_conftests, rootdir, &mut affected);
+        declaration_affected_tests(&test_files, &changed_declarations, rootdir, &mut affected);
         assert!(affected.is_empty());
     }
 
@@ -461,7 +474,7 @@ mod tests {
             base_ref: "HEAD".to_string(),
             total_changed: 2,
             non_python_count: non_python,
-            conftest_files: classified.conftest_files,
+            declaration_files: classified.declaration_files,
             source_files: classified.source_files,
             ..Default::default()
         };
@@ -476,7 +489,7 @@ mod tests {
             "src/foo.py".to_string(),
             "README.md".to_string(),
             "Cargo.toml".to_string(),
-            "tests/conftest.py".to_string(),
+            "tests/__fixtures__.py".to_string(),
         ];
         let (classified, non_python) = classify_changed_files_with_diagnostics(changed);
         assert_eq!(
@@ -489,7 +502,7 @@ mod tests {
             "only src/foo.py is a Python source file"
         );
         assert_eq!(
-            classified.conftest_files.len(),
+            classified.declaration_files.len(),
             1,
             "tests/conftest.py is a conftest"
         );
