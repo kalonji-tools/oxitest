@@ -1,0 +1,7 @@
+[project]
+name = "pkg-layout-fixture"
+version = "0.0.0"
+
+[tool.oxitest]
+testpaths = ["pkg1680"]
+strict = "abort"
