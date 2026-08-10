@@ -655,7 +655,20 @@ class FixtureRegistry:
         # Unwrap FixtureAccessor (duck-typed to avoid circular import)
         raw = getattr(func, "_fa_func", func)
         for defn in defs:
-            if isinstance(defn.source, ConftestSource) and defn.source.func is raw:
+            # Every source variant that carries a declaring function, not just
+            # the conftest one. Matching ConftestSource alone returned None for
+            # every @oxi.fixture declaration, so the namespace-qualified branch
+            # in executor.py never fired for them and resolution fell back to
+            # flat, name-only lookup — which returns the deepest visible
+            # fixture, i.e. the wrong one whenever two namespaces share a name
+            # (#1720). Retiring ConftestSource would have left that branch
+            # unreachable rather than merely unused.
+            if (
+                isinstance(
+                    defn.source, (ConftestSource, ModuleSource, PluginModuleSource)
+                )
+                and defn.source.func is raw
+            ):
                 return defn.namespace or None
         return None
 
