@@ -43,12 +43,22 @@ _FOREIGN_INLINE = _DATA_ROOT / "slice7_shortcut_foreign_inline"
 #: 5 in api/test_api.py + 2 in api/v1/test_v1.py.
 _LEGAL_TESTS = 7
 
-#: ``ExitCode::Failure`` (``src/types/exit.rs``). Both violation projects fail
-#: inside a running test, so the run completes and exits 1. Pinning the exact
-#: code matters because 3 is ``CollectError`` and 4 is ``UsageError`` — a
-#: regression that moved either violation to collection time would still be
-#: non-zero while silently changing what CI is told.
-_EXIT_FAILURE = 1
+#: ``ExitCode::UsageError`` (``src/types/exit.rs``). Both violation projects
+#: fail inside a running test, so the run completes and every test reports —
+#: and then exits 4, because a shortcut that cannot reach its fixture means the
+#: suite is wired wrong (#1761).
+#:
+#: This was ``_EXIT_FAILURE = 1`` until #1761, on the reasoning that both
+#: violations "fail inside a running test, so the run completes and exits 1".
+#: The premise stayed true and the conclusion did not: the run still completes,
+#: but completing is not what decides the code. Exit 4 is defined by the class
+#: of the error, not by when oxitest detects it (ADR-0014).
+#:
+#: Pinning the exact code still matters, for the reason the original comment
+#: gave: 3 is ``CollectError``, and a regression that moved either violation to
+#: collection time would still be non-zero while silently changing what CI is
+#: told.
+_EXIT_USAGE = 4
 
 
 @dataclass(frozen=True)
@@ -90,7 +100,7 @@ def test_the_shortcut_does_not_cross_a_b1_boundary(case: RunMode) -> None:
     stdout, stderr, rc = helpers.run_oxitest(_CROSS, *case.args, cwd=str(_CROSS))
 
     # Assert
-    assert rc == _EXIT_FAILURE, (
+    assert rc == _EXIT_USAGE, (
         f"a cross-boundary shortcut must fail the run under {case.label}; if "
         f"it passed, the shortcut would be a B1 bypass rather than a spelling "
         f"convenience\nstdout:\n{stdout}\nstderr:\n{stderr}"
@@ -117,7 +127,7 @@ def test_a_sync_test_cannot_shortcut_to_an_async_fixture(case: RunMode) -> None:
     )
 
     # Assert
-    assert rc == _EXIT_FAILURE, (
+    assert rc == _EXIT_USAGE, (
         f"a sync test reaching an async fixture by shortcut must fail under "
         f"{case.label}; AsyncDepGuardMiddleware inspects resolved kwargs and "
         f"cannot see a proxy access in the test body, so this route needs its "
@@ -160,7 +170,7 @@ def test_the_not_found_diagnostic_does_not_vary_with_scheduling() -> None:
     )
 
     # Assert
-    assert serial_rc == _EXIT_FAILURE and parallel_rc == _EXIT_FAILURE, (
+    assert serial_rc == _EXIT_USAGE and parallel_rc == _EXIT_USAGE, (
         f"a foreign inline fixture must be unreachable in both modes; got "
         f"serial={serial_rc}, parallel={parallel_rc}"
     )

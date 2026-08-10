@@ -57,19 +57,29 @@ class RunMode:
 _SERIAL = RunMode(label="serial", args=())
 _PARALLEL = RunMode(label="-n 2", args=("-n", "2"))
 
-#: ``ExitCode::Failure`` (``src/types/exit.rs``). Spec decision 8: a B1
+#: ``ExitCode::UsageError`` (``src/types/exit.rs``). A B1 violation is a test
+#: ERROR, the run completes and every test reports — and then the run exits 4
+#: because the suite is wired wrong (#1761).
+#:
+#: This was ``_EXIT_FAILURE = 1`` until #1761, on this reasoning: *"a B1
 #: violation is a test ERROR and the run completes, so it exits 1 like any
-#: other failing run. The neighbouring codes are the reason this is worth
-#: pinning rather than asserting ``rc != 0`` — 3 is ``CollectError`` and 4 is
-#: ``UsageError``, and both would also be non-zero. Those two say "the run was
-#: misconfigured", which is how CI tells a genuine test failure from a broken
-#: invocation; a regression that turned a boundary violation into a collection
-#: abort would silently change that verdict.
-_EXIT_FAILURE = 1
+#: other failing run … 3 is CollectError and 4 is UsageError … Those two say
+#: 'the run was misconfigured', which is how CI tells a genuine test failure
+#: from a broken invocation."* The **second half is what was overturned**: a
+#: fixture reached across its anchor *is* a misconfiguration, ADR-0009 said so
+#: and named #1761 as the fix.
+#:
+#: The **first half still holds**, and is why the exact code is still pinned
+#: rather than asserting ``rc != 0``: a regression that turned a boundary
+#: violation into a collection abort would move it to 3 and silently change
+#: what CI is told, exactly as the original comment warned.
+_EXIT_USAGE = 4
 
 #: ``ExitCode::CollectError`` (``src/types/exit.rs``). Distinguishing it from
-#: ``_EXIT_FAILURE`` is the entire point of the #1768 guard below: the two
+#: ``_EXIT_USAGE`` is the entire point of the #1768 guard below: the two
 #: verdicts differ by *when* the refusal happened, and that is the coupling.
+#: Since #1761 both codes say "misconfigured", so the guard now pins *which*
+#: kind of misconfiguration rather than misconfigured-versus-failed.
 _EXIT_COLLECT_ERROR = 3
 
 
@@ -112,12 +122,13 @@ def test_cross_boundary_access_is_a_boundary_error(case: RunMode) -> None:
     output = stdout + stderr
 
     # Assert
-    assert rc == _EXIT_FAILURE, (
-        f"three cross-boundary accesses must fail the run under {case.label}, "
-        f"and fail it as ERRORed tests — exit 3 (CollectError) or 4 "
-        f"(UsageError) would mean the boundary aborted the run instead of "
-        f"reporting per-test verdicts, and CI reads those as 'the invocation "
-        f"was wrong' rather than 'tests failed'\n"
+    assert rc == _EXIT_USAGE, (
+        f"three cross-boundary accesses must fail the run under {case.label} "
+        f"as ERRORed tests that each still report, and the run must then exit "
+        f"4 because the suite is wired wrong (#1761). Exit 3 (CollectError) "
+        f"would mean the boundary aborted collection instead of producing "
+        f"per-test verdicts; exit 1 would mean CI cannot tell this from an "
+        f"assertion failure\n"
         f"stdout:\n{stdout}\nstderr:\n{stderr}"
     )
     assert output.count("fixture-boundary") >= 3, (
@@ -179,11 +190,14 @@ def test_the_injection_route_refuses_a_cross_boundary_fixture(case: RunMode) -> 
     output = stdout + stderr
 
     # Assert
-    assert rc == _EXIT_FAILURE, (
+    assert rc == _EXIT_USAGE, (
         f"injecting a sibling package's fixture by `Fixture[T]` must fail the "
-        f"run under {case.label}, and fail it as an ERRORed test — exit 3 "
-        f"(CollectError) would mean the refusal moved to collection time, "
-        f"where the name index is deliberately unfiltered so that this "
+        f"run under {case.label} as an ERRORed test, and exit 4. This route "
+        f"reports FixtureNotFoundError rather than BoundaryError because a "
+        f"bare name has no namespace segment to attribute, so a vote wired to "
+        f"BoundaryError alone would leave this B1 violation at exit 1 (#1761). "
+        f"Exit 3 (CollectError) would mean the refusal moved to collection "
+        f"time, where the name index is deliberately unfiltered so that this "
         f"reaches the runtime B1 check at all\n"
         f"stdout:\n{stdout}\nstderr:\n{stderr}"
     )
@@ -219,12 +233,15 @@ def test_unknown_namespace_is_not_reported_as_a_boundary(case: RunMode) -> None:
     output = stdout + stderr
 
     # Assert
-    assert rc == _EXIT_FAILURE, (
+    assert rc == _EXIT_USAGE, (
         f"reaching a namespace that exists nowhere must still fail under "
-        f"{case.label} — and as an ERRORed test, not as exit 3 "
-        f"(CollectError) or 4 (UsageError). An unknown segment is only "
+        f"{case.label} as an ERRORed test, and exit 4: asking for a fixture "
+        f"the run cannot supply is a wiring mistake whether the segment is "
+        f"unknown or merely invisible, and ADR-0009 Rule 5 makes the two "
+        f"deliberately indistinguishable here (#1761). Exit 3 (CollectError) "
+        f"would be wrong for a different reason — an unknown segment is only "
         f"knowable once the access runs, so hoisting it to collection time "
-        f"would report a typo in one test as a whole-run misconfiguration\n"
+        f"would abort the whole run over one test\n"
         f"stdout:\n{stdout}\nstderr:\n{stderr}"
     )
     assert "fixture-boundary" not in output, (
@@ -254,14 +271,15 @@ def test_a_fixture_cannot_depend_below_its_own_anchor() -> None:
     output = stdout + stderr
 
     # Assert
-    assert rc == _EXIT_FAILURE, (
+    assert rc == _EXIT_USAGE, (
         f"an api/-anchored fixture depending on an api/v1/-anchored one must "
         f"fail even though the calling test can see both — otherwise the "
         f"boundary is laundered through the test's position, and a wider "
         f"lifetime would cache a value from the narrower boundary. Exit "
-        f"{_EXIT_FAILURE} specifically: the descent happens during the "
-        f"dependency's resolution, so it is one test ERRORing, not exit 3 "
-        f"(CollectError) or 4 (UsageError) killing the run\n"
+        f"{_EXIT_USAGE} specifically: the descent happens during the "
+        f"dependency's resolution, so it is one test ERRORing and the run "
+        f"still reporting, not exit 3 (CollectError) killing the run before "
+        f"any test produced a verdict\n"
         f"stdout:\n{stdout}\nstderr:\n{stderr}"
     )
     assert "thing" in output, (
@@ -333,7 +351,7 @@ def test_the_collection_validator_stays_name_based() -> None:
     )
     assert rc == _EXIT_COLLECT_ERROR, (
         f"a Fixture[T] parameter whose name matches nothing must be refused at "
-        f"collection, not at run time. Exit {_EXIT_FAILURE} here means the "
+        f"collection, not at run time. Exit {_EXIT_USAGE} here means the "
         f"validator stopped being name-based and the refusal slid downstream to "
         f"resolution, where the only thing still holding B1 is get_visible — "
         f"see #1768\nstdout:\n{stdout}\nstderr:\n{stderr}"
