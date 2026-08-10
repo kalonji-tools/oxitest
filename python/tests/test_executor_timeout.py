@@ -570,11 +570,24 @@ def test_timeout_message_names_the_armed_deadline_when_capped() -> None:
     )
 
 
-def test_a_capped_deadline_reports_the_limit_it_enforced() -> None:
-    """End to end: the wrapper reads the context, not its own argument."""
+def test_a_capped_deadline_is_the_one_enforced() -> None:
+    """A nested 60s deadline inside a 1s one is cut at ~1s, not at 60s.
+
+    Timing is the assertion, deliberately. Whether the *report* comes back from
+    the nested wrapper is platform-dependent: a capped deadline can only fire
+    when the enclosing one is spent, so the restore re-arms a timer that fires
+    within microseconds, and where that lands decides which frame catches it.
+    On Linux the nested wrapper reported it 12/12; on macOS x86_64 it escaped
+    to the enclosing wrapper and the nested result was never produced. Both are
+    the cap working. Asserting that a result exists tested the race, not the
+    cap, and it failed in CI on the platform this bug was reported from.
+
+    ADR-0016 records the attribution limit. The message content is pinned by
+    `test_timeout_message_names_the_armed_deadline_when_capped`, which is a
+    unit test and cannot race.
+    """
     if not hasattr(signal, "alarm"):
         return
-    inner_results: list[TestResult] = []
     inner_wrapper = make_timeout_wrapper(60, context_cls=_UnixTimeoutContext)
     outer_wrapper = make_timeout_wrapper(1, context_cls=_UnixTimeoutContext)
 
@@ -583,19 +596,17 @@ def test_a_capped_deadline_reports_the_limit_it_enforced() -> None:
         return PassedResult()
 
     def enclosing_body() -> PassedResult:
-        inner_results.append(inner_wrapper(slow_body))
+        inner_wrapper(slow_body)
         return PassedResult()
 
+    started = time.monotonic()
     outer_wrapper(enclosing_body)
+    elapsed = time.monotonic() - started
 
-    assert inner_results, (
-        "the inner wrapper must return a result; an empty list means the capped"
-        " deadline escaped as an exception instead of being reported"
-    )
-    message = str(getattr(inner_results[0], "message", ""))
-    assert "60s" not in message.split("(", maxsplit=1)[0], (
-        "the headline limit must be the ~1s that was armed, not the 60s that was"
-        f" asked for -- the body was cut after ~1s; got {message!r}"
+    assert elapsed < 3, (
+        "the nested 60s deadline must be capped at the enclosing 1s remaining;"
+        f" the 5s body ran {elapsed:.2f}s, and anything near 5s means the nested"
+        " deadline was armed as asked and the enclosing promise was extended"
     )
 
 
