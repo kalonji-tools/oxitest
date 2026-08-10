@@ -7,9 +7,9 @@ import sys
 from typing import Any
 
 import oxitest as oxi
-from oxitest._bridge.conftest_loader import create_session
 from oxitest._bridge.result import PROTOCOL_VERSION
 from oxitest._bridge.worker import _check_task_protocol, _end_task_session
+from tests import helpers
 
 
 def _task(**overrides: Any) -> dict[str, Any]:
@@ -169,7 +169,7 @@ def test_end_package_is_inert_without_package_declarations() -> None:
     # Arrange — no fixture can declare lifetime="package" yet, so the hook must
     # tolerate a session that has never seen one.
 
-    session, _violations, _diagnostics = create_session([])
+    session = helpers.make_session()
 
     # Act
     session.end_package("tests/api")

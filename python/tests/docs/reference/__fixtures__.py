@@ -2,9 +2,7 @@
 
 import oxitest
 
-fx = oxitest.Fixtures()
 
-
-@fx.fixture(shared=True)
+@oxitest.fixture(lifetime="module")
 def config() -> dict[str, str]:
     return {"env": "test"}
