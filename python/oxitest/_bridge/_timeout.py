@@ -329,6 +329,24 @@ def extract_timeout_seconds(mark_kwargs: Mapping[str, object]) -> int:
     return seconds
 
 
+def _timeout_message(effective: float, requested: int) -> str:
+    """Name the deadline that fired, and say when it is not the one requested.
+
+    A capped deadline reports the limit it enforced. Reporting the requested
+    value would send the developer debugging against a number that was never
+    armed — measured before the fix as ``Timed out after 60s`` for a deadline
+    armed at ~1s (#2001).
+    """
+    if effective >= requested:
+        # Byte-identical to the pre-#2001 message. The uncapped case is every
+        # ordinary test, and every existing report and assertion reads this form.
+        return f"Timed out after {requested}s"
+    return (
+        f"Timed out after {effective:g}s"
+        f" (the requested {requested}s was capped by an enclosing deadline)"
+    )
+
+
 def make_timeout_wrapper(
     seconds: int,
     *,
@@ -352,6 +370,10 @@ def make_timeout_wrapper(
     arm = not (is_async and not cls.bounds_blocking_calls)
 
     def wrapper(next_fn: Any) -> Any:
+        # Bound before the `with` rather than as `with cls(seconds) as ctx`, so
+        # __enter__ keeps returning None on both arms. The instance is read
+        # afterwards for the deadline it actually armed (#2001).
+        ctx = cls(seconds)
         try:
             if not arm:
                 # No OS-level arm: the event loop owns the deadline. The
@@ -361,9 +383,11 @@ def make_timeout_wrapper(
                 # bare passthrough here let that error escape uncaught, which is
                 # invisible on any platform whose arm keeps the full wrapper.
                 return next_fn()
-            with cls(seconds):
+            with ctx:
                 return next_fn()
         except OxitestTimeoutError:
-            return TimeoutResult(message=f"Timed out after {seconds}s")
+            return TimeoutResult(
+                message=_timeout_message(ctx.effective_seconds, seconds)
+            )
 
     return wrapper
