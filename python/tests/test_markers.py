@@ -774,3 +774,20 @@ def test_evaluate_marks_dispatches_plugin_handlers() -> None:
         "plugin handler must contribute its wrapper or the plugin's test transformation"
         " is silently lost"
     )
+
+
+def test_stacked_timeout_marks_are_refused_at_decoration() -> None:
+    """Two deadlines on one test is always an authoring mistake.
+
+    Before #2001 the innermost silently won, so @timeout(2) stacked over
+    @timeout(20) ran under 20s and the author never learned which limit was
+    lost. The effective deadline is now the shorter of the live deadlines, so
+    stacking is merely harmless -- but harmless is not the bar for something
+    statically visible at import.
+    """
+    with oxitest.raises(ValueError):
+
+        @oxitest.mark.timeout(seconds=2)
+        @oxitest.mark.timeout(seconds=20)
+        def test_two_deadlines() -> None:
+            pass

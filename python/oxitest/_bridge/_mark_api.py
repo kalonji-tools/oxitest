@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, NoReturn, TypeVar
 
-from oxitest._bridge._fn_metadata import _update, get_or_create
+from oxitest._bridge._fn_metadata import _update, get_metadata, get_or_create
 
 _F = TypeVar("_F", bound=Callable[..., Any])
 
@@ -118,6 +118,17 @@ class _TimeoutMark:
         info = MarkInfo("timeout", (), MappingProxyType({"seconds": seconds}))
 
         def decorator(f: _F) -> _F:
+            # `get_metadata` rather than `get_or_create`: the check must not
+            # register metadata on a function that carries none (#2001).
+            if any(m.name == "timeout" for m in get_metadata(f).marks):
+                msg = (
+                    "@oxitest.mark.timeout is already applied to"
+                    f" {getattr(f, '__name__', f)!r}."
+                    " Two deadlines on one test is an authoring mistake: the"
+                    " effective deadline is the shorter of the two, so the other"
+                    " one silently never applies."
+                )
+                raise ValueError(msg)
             _append_mark(f, info)
             return f
 
