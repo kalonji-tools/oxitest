@@ -743,3 +743,25 @@ def test_both_arms_enforce_the_shorter_of_two_live_deadlines() -> None:
             " must cut the 5s body, so anything near 5s means the shorter deadline"
             " was not the one enforced"
         )
+
+
+def test_a_cleared_slot_is_detected_when_the_test_overruns() -> None:
+    """The overrunning test is the case detection exists for, and the hard one.
+
+    A test that clears its deadline and then finishes early leaves an obvious
+    gap between the slot and the prediction. A test that clears it and then
+    *overruns* does not: the prediction, if clamped at zero, reads exactly like
+    the cleared slot. That clamp made the only case that matters invisible, and
+    an end-to-end run is what exposed it.
+    """
+    if not hasattr(signal, "alarm"):
+        return
+    ctx = _UnixTimeoutContext(seconds=1)
+    ctx.__enter__()
+    signal.setitimer(signal.ITIMER_REAL, 0)
+    time.sleep(1.5)
+    ctx.__exit__(None, None, None)
+    assert ctx.deadline_taken, (
+        "a test that cleared its deadline and then ran past it must be detected;"
+        " this is the shape of the real defect, where the overrun is the harm"
+    )
