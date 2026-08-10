@@ -25,8 +25,8 @@ def test_fixture_registry_and_source_types_referenced_by_instantiator() -> None:
     types it must handle. Uses the module namespace directly.
     """
     imported_names = dir(_fixture_instantiator)
-    assert "ConftestSource" in imported_names, (
-        "instantiator must import ConftestSource for its dispatch arms"
+    assert "FrameworkSource" in imported_names, (
+        "instantiator must import FrameworkSource for its dispatch arms"
     )
     assert "ModuleSource" in imported_names, (
         "instantiator must import ModuleSource (Task 7) to handle the new "

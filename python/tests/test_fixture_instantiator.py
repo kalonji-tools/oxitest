@@ -19,10 +19,10 @@ from oxitest._bridge._fixture_instantiator import (
     _ResolutionContext,
 )
 from oxitest._bridge._fixture_registry import (
-    ConftestSource,
     FixtureDef,
     FixtureRegistry,
     FixtureScope,
+    FrameworkSource,
     ModuleSource,
     PluginSource,
 )
@@ -49,7 +49,7 @@ def _make_instantiator(
 def test_resolve_simple_fixture() -> None:
     """resolve_fixture should return the factory's return value for a known fixture."""
     inst, _reg = _make_instantiator(
-        helpers.make_fixture_def("db", lambda: "conn", conftest_path="/c.py")
+        helpers.make_fixture_def("db", lambda: "conn", declaration_path="/c.py")
     )
     teardowns: list = []
 
@@ -71,8 +71,8 @@ def test_resolve_cycle_raises() -> None:
         pass
 
     inst, _reg = _make_instantiator(
-        helpers.make_fixture_def("a", fx_a, conftest_path="/c.py"),
-        helpers.make_fixture_def("b", fx_b, conftest_path="/c.py"),
+        helpers.make_fixture_def("a", fx_a, declaration_path="/c.py"),
+        helpers.make_fixture_def("b", fx_b, declaration_path="/c.py"),
     )
 
     with raises(FixtureCycleError):
@@ -101,7 +101,7 @@ def test_resolve_shared_uses_scope_refs() -> None:
     """Shared fixtures are stored in the ScopeRefs cache after first resolution."""
     inst, _reg = _make_instantiator(
         helpers.make_fixture_def(
-            "shared_db", lambda: "shared_conn", conftest_path="/c.py", shared=True
+            "shared_db", lambda: "shared_conn", declaration_path="/c.py", shared=True
         )
     )
     shared_cache: dict = {}
@@ -123,7 +123,7 @@ def test_resolve_shared_uses_scope_refs() -> None:
 def test_timing_recorded() -> None:
     """get_fixture_timings records setup_count and name for each resolved fixture."""
     inst, _reg = _make_instantiator(
-        helpers.make_fixture_def("fast", lambda: 1, conftest_path="/c.py")
+        helpers.make_fixture_def("fast", lambda: 1, declaration_path="/c.py")
     )
 
     inst.resolve_fixture(
@@ -174,7 +174,7 @@ def test_resolve_param_by_type_not_name() -> None:
         name="my_thing",
         fixture_type=MyType,
         scope=FixtureScope.EACH,
-        source=ConftestSource(func=MyType, conftest_path="/c.py"),
+        source=FrameworkSource(func=MyType, origin="/c.py"),
     )
     inst, _reg = _make_instantiator(defn)
     teardowns: list = []
@@ -208,7 +208,7 @@ def test_resolve_param_type_miss_name_fallback() -> None:
     defn = helpers.make_fixture_def(
         "my_fixture",
         lambda: "value",
-        conftest_path="/c.py",
+        declaration_path="/c.py",
         fixture_type=str,
     )
     inst, _reg = _make_instantiator(defn)
@@ -256,7 +256,7 @@ def test_resolve_param_type_and_name_both_miss() -> None:
 
 
 def test_resolve_param_prefers_param_name_over_type_resolved_name() -> None:
-    """ConftestSource: prefer param name when both type and name match."""
+    """FrameworkSource: prefer param name when both type and name match."""
 
     class DbConn:
         pass
@@ -264,7 +264,7 @@ def test_resolve_param_prefers_param_name_over_type_resolved_name() -> None:
     defn_primary = helpers.make_fixture_def(
         "db",
         DbConn,
-        conftest_path="/c.py",
+        declaration_path="/c.py",
         fixture_type=DbConn,
     )
     inst, _reg = _make_instantiator(defn_primary)
@@ -366,7 +366,7 @@ def test_boundary_switches_to_the_fixture_anchor_and_stops_at_unanchored_sources
         name="legacy",
         fixture_type=object,
         scope=FixtureScope.EACH,
-        source=ConftestSource(func=lambda: None, conftest_path="/t/conftest.py"),
+        source=FrameworkSource(func=lambda: None, origin="/t/conftest.py"),
     )
     ctx = _ResolutionContext(
         "/t/api/v1/test_v1.py",

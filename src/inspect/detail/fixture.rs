@@ -52,7 +52,7 @@ pub fn render_fixture<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<
     if let Some(conftest_idx) = fixture.conftest_idx {
         lines.push(Line::from(""));
         lines.push(section_header("Defined In"));
-        lines.push(connection_line('C', &graph.conftests[conftest_idx].path));
+        lines.push(connection_line('C', &graph.declarations[conftest_idx].path));
     }
     if let Some(plugin_idx) = fixture.plugin_idx {
         lines.push(Line::from(""));
@@ -94,7 +94,7 @@ pub fn collect_edges(graph: &InspectGraph, node: &NodeRef) -> Vec<NodeRef> {
     let mut edges = Vec::new();
     edges.extend(f.consumers.iter().cloned());
     if let Some(idx) = f.conftest_idx {
-        edges.push(NodeRef::new(NodeKind::Conftest, idx));
+        edges.push(NodeRef::new(NodeKind::Declaration, idx));
     }
     if let Some(idx) = f.plugin_idx {
         edges.push(NodeRef::new(NodeKind::Plugin, idx));

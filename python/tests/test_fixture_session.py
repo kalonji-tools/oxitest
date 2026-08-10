@@ -17,10 +17,10 @@ from oxitest._bridge._errors import (
 )
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
-    ConftestSource,
     FixtureDef,
     FixtureRegistry,
     FixtureScope,
+    FrameworkSource,
     ModuleSource,
     PluginSource,
 )
@@ -134,7 +134,7 @@ def test_shared_fixture_setup_timed_once() -> None:
 
     session = helpers.make_session(
         helpers.make_fixture_def(
-            "shared_fx", shared_fixture, conftest_path="/conftest.py", shared=True
+            "shared_fx", shared_fixture, declaration_path="/conftest.py", shared=True
         )
     )
     teardowns: list[Callable[[], None]] = []
@@ -156,7 +156,7 @@ def test_multiple_fixtures_each_tracked_separately() -> None:
     teardowns: list[Callable[[], None]] = []
 
     session.registry.register(
-        helpers.make_fixture_def("fast_b", lambda: 2, conftest_path="/conftest.py")
+        helpers.make_fixture_def("fast_b", lambda: 2, declaration_path="/conftest.py")
     )
 
     session.get_fixture_by_name("fast_a", "test_mod.py", teardowns)
@@ -191,12 +191,12 @@ def test_session_conftest_overrides_builtin() -> None:
         name="TempDir",
         fixture_type=TempDir,
         scope=FixtureScope.EACH,
-        source=ConftestSource(func=lambda: "custom", conftest_path="/conftest.py"),
+        source=FrameworkSource(func=lambda: "custom", origin="/conftest.py"),
     )
     session = FixtureSession([custom], PluginRegistry())
     # Use qualifier "TempDir" to disambiguate (conftest registered with name "TempDir")
     defn = session.registry.resolve(TempDir, qualifier="TempDir")
-    assert isinstance(defn.source, ConftestSource), (
+    assert isinstance(defn.source, FrameworkSource), (
         "conftest fixture should override builtin when they share the same type"
     )
 
@@ -275,7 +275,7 @@ def test_register_plugin_fixtures_stamps_correct_fields() -> None:
         "'shared' stopped being a legal provider scope with the tier (#1720)"
     )
     assert isinstance(defn.source, PluginSource), (
-        "registered source should be PluginSource, not ConftestSource"
+        "registered source should be PluginSource, not FrameworkSource"
     )
     assert defn.source.plugin_module == "fake_plugin", (
         "PluginSource should record the provider's __module__"
@@ -391,7 +391,7 @@ class _UnregisteredType:
 
 
 def test_get_fixture_by_type_resolves_conftest_fixture() -> None:
-    """A conftest ConftestSource fixture must resolve via get_fixture_by_type.
+    """A conftest FrameworkSource fixture must resolve via get_fixture_by_type.
 
     The unified registry indexes FixtureDefs by return type; passing _MyResult
     to get_fixture_by_type must find and run the conftest factory.
@@ -409,7 +409,7 @@ def test_get_fixture_by_type_resolves_conftest_fixture() -> None:
         helpers.make_fixture_def(
             "my_result",
             _my_result_factory,
-            conftest_path="/fake/conftest.py",
+            declaration_path="/fake/conftest.py",
             fixture_type=_MyResult,
         )
     )
@@ -585,7 +585,7 @@ def test_a_conftest_only_namespace_never_produces_a_boundary_error() -> None:
             name="legacy_conn",
             fixture_type=object,
             scope=FixtureScope.EACH,
-            source=ConftestSource(func=object, conftest_path="/t/api/conftest.py"),
+            source=FrameworkSource(func=object, origin="/t/api/conftest.py"),
             namespace="legacy",
         )
     )
@@ -615,7 +615,7 @@ def _mixed_api_session() -> FixtureSession:
             name="legacy_conn",
             fixture_type=object,
             scope=FixtureScope.EACH,
-            source=ConftestSource(func=object, conftest_path="/t/conftest.py"),
+            source=FrameworkSource(func=object, origin="/t/conftest.py"),
             namespace="api",
         )
     )

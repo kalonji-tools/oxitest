@@ -12,7 +12,7 @@ use ahash::{AHashMap, AHashSet};
 use crate::query::resource::QueryEntry;
 
 use super::InspectGraph;
-use super::nodes::{ConftestNode, FixtureNode, MarkNode, PluginNode, TestNode};
+use super::nodes::{DeclarationNode, FixtureNode, MarkNode, PluginNode, TestNode};
 
 // ── GraphBuilder ─────────────────────────────────────────────────────────────
 
@@ -68,7 +68,7 @@ impl GraphBuilder {
             .map(|(i, m)| (m.name.clone(), i))
             .collect();
         let conftest_by_path = graph
-            .conftests
+            .declarations
             .iter()
             .enumerate()
             .map(|(i, c)| (c.path.clone(), i))
@@ -315,8 +315,8 @@ impl GraphBuilder {
         if let Some(&idx) = self.conftest_by_path.get(path) {
             return idx;
         }
-        let idx = self.graph.conftests.len();
-        self.graph.conftests.push(ConftestNode {
+        let idx = self.graph.declarations.len();
+        self.graph.declarations.push(DeclarationNode {
             path: path.to_string(),
             fixtures: vec![],
         });
@@ -382,7 +382,7 @@ impl GraphBuilder {
     fn resolve_fixture_to_conftest_edges(&mut self) {
         // Pre-seed seen-set from existing edges (progressive loading support).
         let mut seen_conftest_fixtures: AHashMap<usize, AHashSet<usize>> = AHashMap::new();
-        for (ct_idx, ct) in self.graph.conftests.iter().enumerate() {
+        for (ct_idx, ct) in self.graph.declarations.iter().enumerate() {
             if !ct.fixtures.is_empty() {
                 seen_conftest_fixtures.insert(ct_idx, ct.fixtures.iter().copied().collect());
             }
@@ -401,7 +401,7 @@ impl GraphBuilder {
                 .or_default()
                 .insert(fix_idx)
             {
-                self.graph.conftests[conftest_idx].fixtures.push(fix_idx);
+                self.graph.declarations[conftest_idx].fixtures.push(fix_idx);
             }
         }
     }
@@ -632,11 +632,11 @@ mod tests {
         );
         let conftest_idx = graph.fixtures[0].conftest_idx.unwrap();
         assert_eq!(
-            graph.conftests[conftest_idx].path, "tests/conftest.py",
+            graph.declarations[conftest_idx].path, "tests/conftest.py",
             "conftest node should have matching path"
         );
         assert!(
-            graph.conftests[conftest_idx].fixtures.contains(&0),
+            graph.declarations[conftest_idx].fixtures.contains(&0),
             "conftest should reference the fixture in its fixtures list"
         );
     }
@@ -900,14 +900,14 @@ mod tests {
         builder.resolve_edges();
         let graph = builder.build();
         assert_eq!(
-            graph.conftests.len(),
+            graph.declarations.len(),
             1,
             "two fixtures from the same conftest path must resolve to one conftest \
              node — a duplicated node would split one file's fixtures across two \
              graph nodes and break navigation between them"
         );
         assert_eq!(
-            graph.conftests[0].fixtures.len(),
+            graph.declarations[0].fixtures.len(),
             2,
             "the shared conftest node should list both fixtures, not just whichever \
              one happened to create the node first"
@@ -1039,7 +1039,7 @@ mod tests {
         let merged = builder2.build();
 
         assert_eq!(
-            merged.conftests.len(),
+            merged.declarations.len(),
             1,
             "fixture from same conftest should reuse existing conftest node"
         );
@@ -1048,11 +1048,11 @@ mod tests {
             "fixture should be linked to the conftest node"
         );
         assert!(
-            merged.conftests[0].fixtures.contains(&0),
+            merged.declarations[0].fixtures.contains(&0),
             "conftest should reference the phase-1 fixture"
         );
         assert!(
-            merged.conftests[0].fixtures.contains(&1),
+            merged.declarations[0].fixtures.contains(&1),
             "conftest should also reference the phase-2 fixture added via from_graph"
         );
     }

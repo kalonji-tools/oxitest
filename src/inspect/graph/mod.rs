@@ -8,7 +8,7 @@
 pub mod builder;
 pub mod nodes;
 
-use nodes::{ConftestNode, FixtureNode, MarkNode, PluginNode, TestNode};
+use nodes::{DeclarationNode, FixtureNode, MarkNode, PluginNode, TestNode};
 
 use crate::query::resource::QueryEntry;
 
@@ -20,7 +20,7 @@ pub enum NodeKind {
     Fixture,
     Test,
     Mark,
-    Conftest,
+    Declaration,
     Plugin,
 }
 
@@ -31,7 +31,7 @@ impl NodeKind {
             Self::Fixture => 'F',
             Self::Test => 'T',
             Self::Mark => 'M',
-            Self::Conftest => 'C',
+            Self::Declaration => 'D',
             Self::Plugin => 'P',
         }
     }
@@ -42,7 +42,7 @@ impl NodeKind {
             Self::Fixture => "fixture",
             Self::Test => "test",
             Self::Mark => "mark",
-            Self::Conftest => "conftest",
+            Self::Declaration => "declaration",
             Self::Plugin => "plugin",
         }
     }
@@ -87,7 +87,7 @@ pub struct InspectGraph {
     pub fixtures: Vec<FixtureNode>,
     pub tests: Vec<TestNode>,
     pub marks: Vec<MarkNode>,
-    pub conftests: Vec<ConftestNode>,
+    pub declarations: Vec<DeclarationNode>,
     pub plugins: Vec<PluginNode>,
     pub broken_edges: Vec<BrokenEdge>,
 }
@@ -95,7 +95,7 @@ pub struct InspectGraph {
 impl InspectGraph {
     /// Strip an absolute rootdir prefix from all path fields in the graph.
     ///
-    /// Normalizes `FixtureNode.source`, `ConftestNode.path`,
+    /// Normalizes `FixtureNode.source`, `DeclarationNode.path`,
     /// and `TestNode.node_id` to relative paths for display in the TUI.
     ///
     /// Uses `camino::Utf8Path::strip_prefix` for platform-safe path handling
@@ -115,7 +115,7 @@ impl InspectGraph {
                 t.node_id = rel.to_string();
             }
         }
-        for c in &mut self.conftests {
+        for c in &mut self.declarations {
             if let Ok(rel) = camino::Utf8Path::new(&c.path).strip_prefix(root) {
                 c.path = rel.to_string();
             }
@@ -128,7 +128,7 @@ impl InspectGraph {
             NodeKind::Fixture => &self.fixtures[r.index].name,
             NodeKind::Test => &self.tests[r.index].node_id,
             NodeKind::Mark => &self.marks[r.index].name,
-            NodeKind::Conftest => &self.conftests[r.index].path,
+            NodeKind::Declaration => &self.declarations[r.index].path,
             NodeKind::Plugin => &self.plugins[r.index].name,
         }
     }
@@ -139,7 +139,7 @@ impl InspectGraph {
             NodeKind::Fixture => self.fixtures.len(),
             NodeKind::Test => self.tests.len(),
             NodeKind::Mark => self.marks.len(),
-            NodeKind::Conftest => self.conftests.len(),
+            NodeKind::Declaration => self.declarations.len(),
             NodeKind::Plugin => self.plugins.len(),
         }
     }
@@ -149,7 +149,7 @@ impl InspectGraph {
         self.fixtures.is_empty()
             && self.tests.is_empty()
             && self.marks.is_empty()
-            && self.conftests.is_empty()
+            && self.declarations.is_empty()
             && self.plugins.is_empty()
     }
 
@@ -184,7 +184,7 @@ impl InspectGraph {
 
     /// Return references to every node in the graph, in display order.
     ///
-    /// Iteration order: tests → fixtures → marks → conftests → plugins.
+    /// Iteration order: tests → fixtures → marks → declarations → plugins.
     /// Each `NodeRef.index` is the position within its own typed vector,
     /// matching the O(1) lookup semantics of `node_name`.
     pub(crate) fn all_node_refs(&self) -> Vec<NodeRef> {
@@ -207,9 +207,9 @@ impl InspectGraph {
                 index: i,
             });
         }
-        for i in 0..self.conftests.len() {
+        for i in 0..self.declarations.len() {
             refs.push(NodeRef {
-                kind: NodeKind::Conftest,
+                kind: NodeKind::Declaration,
                 index: i,
             });
         }
@@ -280,7 +280,7 @@ mod tests {
             name: "slow".to_string(),
             used_by: vec![],
         });
-        graph.conftests.push(ConftestNode {
+        graph.declarations.push(DeclarationNode {
             path: "tests/conftest.py".to_string(),
             fixtures: vec![],
         });
@@ -314,7 +314,7 @@ mod tests {
             ),
             (
                 NodeRef {
-                    kind: NodeKind::Conftest,
+                    kind: NodeKind::Declaration,
                     index: 0,
                 },
                 "tests/conftest.py",
@@ -345,7 +345,7 @@ mod tests {
             (NodeKind::Fixture, 'F'),
             (NodeKind::Test, 'T'),
             (NodeKind::Mark, 'M'),
-            (NodeKind::Conftest, 'C'),
+            (NodeKind::Declaration, 'D'),
             (NodeKind::Plugin, 'P'),
         ];
         for (kind, expected) in &cases {
@@ -456,7 +456,7 @@ mod tests {
         builder.resolve_edges();
         let graph = builder.build();
         let refs = graph.all_node_refs();
-        // resolve_edges auto-creates a ConftestNode for the fixture's source path,
+        // resolve_edges auto-creates a DeclarationNode for the fixture's source path,
         // so the graph contains 1 test + 1 fixture + 1 conftest = 3 nodes total.
         assert_eq!(
             refs.len(),
@@ -491,7 +491,7 @@ mod tests {
             fixture_deps: vec![],
             marks: vec![],
         });
-        graph.conftests.push(ConftestNode {
+        graph.declarations.push(DeclarationNode {
             path: "/home/user/project/tests/conftest.py".to_string(),
             fixtures: vec![],
         });
@@ -507,7 +507,7 @@ mod tests {
             "test node_id should have rootdir prefix stripped"
         );
         assert_eq!(
-            graph.conftests[0].path, "tests/conftest.py",
+            graph.declarations[0].path, "tests/conftest.py",
             "conftest path should have rootdir prefix stripped"
         );
     }

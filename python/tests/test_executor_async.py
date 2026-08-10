@@ -397,8 +397,8 @@ def test_async_yield_fixture_teardown_reverse_order(tmp: TempDir) -> None:
         log.append("teardown_b")
 
     reg = FixtureRegistry()
-    reg.register(helpers.make_fixture_def("a", factory_a, conftest_path="/c.py"))
-    reg.register(helpers.make_fixture_def("b", factory_b, conftest_path="/c.py"))
+    reg.register(helpers.make_fixture_def("a", factory_a, declaration_path="/c.py"))
+    reg.register(helpers.make_fixture_def("b", factory_b, declaration_path="/c.py"))
     session = FixtureSession(reg)
     result = helpers.exec_inline(
         tmp,
@@ -537,7 +537,7 @@ def test_shared_async_fixture_provides_value(tmp: TempDir) -> None:
         helpers.make_fixture_def(
             "pool",
             async_pool_factory,
-            conftest_path="/c.py",
+            declaration_path="/c.py",
             shared=True,
             is_async=True,
         )
@@ -586,7 +586,7 @@ def test_shared_async_fixture_cached_across_tests(tmp: TempDir) -> None:
         helpers.make_fixture_def(
             "pool",
             async_pool_factory,
-            conftest_path="/c.py",
+            declaration_path="/c.py",
             shared=True,
             is_async=True,
         )
@@ -638,7 +638,7 @@ def test_shared_async_stray_task_cleanup(tmp: TempDir) -> None:
         helpers.make_fixture_def(
             "pool",
             async_pool_factory,
-            conftest_path="/c.py",
+            declaration_path="/c.py",
             shared=True,
             is_async=True,
         )
@@ -697,7 +697,7 @@ def test_shared_async_yield_fixture_teardown_at_session_end(tmp: TempDir) -> Non
         helpers.make_fixture_def(
             "pool",
             async_yield_factory,
-            conftest_path="/c.py",
+            declaration_path="/c.py",
             shared=True,
             is_async=True,
         )
@@ -747,7 +747,7 @@ def test_non_shared_async_test_gets_own_loop(tmp: TempDir) -> None:
         helpers.make_fixture_def(
             "pool",
             async_pool_factory,
-            conftest_path="/c.py",
+            declaration_path="/c.py",
             shared=True,
             is_async=True,
         )
@@ -858,10 +858,12 @@ def test_sync_fixture_depending_on_async_fixture_error(tmp: TempDir) -> None:
     reg = FixtureRegistry()
     reg.register(
         helpers.make_fixture_def(
-            "dep", async_factory, conftest_path="/c.py", is_async=True
+            "dep", async_factory, declaration_path="/c.py", is_async=True
         )
     )
-    reg.register(helpers.make_fixture_def("combo", sync_factory, conftest_path="/c.py"))
+    reg.register(
+        helpers.make_fixture_def("combo", sync_factory, declaration_path="/c.py")
+    )
     session = FixtureSession(reg)
     try:
         result = helpers.exec_inline(
@@ -901,12 +903,12 @@ def test_shared_async_depending_on_non_shared_async_error(tmp: TempDir) -> None:
     reg = FixtureRegistry()
     reg.register(
         helpers.make_fixture_def(
-            "dep", non_shared_async, conftest_path="/c.py", is_async=True
+            "dep", non_shared_async, declaration_path="/c.py", is_async=True
         )
     )
     reg.register(
         helpers.make_fixture_def(
-            "pool", shared_async, conftest_path="/c.py", shared=True, is_async=True
+            "pool", shared_async, declaration_path="/c.py", shared=True, is_async=True
         )
     )
     session = FixtureSession(reg)

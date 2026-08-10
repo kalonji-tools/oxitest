@@ -10,10 +10,10 @@ from typing import Any
 from oxitest._bridge._builtins._base import BuiltinFixture
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
-    ConftestSource,
     FixtureDef,
     FixtureRegistry,
     FixtureScope,
+    FrameworkSource,
     PluginModuleSource,
 )
 
@@ -162,27 +162,27 @@ def _builtin_defs() -> list[FixtureDef[Any]]:
 def _is_builtin(defn: FixtureDef[Any]) -> bool:
     if isinstance(defn.source, BuiltinSource):
         return True
-    if defn.conftest_path == _BUILTIN_CONFTEST:
+    if defn.declaration_path == _BUILTIN_CONFTEST:
         return True
-    if isinstance(defn.source, ConftestSource):
+    if isinstance(defn.source, FrameworkSource):
         mod = getattr(defn.source.func, "__module__", "") or ""
         return mod.startswith(_BUILTIN_MODULE_PREFIX)
     return False
 
 
 def _origin_key(defn: FixtureDef[Any]) -> tuple[int, str]:
-    """Sort key: (0, '') for built-in, (1, plugin), (2, conftest_path)."""
+    """Sort key: (0, '') for built-in, (1, plugin), (2, declaration_path)."""
     if _is_builtin(defn):
         return (0, "")
     if isinstance(defn.source, PluginModuleSource):
         # Groups with the FixtureProvider plugins rather than under a raw
         # site-packages path, so one plugin's fixtures list together (#1717).
         return (1, defn.source.plugin_module)
-    if isinstance(defn.source, ConftestSource) and not defn.source.conftest_path:
+    if isinstance(defn.source, FrameworkSource) and not defn.source.origin:
         return (1, getattr(defn.source.func, "__module__", "plugin"))
-    if not isinstance(defn.source, ConftestSource):
-        return (1, defn.conftest_path)
-    return (2, defn.conftest_path)
+    if not isinstance(defn.source, FrameworkSource):
+        return (1, defn.declaration_path)
+    return (2, defn.declaration_path)
 
 
 def _origin_header(defn: FixtureDef[Any]) -> str:
@@ -190,12 +190,12 @@ def _origin_header(defn: FixtureDef[Any]) -> str:
         return "built-in"
     if isinstance(defn.source, PluginModuleSource):
         return f"plugin ({defn.source.plugin_module})"
-    if isinstance(defn.source, ConftestSource) and not defn.source.conftest_path:
+    if isinstance(defn.source, FrameworkSource) and not defn.source.origin:
         mod = getattr(defn.source.func, "__module__", "plugin")
         return f"plugin ({mod})"
-    if not isinstance(defn.source, ConftestSource):
-        return defn.conftest_path
-    return defn.conftest_path
+    if not isinstance(defn.source, FrameworkSource):
+        return defn.declaration_path
+    return defn.declaration_path
 
 
 # Graph coloring states for DFS cycle detection.

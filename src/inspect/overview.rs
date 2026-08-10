@@ -1,7 +1,7 @@
 //! Overview section data for the cartographic landing screen.
 //!
 //! [`OverviewSections`] holds pre-sorted slices of "gravity" entries —
-//! fixtures with the most consumers, marks with the most tests, conftests
+//! fixtures with the most consumers, marks with the most tests, declarations
 //! with the most fixtures, and diagnostic signals — used to populate the
 //! TUI overview panel.
 
@@ -50,13 +50,13 @@ pub enum OverviewItem {
 /// Flat cursor layout (for `item_at` / `node_ref_at`):
 ///
 /// ```text
-/// [gravity[0], …, marks[0], …, conftests[0], …, signals[0], …]
+/// [gravity[0], …, marks[0], …, declarations[0], …, signals[0], …]
 /// ```
 #[derive(Default)]
 pub struct OverviewSections {
     pub gravity: Vec<GravityEntry>,
     pub marks: Vec<MarkEntry>,
-    pub conftests: Vec<ConftestEntry>,
+    pub declarations: Vec<ConftestEntry>,
     pub signals: Vec<Signal>,
 }
 
@@ -66,7 +66,7 @@ impl OverviewSections {
     /// - `gravity`: fixtures with >0 consumers, sorted descending by
     ///   `consumers.len()`.
     /// - `marks`: all marks, sorted descending by `used_by.len()`.
-    /// - `conftests`: all conftests, sorted descending by `fixtures.len()`.
+    /// - `declarations`: all declarations, sorted descending by `fixtures.len()`.
     pub(crate) fn from_graph(graph: &InspectGraph) -> Self {
         // ── Gravity (fixtures by consumer count) ─────────────────────────
         let mut gravity: Vec<GravityEntry> = graph
@@ -95,32 +95,32 @@ impl OverviewSections {
             .collect();
         marks.sort_by_key(|e| std::cmp::Reverse(e.test_count));
 
-        // ── Conftests (by fixture count) ──────────────────────────────────
-        let mut conftests: Vec<ConftestEntry> = graph
-            .conftests
+        // ── Declarations (by fixture count) ──────────────────────────────────
+        let mut declarations: Vec<ConftestEntry> = graph
+            .declarations
             .iter()
             .enumerate()
             .map(|(i, c)| ConftestEntry {
-                node_ref: NodeRef::new(NodeKind::Conftest, i),
+                node_ref: NodeRef::new(NodeKind::Declaration, i),
                 path: c.path.clone(),
                 fixture_count: c.fixtures.len(),
             })
             .collect();
-        conftests.sort_by_key(|e| std::cmp::Reverse(e.fixture_count));
+        declarations.sort_by_key(|e| std::cmp::Reverse(e.fixture_count));
 
         let signals = super::signals::detect_signals(graph);
 
         Self {
             gravity,
             marks,
-            conftests,
+            declarations,
             signals,
         }
     }
 
     /// Total number of selectable items across all sections.
     pub(crate) const fn item_count(&self) -> usize {
-        self.gravity.len() + self.marks.len() + self.conftests.len() + self.signals.len()
+        self.gravity.len() + self.marks.len() + self.declarations.len() + self.signals.len()
     }
 
     /// Return the item at the given flat cursor `index`.
@@ -131,7 +131,7 @@ impl OverviewSections {
     pub(crate) fn item_at(&self, index: usize) -> Option<OverviewItem> {
         let g = self.gravity.len();
         let m = self.marks.len();
-        let c = self.conftests.len();
+        let c = self.declarations.len();
 
         if index < g {
             let e = &self.gravity[index];
@@ -148,7 +148,7 @@ impl OverviewSections {
                 test_count: e.test_count,
             }))
         } else if index < g + m + c {
-            let e = &self.conftests[index - g - m];
+            let e = &self.declarations[index - g - m];
             Some(OverviewItem::Conftest(ConftestEntry {
                 node_ref: e.node_ref.clone(),
                 path: e.path.clone(),
@@ -169,13 +169,13 @@ impl OverviewSections {
     pub(crate) fn node_ref_at(&self, index: usize) -> Option<NodeRef> {
         let g = self.gravity.len();
         let m = self.marks.len();
-        let c = self.conftests.len();
+        let c = self.declarations.len();
         if index < g {
             Some(self.gravity[index].node_ref.clone())
         } else if index < g + m {
             Some(self.marks[index - g].node_ref.clone())
         } else if index < g + m + c {
-            Some(self.conftests[index - g - m].node_ref.clone())
+            Some(self.declarations[index - g - m].node_ref.clone())
         } else if index < g + m + c + self.signals.len() {
             self.signals[index - g - m - c].affected.first().cloned()
         } else {
@@ -189,7 +189,7 @@ impl OverviewSections {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::inspect::graph::nodes::{ConftestNode, FixtureNode, MarkNode, TestNode};
+    use crate::inspect::graph::nodes::{DeclarationNode, FixtureNode, MarkNode, TestNode};
 
     /// Build a fixture node with the given name and a pre-set consumer list.
     fn make_fixture(name: &str, consumers: Vec<NodeRef>) -> FixtureNode {
@@ -229,8 +229,8 @@ mod tests {
     }
 
     /// Build a conftest node with a fixture index list.
-    fn make_conftest(path: &str, fixtures: Vec<usize>) -> ConftestNode {
-        ConftestNode {
+    fn make_conftest(path: &str, fixtures: Vec<usize>) -> DeclarationNode {
+        DeclarationNode {
             path: path.to_string(),
             fixtures,
         }
@@ -260,7 +260,7 @@ mod tests {
 
         // One conftest with one fixture.
         graph
-            .conftests
+            .declarations
             .push(make_conftest("tests/conftest.py", vec![0]));
 
         let sections = OverviewSections::from_graph(&graph);
@@ -294,17 +294,17 @@ mod tests {
         );
 
         assert_eq!(
-            sections.conftests.len(),
+            sections.declarations.len(),
             1,
-            "all conftests should appear in the conftests section"
+            "all declarations should appear in the declarations section"
         );
         assert_eq!(
-            sections.conftests[0].path, "tests/conftest.py",
+            sections.declarations[0].path, "tests/conftest.py",
             "conftest path should match"
         );
         assert_eq!(
-            sections.conftests[0].fixture_count, 1,
-            "fixture_count should equal conftests.fixtures.len()"
+            sections.declarations[0].fixture_count, 1,
+            "fixture_count should equal declarations.fixtures.len()"
         );
     }
 
@@ -354,19 +354,19 @@ mod tests {
 
         // Add one conftest.
         graph
-            .conftests
+            .declarations
             .push(make_conftest("tests/conftest.py", vec![0, 1]));
 
         let sections = OverviewSections::from_graph(&graph);
         let total = sections.item_count();
         let expected = sections.gravity.len()
             + sections.marks.len()
-            + sections.conftests.len()
+            + sections.declarations.len()
             + sections.signals.len();
 
         assert_eq!(
             total, expected,
-            "item_count should equal gravity + marks + conftests + signals"
+            "item_count should equal gravity + marks + declarations + signals"
         );
 
         // Every index in [0, total) must return Some.
@@ -410,7 +410,9 @@ mod tests {
         graph.marks.push(make_mark("slow", vec![0]));
 
         // One conftest.
-        graph.conftests.push(make_conftest("conftest.py", vec![0]));
+        graph
+            .declarations
+            .push(make_conftest("conftest.py", vec![0]));
 
         let sections = OverviewSections::from_graph(&graph);
 
@@ -444,7 +446,7 @@ mod tests {
         ));
         graph.tests.push(make_test("tests/test.py::test_it"));
         graph.marks.push(make_mark("m", vec![0]));
-        graph.conftests.push(make_conftest("c.py", vec![0]));
+        graph.declarations.push(make_conftest("c.py", vec![0]));
 
         let sections = OverviewSections::from_graph(&graph);
 
@@ -460,7 +462,7 @@ mod tests {
         );
         assert_eq!(
             sections.node_ref_at(2).map(|r| r.kind),
-            Some(NodeKind::Conftest),
+            Some(NodeKind::Declaration),
             "node_ref_at(2) should be a Conftest ref"
         );
     }
@@ -550,7 +552,7 @@ mod tests {
     fn signals_populated_from_graph_with_unused_fixture() {
         let mut graph = InspectGraph::default();
         // Conftest needed so conftest_idx is valid.
-        graph.conftests.push(ConftestNode {
+        graph.declarations.push(DeclarationNode {
             path: "conftest.py".to_string(),
             fixtures: vec![],
         });
@@ -600,17 +602,17 @@ mod tests {
         let sections = OverviewSections::from_graph(&graph);
         let expected = sections.gravity.len()
             + sections.marks.len()
-            + sections.conftests.len()
+            + sections.declarations.len()
             + sections.signals.len();
 
         assert_eq!(
             sections.item_count(),
             expected,
             "item_count should include signals in the total — \
-             gravity={}, marks={}, conftests={}, signals={}",
+             gravity={}, marks={}, declarations={}, signals={}",
             sections.gravity.len(),
             sections.marks.len(),
-            sections.conftests.len(),
+            sections.declarations.len(),
             sections.signals.len(),
         );
     }
@@ -618,7 +620,7 @@ mod tests {
     #[test]
     fn item_at_returns_signal_variant_for_signal_index() {
         let mut graph = InspectGraph::default();
-        graph.conftests.push(ConftestNode {
+        graph.declarations.push(DeclarationNode {
             path: "conftest.py".to_string(),
             fixtures: vec![],
         });
@@ -636,7 +638,8 @@ mod tests {
         });
 
         let sections = OverviewSections::from_graph(&graph);
-        let signal_start = sections.gravity.len() + sections.marks.len() + sections.conftests.len();
+        let signal_start =
+            sections.gravity.len() + sections.marks.len() + sections.declarations.len();
 
         assert!(
             !sections.signals.is_empty(),
@@ -654,7 +657,7 @@ mod tests {
     #[test]
     fn node_ref_at_returns_first_affected_for_signal() {
         let mut graph = InspectGraph::default();
-        graph.conftests.push(ConftestNode {
+        graph.declarations.push(DeclarationNode {
             path: "conftest.py".to_string(),
             fixtures: vec![],
         });
@@ -672,7 +675,8 @@ mod tests {
         });
 
         let sections = OverviewSections::from_graph(&graph);
-        let signal_start = sections.gravity.len() + sections.marks.len() + sections.conftests.len();
+        let signal_start =
+            sections.gravity.len() + sections.marks.len() + sections.declarations.len();
 
         let node_ref = sections.node_ref_at(signal_start);
         let expected = sections.signals[0].affected.first().cloned();

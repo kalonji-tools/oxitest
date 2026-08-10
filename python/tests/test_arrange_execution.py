@@ -218,10 +218,10 @@ def test_arrange_ambiguous_type_reports_error(tmp: TempDir) -> None:
     # is raised.
     session = helpers.make_session(
         helpers.make_fixture_def(
-            "alpha", fixture_type=ambig_type, conftest_path="/conftest.py"
+            "alpha", fixture_type=ambig_type, declaration_path="/conftest.py"
         ),
         helpers.make_fixture_def(
-            "beta", fixture_type=ambig_type, conftest_path="/conftest.py"
+            "beta", fixture_type=ambig_type, declaration_path="/conftest.py"
         ),
     )
     # Seed the cache so the executor loads the same module we pre-loaded.

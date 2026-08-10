@@ -30,7 +30,7 @@ def _make_task(path: str, fn_name: str) -> dict:
                 ],
             }
         ],
-        "conftest_paths": [],
+        "declaration_paths": [],
         "timeout_secs": None,
     }
 

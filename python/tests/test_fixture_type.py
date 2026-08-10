@@ -11,8 +11,8 @@ import oxitest as oxi
 from oxitest import Fixture, FixtureRef, Yields
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
-    ConftestSource,
     FixtureScope,
+    FrameworkSource,
     PluginSource,
     _fixture_inner_type,
 )
@@ -306,8 +306,8 @@ class SourceCase:
 @oxi.parametrize(
     conftest=SourceCase(
         label="conftest",
-        source=ConftestSource(func=lambda: None, conftest_path="/conftest.py"),
-        field="conftest_path",
+        source=FrameworkSource(func=lambda: None, origin="/conftest.py"),
+        field="origin",
         expected="/conftest.py",
     ),
     plugin=SourceCase(

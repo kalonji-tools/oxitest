@@ -127,7 +127,7 @@ class FixtureValidator:
         self,
         items: list[dict[str, Any]],
     ) -> list[tuple[str, str]]:
-        """Return (conftest_path, fixture_name) pairs for unused fixtures.
+        """Return (declaration_path, fixture_name) pairs for unused fixtures.
 
         A fixture is unused if:
         - It is not autouse
@@ -156,16 +156,16 @@ class FixtureValidator:
             defn = defs[-1]  # most-local
             if defn.autouse:
                 continue
-            # Skip builtins (conftest_path starts with "<")
-            if defn.conftest_path.startswith("<"):
+            # Skip builtins (declaration_path starts with "<")
+            if defn.declaration_path.startswith("<"):
                 continue
             # Only flag fixtures from conftest files; module-level Fixtures()
             # instances may be used solely via FixtureRef in parametrize.
-            if not defn.conftest_path.endswith("conftest.py"):
+            if not defn.declaration_path.endswith("conftest.py"):
                 continue
             if name in all_used:
                 continue
-            unused.append((defn.conftest_path, name))
+            unused.append((defn.declaration_path, name))
         return sorted(unused)
 
     def _lookup_test_function(self, module_path: str, fn_part: str) -> Any | None:

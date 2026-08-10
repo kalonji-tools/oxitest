@@ -7,7 +7,7 @@ Duplicate detection has two rules, because a namespace is an anchor-directory
 basename and basenames are not unique in a tree:
 
 - against a conftest.py Fixtures() instance (the slice-1 Q3 rule) — always a
-  collision. A ConftestSource has no anchor and resolves run-wide, so it is
+  collision. A FrameworkSource has no anchor and resolves run-wide, so it is
   reachable from wherever the other declaration is.
 - against another __fixtures__.py (#1713) — a collision only when one anchor's
   subtree contains the other's. ``tests/api/v1`` and ``tests/admin/v1`` both
@@ -55,7 +55,7 @@ def register_module_source_fixtures(
     Collision with an existing FixtureDef in the same (namespace, name)
     raises UsageError naming both source paths.
 
-    Collision scope: only (namespace, name) collisions between ConftestSource
+    Collision scope: only (namespace, name) collisions between FrameworkSource
     and ModuleSource are detected. Cross-namespace name shadowing (e.g., a
     PluginSource in a different namespace with the same short name) is
     intentional per ADR-0009 Rule 5 (namespace derivation) — the namespace
@@ -128,7 +128,7 @@ def register_module_source_fixtures(
             msg = (
                 f"fixture '{namespace}.{attr_name}' declared twice in "
                 f"overlapping packages:\n"
-                f"  {existing.conftest_path}\n"
+                f"  {existing.declaration_path}\n"
                 f"  {module_path}\n"
                 f"→ delete one declaration (ADR-0009 slice-1 coexistence)"
             )
@@ -394,7 +394,7 @@ def _extract_depends_on(func: Any) -> tuple[tuple[str, type], ...]:
 def _is_async(obj: Any) -> bool:
     """Whether *obj* is a coroutine function or an async-generator function.
 
-    Mirrors the ConftestSource path (``_fixtures.py``) exactly. Without this
+    Mirrors the FrameworkSource path (``_fixtures.py``) exactly. Without this
     the whole async surface is invisible to the resolver: an ``async def``
     fixture is treated as an ordinary callable and its coroutine is injected
     un-awaited (kalonji-tools/oxitest#1733).

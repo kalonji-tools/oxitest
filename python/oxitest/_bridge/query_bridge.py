@@ -8,7 +8,7 @@ from typing import Any
 
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
-    ConftestSource,
+    FrameworkSource,
     ModuleSource,
     PluginModuleSource,
     PluginSource,
@@ -34,7 +34,7 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
     entries = []
     for defn in registry.all():
         match defn.source:
-            case ConftestSource(conftest_path=p):
+            case FrameworkSource(origin=p):
                 source = p
             # A declaration reports the file it was written in, the same way a
             # conftest fixture does. Without this arm it fell to `case _` and
@@ -50,7 +50,7 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
                 source = "<unknown>"
 
         doc = ""
-        if isinstance(defn.source, (ConftestSource, ModuleSource, PluginModuleSource)):
+        if isinstance(defn.source, (FrameworkSource, ModuleSource, PluginModuleSource)):
             doc = (defn.source.func.__doc__ or "").strip()
         elif isinstance(defn.source, BuiltinSource):
             doc = (defn.source.impl_cls.__doc__ or "").strip()

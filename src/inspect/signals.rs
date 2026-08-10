@@ -198,7 +198,7 @@ mod tests {
     use super::*;
     use crate::inspect::graph::{
         BrokenEdge, InspectGraph, NodeKind, NodeRef,
-        nodes::{ConftestNode, FixtureNode, TestNode},
+        nodes::{DeclarationNode, FixtureNode, TestNode},
     };
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -248,7 +248,7 @@ mod tests {
     fn unused_fixture_detected() {
         let mut graph = InspectGraph::default();
         // Conftest node so conftest_idx=Some(0) is valid.
-        graph.conftests.push(ConftestNode {
+        graph.declarations.push(DeclarationNode {
             path: "conftest.py".to_string(),
             fixtures: vec![],
         });
@@ -348,7 +348,7 @@ mod tests {
     fn broken_edges_detected() {
         let mut graph = InspectGraph::default();
         // Conftest node so conftest_idx=Some(0) is valid.
-        graph.conftests.push(ConftestNode {
+        graph.declarations.push(DeclarationNode {
             path: "conftest.py".to_string(),
             fixtures: vec![],
         });

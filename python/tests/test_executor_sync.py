@@ -594,8 +594,8 @@ def test_yield_fixture_teardown_exception_does_not_block_next_teardown(
         log.append("b_teardown")
 
     reg = FixtureRegistry()
-    reg.register(helpers.make_fixture_def("a", factory_a, conftest_path="/c.py"))
-    reg.register(helpers.make_fixture_def("b", factory_b, conftest_path="/c.py"))
+    reg.register(helpers.make_fixture_def("a", factory_a, declaration_path="/c.py"))
+    reg.register(helpers.make_fixture_def("b", factory_b, declaration_path="/c.py"))
     session = FixtureSession(reg)
     diag_token = _diagnostic_collector_var.set(session.diagnostics)
     try:
@@ -652,8 +652,8 @@ def test_multiple_teardown_failures_all_reported(
         raise ValueError(msg)
 
     reg = FixtureRegistry()
-    reg.register(helpers.make_fixture_def("a", factory_a, conftest_path="/c.py"))
-    reg.register(helpers.make_fixture_def("b", factory_b, conftest_path="/c.py"))
+    reg.register(helpers.make_fixture_def("a", factory_a, declaration_path="/c.py"))
+    reg.register(helpers.make_fixture_def("b", factory_b, declaration_path="/c.py"))
     session = FixtureSession(reg)
     diag_token = _diagnostic_collector_var.set(session.diagnostics)
     try:

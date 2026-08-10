@@ -25,7 +25,7 @@ pub fn node_source_location(graph: &InspectGraph, node: &NodeRef) -> Option<(Str
             let file = node_id.split("::").next().unwrap_or(node_id);
             Some((file.to_string(), 1))
         }
-        NodeKind::Mark | NodeKind::Plugin | NodeKind::Conftest => None,
+        NodeKind::Mark | NodeKind::Plugin | NodeKind::Declaration => None,
     }
 }
 
@@ -223,13 +223,13 @@ mod tests {
 
     #[test]
     fn conftest_kind_returns_none() {
-        use crate::inspect::graph::nodes::ConftestNode;
+        use crate::inspect::graph::nodes::DeclarationNode;
         let mut graph = InspectGraph::default();
-        graph.conftests.push(ConftestNode {
+        graph.declarations.push(DeclarationNode {
             path: "tests/conftest.py".to_string(),
             fixtures: vec![],
         });
-        let node = NodeRef::new(NodeKind::Conftest, 0);
+        let node = NodeRef::new(NodeKind::Declaration, 0);
         let result = node_source_location(&graph, &node);
         assert!(
             result.is_none(),
