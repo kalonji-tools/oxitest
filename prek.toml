@@ -128,6 +128,23 @@ pass_filenames = false
 files = "^\\.github/workflows/.*\\.ya?ml$"
 
 [[repos.hooks]]
+id = "platform-sets"
+name = "platform sets"
+language = "system"
+# Three files encode the platform set — the required rollup in test.yml, the
+# wheel targets in publish.yml, and `classifiers` — and nothing compared them,
+# so they disagreed three ways (#1946). ADR-0013 makes the tested set the
+# definition; this holds the derivation.
+#
+# No `stages:` key, so it also runs in CI.
+entry = "python scripts/check_platform_sets.py"
+pass_filenames = false
+# The checker's own file is in the list because PLATFORMS holds ADR-0013
+# Rule 3: a commit that edits only the table is a commit that changes the
+# decision, and without this entry the hook does not run on it.
+files = "^(\\.github/workflows/(test|publish)\\.ya?ml|pyproject\\.toml|scripts/check_platform_sets\\.py)$"
+
+[[repos.hooks]]
 id = "subprocess-encoding"
 name = "subprocess encoding"
 language = "system"
