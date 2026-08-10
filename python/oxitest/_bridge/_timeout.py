@@ -175,6 +175,18 @@ class _UnixTimeoutContext:
         self._deadline_taken = (
             not fired and abs(remaining - predicted) > _READ_SKEW_SECONDS
         )
+        # A capped deadline can only fire when the enclosing one is also spent,
+        # so this often re-arms a timer that fires within microseconds —
+        # measured at 0.010 ms for _MIN_REARM_SECONDS. That fire lands while
+        # this context's own OxitestTimeoutError is still propagating, and the
+        # wrapper's `except` cannot tell the two apart because both are the
+        # same exception type. The enclosing test therefore reports passed
+        # rather than timing out, in the one case where its deadline expires
+        # *during* a nested run. Restoring the handler before arming does not
+        # change it — measured, 8/8 either way — because the attribution is
+        # lost in the wrapper, not at the handler. Known limit, recorded in
+        # ADR-0016; a deadline with time left after the nested run is
+        # unaffected and fires normally (#2001).
         if state.enclosing_remaining > 0.0:
             rest = state.enclosing_remaining - elapsed
             signal.setitimer(signal.ITIMER_REAL, max(rest, _MIN_REARM_SECONDS))
