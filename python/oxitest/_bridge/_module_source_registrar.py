@@ -26,6 +26,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, get_type_hints
 
+from oxitest._bridge._boundary import safe_type_hints
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import UsageError
 from oxitest._bridge._fixture_decorator import MARKER_ATTR, _FixtureMarker
@@ -35,6 +36,7 @@ from oxitest._bridge._fixture_registry import (
     FixtureRegistry,
     ModuleSource,
     PluginModuleSource,
+    _fixture_inner_type,
 )
 from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge._visibility import anchors_overlap
@@ -146,6 +148,7 @@ def register_module_source_fixtures(
                 autouse=marker.autouse,
                 namespace=namespace,
                 is_async=_is_async(obj),
+                depends_on=_extract_depends_on(obj),
             )
         )
 
@@ -241,6 +244,7 @@ def register_plugin_source_fixtures(  # noqa: PLR0913 — five are the declarati
                 autouse=enabled,
                 namespace=namespace,
                 is_async=_is_async(obj),
+                depends_on=_extract_depends_on(obj),
             )
         )
 
@@ -358,6 +362,33 @@ def _clashing_declaration(
         if anchor is None or anchors_overlap(anchor, anchor_package_path):
             return defn
     return None
+
+
+def _extract_depends_on(func: Any) -> tuple[tuple[str, type], ...]:
+    """Extract dependency declarations from a fixture function.
+
+    Returns ``(qualifier, binding_type)`` pairs for parameters annotated with
+    ``Fixture[T]``. Unannotated parameters are NOT included — they are caught at
+    resolve time by ``UnannotatedFixtureParamError``.
+
+    Mirrors ``conftest_loader._extract_depends_on``. Without it a declaration's
+    ``FixtureDef`` carries no dependencies at all, so the fixture dependency
+    graph is empty for every ``@oxi.fixture``: ``query fixtures -E uses(x)``
+    answers "no results" and ``--tree`` draws no edges, while the same project
+    runs green (#1720). The duplication is deliberate and short-lived — the
+    conftest copy goes with ``conftest_loader.py``, and this is the survivor.
+    """
+    hints = safe_type_hints(func, include_extras=True)
+    if hints is None:
+        return ()
+    deps: list[tuple[str, type]] = []
+    for param_name, hint in hints.items():
+        if param_name == "return":
+            continue
+        is_fx, inner = _fixture_inner_type(hint)
+        if is_fx:
+            deps.append((param_name, inner))
+    return tuple(deps)
 
 
 def _is_async(obj: Any) -> bool:

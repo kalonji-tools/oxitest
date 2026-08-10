@@ -10,6 +10,7 @@ from oxitest._bridge._fixture_registry import (
     BuiltinSource,
     ConftestSource,
     FixtureScope,
+    ModuleSource,
     PluginModuleSource,
     PluginSource,
 )
@@ -36,6 +37,12 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
         match defn.source:
             case ConftestSource(conftest_path=p):
                 source = p
+            # A declaration reports the file it was written in, the same way a
+            # conftest fixture does. Without this arm it fell to `case _` and
+            # reported "<unknown>" — the source column's whole job is to say
+            # where to go and edit it (#1720).
+            case ModuleSource(defining_module_path=p):
+                source = p
             case PluginSource(plugin_module=m) | PluginModuleSource(plugin_module=m):
                 source = f"<plugin:{m}>"
             case BuiltinSource():
@@ -44,7 +51,7 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
                 source = "<unknown>"
 
         doc = ""
-        if isinstance(defn.source, (ConftestSource, PluginModuleSource)):
+        if isinstance(defn.source, (ConftestSource, ModuleSource, PluginModuleSource)):
             doc = (defn.source.func.__doc__ or "").strip()
         elif isinstance(defn.source, BuiltinSource):
             doc = (defn.source.impl_cls.__doc__ or "").strip()
