@@ -17,6 +17,7 @@ from oxitest._bridge._timeout import (
     TimeoutSet,
     _IdleHandler,
     _IdleTimer,
+    _timeout_message,
     _UnixTimeoutContext,
     _WindowsTimeoutContext,
     make_timeout_wrapper,
@@ -540,3 +541,52 @@ def test_unaffected_unix_context_arms_what_it_was_asked() -> None:
         )
     finally:
         ctx.__exit__(None, None, None)
+
+
+def test_timeout_message_names_the_armed_deadline_when_capped() -> None:
+    """A capped deadline must report the limit it enforced, not the one asked for.
+
+    ``make_timeout_wrapper`` closed over the requested seconds, so an inner 60s
+    deadline capped to 1s fired at 1s and reported 60s -- a number that was
+    never armed, which sends the developer debugging against the wrong limit.
+    """
+    uncapped = _timeout_message(60.0, 60)
+    assert uncapped == "Timed out after 60s", (
+        "the uncapped message must stay byte-identical to the pre-#2001 form,"
+        f" because every existing report and test reads it; got {uncapped!r}"
+    )
+    capped = _timeout_message(1.0, 60)
+    assert "60s" in capped and "1s" in capped, (
+        "a capped message must name both numbers -- the limit enforced so the"
+        " developer knows what bit, and the limit requested so the cap is"
+        f" visible rather than looking like a typo; got {capped!r}"
+    )
+
+
+def test_a_capped_deadline_reports_the_limit_it_enforced() -> None:
+    """End to end: the wrapper reads the context, not its own argument."""
+    if not hasattr(signal, "alarm"):
+        return
+    inner_results: list[object] = []
+    inner_wrapper = make_timeout_wrapper(60, context_cls=_UnixTimeoutContext)
+    outer_wrapper = make_timeout_wrapper(1, context_cls=_UnixTimeoutContext)
+
+    def slow_body() -> PassedResult:
+        time.sleep(5)
+        return PassedResult()
+
+    def enclosing_body() -> PassedResult:
+        inner_results.append(inner_wrapper(slow_body))
+        return PassedResult()
+
+    outer_wrapper(enclosing_body)
+
+    assert inner_results, (
+        "the inner wrapper must return a result; an empty list means the capped"
+        " deadline escaped as an exception instead of being reported"
+    )
+    message = str(getattr(inner_results[0], "message", ""))
+    assert "60s" not in message.split("(", maxsplit=1)[0], (
+        "the headline limit must be the ~1s that was armed, not the 60s that was"
+        f" asked for -- the body was cut after ~1s; got {message!r}"
+    )
