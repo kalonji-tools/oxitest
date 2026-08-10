@@ -590,3 +590,51 @@ def test_a_capped_deadline_reports_the_limit_it_enforced() -> None:
         "the headline limit must be the ~1s that was armed, not the 60s that was"
         f" asked for -- the body was cut after ~1s; got {message!r}"
     )
+
+
+def test_a_cancelled_slot_is_detected() -> None:
+    """Code that cancels the timer voids the deadline, and that must be visible."""
+    if not hasattr(signal, "alarm"):
+        return
+    ctx = _UnixTimeoutContext(seconds=5)
+    ctx.__enter__()
+    signal.setitimer(signal.ITIMER_REAL, 0)
+    ctx.__exit__(None, None, None)
+    assert ctx.deadline_taken, (
+        "a cancelled timer means the test ran with no deadline; without detection"
+        " it passes silently and the pass is unearned"
+    )
+
+
+def test_a_fired_deadline_is_not_reported_as_taken() -> None:
+    """A fired deadline leaves the slot at 0 too -- the two must not be confused.
+
+    This is why __exit__ reads the in-flight exception instead of deciding from
+    arithmetic: a deadline that fired and one that was cancelled are identical
+    at the slot.
+    """
+    if not hasattr(signal, "alarm"):
+        return
+    ctx = _UnixTimeoutContext(seconds=1)
+    try:
+        with ctx:
+            time.sleep(3)
+    except OxitestTimeoutError:
+        pass
+    assert not ctx.deadline_taken, (
+        "a fired deadline is the timeout working, not interference; reporting it"
+        " as taken would attach a warning to every genuine timeout"
+    )
+
+
+def test_an_undisturbed_context_is_not_reported_as_taken() -> None:
+    """The ordinary case must stay clean, including close to the deadline."""
+    if not hasattr(signal, "alarm"):
+        return
+    ctx = _UnixTimeoutContext(seconds=2)
+    with ctx:
+        time.sleep(1.8)
+    assert not ctx.deadline_taken, (
+        "finishing just inside the deadline must stay clean, or every slow test"
+        " near its limit would be reported as interfered with"
+    )
