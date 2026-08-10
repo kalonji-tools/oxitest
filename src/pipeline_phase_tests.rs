@@ -435,7 +435,7 @@ mod strict_enforce_detailed_tests {
     }
 
     #[test]
-    fn enforce_preserves_test_and_conftest_files() {
+    fn enforce_preserves_test_files() {
         Python::initialize();
         Python::attach(|py| {
             let mut p = make_pipeline(PipelinePhase::Collected {
@@ -444,7 +444,6 @@ mod strict_enforce_detailed_tests {
                 session: crate::bridge::FixtureSession::stub(py),
             });
             p.shared.test_files = vec![camino::Utf8PathBuf::from("tests/test_x.py")];
-            p.shared.conftest_files = vec![camino::Utf8PathBuf::from("tests/conftest.py")];
             p.cfg.markers.strict = Some(StrictMode::Enforce);
 
             let p = p.strict_or_skip(py).unwrap();
@@ -457,16 +456,6 @@ mod strict_enforce_detailed_tests {
                 p.shared.test_files[0].as_str(),
                 "tests/test_x.py",
                 "test_files path must be preserved"
-            );
-            assert_eq!(
-                p.shared.conftest_files.len(),
-                1,
-                "conftest_files must survive strict_or_skip"
-            );
-            assert_eq!(
-                p.shared.conftest_files[0].as_str(),
-                "tests/conftest.py",
-                "conftest_files path must be preserved"
             );
         });
     }
@@ -678,13 +667,7 @@ mod state_construction_tests {
             camino::Utf8PathBuf::from("tests/test_a.py"),
             camino::Utf8PathBuf::from("tests/test_b.py"),
         ];
-        p.shared.conftest_files = vec![camino::Utf8PathBuf::from("tests/conftest.py")];
         assert_eq!(p.shared.test_files.len(), 2, "should have two test files");
-        assert_eq!(
-            p.shared.conftest_files.len(),
-            1,
-            "should have one conftest file"
-        );
     }
 
     #[test]

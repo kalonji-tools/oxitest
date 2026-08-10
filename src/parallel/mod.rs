@@ -58,7 +58,6 @@ pub struct PhaseResult {
 /// Holding the *serialized* form is what leaves `run_phase_parallel` with
 /// nothing to fail at — see ADR-0011's worked example.
 pub struct WorkerPayloads {
-    conftest: std::sync::Arc<serde_json::value::RawValue>,
     fixture_modules: std::sync::Arc<serde_json::value::RawValue>,
     plugins: std::sync::Arc<serde_json::value::RawValue>,
 }
@@ -67,13 +66,10 @@ impl WorkerPayloads {
     /// All three or none: a worker missing any of them runs a session that
     /// silently differs from the coordinator's.
     pub(crate) fn new(
-        conftest_paths: &[camino::Utf8PathBuf],
         fixture_modules: &[types::FixtureModule],
         plugins: &[String],
         plugin_settings: &std::collections::HashMap<String, toml::Value>,
     ) -> Result<Self, serde_json::Error> {
-        let conftest_strs: Vec<&str> = conftest_paths.iter().map(|p| p.as_str()).collect();
-
         // Not `serde_json::json!`: it expands to `to_value(..).unwrap()`, and
         // clippy does not lint `unwrap` inside an external macro (#1832).
         let plugin_payload = serde_json::Map::from_iter([
@@ -85,7 +81,6 @@ impl WorkerPayloads {
         ]);
 
         Ok(Self {
-            conftest: serde_json::value::to_raw_value(&conftest_strs)?.into(),
             fixture_modules: serde_json::value::to_raw_value(fixture_modules)?.into(),
             plugins: serde_json::value::to_raw_value(&plugin_payload)?.into(),
         })
@@ -132,7 +127,6 @@ pub fn run_phase_parallel(
     let sched = Arc::new(scheduler::Scheduler::new(groups));
     let cancelled = Arc::new(AtomicBool::new(false));
     let WorkerPayloads {
-        conftest: conftest_raw,
         fixture_modules: fixture_modules_raw,
         plugins: plugins_raw,
     } = payloads;
@@ -157,7 +151,6 @@ pub fn run_phase_parallel(
                 worker_id: i,
                 sched: Arc::clone(&sched),
                 cancelled: Arc::clone(&cancelled),
-                conftest_json: std::sync::Arc::clone(conftest_raw),
                 fixture_modules_json: std::sync::Arc::clone(fixture_modules_raw),
                 plugins_json: std::sync::Arc::clone(plugins_raw),
                 timeout_secs,
@@ -252,7 +245,7 @@ mod fixture_module_payload_tests {
         plugins: &[String],
         plugin_settings: &std::collections::HashMap<String, toml::Value>,
     ) -> WorkerPayloads {
-        WorkerPayloads::new(&[], fixture_modules, plugins, plugin_settings)
+        WorkerPayloads::new(fixture_modules, plugins, plugin_settings)
             .expect("the worker payloads serialize")
     }
 

@@ -7,7 +7,6 @@ from oxitest._bridge._diagnostic_collector import (
     emit_diagnostic,
 )
 from oxitest._bridge._fixture_session import FixtureSession
-from oxitest._bridge.conftest_loader import create_session
 from oxitest._bridge.plugin_loader import PluginRegistry
 from oxitest._bridge.result import Diagnostic, DiagnosticSeverity
 
@@ -200,21 +199,3 @@ def test_session_end_clears_diagnostic_collector() -> None:
         )
     finally:
         _diagnostic_collector_var.reset(token)
-
-
-def test_create_session_returns_diagnostics_tuple() -> None:
-    """create_session returns (session, violations, diagnostics) 3-tuple."""
-    result = create_session([])
-    assert len(result) == 3, (
-        f"create_session should return a 3-tuple, got {len(result)}-tuple"
-    )
-    session, violations, diagnostics = result
-    assert isinstance(session, FixtureSession), (
-        "Rust bridge extracts the session via PyO3 — wrong type would crash the run"
-    )
-    assert isinstance(violations, list), (
-        "Rust bridge iterates violations for strict-mode — wrong type would crash"
-    )
-    assert isinstance(diagnostics, list), (
-        "Rust bridge drains diagnostics into RunStats — wrong type would crash"
-    )

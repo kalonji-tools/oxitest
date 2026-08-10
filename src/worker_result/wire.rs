@@ -17,12 +17,12 @@ use camino::Utf8PathBuf;
 /// assertion message says every downstream check becomes meaningless. The coupling
 /// is a Python script parsing Rust source as text; the qualifier is load-bearing.
 #[allow(clippy::redundant_pub_crate)]
-pub(crate) const PROTOCOL_VERSION: u32 = 7;
+pub(crate) const PROTOCOL_VERSION: u32 = 8;
 
 /// A JSON task sent to a worker subprocess over stdin.
 ///
 /// One task describes a group of modules: the module files to import, their
-/// test items, the conftest files to load, and an optional per-test timeout.
+/// test items and an optional per-test timeout.
 /// The worker deserializes this from a single JSON line.
 ///
 /// The coordinator sends exactly one module per task today; #1710 makes a
@@ -35,7 +35,6 @@ pub struct WorkerTask<'a> {
     /// so the coordinator's result-side version warning never fires.
     pub protocol_version: u32,
     pub modules: Vec<WorkerTaskModule<'a>>,
-    pub conftest_paths: &'a serde_json::value::RawValue,
     /// `[{"module": ..., "anchor": ...}]` — see `types::FixtureModule` (#1732).
     pub fixture_modules: &'a serde_json::value::RawValue,
     /// `{"modules": [...], "settings": {...}}` — what a worker needs to

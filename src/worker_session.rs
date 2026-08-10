@@ -229,7 +229,6 @@ pub struct WorkerParams {
     /// Flag set when the run is cancelled (e.g. maxfail reached).
     pub cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// Pre-serialized conftest JSON sent to the worker on each task.
-    pub conftest_json: std::sync::Arc<serde_json::value::RawValue>,
     /// `[{"module": ..., "anchor": ...}]` — every `__fixtures__.py` collection
     /// registered serially, so worker sessions match the coordinator (#1732).
     pub fixture_modules_json: std::sync::Arc<serde_json::value::RawValue>,
@@ -263,7 +262,6 @@ pub struct WorkerParams {
 #[allow(clippy::too_many_arguments)]
 fn build_task<'a>(
     group: &'a scheduler::TaskGroup,
-    conftest_json: &'a serde_json::value::RawValue,
     fixture_modules_json: &'a serde_json::value::RawValue,
     plugins_json: &'a serde_json::value::RawValue,
     timeout_secs: Option<u64>,
@@ -291,7 +289,6 @@ fn build_task<'a>(
                     .collect(),
             })
             .collect(),
-        conftest_paths: conftest_json,
         fixture_modules: fixture_modules_json,
         plugins: plugins_json,
         timeout_secs,
@@ -324,7 +321,6 @@ fn run_worker_loop(
         worker_id,
         sched,
         cancelled,
-        conftest_json,
         fixture_modules_json,
         plugins_json,
         timeout_secs,
@@ -356,7 +352,6 @@ fn run_worker_loop(
 
         let task = build_task(
             &group,
-            &conftest_json,
             &fixture_modules_json,
             &plugins_json,
             timeout_secs,
@@ -535,7 +530,6 @@ mod worker_session_tests {
 
     /// Helper: build a minimal `WorkerTask` from the given `RawValue` payloads.
     fn minimal_task<'a>(
-        conftest: &'a serde_json::value::RawValue,
         fixture_modules: &'a serde_json::value::RawValue,
         plugins: &'a serde_json::value::RawValue,
     ) -> WorkerTask<'a> {
@@ -550,7 +544,6 @@ mod worker_session_tests {
                     markers: vec![],
                 }],
             }],
-            conftest_paths: conftest,
             fixture_modules,
             plugins,
             timeout_secs: None,
@@ -584,10 +577,9 @@ mod worker_session_tests {
         session.close_stdin();
 
         // Assert
-        let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let no_plugins = empty_plugins();
-        let task = minimal_task(&conftest, &fixtures, &no_plugins);
+        let task = minimal_task(&fixtures, &no_plugins);
         assert!(
             session.send_task(&task).is_err(),
             "closing stdin must actually release the pipe — the worker begins its \
@@ -640,7 +632,6 @@ mod worker_session_tests {
     #[test]
     fn build_task_maps_every_module_in_the_group() {
         // Arrange
-        let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let group = crate::scheduler::TaskGroup {
             modules: vec![
@@ -654,7 +645,6 @@ mod worker_session_tests {
         let no_plugins = empty_plugins();
         let task = build_task(
             &group,
-            &conftest,
             &fixtures,
             &no_plugins,
             None,
@@ -687,7 +677,6 @@ mod worker_session_tests {
     #[test]
     fn build_task_stamps_the_current_protocol_version() {
         // Arrange
-        let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let group = crate::scheduler::TaskGroup::single(task_module("tests/test_a.py", 1));
 
@@ -695,7 +684,6 @@ mod worker_session_tests {
         let no_plugins = empty_plugins();
         let task = build_task(
             &group,
-            &conftest,
             &fixtures,
             &no_plugins,
             None,
@@ -718,10 +706,9 @@ mod worker_session_tests {
     fn send_task_writes_valid_json_line() {
         // Arrange
         let (mut child, mut session) = cat_session();
-        let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let no_fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let no_plugins = empty_plugins();
-        let task = minimal_task(&conftest, &no_fixtures, &no_plugins);
+        let task = minimal_task(&no_fixtures, &no_plugins);
 
         // Act
         session.send_task(&task).expect("send_task must succeed");
@@ -755,7 +742,11 @@ mod worker_session_tests {
             "items must stay nested under their module so teardown boundaries \
              are structural rather than inferred from ordering"
         );
-        assert_eq!(parsed["conftest_paths"], serde_json::json!([]));
+        assert!(
+            parsed["conftest_paths"].is_null(),
+            "the task carried a conftest list until protocol v8; a worker \
+             receiving one again means the retired field came back"
+        );
         assert!(parsed["timeout_secs"].is_null());
         assert_eq!(
             parsed["rootdir"], "/rootdir",
@@ -772,7 +763,6 @@ mod worker_session_tests {
     fn send_task_includes_param_id_when_present() {
         // Arrange
         let (mut child, mut session) = cat_session();
-        let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let no_fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let task = WorkerTask {
             protocol_version: crate::worker_result::PROTOCOL_VERSION,
@@ -785,7 +775,6 @@ mod worker_session_tests {
                     markers: vec!["slow"],
                 }],
             }],
-            conftest_paths: &conftest,
             fixture_modules: &no_fixtures,
             plugins: &empty_plugins(),
             timeout_secs: Some(30),
@@ -820,10 +809,9 @@ mod worker_session_tests {
     fn send_task_echoes_back_through_line_rx() {
         // Arrange — keep the session alive so we can read from line_rx.
         let (mut child, mut session) = cat_session();
-        let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let no_fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let no_plugins = empty_plugins();
-        let task = minimal_task(&conftest, &no_fixtures, &no_plugins);
+        let task = minimal_task(&no_fixtures, &no_plugins);
 
         // Act
         session.send_task(&task).expect("send_task must succeed");
@@ -862,11 +850,9 @@ mod worker_session_tests {
 
         // Wait for the child to exit so its stdin pipe is broken.
         let _ = child.wait();
-
-        let conftest = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let no_fixtures = serde_json::value::RawValue::from_string("[]".to_string()).unwrap();
         let no_plugins = empty_plugins();
-        let task = minimal_task(&conftest, &no_fixtures, &no_plugins);
+        let task = minimal_task(&no_fixtures, &no_plugins);
 
         // Act — writing to a dead process should eventually error.
         // The first write may succeed (kernel buffer), so send repeatedly.

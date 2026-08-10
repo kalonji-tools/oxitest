@@ -15,7 +15,6 @@ Task schema (stdin, protocol v7):
                 "markers": [str]
             }]
         }],
-        "conftest_paths": [str],
         "fixture_modules": [{"module": str, "anchor": str}],
         "plugins": {"modules": [str], "settings": {str: {str: any}}},
         "timeout_secs": int | null,
@@ -150,7 +149,6 @@ class WorkerTask(TypedDict):
 
     protocol_version: int
     modules: list[WorkerTaskModule]
-    conftest_paths: list[str]
     fixture_modules: list[WorkerFixtureModule]
     plugins: NotRequired[WorkerPluginInputs]
     timeout_secs: int | None
@@ -352,7 +350,7 @@ def build_session(task: WorkerTask) -> Any:
 
     Called once per process rather than once per task. That is sound because
     every field it reads is run-constant: the coordinator serialises
-    ``conftest_paths`` and ``fixture_modules`` a single time for the whole run
+    ``fixture_modules`` a single time for the whole run
     and hands every worker the same bytes, and ``rootdir`` comes from the
     config. A task carries them so a worker needs no separate handshake, not
     because they can differ between tasks.
@@ -361,14 +359,13 @@ def build_session(task: WorkerTask) -> Any:
     it per task would re-register an identical list against a session that
     already has it.
     """
-    from oxitest._bridge.conftest_loader import create_session
+    from oxitest._bridge._session_factory import create_session
 
-    conftest_paths: list[str] = task.get("conftest_paths", [])
     # Optional on the Python side purely so in-process unit tests can build a
     # task dict without mutating the interpreter's sys.path. The coordinator
     # always sends it.
     rootdir: str | None = task.get("rootdir")
-    session, _violations, _diagnostics = create_session(conftest_paths, rootdir=rootdir)
+    session, _violations, _diagnostics = create_session(rootdir=rootdir)
     # Plugins before fixture modules, mirroring the serial order in
     # FixtureSession.__init__ (builtins → plugins → conftest): a user's own
     # declaration must be able to shadow a plugin's, which requires the

@@ -26,9 +26,7 @@ impl Pipeline {
         };
 
         let (session, fixture_violations) =
-            helpers::init_session(py, &shared.conftest_files, &shared.cfg, || {
-                shared.make_error_reporter()
-            })?;
+            helpers::init_session(py, &shared.cfg, || shared.make_error_reporter())?;
 
         // Replace test_files with the filtered modules to import.
         if let Some(modules) = modules_to_import {
@@ -241,7 +239,6 @@ impl Pipeline {
                 py,
                 args,
                 &self.shared.test_files,
-                &self.shared.conftest_files,
                 Some(session),
                 &self.cfg,
                 self.use_color,
@@ -258,7 +255,6 @@ impl Pipeline {
             py,
             args,
             &self.shared.test_files,
-            &self.shared.conftest_files,
             Some(session),
             &self.cfg,
             self.is_tty,

@@ -65,7 +65,6 @@ pub fn collect_entries(
     py: pyo3::Python<'_>,
     resource: ResourceKind,
     test_files: &[camino::Utf8PathBuf],
-    _conftest_files: &[camino::Utf8PathBuf],
     session: Option<&crate::bridge::FixtureSession>,
     cfg: &config::Config,
 ) -> Result<Vec<QueryEntry>, String> {
@@ -163,7 +162,6 @@ pub fn run_query(
     py: pyo3::Python<'_>,
     args: &config::QueryArgs,
     test_files: &[camino::Utf8PathBuf],
-    conftest_files: &[camino::Utf8PathBuf],
     session: Option<&crate::bridge::FixtureSession>,
     cfg: &config::Config,
     is_tty: bool,
@@ -176,7 +174,7 @@ pub fn run_query(
     // because `--tree` never reaches this function (#1720).
 
     // 1. Collect entries
-    let mut entries = collect_entries(py, args.resource, test_files, conftest_files, session, cfg)?;
+    let mut entries = collect_entries(py, args.resource, test_files, session, cfg)?;
 
     // 2. Parse and apply DSL expression filter
     let parsed_expr = if let Some(ref expr_str) = args.expression {

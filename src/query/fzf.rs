@@ -20,7 +20,6 @@ pub fn run_fzf(
     py: pyo3::Python<'_>,
     args: &config::QueryArgs,
     test_files: &[camino::Utf8PathBuf],
-    conftest_files: &[camino::Utf8PathBuf],
     session: Option<&bridge::FixtureSession>,
     cfg: &config::Config,
     use_color: bool,
@@ -35,8 +34,7 @@ pub fn run_fzf(
         None
     };
 
-    let entries =
-        super::collect_entries(py, args.resource, test_files, conftest_files, session, cfg)?;
+    let entries = super::collect_entries(py, args.resource, test_files, session, cfg)?;
 
     let filtered: Vec<super::resource::QueryEntry> = if let Some(ref expr) = expr {
         entries
