@@ -1,0 +1,7 @@
+[project]
+name = "ns-layout-fixture"
+version = "0.0.0"
+
+[tool.oxitest]
+testpaths = ["ns1680"]
+strict = "abort"
