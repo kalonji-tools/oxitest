@@ -265,7 +265,6 @@ class _BoundaryCase:
     # have nothing narrower to wait for, and the correct backstop for the
     # function tier when no per-test sink is active.
     each=_BoundaryCase(FixtureScope.EACH, None),
-    shared=_BoundaryCase(FixtureScope.SHARED, None),
     session=_BoundaryCase(FixtureScope.SESSION, None),
     module=_BoundaryCase(FixtureScope.MODULE, _MOD_A),
     package=_BoundaryCase(FixtureScope.PACKAGE, _ANCHOR),

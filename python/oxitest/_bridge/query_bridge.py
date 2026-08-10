@@ -9,7 +9,6 @@ from typing import Any
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
     ConftestSource,
-    FixtureScope,
     ModuleSource,
     PluginModuleSource,
     PluginSource,
@@ -62,7 +61,6 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
             {
                 "name": defn.name,
                 "source": source,
-                "shared": str(defn.scope == FixtureScope.SHARED).lower(),
                 "autouse": str(defn.autouse).lower(),
                 "async": str(defn.is_async).lower(),
                 "description": doc,

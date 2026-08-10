@@ -583,9 +583,6 @@ class FixtureSession:
                 else self._session_scope
             )
             return ScopeRefs(scope.cache, scope.teardowns, scope.hits, scope.misses)
-        if defn.shared:
-            s = self._shared_scope
-            return ScopeRefs(s.cache, s.teardowns, s.hits, s.misses)
         # Function tier (#1775). A per-test scope exists only while a test is
         # being resolved or run; every access route during that window — the
         # autouse pass, Fixture[T] injection, fx. proxy access — lands in the

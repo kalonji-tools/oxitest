@@ -185,13 +185,13 @@ def test_tree_keyword_filter() -> None:
 
 
 def test_tree_verbosity_1_shows_tags() -> None:
-    """Verbosity level 1 adds [shared] and async tags alongside each fixture name."""
+    """Verbosity level 1 adds the async tag alongside each fixture name.
+
+    The [shared] tag went with the tier it named (#1720).
+    """
     reg = FixtureRegistry()
-    reg.register(
-        helpers.make_fixture_def("db", conftest_path="c.py", shared=True, is_async=True)
-    )
+    reg.register(helpers.make_fixture_def("db", conftest_path="c.py", is_async=True))
     result = tree_fixtures_from_registry(reg, verbosity=1, use_color=False)
-    assert "[shared" in result, f"shared tag missing: {result!r}"
     assert "async" in result, f"async tag missing: {result!r}"
 
 

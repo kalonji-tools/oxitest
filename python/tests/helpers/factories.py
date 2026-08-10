@@ -70,7 +70,7 @@ def make_fixture_def(  # noqa: PLR0913 — test helper, all kwargs have defaults
     return FixtureDef(
         name=name,
         fixture_type=ft,
-        scope=FixtureScope.SHARED if shared else FixtureScope.EACH,
+        scope=FixtureScope.SESSION if shared else FixtureScope.EACH,
         source=ConftestSource(func=factory, conftest_path=conftest_path),
         autouse=autouse,
         namespace=namespace,

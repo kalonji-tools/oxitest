@@ -273,7 +273,7 @@ class Fixtures:
             defn = FixtureDef(
                 name=fixture_name,
                 fixture_type=object,  # placeholder — overwritten by conftest_loader
-                scope=FixtureScope.SHARED if shared else FixtureScope.EACH,
+                scope=FixtureScope.SESSION if shared else FixtureScope.EACH,
                 source=ConftestSource(func=f, conftest_path=""),
                 autouse=autouse,
                 is_async=is_async,

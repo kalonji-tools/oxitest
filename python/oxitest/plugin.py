@@ -132,9 +132,9 @@ class FixtureProvider(Protocol):
 
     @property
     def scope(self) -> str:
-        """Fixture scope: 'each' (per test), 'shared', or 'session'.
+        """Fixture scope: 'each' (per test) or 'session'.
 
-        `'shared'` and `'session'` are both built once per **task group** — the
+        `'session'` is built once per **task group** — the
         unit of work a worker picks up, which is a single module unless a
         `lifetime="package"` declaration merges a subtree. Neither is once per
         run, and neither is once per worker process.
