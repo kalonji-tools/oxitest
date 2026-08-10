@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from oxitest import TempDir, raises
-from oxitest._bridge.conftest_loader import load_fixtures_from_conftest
 from oxitest._bridge.importer import collect_module
 from oxitest._bridge.result import ErrorResult
 from tests import helpers
@@ -157,48 +156,42 @@ def test_dataclass_parametrize_rejects_mixed_types(tmp: TempDir) -> None:
         collect_module(helpers.write_test_module(tmp, code))
 
 
-def test_fixture_ref_no_session_with_namespace_returns_error(tmp: TempDir) -> None:
-    """FixtureRef with namespace and session=None produces an error result."""
-    conftest = tmp / "conftest.py"
-    conftest.write_text(
-        "import oxitest\n"
-        "db = oxitest.Fixtures()\n"
-        "\n"
-        "@db.fixture\n"
-        "def conn():\n"
-        "    return 'db-conn'\n",
-        encoding="utf-8",
-    )
-    # Load conftest so sys.modules["conftest"] has db available for import
-    load_fixtures_from_conftest(str(conftest))
+def test_fixture_ref_no_session_returns_error(tmp: TempDir) -> None:
+    """FixtureRef with ``session=None`` produces an error result.
+
+    Was ``..._with_namespace_...``: the namespace came from the ``Fixtures()``
+    variable the fixture was registered on, and the test reached the function
+    object through that instance's private ``_defs``. A ``@oxi.fixture``
+    declaration carries no namespace until it is registered against an anchor,
+    so with no session there is no namespace to qualify by — what remains is
+    the resolution failure itself, which is what the assertions read (#1720).
+    """
     f = tmp / "test_ns_err.py"
     f.write_text(
         "from __future__ import annotations\n"
         "from dataclasses import dataclass\n"
         "import oxitest\n"
-        "from oxitest import Fixture, FixtureRef\n"
-        "from conftest import db as _db_ns\n"
+        "from oxitest import Fixture, FixtureRef, fixture\n"
         "\n"
-        "_conn_ref = None\n"
-        "for _defn in _db_ns._defs:\n"
-        "    if _defn.name == 'conn':\n"
-        "        _conn_ref = _defn.func\n"
-        "        break\n"
+        "@fixture(lifetime='function')\n"
+        "def conn() -> str:\n"
+        "    return 'db-conn'\n"
         "\n"
         "@dataclass(frozen=True)\n"
         "class StoreCase:\n"
         "    store: FixtureRef[str]\n"
         "\n"
-        "@oxitest.parametrize(prod=StoreCase(store=_conn_ref))\n"
+        "@oxitest.parametrize(prod=StoreCase(store=conn))\n"
         "def test_query(store: Fixture[str]) -> None:\n"
-        "    assert store == 'db-conn'\n",
+        "    assert store == 'db-conn', 'the ref must resolve when a session exists'\n",
         encoding="utf-8",
     )
     result = helpers.run_test(str(f), "test_query", session=None, param_id="prod")
     result = helpers.assert_result(
         result,
         ErrorResult,
-        why="FixtureRef with namespace and session=None should produce status='error'",
+        why="a FixtureRef cannot resolve without a session, and the executor must"
+        " report that rather than injecting the undecorated function",
     )
     assert "conn" in result.message, (
         f"error message should mention fixture name 'conn', got {result.message!r}"
