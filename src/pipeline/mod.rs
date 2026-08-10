@@ -119,7 +119,6 @@ pub struct PipelineShared {
     /// Sum of AST-derived body weights across all prescan items; `None` if prescan produced no items.
     pub(crate) ast_weight: Option<types::DurationMs>,
     pub(crate) test_files: Vec<Utf8PathBuf>,
-    pub(crate) conftest_files: Vec<Utf8PathBuf>,
     /// `__fixtures__.py` files registered during collection, sent to every
     /// worker so parallel sessions see what the serial session sees (#1732).
     pub(crate) fixture_modules: Vec<types::FixtureModule>,
@@ -532,7 +531,6 @@ fn build_shared(
         base,
         ast_weight: None,
         test_files: vec![],
-        conftest_files: vec![],
         fixture_modules: vec![],
         pending_diagnostics: vec![],
     })

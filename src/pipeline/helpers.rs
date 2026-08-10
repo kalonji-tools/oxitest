@@ -98,7 +98,6 @@ fn register_plugin_fixture_homes(
 /// Initialize a `FixtureSession`: load conftest fixtures, plugins, and async backend.
 pub(super) fn init_session(
     py: Python<'_>,
-    conftest_files: &[camino::Utf8PathBuf],
     cfg: &crate::config::Config,
     make_reporter: impl Fn() -> Box<dyn reporter::Reporter>,
 ) -> Result<
@@ -108,16 +107,15 @@ pub(super) fn init_session(
     ),
     ExitCode,
 > {
-    let (session, fixture_violations) =
-        match crate::bridge::FixtureSession::new(py, conftest_files, &cfg.rootdir) {
-            Ok(pair) => pair,
-            Err(e) => {
-                let err = crate::types::CollectError::PyError(format!(
-                    "Failed to load conftest fixtures: {e}"
-                ));
-                return Err(early_exit_with_error(&[err], &make_reporter));
-            }
-        };
+    let (session, fixture_violations) = match crate::bridge::FixtureSession::new(py, &cfg.rootdir) {
+        Ok(pair) => pair,
+        Err(e) => {
+            let err = crate::types::CollectError::PyError(format!(
+                "Failed to load conftest fixtures: {e}"
+            ));
+            return Err(early_exit_with_error(&[err], &make_reporter));
+        }
+    };
 
     if !cfg.features.plugins.is_empty() {
         if let Err(e) =

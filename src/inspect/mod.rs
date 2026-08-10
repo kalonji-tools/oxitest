@@ -115,23 +115,20 @@ pub fn build_phase1_graph(
 /// `cargo test` without a thread or a live Python session. Same rationale as
 /// `build_task` in `worker_session.rs:187`-`:189`.
 pub struct Phase2Args {
-    pub(crate) conftest_files: Vec<Utf8PathBuf>,
     pub(crate) test_files: Vec<Utf8PathBuf>,
     pub(crate) plugins: Vec<String>,
     pub(crate) plugin_settings: std::collections::HashMap<String, toml::Value>,
     pub(crate) rootdir: Utf8PathBuf,
 }
 
-/// Build [`Phase2Args`] from a `Config` plus the file lists the caller already
-/// collected. `conftest_files` and `test_files` come from `collect_files`, not
-/// `Config`, so they are supplied separately rather than cloned off `cfg`.
-pub fn phase2_args(
-    cfg: &config::Config,
-    conftest_files: Vec<Utf8PathBuf>,
-    test_files: Vec<Utf8PathBuf>,
-) -> Phase2Args {
+/// Build [`Phase2Args`] from a `Config` plus the test files the caller already
+/// collected. `test_files` comes from `collect_files`, not `Config`, so it is
+/// supplied separately rather than cloned off `cfg`.
+///
+/// No conftest list: the session no longer loads them (#1720). The inspect
+/// graph still receives one for its Conftest node, which #1722 retires.
+pub fn phase2_args(cfg: &config::Config, test_files: Vec<Utf8PathBuf>) -> Phase2Args {
     Phase2Args {
-        conftest_files,
         test_files,
         plugins: cfg.features.plugins.clone(),
         plugin_settings: cfg.features.plugin_settings.clone(),
@@ -148,7 +145,6 @@ pub fn phase2_args(
 /// `LoadingState::Complete` with whatever data it already has.
 pub fn spawn_phase2(args: Phase2Args, tx: mpsc::Sender<Phase2Data>) {
     let Phase2Args {
-        conftest_files,
         test_files,
         plugins,
         plugin_settings,
@@ -160,8 +156,8 @@ pub fn spawn_phase2(args: Phase2Args, tx: mpsc::Sender<Phase2Data>) {
                 use crate::bridge::FixtureSession;
                 use crate::query::resource::QueryEntry;
 
-                let (session, _violations) = FixtureSession::new(py, &conftest_files, &rootdir)
-                    .map_err(|e| e.to_string())?;
+                let (session, _violations) =
+                    FixtureSession::new(py, &rootdir).map_err(|e| e.to_string())?;
 
                 // Load plugins if configured.
                 if !plugins.is_empty() {
@@ -228,10 +224,7 @@ pub fn run(args: &InspectArgs, cfg: &config::Config) -> Result<(), Box<dyn std::
     // Phase 2: spawn background Python session immediately — it starts while
     // Phase 1 parses ASTs, so fixture/plugin data is ready sooner.
     let (tx, rx) = mpsc::channel();
-    spawn_phase2(
-        phase2_args(cfg, conftest_files.clone(), test_files_for_phase2),
-        tx,
-    );
+    spawn_phase2(phase2_args(cfg, test_files_for_phase2), tx);
 
     // Phase 1: instant-tier graph (synchronous, runs concurrently with Phase 2).
     let mut graph = build_phase1_graph(args, cfg, test_files, &conftest_files)?;
@@ -273,7 +266,7 @@ mod tests {
         let cfg = Config::default();
 
         // Act
-        let args = phase2_args(&cfg, Vec::new(), Vec::new());
+        let args = phase2_args(&cfg, Vec::new());
 
         // Assert
         assert_eq!(

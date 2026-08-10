@@ -60,16 +60,11 @@ impl FixtureSession {
     ///
     /// `rootdir` is appended to `sys.path` so test modules can import sibling
     /// utility modules (#1780).
-    pub fn new(
-        py: Python<'_>,
-        conftest_paths: &[Utf8PathBuf],
-        rootdir: &camino::Utf8Path,
-    ) -> PyResult<(Self, Vec<RawViolation>)> {
-        let loader = py.import("oxitest._bridge.conftest_loader")?;
-        let paths: Vec<&str> = conftest_paths.iter().map(|p| p.as_str()).collect();
+    pub fn new(py: Python<'_>, rootdir: &camino::Utf8Path) -> PyResult<(Self, Vec<RawViolation>)> {
+        let factory = py.import("oxitest._bridge._session_factory")?;
         let kwargs = pyo3::types::PyDict::new(py);
         kwargs.set_item("rootdir", rootdir.as_str())?;
-        let result = loader.call_method("create_session", (paths,), Some(&kwargs))?;
+        let result = factory.call_method("create_session", (), Some(&kwargs))?;
         let (session, violations, _diagnostics): (
             Bound<'_, PyAny>,
             Vec<RawViolation>,

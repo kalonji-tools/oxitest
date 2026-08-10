@@ -34,7 +34,6 @@ pub fn make_pipeline(phase: crate::pipeline::PipelinePhase) -> crate::pipeline::
             python_bin: "python3".to_string(),
             ast_weight: None,
             test_files: vec![],
-            conftest_files: vec![],
             fixture_modules: vec![],
             pending_diagnostics: vec![],
         },

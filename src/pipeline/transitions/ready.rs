@@ -88,7 +88,6 @@ impl Pipeline {
         // Serialized here, once, because here is where a `Result` already flows
         // (ADR-0011). Everything downstream carries bytes and cannot fail at it.
         let payloads = match parallel::WorkerPayloads::new(
-            &shared.conftest_files,
             &shared.fixture_modules,
             &shared.cfg.features.plugins,
             &shared.cfg.features.plugin_settings,

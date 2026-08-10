@@ -513,10 +513,7 @@ impl InspectApp {
 
         // Spawn phase-2 in background.
         let (tx, rx) = std::sync::mpsc::channel();
-        super::spawn_phase2(
-            super::phase2_args(&rargs.config, conftest_files, test_files_for_phase2),
-            tx,
-        );
+        super::spawn_phase2(super::phase2_args(&rargs.config, test_files_for_phase2), tx);
 
         // Swap graph and reset dependent state.
         self.search.total_candidates = graph.all_node_refs().len();

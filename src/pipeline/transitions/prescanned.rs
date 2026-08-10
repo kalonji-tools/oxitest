@@ -3,8 +3,8 @@
 use super::super::{Pipeline, PipelinePhase};
 use super::FilterPredicates;
 use super::file_passes_all_filters;
+use crate::config;
 use crate::types::ExitCode;
-use crate::{collector, config};
 
 impl Pipeline {
     // 4. filter_metadata: Prescanned -> MetadataFiltered
@@ -83,18 +83,13 @@ impl Pipeline {
             })
             .collect();
 
-        let filtered_conftests =
-            collector::conftests_for_modules(&self.shared.conftest_files, &modules_to_import);
-
         tracing::info!(
             total_files = prescan_data.len(),
             matched_files = modules_to_import.len(),
-            conftests = filtered_conftests.len(),
             "lazy collection: filtered by prescan metadata"
         );
 
-        let (mut shared, _) = self.into_parts();
-        shared.conftest_files = filtered_conftests;
+        let (shared, _) = self.into_parts();
         Ok(Self {
             shared,
             phase: PipelinePhase::MetadataFiltered { modules_to_import },

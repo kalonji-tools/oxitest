@@ -13,11 +13,12 @@ route, which is not the route under test.
 Importing from an ordinary module instead means both sides go through the one
 ``sys.modules["agi._registrar"]`` entry.
 
-- **``name="db"``** gives the registrar a namespace; without one,
-  ``get_namespace_for_func`` returns ``None`` even on an identity match.
-- **``shared=True``** puts both fixtures at a lifetime wider than ``function``.
+- The **namespace** is the anchor directory's basename, ``agi`` (ADR-0009
+  Rule 5). It came from ``Fixtures(name="db")`` until #1720.
+- **``lifetime="module"``** puts both fixtures at a lifetime wider than
+  ``function``.
   That is the case ``AsyncDepGuardMiddleware`` cannot see: it inspects resolved
-  kwargs for a coroutine, and a shared async fixture's kwarg is not one.
+  kwargs for a coroutine, and a wider-lifetime async fixture's kwarg is not one.
 
 Two fixtures rather than one because ``strict = "abort"`` rejects a
 single-case ``@oxi.parametrize``, and both cases must be illegal for the run's
@@ -30,14 +31,12 @@ import oxitest as oxi
 
 from agi._kinds import Conn
 
-db = oxi.Fixtures(name="db")
 
-
-@db.fixture(shared=True)
+@oxi.fixture(lifetime="module")
 async def conn() -> Conn:
     return Conn("conn")
 
 
-@db.fixture(shared=True)
+@oxi.fixture(lifetime="module")
 async def other() -> Conn:
     return Conn("other")

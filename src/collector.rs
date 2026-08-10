@@ -164,45 +164,6 @@ pub fn coverage_roots(config: &Config) -> &[Utf8PathBuf] {
 pub fn collect_declared_doctest_files(config: &Config) -> Result<Vec<Utf8PathBuf>, globset::Error> {
     collect_doctest_files_in(coverage_roots(config), config)
 }
-
-/// Return only conftests that are ancestors of any matched test module.
-///
-/// A conftest is an ancestor if its directory is a prefix of any matched
-/// module's directory. Results are sorted shallow-first (by component count).
-pub fn conftests_for_modules(
-    all_conftests: &[Utf8PathBuf],
-    matched_modules: &[Utf8PathBuf],
-) -> Vec<Utf8PathBuf> {
-    if matched_modules.is_empty() {
-        return vec![];
-    }
-
-    // Collect all ancestor directories of all matched modules.
-    let mut ancestor_dirs: HashSet<Utf8PathBuf> = HashSet::new();
-    for module in matched_modules {
-        let mut dir = module.parent();
-        while let Some(d) = dir {
-            ancestor_dirs.insert(d.to_owned());
-            dir = d.parent();
-        }
-    }
-
-    // Filter conftests whose parent directory is in the ancestor set.
-    let mut result: Vec<Utf8PathBuf> = all_conftests
-        .iter()
-        .filter(|c| {
-            c.parent()
-                .map(|d| ancestor_dirs.contains(d))
-                .unwrap_or(false)
-        })
-        .cloned()
-        .collect();
-
-    // Sort shallow-first by component count.
-    result.sort_by_key(|p| p.components().count());
-    result
-}
-
 fn collect_from(
     path: &Utf8Path,
     config: &Config,
@@ -596,48 +557,6 @@ mod tests {
             files_plain[0].as_str(),
             "different input forms must produce identical collected paths"
         );
-    }
-
-    #[test]
-    fn conftests_for_modules_returns_ancestor_chain_only() {
-        let all_conftests = vec![
-            Utf8PathBuf::from("/project/conftest.py"),
-            Utf8PathBuf::from("/project/tests/conftest.py"),
-            Utf8PathBuf::from("/project/tests/unit/conftest.py"),
-            Utf8PathBuf::from("/project/tests/integration/conftest.py"),
-            Utf8PathBuf::from("/project/tests/e2e/conftest.py"),
-        ];
-        let matched_modules = vec![Utf8PathBuf::from("/project/tests/unit/test_auth.py")];
-        let result = conftests_for_modules(&all_conftests, &matched_modules);
-        assert!(result.contains(&Utf8PathBuf::from("/project/conftest.py")));
-        assert!(result.contains(&Utf8PathBuf::from("/project/tests/conftest.py")));
-        assert!(result.contains(&Utf8PathBuf::from("/project/tests/unit/conftest.py")));
-        assert!(!result.contains(&Utf8PathBuf::from("/project/tests/integration/conftest.py")));
-        assert!(!result.contains(&Utf8PathBuf::from("/project/tests/e2e/conftest.py")));
-        assert_eq!(result.len(), 3);
-    }
-
-    #[test]
-    fn conftests_for_modules_multiple_matched_dirs() {
-        let all_conftests = vec![
-            Utf8PathBuf::from("/project/conftest.py"),
-            Utf8PathBuf::from("/project/tests/unit/conftest.py"),
-            Utf8PathBuf::from("/project/tests/integration/conftest.py"),
-        ];
-        let matched_modules = vec![
-            Utf8PathBuf::from("/project/tests/unit/test_a.py"),
-            Utf8PathBuf::from("/project/tests/integration/test_b.py"),
-        ];
-        let result = conftests_for_modules(&all_conftests, &matched_modules);
-        assert_eq!(result.len(), 3);
-    }
-
-    #[test]
-    fn conftests_for_modules_empty_matched_returns_empty() {
-        let all_conftests = vec![Utf8PathBuf::from("/project/conftest.py")];
-        let matched_modules: Vec<Utf8PathBuf> = vec![];
-        let result = conftests_for_modules(&all_conftests, &matched_modules);
-        assert!(result.is_empty());
     }
 
     #[test]

@@ -47,7 +47,7 @@ async def test_an_async_test_reaches_the_same_fixture(fx: Fixtures) -> None:
     registered.
     """
     # Act
-    value = await fx.db.conn
+    value = await fx.conn
 
     # Assert
     assert value.label == "conn", (
