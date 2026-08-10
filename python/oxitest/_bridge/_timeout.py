@@ -171,7 +171,12 @@ class _UnixTimeoutContext:
         # A deadline that fired and one that was cancelled both leave the slot
         # at 0.0, so arithmetic alone cannot tell them apart (#2001).
         fired = exc_type is OxitestTimeoutError
-        predicted = max(state.effective - elapsed, 0.0)
+        # Deliberately NOT clamped at zero. A test that overran its deadline
+        # without the deadline firing is the case that matters, and clamping
+        # made it undetectable: elapsed 5s against a 3s deadline predicts 0,
+        # which is exactly what a cleared slot reads. Left unclamped, that same
+        # case predicts -2 against a slot of 0 and is caught.
+        predicted = state.effective - elapsed
         self._deadline_taken = (
             not fired and abs(remaining - predicted) > _READ_SKEW_SECONDS
         )
