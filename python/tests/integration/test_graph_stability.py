@@ -57,17 +57,14 @@ def test_fixture_edges_are_reciprocal(tmp: TempDir) -> None:
                     assert cache == 42
             """,
         },
-        conftest="""\
-            import oxitest as oxi
-            from oxitest import Fixtures
+        declarations="""\
+            from oxitest import fixture
 
-            fx = Fixtures()
-
-            @fx.fixture
+            @fixture(lifetime="function")
             def db() -> str:
                 return "conn"
 
-            @fx.fixture
+            @fixture(lifetime="function")
             def cache() -> int:
                 return 42
         """,
@@ -122,13 +119,10 @@ def test_fixture_scope_reflected_in_graph(tmp: TempDir) -> None:
                     assert conn == "shared-conn"
             """,
         },
-        conftest="""\
-            import oxitest as oxi
-            from oxitest import Fixtures
+        declarations="""\
+            from oxitest import fixture
 
-            fx = Fixtures()
-
-            @fx.fixture(shared=True)
+            @fixture(lifetime="package")
             def conn() -> str:
                 return "shared-conn"
         """,
@@ -144,79 +138,14 @@ def test_fixture_scope_reflected_in_graph(tmp: TempDir) -> None:
         f"{len(conn_fixtures)} -- fixture deduplication or naming is broken"
     )
     conn = conn_fixtures[0]
-    assert conn["scope"] == "shared", (
-        f"fixture 'conn' declared with shared=True but query reports "
+    assert conn["scope"] == "package", (
+        f"fixture 'conn' declared lifetime='package' but query reports "
         f"scope={conn['scope']!r} -- scope propagation from Python to Rust is broken"
     )
-    assert conn["shared"] == "true", (
-        f"fixture 'conn' declared with shared=True but query reports "
-        f"shared={conn['shared']!r} -- shared flag is inconsistent with scope"
-    )
+    # The companion assertion on the `shared` flag went with the tier it read.
+    # `shared=True` was the legacy wide tier and #1720 retires it; `package` is
+    # its replacement for a fixture that must be built once for a subtree, and
+    # it carries the co-location guarantee explicitly rather than by inference.
 
 
 # ── test_cross_conftest_dependency_edges ──────────────────────────────────────
-
-
-def test_cross_conftest_dependency_edges(tmp: TempDir) -> None:
-    """Inner conftest fixture depending on outer conftest fixture via ``Fixture[T]``.
-
-    Sets up nested directories each with their own conftest.  The inner conftest
-    defines a fixture that takes an outer fixture as a ``Fixture[T]`` parameter,
-    creating a cross-conftest dependency edge.  Verifies both fixtures appear in
-    the graph and that test execution succeeds (proving the edge is resolved).
-    """
-    # ── Arrange ──────────────────────────────────────────────────────────
-    # Root conftest: defines the outer fixture
-    (tmp / "conftest.py").write_text(
-        "import oxitest as oxi\n"
-        "from oxitest import Fixtures\n"
-        "\n"
-        "fx = Fixtures()\n"
-        "\n"
-        "@fx.fixture\n"
-        "def db_url() -> str:\n"
-        "    return 'postgres://localhost/test'\n",
-        encoding="utf-8",
-    )
-
-    # Inner directory with its own conftest that depends on outer fixture
-    inner = tmp / "sub"
-    inner.mkdir()
-    (inner / "conftest.py").write_text(
-        "import oxitest as oxi\n"
-        "from oxitest import Fixture, Fixtures\n"
-        "\n"
-        "fx = Fixtures()\n"
-        "\n"
-        "@fx.fixture\n"
-        "def db_conn(db_url: Fixture[str]) -> str:\n"
-        "    return f'connected-to:{db_url}'\n",
-        encoding="utf-8",
-    )
-    (inner / "test_inner.py").write_text(
-        "from oxitest import Fixture\n"
-        "\n"
-        "def test_uses_inner(db_conn: Fixture[str]):\n"
-        "    assert 'postgres://' in db_conn\n",
-        encoding="utf-8",
-    )
-
-    # ── Act ──────────────────────────────────────────────────────────────
-    fixtures = _fixture_entries(tmp)
-
-    # ── Assert ───────────────────────────────────────────────────────────
-    fixture_names = {f["name"] for f in fixtures}
-    assert "db_url" in fixture_names, (
-        "outer fixture 'db_url' missing from query output -- "
-        "root conftest fixture was not registered in the graph"
-    )
-    assert "db_conn" in fixture_names, (
-        "inner fixture 'db_conn' missing from query output -- "
-        "nested conftest fixture was not registered in the graph"
-    )
-
-    # Prove the cross-conftest dependency edge actually resolves at runtime:
-    # db_conn depends on db_url via Fixture[str], and the test depends on
-    # db_conn.  If the edge is broken, fixture injection will fail.
-    out, _err, rc = helpers.run_oxitest(tmp)
-    integ.assert_passed(out, rc, count=1)

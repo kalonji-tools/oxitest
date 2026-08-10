@@ -36,7 +36,7 @@ def write_project(
     *,
     tests: dict[str, str],
     pyproject: str | None = None,
-    conftest: str | None = None,
+    declarations: str | None = None,
     extra_files: dict[str, str] | None = None,
 ) -> None:
     """Scaffold a project in tmp.
@@ -45,7 +45,9 @@ def write_project(
         tmp: TempDir to write into.
         tests: Mapping of {filename: code}. Code is dedented.
         pyproject: Optional pyproject.toml content (dedented).
-        conftest: Optional conftest.py content (dedented).
+        declarations: Optional ``__fixtures__.py`` content (dedented). Named for
+            the declaration file, not for a directory: ``__fixtures__.py`` needs
+            no ``__init__.py`` beside it, measured at the rootdir and nested.
         extra_files: Optional mapping of {relative_path: content} for arbitrary
             project files (e.g. package modules like ``mypkg/__init__.py``).
             Parent directories are created automatically. Content is *not*
@@ -56,8 +58,10 @@ def write_project(
         (tmp / "pyproject.toml").write_text(
             textwrap.dedent(pyproject), encoding="utf-8"
         )
-    if conftest:
-        (tmp / "conftest.py").write_text(textwrap.dedent(conftest), encoding="utf-8")
+    if declarations:
+        (tmp / "__fixtures__.py").write_text(
+            textwrap.dedent(declarations), encoding="utf-8"
+        )
     for name, code in tests.items():
         (tmp / name).write_text(textwrap.dedent(code), encoding="utf-8")
     if extra_files:

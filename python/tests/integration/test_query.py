@@ -143,16 +143,14 @@ def test_one(conn: Fixture[object]):
     pass
 """,
         },
-        conftest="""\
-from oxitest import Fixtures, Fixture
+        declarations="""\
+from oxitest import Fixture, fixture
 
-fx = Fixtures()  # oxitest: allow[registrar-in-test-module]
-
-@fx.fixture
+@fixture(lifetime="function")
 def db() -> object:
     return object()
 
-@fx.fixture
+@fixture(lifetime="function")
 def conn(db: Fixture[object]) -> object:
     return db
 """,
@@ -180,12 +178,10 @@ def test_without():
     pass
 """,
         },
-        conftest="""\
-from oxitest import Fixtures
+        declarations="""\
+from oxitest import fixture
 
-fx = Fixtures()  # oxitest: allow[registrar-in-test-module]
-
-@fx.fixture
+@fixture(lifetime="function")
 def db() -> object:
     return object()
 """,
@@ -208,12 +204,10 @@ def test_query_fixtures_shows_docstring(tmp: TempDir) -> None:
                     pass
             """,
         },
-        conftest="""\
-            from oxitest import Fixtures
+        declarations="""\
+            from oxitest import fixture
 
-            fx = Fixtures()
-
-            @fx.fixture
+            @fixture(lifetime="function")
             def db() -> object:
                 \"\"\"Provide a database connection.\"\"\"
                 return object()
@@ -241,12 +235,10 @@ def test_without():
     pass
 """,
         },
-        conftest="""\
-from oxitest import Fixtures
+        declarations="""\
+from oxitest import fixture
 
-fx = Fixtures()  # oxitest: allow[registrar-in-test-module]
-
-@fx.fixture
+@fixture(lifetime="function")
 def db_conn() -> object:
     return object()
 """,
@@ -272,16 +264,14 @@ def test_db_conn(db_conn: Fixture[object]):
     pass
 """,
         },
-        conftest="""\
-from oxitest import Fixtures
+        declarations="""\
+from oxitest import fixture
 
-fx = Fixtures()  # oxitest: allow[registrar-in-test-module]
-
-@fx.fixture
+@fixture(lifetime="function")
 def db() -> object:
     return object()
 
-@fx.fixture
+@fixture(lifetime="function")
 def db_conn() -> object:
     return object()
 """,
@@ -313,12 +303,10 @@ def test_slow_no_db():
     pass
 """,
         },
-        conftest="""\
-from oxitest import Fixtures
+        declarations="""\
+from oxitest import fixture
 
-fx = Fixtures()  # oxitest: allow[registrar-in-test-module]
-
-@fx.fixture
+@fixture(lifetime="function")
 def db() -> object:
     return object()
 """,

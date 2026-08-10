@@ -259,12 +259,10 @@ def test_uses_db(db: Fixture[str]):
     assert db == "connected", f"expected 'connected', got {db!r}"
 """,
         },
-        conftest="""\
-import oxitest
+        declarations="""\
+from oxitest import fixture
 
-fx = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
-
-@fx.fixture
+@fixture(lifetime="function")
 def db() -> str:
     return "connected"
 """,
@@ -293,12 +291,10 @@ def test_uses_db(db: Fixture[str]):
     assert db == "connected", f"expected 'connected', got {db!r}"
 """,
         },
-        conftest="""\
-import oxitest
+        declarations="""\
+from oxitest import fixture
 
-fx = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
-
-@fx.fixture
+@fixture(lifetime="function")
 def db() -> str:
     return "connected"
 """,
@@ -318,43 +314,6 @@ strict = "abort"
 
 
 # ── Conftest ancestor discovery ──────────────────────────────────────────────
-
-
-def test_node_id_in_nested_dir_loads_ancestor_conftests(tmp: TempDir) -> None:
-    """Node ID targeting a file in a subdirectory loads all ancestor conftests."""
-    (tmp / "pyproject.toml").write_text("", encoding="utf-8")
-    (tmp / "conftest.py").write_text(
-        "import oxitest\nfx = oxitest.Fixtures()\n\n"
-        "@fx.fixture\ndef root_val() -> str:\n    return 'from_root'\n",
-        encoding="utf-8",
-    )
-    sub = tmp / "tests"
-    sub.mkdir()
-    (sub / "conftest.py").write_text(
-        "import oxitest\nfx = oxitest.Fixtures()\n\n"
-        "@fx.fixture\ndef sub_val() -> str:\n    return 'from_sub'\n",
-        encoding="utf-8",
-    )
-    deep = sub / "deep"
-    deep.mkdir()
-    (deep / "test_deep.py").write_text(
-        "from oxitest import Fixture\n\n"
-        "def test_sees_root(root_val: Fixture[str]):\n"
-        "    assert root_val == 'from_root'\n\n"
-        "def test_sees_sub(sub_val: Fixture[str]):\n"
-        "    assert sub_val == 'from_sub'\n",
-        encoding="utf-8",
-    )
-    out, _, rc = helpers.run_oxitest_subcmd(
-        tmp,
-        "run",
-        "tests/deep/test_deep.py::test_sees_root",
-        cwd=".",
-    )
-    integ.assert_passed(out, rc, count=1)
-
-
-# ── Multiple node IDs ────────────────────────────────────────────────────────
 
 
 def test_run_multiple_node_ids(tmp: TempDir) -> None:

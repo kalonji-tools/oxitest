@@ -30,6 +30,7 @@ __all__ = [
     "run_oxitest_subcmd",
     "run_test",
     "run_with_event_log",
+    "session_from_declarations",
     "write_test_file",
     "write_test_module",
 ]
@@ -47,6 +48,7 @@ from tests.helpers.factories import (
     make_registry,
     make_session,
     make_session_with,
+    session_from_declarations,
 )
 from tests.helpers.modules import (
     install_module,

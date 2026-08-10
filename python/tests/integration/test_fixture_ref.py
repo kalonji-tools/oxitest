@@ -13,15 +13,13 @@ def test_fixture_ref_in_parametrize_resolves_fixture(tmp: TempDir) -> None:
             "test_ref.py": """\
                 from dataclasses import dataclass
                 import oxitest
-                from oxitest import Fixture, FixtureRef
+                from oxitest import Fixture, FixtureRef, fixture
 
-                fx = oxitest.Fixtures()  # oxitest: allow[registrar-in-test-module]
-
-                @fx.fixture
+                @fixture(lifetime='function')
                 def greeting() -> str:
                     return "hello"
 
-                @fx.fixture
+                @fixture(lifetime='function')
                 def farewell() -> str:
                     return "goodbye"
 

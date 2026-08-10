@@ -192,6 +192,26 @@ impl Pipeline {
             unreachable!("query called outside SessionReady phase")
         };
 
+        // A query answers from the session without collecting items, and item
+        // collection is where declaration homes are registered. Without this
+        // the session holds conftest fixtures and builtins only, so
+        // `query fixtures --tree` drew a tree of builtins for a project whose
+        // every fixture came from a `__fixtures__.py` (#1720).
+        //
+        // `run_query` does the same for the paths that reach it; this transition
+        // is the other entry point, and `--tree` reaches only this one.
+        let (errors, _diagnostics, _modules) =
+            crate::pipeline::collection::register_declaration_homes_for_files(
+                py,
+                session,
+                &self.shared.cfg,
+                &self.shared.test_files,
+            );
+        if let Some(first) = errors.into_iter().next() {
+            eprintln!("error: {first:?}");
+            return Ok(ExitCode::Failure);
+        }
+
         if args.tree {
             if args.resource != query::resource::ResourceKind::Fixtures {
                 eprintln!("error: --tree is only valid for the 'fixtures' resource");

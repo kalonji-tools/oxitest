@@ -8,7 +8,6 @@ from typing import Any
 
 import oxitest
 from oxitest import CollectedItem, TempDir, raises
-from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._fixture_type import Fixture
 from oxitest._bridge._fn_metadata import _update, get_metadata
 from oxitest._bridge._mark_api import MarkInfo
@@ -535,50 +534,6 @@ def test_collect_mixed_sync_async(tmp: TempDir) -> None:
     assert by_name["test_async"].is_async is True, (
         "async functions must be is_async=True -- a wrong False calls them without"
         " await, producing a coroutine-never-awaited error"
-    )
-
-
-def test_fixtures_in_test_module_are_registered_with_allow(tmp: TempDir) -> None:
-    """Fixtures() with allow comment registers silently — no violation."""
-    path = helpers.write_test_module(
-        tmp,
-        "import oxitest\n"
-        "fixtures = oxitest.Fixtures()  "
-        "# oxitest: allow[registrar-in-test-module]\n"
-        "@fixtures.fixture\n"
-        "async def async_val():\n"
-        "    return 42\n"
-        "@fixtures.fixture\n"
-        "def sync_val():\n"
-        "    return 1\n"
-        "async def test_foo(async_val, sync_val): pass\n",
-        name="test_async_fx.py",
-    )
-    registry = FixtureRegistry()
-
-    class _FakeSession:
-        _registry = registry
-        _module_cache = None
-
-    _, violations = collect_module(path, session=_FakeSession())
-    registrar_viols = [
-        v for v in violations if v.kind == ViolationKind.REGISTRAR_IN_TEST_MODULE
-    ]
-    assert len(registrar_viols) == 0, (
-        "the allow comment is the opt-in gate for registrars in test modules --"
-        " emitting a violation despite the comment breaks the suppression contract and"
-        " forces users to move fixtures elsewhere: "
-        f"{registrar_viols}"
-    )
-    assert registry.get("async_val") is not None, (
-        "the allow comment authorizes fixture registration -- if fixtures are not"
-        " registered despite the comment, the test will fail at runtime with 'unknown"
-        " fixture' errors"
-    )
-    assert registry.get("sync_val") is not None, (
-        "the allow comment authorizes fixture registration -- if fixtures are not"
-        " registered despite the comment, the test will fail at runtime with 'unknown"
-        " fixture' errors"
     )
 
 
@@ -1429,43 +1384,3 @@ def test_get_fixture_deps_skips_return_annotation() -> None:
 
 
 # --- allow-comment gate tests for _check_module_registrars ---
-
-
-def test_fixtures_without_allow_comment_blocked(tmp: TempDir) -> None:
-    """Fixtures() without allow comment emits violation and does NOT register."""
-    path = helpers.write_test_module(
-        tmp,
-        "import oxitest\n"
-        "fixtures = oxitest.Fixtures()\n"
-        "@fixtures.fixture\n"
-        "def local_val():\n"
-        "    return 99\n"
-        "def test_foo(local_val): pass\n",
-        name="test_no_allow.py",
-    )
-    registry = FixtureRegistry()
-
-    class _FakeSession:
-        _registry = registry
-        _module_cache = None
-
-    _, violations = collect_module(path, session=_FakeSession())
-    registrar_viols = [
-        v for v in violations if v.kind == ViolationKind.REGISTRAR_IN_TEST_MODULE
-    ]
-    assert len(registrar_viols) == 1, (
-        "Fixtures() without an allow comment must emit exactly one violation -- the"
-        " allow-comment gate exists to prevent accidental registrar usage in test"
-        " modules, and zero violations means the gate is broken: "
-        f"{registrar_viols}"
-    )
-    assert "Fixtures" in registrar_viols[0].detail, (
-        f"the violation detail must name the registrar class so the user knows which"
-        f" instance triggered the violation and can decide whether to add an allow"
-        f" comment: {registrar_viols[0].detail!r}"
-    )
-    assert registry.get("local_val") is None, (
-        "fixtures must NOT be registered when the allow comment is absent --"
-        " registering them anyway bypasses the safety gate and lets accidental"
-        " registrars silently take effect"
-    )

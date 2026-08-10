@@ -51,63 +51,6 @@ def test_module_source_end_to_end(tmp: TempDir) -> None:
     )
 
 
-def test_old_fixtures_api_still_works(tmp: TempDir) -> None:
-    """Coexistence regression: existing conftest-based fixtures still work.
-
-    Runs oxitest on an inline test project that uses the old Fixtures()
-    conftest API to confirm it is unaffected by the ModuleSource changes.
-    """
-    (tmp / "conftest.py").write_text(
-        "from oxitest import Fixtures\n\n"
-        "fx = Fixtures()\n\n"
-        "@fx.fixture\n"
-        "def db() -> str:\n"
-        "    return 'connected'\n",
-        encoding="utf-8",
-    )
-    (tmp / "test_old_api.py").write_text(
-        "from oxitest import Fixture\n\n"
-        "def test_uses_old_api(db: Fixture[str]) -> None:\n"
-        "    assert db == 'connected', "
-        "'old Fixtures() conftest API must still work after ModuleSource changes'\n",
-        encoding="utf-8",
-    )
-
-    out, err, rc = helpers.run_oxitest(tmp)
-    assert rc == 0, (
-        f"old Fixtures() API regressed — coexistence broken:\n"
-        f"stdout:\n{out}\n"
-        f"stderr:\n{err}"
-    )
-
-
-def test_collision_between_sources_is_loud(tmp: TempDir) -> None:
-    """Same fixture name in conftest.py + __fixtures__.py must abort loudly.
-
-    Runs oxitest on data/slice1_collision/ and asserts the run fails with
-    a 'declared twice' diagnostic naming both source paths.
-    """
-    json_path = Path(tmp) / "collision_report.json"
-    out, err, rc = helpers.run_oxitest(
-        _DATA_ROOT / "slice1_collision",
-        "--json",
-        str(json_path),
-    )
-
-    assert rc != 0, (
-        f"collision run should have failed but returned 0.\n"
-        f"stdout:\n{out}\nstderr:\n{err}"
-    )
-    combined = out + err
-    assert "declared twice" in combined, (
-        f"expected 'declared twice' in collision diagnostic;\n"
-        f"stdout:\n{out}\nstderr:\n{err}"
-    )
-    assert "conftest.py" in combined and "__fixtures__.py" in combined, (
-        f"diagnostic must name BOTH source paths;\nstdout:\n{out}\nstderr:\n{err}"
-    )
-
-
 def test_warm_cache_preserves_fixture_registration() -> None:
     """HIGH-1 regression: __fixtures__.py fixtures registered on warm-cache runs.
 

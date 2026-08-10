@@ -198,17 +198,18 @@ def test_exitfirst_still_disposes(tmp: TempDir) -> None:
 def test_old_shared_fixture_api_unaffected(tmp: TempDir) -> None:
     """Coexistence: shared=True still routes to the session-wide shared scope.
 
-    Module scope is a new branch ahead of the ``shared`` branch in
-    ``_scope_for``; this guards against it swallowing shared fixtures.
+    Module scope is a new branch ahead of the wider branches in
+    ``_scope_for``; this guards against it swallowing a wider-tier fixture.
+    The wider tier here was ``shared=True`` until #1720 retired it; ``package``
+    holds the same position relative to module scope.
     """
     log = Path(tmp) / "shared.log"
-    (tmp / "conftest.py").write_text(
+    (tmp / "__fixtures__.py").write_text(
         "import pathlib\n"
         "from collections.abc import Iterator\n"
-        "from oxitest import Fixtures\n\n"
-        "fx = Fixtures()\n"
+        "from oxitest import fixture\n\n"
         f"LOG = pathlib.Path({str(log)!r})\n\n\n"
-        "@fx.fixture(shared=True)\n"
+        "@fixture(lifetime='package')\n"
         "def resource() -> Iterator[str]:\n"
         "    with LOG.open('a', encoding='utf-8') as fh:\n"
         "        fh.write('SETUP\\n')\n"
@@ -297,11 +298,10 @@ def test_failing_shared_teardown_is_reported(tmp: TempDir) -> None:
     after ``end_task``, so a shared fixture's teardown failure was lost on
     every run.
     """
-    (tmp / "conftest.py").write_text(
+    (tmp / "__fixtures__.py").write_text(
         "from collections.abc import Iterator\n"
-        "from oxitest import Fixtures\n\n"
-        "fx = Fixtures()\n\n\n"
-        "@fx.fixture(shared=True)\n"
+        "from oxitest import fixture\n\n\n"
+        "@fixture(lifetime='package')\n"
         "def shared_raiser() -> Iterator[str]:\n"
         "    yield 's'\n"
         "    msg = 'shared teardown boom'\n"

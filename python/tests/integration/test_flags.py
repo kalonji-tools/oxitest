@@ -31,10 +31,9 @@ def test_list_prints_node_ids_and_exits_zero(tmp: TempDir) -> None:
 
 def test_list_detailed_shows_marks_and_fixtures(tmp: TempDir) -> None:
     """`query tests` shows marks in default columnar output."""
-    (tmp / "conftest.py").write_text(
-        "from oxitest import Fixtures\n\n"
-        "fx = Fixtures()\n\n"
-        "@fx.fixture\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n\n"
+        "@fixture(lifetime='function')\n"
         "def my_db() -> str:\n"
         "    return 'connected'\n",
         encoding="utf-8",
@@ -654,11 +653,10 @@ def test_durations_shows_slowest_tests(tmp: TempDir) -> None:
 
 def test_durations_shows_fixture_timings(tmp: TempDir) -> None:
     """--durations shows slowest fixtures alongside slowest tests."""
-    (tmp / "conftest.py").write_text(
+    (tmp / "__fixtures__.py").write_text(
         "import time\n"
-        "import oxitest as oxi\n\n"
-        "fx = oxi.Fixtures()\n\n"
-        "@fx.fixture\n"
+        "from oxitest import fixture\n\n"
+        "@fixture(lifetime='function')\n"
         "def slow_setup() -> int:\n"
         "    time.sleep(0.05)\n"
         "    return 42\n",
@@ -727,11 +725,10 @@ def test_parametrize_with_fixtures_in_parallel(tmp: TempDir) -> None:
     """Parametrized tests using fixtures run correctly across parallel workers."""
     integ.write_project(
         tmp,
-        conftest="""\
-            import oxitest as oxi
-            fx = oxi.Fixtures()
+        declarations="""\
+            from oxitest import fixture
 
-            @fx.fixture
+            @fixture(lifetime="function")
             def store() -> dict:
                 return {}
         """,
@@ -792,11 +789,10 @@ def test_class_based_tests_with_fixtures(tmp: TempDir) -> None:
     """Class-based tests receive fixtures via method parameters."""
     integ.write_project(
         tmp,
-        conftest="""\
-            import oxitest as oxi
-            fx = oxi.Fixtures()
+        declarations="""\
+            from oxitest import fixture
 
-            @fx.fixture
+            @fixture(lifetime="function")
             def store() -> dict:
                 return {"seed": "value"}
         """,
@@ -816,34 +812,6 @@ def test_class_based_tests_with_fixtures(tmp: TempDir) -> None:
     )
     out, _, rc = helpers.run_oxitest(tmp)
     integ.assert_passed(out, rc, count=2)
-
-
-def test_nested_conftest_reexport(tmp: TempDir) -> None:
-    """Child conftest can re-export parent conftest fixtures."""
-    root = Path(tmp)
-    root_conftest = (
-        "import oxitest as oxi\n"
-        "fx = oxi.Fixtures()\n\n"
-        "@fx.fixture\n"
-        "def db() -> str:\n"
-        "    return 'root_db'\n"
-    )
-    (root / "conftest.py").write_text(root_conftest, encoding="utf-8")
-
-    sub = root / "sub"
-    sub.mkdir()
-    (sub / "conftest.py").write_text(
-        "from conftest import fx  # noqa: F401 — re-export parent fixtures\n",
-        encoding="utf-8",
-    )
-    (sub / "test_reexport.py").write_text(
-        "from oxitest import Fixture\n\n"
-        "def test_uses_parent_fixture(db: Fixture[str]) -> None:\n"
-        "    assert db == 'root_db', 'should resolve parent fixture'\n",
-        encoding="utf-8",
-    )
-    out, _, rc = helpers.run_oxitest(tmp)
-    integ.assert_passed(out, rc, count=1)
 
 
 def test_importorskip_skips_missing_module(tmp: TempDir) -> None:
@@ -889,28 +857,30 @@ def test_autouse_yield_fixture_teardown(tmp: TempDir) -> None:
     """Autouse yield fixture runs teardown after each test."""
     integ.write_project(
         tmp,
-        conftest="""\
-            import oxitest as oxi
-            from oxitest import Yields
-            fx = oxi.Fixtures()
-            log = []
+        declarations="""\
+            from oxitest import Yields, fixture
+            from log_store import log
 
-            @fx.fixture(autouse=True)
+            @fixture(lifetime="function", autouse=True)
             def cleanup() -> Yields[None]:
                 yield
                 log.append("torn_down")
         """,
+        # The log lives in its own module rather than in the declaration file:
+        # the observable has to be importable by the test, and importing
+        # ``__fixtures__`` by its dunder name is not how a reader would write it.
+        extra_files={"log_store.py": "log: list[str] = []\n"},
         tests={
             "test_autouse.py": """\
-                import conftest
+                import log_store
 
                 def test_first() -> None:
                     assert True
 
                 def test_second_sees_teardown() -> None:
                     # After test_first, cleanup fixture should have torn down
-                    assert "torn_down" in conftest.log, (
-                        f"expected teardown to have run: {conftest.log}"
+                    assert "torn_down" in log_store.log, (
+                        f"expected teardown to have run: {log_store.log}"
                     )
             """,
         },

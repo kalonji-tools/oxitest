@@ -7,10 +7,9 @@ from tests.integration import helpers as integ
 
 def test_no_shared_fixtures_no_cache_stats(tmp: TempDir) -> None:
     """Without shared fixtures, no cache stats line appears."""
-    (tmp / "conftest.py").write_text(
-        "from oxitest import Fixtures\n\n"
-        "fx = Fixtures()\n\n"
-        "@fx.fixture\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n\n"
+        "@fixture(lifetime='function')\n"
         "def db() -> str:\n"
         "    return 'conn'\n",
         encoding="utf-8",
@@ -28,10 +27,9 @@ def test_no_shared_fixtures_no_cache_stats(tmp: TempDir) -> None:
 
 def test_shared_fixture_shows_cache_stats(tmp: TempDir) -> None:
     """With shared fixtures used by multiple tests, cache stats appear."""
-    (tmp / "conftest.py").write_text(
-        "from oxitest import Fixtures\n\n"
-        "fx = Fixtures()\n\n"
-        "@fx.fixture(shared=True)\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n\n"
+        "@fixture(lifetime='module')\n"
         "def db() -> str:\n"
         "    return 'conn'\n",
         encoding="utf-8",
@@ -105,10 +103,9 @@ def test_module_lifetime_breakdown_uses_qualified_name(tmp: TempDir) -> None:
 
 def test_verbose_shows_per_fixture_breakdown(tmp: TempDir) -> None:
     """With -v, per-fixture breakdown appears."""
-    (tmp / "conftest.py").write_text(
-        "from oxitest import Fixtures\n\n"
-        "fx = Fixtures()\n\n"
-        "@fx.fixture(shared=True)\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n\n"
+        "@fixture(lifetime='module')\n"
         "def db() -> str:\n"
         "    return 'conn'\n",
         encoding="utf-8",

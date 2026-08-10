@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 from oxitest import Fixture, TempDir, parametrize, raises
 from oxitest._bridge._fn_metadata import get_metadata
-from oxitest._bridge.conftest_loader import create_session
 from oxitest._bridge.importer import collect_module
 from oxitest._bridge.parametrize import DataclassCases, DictCases
 from oxitest._bridge.result import PassedResult
@@ -180,12 +179,11 @@ def test_executor_dict_mode_failure(tmp: TempDir) -> None:
 
 def test_executor_dict_mode_with_fixture(tmp: TempDir) -> None:
     """Dict mode: Fixture[T] params resolved from session alongside dict values."""
-    conftest = tmp / "conftest.py"
-    conftest.write_text(
-        "import oxitest\n"
-        "fixtures = oxitest.Fixtures()\n"
-        "@fixtures.fixture\n"
-        "def multiplier():\n"
+    declarations = tmp / "__fixtures__.py"
+    declarations.write_text(
+        "from oxitest import fixture\n"
+        "@fixture(lifetime='function')\n"
+        "def multiplier() -> int:\n"
         "    return 10\n",
         encoding="utf-8",
     )
@@ -199,7 +197,9 @@ def test_executor_dict_mode_with_fixture(tmp: TempDir) -> None:
         "    assert x * multiplier == expected\n",
         encoding="utf-8",
     )
-    session, _, _diags = create_session([str(conftest)])
+    session = helpers.session_from_declarations(
+        declarations, anchor_package_path=str(tmp)
+    )
     result = helpers.run_test(str(f), "test_mul", session=session, param_id="double")
     helpers.assert_result(
         result,

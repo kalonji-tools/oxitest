@@ -19,12 +19,11 @@ def test_async_each_fixture_on_sync_test_raises_arrange_error(
     Uses helpers.run_oxitest to drive a real oxitest run so the arrange
     phase actually executes.
     """
-    (tmp / "conftest.py").write_text(
-        "from oxitest import Fixtures\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n"
         "\n"
-        "fx = Fixtures()\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "async def each_txn():\n"
         "    yield\n",
         encoding="utf-8",
@@ -63,12 +62,11 @@ def test_each_loop_created_lazily_and_closed_after_test(
     Only created if an async-each fixture is used; closed in the executor's
     finally block so no loop leaks.
     """
-    (tmp / "conftest.py").write_text(
-        "from oxitest import Fixtures\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n"
         "\n"
-        "fx = Fixtures()\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "async def each_txn():\n"
         "    yield\n",
         encoding="utf-8",
@@ -104,19 +102,19 @@ def test_two_async_each_fixtures_share_one_per_test_session(
     covers the cache-hit branch of ``get_each_session`` — first call acquires,
     second call returns the cached session.
     """
-    (tmp / "conftest.py").write_text(
+    (tmp / "state.py").write_text("loops = {}\n", encoding="utf-8")
+    (tmp / "__fixtures__.py").write_text(
         "import asyncio\n"
-        "from oxitest import Fixtures\n"
+        "from oxitest import fixture\n"
         "\n"
-        "fx = Fixtures()\n"
-        "loops = {}\n"
+        "from state import loops\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "async def first_async():\n"
         "    loops['first'] = id(asyncio.get_running_loop())\n"
         "    yield\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "async def second_async():\n"
         "    loops['second'] = id(asyncio.get_running_loop())\n"
         "    yield\n",
@@ -124,7 +122,7 @@ def test_two_async_each_fixtures_share_one_per_test_session(
     )
     (tmp / "test_sample.py").write_text(
         "from oxitest import arrange\n"
-        "from conftest import loops\n"
+        "from state import loops\n"
         "\n"
         "@arrange('first_async', 'second_async')\n"
         "async def test_two_async_each():\n"
@@ -184,20 +182,19 @@ def test_multiple_illegal_entries_listed_in_one_diagnostic(
     tmp: TempDir,
 ) -> None:
     """N illegal @arrange entries → one raise, N bullets under `Illegal:`."""
-    (tmp / "conftest.py").write_text(
-        "from oxitest import Fixtures\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n"
         "\n"
-        "fx = Fixtures()\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "async def a():\n"
         "    yield\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "async def b():\n"
         "    yield\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "async def c():\n"
         "    yield\n",
         encoding="utf-8",
@@ -229,25 +226,25 @@ def test_scan_is_all_or_nothing_no_partial_setup(tmp: TempDir) -> None:
     Mix legal + illegal entries. Verify a global counter incremented by the
     legal fixture stays at 0 — proving the scan ran before any instantiation.
     """
-    (tmp / "conftest.py").write_text(
-        "from oxitest import Fixtures\n"
+    (tmp / "state.py").write_text("counter = {'setup_calls': 0}\n", encoding="utf-8")
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n"
         "\n"
-        "fx = Fixtures()\n"
-        "counter = {'setup_calls': 0}\n"
+        "from state import counter\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "def legal_sync():\n"
         "    counter['setup_calls'] += 1\n"
         "    yield\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "async def illegal_async():\n"
         "    yield\n",
         encoding="utf-8",
     )
     (tmp / "test_sample.py").write_text(
         "from oxitest import arrange\n"
-        "from conftest import counter\n"
+        "from state import counter\n"
         "\n"
         "@arrange('legal_sync', 'illegal_async')\n"
         "def test_mixed():\n"
@@ -274,23 +271,23 @@ def test_scan_is_all_or_nothing_no_partial_setup(tmp: TempDir) -> None:
 
 def test_mixed_sync_async_teardown_lifo(tmp: TempDir) -> None:
     """@arrange('sync_a', 'async_b', 'sync_c') → teardown sync_c → async_b → sync_a."""
-    (tmp / "conftest.py").write_text(
-        "from oxitest import Fixtures\n"
+    (tmp / "state.py").write_text("order = []\n", encoding="utf-8")
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n"
         "\n"
-        "fx = Fixtures()\n"
-        "order = []\n"
+        "from state import order\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "def sync_a():\n"
         "    yield\n"
         "    order.append('sync_a')\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "async def async_b():\n"
         "    yield\n"
         "    order.append('async_b')\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "def sync_c():\n"
         "    yield\n"
         "    order.append('sync_c')\n",
@@ -298,7 +295,7 @@ def test_mixed_sync_async_teardown_lifo(tmp: TempDir) -> None:
     )
     (tmp / "test_sample.py").write_text(
         "from oxitest import arrange\n"
-        "from conftest import order\n"
+        "from state import order\n"
         "\n"
         "@arrange('sync_a', 'async_b', 'sync_c')\n"
         "async def test_lifo():\n"
@@ -329,14 +326,14 @@ def test_per_test_loop_shared_across_setup_body_and_teardown(
     yielded by the fixture (Events, Queues, aiohttp sessions) stay valid in
     the body. Body-loop identity is the invariant this test guards.
     """
-    (tmp / "conftest.py").write_text(
+    (tmp / "state.py").write_text("seen = {}\n", encoding="utf-8")
+    (tmp / "__fixtures__.py").write_text(
         "import asyncio\n"
-        "from oxitest import Fixtures\n"
+        "from oxitest import fixture\n"
         "\n"
-        "fx = Fixtures()\n"
-        "seen = {}\n"
+        "from state import seen\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "async def probe():\n"
         "    seen['setup'] = id(asyncio.get_running_loop())\n"
         "    yield\n"
@@ -346,7 +343,7 @@ def test_per_test_loop_shared_across_setup_body_and_teardown(
     (tmp / "test_sample.py").write_text(
         "import asyncio\n"
         "from oxitest import arrange\n"
-        "from conftest import seen\n"
+        "from state import seen\n"
         "\n"
         "@arrange('probe')\n"
         "async def test_probe():\n"
@@ -374,18 +371,18 @@ def test_teardown_raise_does_not_halt_draining(tmp: TempDir) -> None:
 
     Matches existing sync convention (`_warn_teardown` → continue).
     """
-    (tmp / "conftest.py").write_text(
-        "from oxitest import Fixtures\n"
+    (tmp / "state.py").write_text("log = []\n", encoding="utf-8")
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n"
         "\n"
-        "fx = Fixtures()\n"
-        "log = []\n"
+        "from state import log\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "async def outer():\n"
         "    yield\n"
         "    log.append('outer_teardown')\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "async def raising():\n"
         "    yield\n"
         "    log.append('raising_teardown_start')\n"
@@ -394,7 +391,7 @@ def test_teardown_raise_does_not_halt_draining(tmp: TempDir) -> None:
     )
     (tmp / "test_sample.py").write_text(
         "from oxitest import arrange\n"
-        "from conftest import log\n"
+        "from state import log\n"
         "\n"
         "@arrange('outer', 'raising')\n"
         "async def test_raise():\n"
@@ -462,12 +459,11 @@ def test_arrange_scan_runs_once_per_test_not_per_parametrize_case(
     diagnostics; either 1 or 3 message copies is acceptable — what matters
     is that all three cases hit the scan (proven by 3 errored cases).
     """
-    (tmp / "conftest.py").write_text(
-        "from oxitest import Fixtures\n"
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n"
         "\n"
-        "fx = Fixtures()\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "async def illegal_async():\n"
         "    yield\n",
         encoding="utf-8",
@@ -534,13 +530,13 @@ def test_async_each_coroutine_only_fixture(tmp: TempDir) -> None:
     — every other async test in this file uses `yield` fixtures
     (asyncgens), so the plain-coroutine path had no coverage.
     """
-    (tmp / "conftest.py").write_text(
-        "from oxitest import Fixtures\n"
+    (tmp / "state.py").write_text("calls: list[str] = []\n", encoding="utf-8")
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n"
         "\n"
-        "fx = Fixtures()\n"
-        "calls: list[str] = []\n"
+        "from state import calls\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "async def coro_only():\n"
         "    calls.append('setup')\n"
         "    # no yield — pure coroutine, awaited for its side effect\n",
@@ -548,7 +544,7 @@ def test_async_each_coroutine_only_fixture(tmp: TempDir) -> None:
     )
     (tmp / "test_sample.py").write_text(
         "from oxitest import arrange\n"
-        "from conftest import calls\n"
+        "from state import calls\n"
         "\n"
         "@arrange('coro_only')\n"
         "async def test_body() -> None:\n"
@@ -590,12 +586,12 @@ def test_cross_loop_asyncio_task_usable_in_body(tmp: TempDir) -> None:
     After sharing ``arrange_session`` with the middleware, setup, body,
     and teardown share one loop, so the Task stays awaitable throughout.
     """
-    (tmp / "conftest.py").write_text(
+    (tmp / "state.py").write_text("shared_state: dict = {}\n", encoding="utf-8")
+    (tmp / "__fixtures__.py").write_text(
         "import asyncio\n"
-        "from oxitest import Fixtures\n"
+        "from oxitest import fixture\n"
         "\n"
-        "fx = Fixtures()\n"
-        "shared_state: dict = {}\n"
+        "from state import shared_state\n"
         "\n"
         "\n"
         "async def _idle() -> None:\n"
@@ -603,7 +599,7 @@ def test_cross_loop_asyncio_task_usable_in_body(tmp: TempDir) -> None:
         "    await asyncio.sleep(60)\n"
         "\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "async def publish_task():\n"
         "    # create_task binds this Task to whichever loop is running here.\n"
         "    task = asyncio.create_task(_idle())\n"
@@ -615,7 +611,7 @@ def test_cross_loop_asyncio_task_usable_in_body(tmp: TempDir) -> None:
     (tmp / "test_sample.py").write_text(
         "import asyncio\n"
         "from oxitest import arrange\n"
-        "from conftest import shared_state\n"
+        "from state import shared_state\n"
         "\n"
         "@arrange('publish_task')\n"
         "async def test_cross_loop_task() -> None:\n"
@@ -706,19 +702,19 @@ def test_shared_session_precedence_over_arrange_session(tmp: TempDir) -> None:
     as pre-refactor code. Fixing the mixed case is a bigger design
     question about coalescing session lifetimes; out of scope for #1545.
     """
-    (tmp / "conftest.py").write_text(
+    (tmp / "state.py").write_text("seen = {}\n", encoding="utf-8")
+    (tmp / "__fixtures__.py").write_text(
         "import asyncio\n"
-        "from oxitest import Fixtures\n"
+        "from oxitest import fixture\n"
         "\n"
-        "fx = Fixtures()\n"
-        "seen = {}\n"
+        "from state import seen\n"
         "\n"
-        "@fx.fixture(shared=True)\n"
+        "@fixture(lifetime='package')\n"
         "async def shared_ping() -> int:\n"
         "    seen['shared'] = id(asyncio.get_running_loop())\n"
         "    return 1\n"
         "\n"
-        "@fx.fixture\n"
+        "@fixture(lifetime='function')\n"
         "async def arrange_ping():\n"
         "    seen['arrange'] = id(asyncio.get_running_loop())\n"
         "    yield\n",
@@ -727,7 +723,7 @@ def test_shared_session_precedence_over_arrange_session(tmp: TempDir) -> None:
     (tmp / "test_sample.py").write_text(
         "import asyncio\n"
         "from oxitest import Fixture, arrange\n"
-        "from conftest import seen\n"
+        "from state import seen\n"
         "\n"
         "@arrange('arrange_ping')\n"
         "async def test_body(shared_ping: Fixture[int]) -> None:\n"

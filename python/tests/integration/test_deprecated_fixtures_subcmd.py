@@ -22,12 +22,10 @@ def test_fixtures_subcmd_prints_deprecation_warning(tmp: TempDir) -> None:
                     pass
             """,
         },
-        conftest="""\
-            from oxitest import Fixtures
+        declarations="""\
+            from oxitest import fixture
 
-            fx = Fixtures()
-
-            @fx.fixture
+            @fixture(lifetime="function")
             def db() -> object:
                 return object()
         """,
@@ -49,12 +47,10 @@ def test_fixtures_subcmd_still_lists_fixtures(tmp: TempDir) -> None:
                     pass
             """,
         },
-        conftest="""\
-            from oxitest import Fixtures
+        declarations="""\
+            from oxitest import fixture
 
-            fx = Fixtures()
-
-            @fx.fixture
+            @fixture(lifetime="function")
             def db() -> object:
                 return object()
         """,
