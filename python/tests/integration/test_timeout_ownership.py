@@ -7,6 +7,9 @@ outcome is wrong, so the outcome is what has to be asserted.
 
 from __future__ import annotations
 
+import signal
+
+import oxitest as oxi
 from oxitest import TempDir
 from tests import helpers
 
@@ -19,7 +22,29 @@ version = "0.0.0"
 timeout = 3
 """
 
+#: The defect is Unix-only: Windows delivers a deadline with a per-test
+#: `threading.Timer` and has no process-global slot for test code to write, and
+#: no `signal.alarm` to write it with. A probe that clears the timer therefore
+#: cannot be expressed on Windows at all -- the run dies with AttributeError.
+_NO_SHARED_TIMER = not hasattr(signal, "alarm")
+_NO_SHARED_TIMER_REASON = (
+    "the deadline is only takeable where one process-global timer delivers it;"
+    " Windows uses a per-test timer and has no signal.alarm"
+)
 
+#: A body that reaches Python bytecode boundaries, so BOTH arms can interrupt
+#: it. `time.sleep` is a blocking C call, and the ctypes arm fires only at a
+#: bytecode boundary -- a sleeping body is not bounded there
+#: (`bounds_blocking_calls = False`), so it measures the platform difference
+#: instead of the deadline.
+_SPIN_FOR_30S = (
+    "    deadline = time.monotonic() + 30\n"
+    "    while time.monotonic() < deadline:\n"
+    "        pass\n"
+)
+
+
+@oxi.mark.skip(when=_NO_SHARED_TIMER, reason=_NO_SHARED_TIMER_REASON)
 def test_a_test_that_clears_the_timer_is_reported_as_warned(tmp: TempDir) -> None:
     """Two lines of ordinary user code void the deadline, and it must be reported.
 
@@ -63,8 +88,7 @@ def test_a_nested_run_leaves_the_enclosing_test_its_deadline(tmp: TempDir) -> No
         "\n"
         "def test_nests_then_blocks():\n"
         "    wrapper = make_timeout_wrapper(1)\n"
-        "    wrapper(PassedResult)\n"
-        "    time.sleep(30)\n"
+        "    wrapper(PassedResult)\n" + _SPIN_FOR_30S
     )
     out, _, rc = helpers.run_oxitest(tmp, "-n", "1")
     assert "test_nests_then_blocks" in out, (
