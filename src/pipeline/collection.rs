@@ -646,6 +646,137 @@ pub(super) fn register_plugin_home(
 /// so `import oxitest as ox` declares a real fixture that no static scan can
 /// see; erring wide costs one import, erring narrow silently drops the fixture,
 /// which is #1850.
+/// Register every declaration home reachable from one test file's directory.
+///
+/// The chain is the file's own directory and every ancestor up to the rootdir
+/// package (#1765); each directory may hold both declaration homes.
+///
+/// Extracted from the collection loop so the `query` and `inspect` surfaces can
+/// build the same registry the pipeline does (#1720). Those surfaces used to
+/// see conftest fixtures only, because `FixtureSession::new` is fed conftest
+/// paths and the prescan walk lived here — so `oxitest query fixtures` listed
+/// nothing a `@oxi.fixture` declared.
+///
+/// `registered_dirs` is the caller's, not this function's: collection
+/// accumulates it across every file it visits, and calls this **before** its
+/// cache-hit `continue` so a warm cache still registers.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "three accumulators, the dedup set, and the four inputs a DeclarationHome needs; \
+              bundling them would hide which of the two Utf8Paths is the anchor"
+)]
+fn register_homes_in_chain(
+    py: pyo3::Python<'_>,
+    session: &bridge::FixtureSession,
+    parent_dir: &camino::Utf8Path,
+    tree_root: Option<&camino::Utf8Path>,
+    root_provenance: RootProvenance,
+    registered_dirs: &mut std::collections::HashSet<camino::Utf8PathBuf>,
+    errors: &mut Vec<types::CollectError>,
+    diagnostics: &mut Vec<crate::reporter::stats::DiagnosticEntry>,
+    fixture_modules: &mut Vec<types::FixtureModule>,
+) {
+    for dir in registration_chain(parent_dir, tree_root) {
+        // `continue`, not `break`. The set accumulates every directory a
+        // previously walked file registered, so `break` would stop the second
+        // file in a package at the already-registered root and never reach its
+        // own directory; and the seed means a vendored plugin mid-chain must
+        // not stop the walk reaching the user homes below it. The second is
+        // pinned by test_a_plugin_anchor_mid_chain_does_not_stop_the_walk
+        // (#1934).
+        if registered_dirs.contains(&dir) {
+            continue;
+        }
+        // Both declaration homes for this directory, per ADR-0009's
+        // file-convention table. `__fixtures__.py` is reserved and holds any
+        // lifetime; `__init__.py` is an ordinary package-init file that may
+        // also host declarations (package lifetime is the recommended use).
+        for file_kind in [HomeFile::Fixtures, HomeFile::Init] {
+            let path = dir.join(file_kind.as_str());
+            if path.exists() {
+                register_declaration_home(
+                    py,
+                    session,
+                    &DeclarationHome {
+                        path: &path,
+                        anchor: &dir,
+                        file: file_kind,
+                        kind: HomeKind::User {
+                            tree_root,
+                            root_provenance,
+                        },
+                    },
+                    errors,
+                    diagnostics,
+                    fixture_modules,
+                );
+            }
+        }
+        registered_dirs.insert(dir);
+    }
+}
+
+/// Register every declaration home the given test files can reach.
+///
+/// The query and inspect surfaces build a session from conftest paths alone
+/// (`FixtureSession::new`), so without this they see conftest fixtures and
+/// builtins and nothing a `@oxi.fixture` declares. Collection reaches the same
+/// homes through its per-file loop; this is the same walk over a file set that
+/// is already known, for the surfaces that do not run a collection (#1720).
+///
+/// Returns the accumulators rather than reporting them: a query run decides for
+/// itself whether an unimportable declaration file is worth a diagnostic, and
+/// the caller owns that judgement.
+pub fn register_declaration_homes_for_files(
+    py: pyo3::Python<'_>,
+    session: &bridge::FixtureSession,
+    cfg: &config::Config,
+    test_files: &[camino::Utf8PathBuf],
+) -> (
+    Vec<types::CollectError>,
+    Vec<crate::reporter::stats::DiagnosticEntry>,
+    Vec<types::FixtureModule>,
+) {
+    // Same derivation as the collection loop, and for the same reason: the
+    // rootdir package is a property of the project, not of the run.
+    let (declared_dirs, root_provenance) = if cfg.paths.declared_testpaths.is_empty() {
+        (implied_declared_dirs(cfg), RootProvenance::Layout)
+    } else {
+        (declared_dirs_holding_tests(cfg), RootProvenance::Declared)
+    };
+    let tree_root = rootdir_package(&declared_dirs, &cfg.rootdir);
+
+    // Seeded with the activated plugins' anchors, so a vendored plugin is not
+    // registered twice — once ambient, once anchored (#1717).
+    let mut registered_dirs: std::collections::HashSet<camino::Utf8PathBuf> = session
+        .plugin_anchor_dirs(py)
+        .into_iter()
+        .map(camino::Utf8PathBuf::from)
+        .collect();
+
+    let mut errors = Vec::new();
+    let mut diagnostics = Vec::new();
+    let mut fixture_modules = Vec::new();
+
+    for file in test_files {
+        if let Some(parent_dir) = file.parent() {
+            register_homes_in_chain(
+                py,
+                session,
+                parent_dir,
+                tree_root.as_deref(),
+                root_provenance,
+                &mut registered_dirs,
+                &mut errors,
+                &mut diagnostics,
+                &mut fixture_modules,
+            );
+        }
+    }
+
+    (errors, diagnostics, fixture_modules)
+}
+
 fn register_declaration_home(
     py: pyo3::Python<'_>,
     session: &bridge::FixtureSession,
@@ -813,44 +944,17 @@ pub(super) fn collect_items(
         // so any registration placed after the cache check is silently skipped
         // for cached modules (HIGH-1 fix).
         if let Some(parent_dir) = file.parent() {
-            for dir in registration_chain(parent_dir, tree_root.as_deref()) {
-                // `continue`, not `break`. The set accumulates every directory
-                // a previously walked file registered, so `break` would stop
-                // the second file in a package at the already-registered root
-                // and never reach its own directory; and the seed means a
-                // vendored plugin mid-chain must not stop the walk reaching the
-                // user homes below it. The second is pinned by
-                // test_a_plugin_anchor_mid_chain_does_not_stop_the_walk (#1934).
-                if registered_fixture_dirs.contains(&dir) {
-                    continue;
-                }
-                // Both declaration homes for this directory, per ADR-0009's
-                // file-convention table. `__fixtures__.py` is reserved and holds any
-                // lifetime; `__init__.py` is an ordinary package-init file that may
-                // also host declarations (package lifetime is the recommended use).
-                for file_kind in [HomeFile::Fixtures, HomeFile::Init] {
-                    let path = dir.join(file_kind.as_str());
-                    if path.exists() {
-                        register_declaration_home(
-                            py,
-                            session,
-                            &DeclarationHome {
-                                path: &path,
-                                anchor: &dir,
-                                file: file_kind,
-                                kind: HomeKind::User {
-                                    tree_root: tree_root.as_deref(),
-                                    root_provenance,
-                                },
-                            },
-                            &mut errors,
-                            &mut diagnostics,
-                            &mut fixture_modules,
-                        );
-                    }
-                }
-                registered_fixture_dirs.insert(dir);
-            }
+            register_homes_in_chain(
+                py,
+                session,
+                parent_dir,
+                tree_root.as_deref(),
+                root_provenance,
+                &mut registered_fixture_dirs,
+                &mut errors,
+                &mut diagnostics,
+                &mut fixture_modules,
+            );
         }
 
         let mtime = file_mtime_secs(file);

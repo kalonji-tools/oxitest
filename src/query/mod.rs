@@ -169,6 +169,30 @@ pub fn run_query(
     is_tty: bool,
     use_color: bool,
 ) -> Result<String, String> {
+    // 0. Teach the session about declaration files.
+    //
+    // `FixtureSession::new` is fed conftest paths, so the session arrives
+    // knowing conftest fixtures and builtins only. Every `@oxi.fixture`
+    // declaration reaches a registry through the collection walk, which a query
+    // never runs — so before #1720 this listed nothing a `__fixtures__.py`
+    // declared, while the same project ran green (#1720).
+    //
+    // A declaration file that cannot be imported is fatal here rather than
+    // ignored: the query would otherwise answer from a registry it knows is
+    // incomplete, and answering "no results" is indistinguishable from a
+    // correct empty answer. Diagnostics are warnings about files that *were*
+    // read, so they do not make the answer wrong and are not surfaced through
+    // this path.
+    if let Some(built) = session {
+        let (errors, _diagnostics, _modules) =
+            crate::pipeline::collection::register_declaration_homes_for_files(
+                py, built, cfg, test_files,
+            );
+        if let Some(first) = errors.into_iter().next() {
+            return Err(format!("{first:?}"));
+        }
+    }
+
     // 1. Collect entries
     let mut entries = collect_entries(py, args.resource, test_files, conftest_files, session, cfg)?;
 
