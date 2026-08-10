@@ -2,7 +2,7 @@
 
 The spec's phrasing is the reason this file exists: the decision to give the
 user tier its own scope "is only honest if" the two tiers left behind stay
-where they were. A change that quietly hoisted `TempDirFactory` or `shared=True`
+where they were. A change that quietly hoisted `TempDirFactory`
 to process lifetime would satisfy every positive assertion in the branch while
 making every suite hold its temp directories for the life of a worker.
 
@@ -80,7 +80,7 @@ def test_the_builtin_factory_is_still_rebuilt_per_task_group(
     Hoisting it alongside the user tier would accumulate every temp directory a
     worker ever created until the process exits — the cost decision 2 declined
     to pay. ``factory.dirs`` is per-instance state, so a factory rebuilt per
-    task group always reads 1 immediately after its own ``mktemp``; one shared
+    task group always reads 1 immediately after its own ``mktemp``; one
     across groups would climb.
     """
     # Assert
@@ -91,25 +91,6 @@ def test_the_builtin_factory_is_still_rebuilt_per_task_group(
         f"{counts}. A count above 1 means the factory outlived a task group, so "
         f"a suite that never declared the process tier is now holding temp "
         f"directories for the life of a worker"
-    )
-
-
-def test_shared_true_is_still_rebuilt_per_task_group(
-    parallel_run: Fixture[helpers.EventLogRun],
-) -> None:
-    """The legacy ``shared=True`` tier stays task-scoped (decision 8).
-
-    Its instance count is a regression check, not a target: #1777 changed the
-    tier beside it, and this is what says it did not drag this one along.
-    """
-    # Assert
-    _assert_a_worker_drained_two_groups(parallel_run)
-    builds = Counter(_pids(parallel_run, "SHARED_SETUP ", field=1))
-    assert any(count > 1 for count in builds.values()), (
-        f"shared=True was built {dict(builds)} — once per PID. It drains at "
-        f"end_task, so a worker that handled two task groups must have built it "
-        f"twice; exactly one per process means it moved to the process boundary "
-        f"with the user tier, which decision 8 rejects"
     )
 
 

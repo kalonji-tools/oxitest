@@ -213,6 +213,30 @@ class FixtureDef(Generic[T]):
         return self.scope == FixtureScope.SHARED
 
     @property
+    def arranges(self) -> bool:
+        """Whether Auto-Arrangement treats this fixture as an input.
+
+        The arrange stage co-locates every test in the Connected Component of
+        such a fixture. It read :attr:`shared` until #1720 retired that tier.
+
+        ``module`` rather than ``package`` or ``process``, and both of those
+        were measured rather than reasoned about:
+
+        - ``package`` is refused outright. ``reject_inprocess_inside_package``
+          forbids an ``inprocess`` test inside a package that declares a
+          ``package`` fixture, and #1777's coordinator acceptance project needs
+          both — the mark so the coordinator resolves the fixture at all, the
+          arrangement so it runs two phases.
+        - ``process`` gives two phases but drains at ``end_process``, so the
+          fixture survives the phase boundary. The acceptance test needs one
+          that is *rebuilt* across phases, and measured a single build.
+
+        ``module`` drains at ``end_module``, so it is rebuilt, and it fires
+        arrangement. It is also what the package guard's own hint recommends.
+        """
+        return self.scope is FixtureScope.MODULE
+
+    @property
     def anchor(self) -> str | None:
         """The B1 anchor path, or ``None`` for sources exempt from B1.
 
@@ -293,7 +317,7 @@ def _compute_shared_ancestors(
             continue
         visited.add(name)
         defs = by_name.get(name)
-        if defs and defs[-1].shared:
+        if defs and defs[-1].arranges:
             result.add(name)
         for dep in graph.get(name, ()):
             if dep in visited:
@@ -731,7 +755,9 @@ class FixtureRegistry:
         """Return sorted names of fixtures with effective (most-local) shared=True."""
         return tuple(
             sorted(
-                name for name, defs in self._by_name.items() if defs and defs[-1].shared
+                name
+                for name, defs in self._by_name.items()
+                if defs and defs[-1].arranges
             )
         )
 

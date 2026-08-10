@@ -17,7 +17,6 @@ def _record(event: str) -> None:
 
 def test_delta(
     per_process: Fixture[str],
-    legacy_shared: Fixture[str],
     factory: TempDirFactory,
 ) -> None:
     factory.mktemp("x")
@@ -25,4 +24,4 @@ def test_delta(
     # handed out. A factory rebuilt per task group always reads 1 here; one
     # hoisted to process lifetime would climb.
     _record(f"FACTORY delta {os.getpid()} dirs={len(factory.dirs)}")
-    assert per_process and legacy_shared, "both wide tiers must inject"
+    assert per_process, "the process tier must inject"
