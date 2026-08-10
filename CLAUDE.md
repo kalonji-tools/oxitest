@@ -330,7 +330,7 @@ Illustrative only, **not exhaustive**. Note that syntax-valid is not verified:
 | `src/**.rs` — fmt, clippy, `test-rust`, `cargo doc` | `bacon.toml`, `prek.toml`, `cliff.toml`, `codecov.yml` — `check-toml`/`check-yaml` parse them; nothing validates them |
 | `python/**.py` — ruff, ty, `test-python`, plus `scripts/check_subprocess_encoding.py` for text-mode `subprocess` calls with no `encoding=` (#1986) | `devenv.nix`, `flake.nix`, `nix/` — no gate at all |
 | `docs/**.md` in the mkdocs nav — `mkdocs --strict` | `.github/actions/*/action.yml` — `check-yaml` parses them; actionlint cannot read a composite |
-| `.github/workflows/*` — actionlint for referenced-but-undeclared `needs:`, plus `scripts/check_rollup_agreement.py` for the reverse (#1974) | `justfile` — `scripts/check_justfile_quoting.py` refuses a quoted interpolation (#2015); nothing else reads it |
+| `.github/workflows/*` — actionlint for referenced-but-undeclared `needs:`, `scripts/check_rollup_agreement.py` for the reverse (#1974), and `scripts/check_platform_sets.py` for agreement between the required rollup, the wheel targets and `classifiers` (#1950) | `justfile` — `scripts/check_justfile_quoting.py` refuses a quoted interpolation (#2015); nothing else reads it |
 | `docs/internals/**` — mdbook | `.envrc`, `.config/wt.toml` — no gate |
 | `Cargo.lock`, `uv.lock` — lock checks | `*.md` outside the mkdocs nav — codespell only, no link check |
 

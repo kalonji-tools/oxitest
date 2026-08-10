@@ -215,19 +215,15 @@ jobs:
 
       - uses: ./.github/actions/platform-test
 
-  # Advisory, and deliberately absent from the `required` job's `needs:`.
+  # Required. It landed advisory, against map #1946 standing preference 5, by
+  # maintainer decision: #1986 took Windows from 292 non-passes to 39, and
+  # holding a shipped gate-backed improvement behind that residue was the worse
+  # trade. #1989 then cleared the 39 and promoted the job into the `required`
+  # job's `needs:` below, so the exception closed rather than becoming the
+  # permanent-advisory state preference 5 warns about.
   #
-  # Map #1946 standing preference 5 says a platform job is promoted to required
-  # in the same ticket that adds it, never a follow-up, because permanent-
-  # advisory is how CI rots into silently-red. That is **overridden here by
-  # maintainer decision**: #1986 took Windows from 292 non-passes to 39, but the
-  # residue is 39 genuine cross-platform defects (plugin system, debugger, node
-  # IDs, fixture cache, cwd guard), and holding a shipped gate-backed
-  # improvement behind that is the worse trade.
-  #
-  # **#1989 owns the promotion** and states the accepted risk. If #1989 stalls,
-  # this job is advisory indefinitely and preference 5 was right — so treat a
-  # long-lived advisory Windows job as a bug in the backlog, not a steady state.
+  # Windows is therefore in the supported set, and ADR-0013 derives its wheel
+  # target and its classifier from that (#1950).
   windows:
     name: Test (Windows x86_64)
     needs: changes
