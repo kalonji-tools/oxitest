@@ -75,19 +75,9 @@ in
     before = [ "devenv:enterShell" ];
   };
 
-  tasks."oxitest:install-graphify" = {
-    exec = ''
-      uv tool install graphifyy -q 2>/dev/null
-      export PATH="$HOME/.local/bin:$PATH"
-      if git rev-parse --git-dir > /dev/null 2>&1; then
-        graphify hook install 2>/dev/null || true
-      fi
-    '';
-    before = [ "devenv:enterShell" ];
-  };
-
   enterShell = ''
-    # Put venv bin and uv tools on PATH so prek hooks find ruff, ty, codespell, graphify
+    # Put uv tool bin and the devenv venv bin on PATH; prek hooks find ruff, ty
+    # and codespell in the venv
     export PATH="$HOME/.local/bin:$UV_PROJECT_ENVIRONMENT/bin:$PATH"
 
     # Symlink .venv → devenv venv so tools with hardcoded .venv paths work

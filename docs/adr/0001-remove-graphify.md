@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-06-19
+**Executed:** 2026-08-10 ([#2028](https://github.com/kalonji-tools/oxitest/issues/2028)) — seven weeks after acceptance. The purge commit `b1ba91f9` never opened `devenv.nix`, so the install task and the Git hooks it installed survived; the Context list below now records them.
 
 ## Context
 
@@ -10,8 +11,10 @@ Graphify was integrated into oxitest to speed up AI-assisted codebase exploratio
 - A `graphify-out/` directory with cached AST data, a knowledge graph (`graph.json`), and a report (`GRAPH_REPORT.md`)
 - PreToolUse hooks in `.claude/settings.json` that forced agents to query the graph before reading source files
 - CLAUDE.md instructions directing agents to use `graphify query`, `graphify path`, and `graphify explain`
-- Exclusion patterns in `.gitignore` and `prek.toml` to avoid linting graphify output
+- Exclusion patterns in `.gitignore`, `prek.toml`, and the codespell `skip` list in `pyproject.toml` to avoid linting graphify output
 - A custom pre-push hook (later removed) to auto-commit graphify output
+- A `devenv.nix` task, `oxitest:install-graphify`, that installed the tool and ran `graphify hook install` before every shell entry
+- `post-commit` and `post-checkout` Git hooks, installed by that task, that rebuilt the graph after every commit and every branch switch
 
 ## Decision
 
