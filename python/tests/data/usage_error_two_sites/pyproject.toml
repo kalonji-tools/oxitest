@@ -1,0 +1,4 @@
+[tool.oxitest]
+testpaths = ["usage_error_two_sites"]
+python_files = ["test_*.py"]
+strict = "abort"

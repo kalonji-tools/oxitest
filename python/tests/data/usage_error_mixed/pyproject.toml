@@ -1,0 +1,4 @@
+[tool.oxitest]
+testpaths = ["usage_error_mixed"]
+python_files = ["test_*.py"]
+strict = "abort"
