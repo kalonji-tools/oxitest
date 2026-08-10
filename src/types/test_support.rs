@@ -154,6 +154,7 @@ impl FailedOutcomeBuilder {
             source_line: self.source_line,
             frames: self.frames,
             comparison,
+            usage_error: false,
         }))
     }
 }

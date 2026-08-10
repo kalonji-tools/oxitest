@@ -25,6 +25,7 @@ from oxitest._bridge._assert_error import (
 )
 from oxitest._bridge._boundary import safe_call
 from oxitest._bridge._builtins._warncapture import WarnCapture
+from oxitest._bridge._errors import is_usage_error
 from oxitest._bridge.result import (
     ErrorResult,
     FailedResult,
@@ -235,6 +236,8 @@ def _handle_runtime_exception(
             frames=_get_frames(
                 exc, show_locals=show_locals, show_internals=show_internals
             ),
+            # A BoundaryError from an `fx.` proxy access lands here (#1761).
+            usage_error=is_usage_error(exc),
         )
     return None
 

@@ -38,7 +38,7 @@ from oxitest._bridge._boundary import (
     safe_teardown,
     setup_completed,
 )
-from oxitest._bridge._errors import FixtureSetupError
+from oxitest._bridge._errors import AsyncDependencyError, FixtureSetupError
 from oxitest._bridge._fixture_context import _warn_teardown
 
 #: Teardown-store key for fixtures disposed at the end of the run. Every other
@@ -76,7 +76,12 @@ def _check_async_dep(_dep_name: str, dep_val: Any, fixture_name: str, msg: str) 
     if inspect.iscoroutine(dep_val) or inspect.isasyncgen(dep_val):
         if inspect.iscoroutine(dep_val):
             dep_val.close()
-        raise FixtureSetupError(fixture_name, RuntimeError(msg))
+        # AsyncDependencyError rather than its FixtureSetupError parent: this
+        # refusal is a wiring mistake and votes for exit 4, while the parent
+        # also wraps genuine exceptions from a user's fixture body, which are
+        # ordinary failures (#1761). All three call sites below raise through
+        # here, so one class covers every lifetime refusal.
+        raise AsyncDependencyError(fixture_name, RuntimeError(msg))
 
 
 def _reject_async_in_sync(dep_name: str, dep_val: Any, fixture_name: str) -> None:

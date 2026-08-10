@@ -7,6 +7,7 @@ import os
 __all__ = [
     "AmbiguousFixtureError",
     "ArrangeError",
+    "AsyncDependencyError",
     "AsyncFixtureAccessError",
     "AutouseRegistrationError",
     "BackendNotFoundError",
@@ -31,6 +32,7 @@ __all__ = [
     "TestIdentityUnavailableError",
     "UnannotatedFixtureParamError",
     "UsageError",
+    "is_usage_error",
 ]
 
 from typing import TYPE_CHECKING, Any
@@ -82,7 +84,13 @@ def _default_fixture_not_found_message(name: str, namespace: str) -> str:
 
 
 class FixtureNotFoundError(FixtureError):
-    """Raised when a requested fixture name cannot be found in the registry."""
+    """Raised when a requested fixture name cannot be found in the registry.
+
+    Votes for exit 4 (see ``is_usage_error``): reaching this error at run time
+    means the test asked for a fixture it cannot see, which is a wiring
+    mistake. A name that exists nowhere at all is refused earlier, by the
+    name-based collection validator, and exits 3 without ever reaching the vote.
+    """
 
     def __init__(
         self,
@@ -209,6 +217,25 @@ class FixtureSetupError(FixtureError):
             f"If using a yield fixture, the error is in setup (before yield)."
         )
         self.fixture_name = name
+
+
+class AsyncDependencyError(FixtureSetupError):
+    """Raised when a fixture dependency's lifetime cannot hold its value.
+
+    When it fires:
+        Raised only by ``_check_async_dep``, which covers all three refusals:
+        a fixture that outlives the test depending on a shorter-lived async
+        fixture, a sync fixture depending on an async one, and a shared fixture
+        depending on a non-shared async one. An async value is bound to one
+        test's event loop, so a wider-lived holder would hand it to tests whose
+        loop is gone.
+
+    Why a subclass rather than a flag on ``FixtureSetupError``:
+        That error also wraps genuine exceptions raised inside a user's fixture
+        body, and those are ordinary failures rather than wiring mistakes.
+        Marking the parent would exit 4 for every broken fixture body. Every
+        existing ``except FixtureSetupError`` still catches this unchanged.
+    """
 
 
 class TestContextUnavailableError(FixtureError):
@@ -603,3 +630,36 @@ class ArrangeError(OxitestError):
             f"    3. Convert fixture to sync — remove `async` from def\n"
         )
         super().__init__(message)
+
+
+#: Errors that mean the suite is wired wrong, rather than that a test failed.
+#:
+#: A tuple rather than a marker base class, so enrolling an error changes one
+#: place instead of that error's declaration. ``isinstance`` covers subclasses
+#: either way — ``FixtureTypeNotFoundError`` votes through
+#: ``FixtureNotFoundError`` without appearing here.
+#:
+#: ``FixtureSetupError`` is deliberately absent. It also wraps genuine
+#: exceptions from a user's fixture body, and those are ordinary failures;
+#: only ``AsyncDependencyError`` names the lifetime refusal.
+_USAGE_ERROR_TYPES: tuple[type[BaseException], ...] = (
+    AsyncDependencyError,
+    AsyncFixtureAccessError,
+    BoundaryError,
+    FixtureNotFoundError,
+)
+
+
+def is_usage_error(exc: BaseException) -> bool:
+    """True when *exc* means the request was invalid, not that a test failed.
+
+    The single source of truth for the vote. Every error funnel asks this
+    rather than testing types itself; a funnel that decided for itself would be
+    a second definition, and the two would drift.
+
+    An error that votes raises the run's exit code to ``ExitCode::UsageError``
+    (4) without stopping the run — every test still reports (#1761). Exit 4 is
+    defined by the class of the error, not by when oxitest detects it
+    (ADR-0014).
+    """
+    return isinstance(exc, _USAGE_ERROR_TYPES)

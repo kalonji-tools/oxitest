@@ -38,6 +38,7 @@ const fn build_diagnostic(
     source_line: String,
     frames: Vec<Frame>,
     comparison: Option<ComparisonDetail>,
+    usage_error: bool,
 ) -> FailureDiagnostic {
     FailureDiagnostic {
         message,
@@ -46,6 +47,7 @@ const fn build_diagnostic(
         source_line,
         frames,
         comparison,
+        usage_error,
     }
 }
 
@@ -73,6 +75,8 @@ pub enum RawOutcome {
         lineno: LineNo,
         source_line: String,
         frames: Vec<Frame>,
+        /// The suite is wired wrong rather than the test having failed (#1761).
+        usage_error: bool,
     },
     Skipped {
         reason: String,
@@ -122,6 +126,9 @@ impl RawOutcome {
                 source_line,
                 frames,
                 Some(comparison),
+                // An assertion failure is what exit 4 exists to be told apart
+                // from, so this arm can never carry the flag.
+                false,
             ))),
             Self::Error {
                 message,
@@ -129,6 +136,7 @@ impl RawOutcome {
                 lineno,
                 source_line,
                 frames,
+                usage_error,
             } => types::TestOutcome::Error(Box::new(build_diagnostic(
                 message,
                 file,
@@ -136,6 +144,7 @@ impl RawOutcome {
                 source_line,
                 frames,
                 None,
+                usage_error,
             ))),
             Self::Skipped { reason } => types::TestOutcome::Skipped { reason },
             Self::Warned {
@@ -221,6 +230,7 @@ impl WireResult {
                 lineno,
                 source_line,
                 frames,
+                usage_error,
                 ..
             } => {
                 let raw = RawOutcome::Error {
@@ -229,6 +239,7 @@ impl WireResult {
                     lineno: wire_lineno(lineno),
                     source_line,
                     frames: wire_frames(frames),
+                    usage_error,
                 };
                 types::ResolvedOutcome {
                     node_id: types::NodeId::from_raw(&node_id),
