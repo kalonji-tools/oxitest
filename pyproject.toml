@@ -8,6 +8,19 @@ dynamic = ["version"]
 requires-python = ">=3.11"
 description = "A fast Python test runner written in Rust"
 license = { text = "MIT" }
+# Derived from the tested platform set, never the reverse (ADR-0013), and held
+# there by scripts/check_platform_sets.py. Trove classifiers carry no
+# architecture axis, so this is the OS projection of that set: both Linux rows
+# and both macOS rows collapse to one entry each.
+#
+# Deliberately no `Programming Language :: Python :: 3.x` entries. Those would
+# be a fourth platform-shaped set that nothing compares against
+# `requires-python`, which is the drift ADR-0013 exists to prevent.
+classifiers = [
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+]
 
 [project.scripts]
 oxitest = "oxitest:main"

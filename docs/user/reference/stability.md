@@ -2,6 +2,22 @@
 
 oxitest follows [semantic versioning](https://semver.org/). This page defines what is covered by the stability guarantee.
 
+## Supported platforms
+
+A platform is supported when CI runs the full test suite on it. Wheel targets and PyPI classifiers are derived from this list, never the reverse — see [ADR-0013](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0013-platform-support-is-what-ci-tests.md) for the decision and its rationale.
+
+| Platform | Wheel |
+|---|---|
+| Linux x86_64 | `manylinux` x86_64 |
+| Linux aarch64 | `manylinux` aarch64 |
+| macOS arm64 | `universal2` |
+| macOS x86_64 | `universal2` |
+| Windows x86_64 | `win_amd64` |
+
+Removing a platform from this list is a backward-incompatible change and needs a major version bump. Adding one does not.
+
+Wheels are built for Python 3.11 through 3.14 on every platform in the table. Python version and platform are separate axes and this page's definition of support ranges over the platform: the platform jobs run 3.12, and all four versions run on Linux x86_64.
+
 ## Stable (semver-protected)
 
 These surfaces will not change in backward-incompatible ways without a major version bump:

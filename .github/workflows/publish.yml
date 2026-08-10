@@ -53,6 +53,51 @@ jobs:
           name: wheels-macos
           path: dist
 
+  # Windows joined the supported set when #1989 promoted its test job into the
+  # `Tests (required)` rollup. ADR-0013 derives wheel targets from the tested
+  # set, so the target follows the job rather than the other way round.
+  #
+  # This job cannot be exercised by a pull request — `publish.yml` runs on tag
+  # push only. What is established is that maturin builds oxitest on this
+  # runner: `.github/actions/platform-test` runs `uv run maturin develop` on
+  # `windows-latest` and that job is required and green. What is not is this
+  # job's four-interpreter release build. It is in `publish`'s `needs:` below,
+  # so a failure here blocks the upload rather than shipping a partial release.
+  # One job per interpreter, rather than the `macos` job's single job with four
+  # versions and `-i python3.11 python3.12 ...`. That spelling is Unix-only:
+  # `actions/setup-python` gives each version its own tool-cache directory on
+  # PATH, and on Linux and macOS each holds a `python3.11` file while on Windows
+  # each holds only `python.exe` and `python3.exe`. There is no
+  # `python3.11.exe`, so `-i` would find none of the four.
+  #
+  # `--find-interpreter` with exactly one Python on PATH assumes no name
+  # resolution at all. It is also the shape maturin itself generates for
+  # Windows: `src/ci/github/__snapshot__/github_default.yml` in PyO3/maturin
+  # passes `--release --out dist --find-interpreter` and never `-i pythonX.Y`.
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13', '3.14']
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64-pc-windows-msvc
+          args: --release --out dist --find-interpreter
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-windows-${{ matrix.python-version }}
+          path: dist
+
   sdist:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -72,7 +117,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [linux, macos, sdist]
+    needs: [linux, macos, windows, sdist]
     environment: pypi
     permissions:
       id-token: write
