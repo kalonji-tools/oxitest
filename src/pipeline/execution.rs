@@ -482,15 +482,23 @@ fn report_violations(
     }
 }
 
+/// Warn that a module-lifetime fixture is rebuilt once per task group.
+///
+/// Ungated on arrangement (#1848). The gate used to suppress this whenever
+/// auto-arrange was on, on the premise that arrangement co-located the fixture
+/// and the rebuild did not happen. Arrangement was measured not to reduce a
+/// build at this tier in any of the eight cells of the consumption-form
+/// matrix, so the gate hid a true statement exactly when the user had been
+/// told the case was handled.
+///
+/// Still parallel-only, and structurally so: the sole call site is inside the
+/// `ExecutionStrategy::Parallel` arm, so `--serial` never reaches it and the
+/// message never advises a user to do what they are already doing.
 fn emit_module_lifetime_warning(
     py: Python<'_>,
     session: &bridge::FixtureSession,
-    cfg: &config::Config,
     worker_count: usize,
 ) {
-    if cfg.exec.auto_arrange_threshold > 0 {
-        return;
-    }
     let module_names = session.module_lifetime_fixture_names(py);
     if module_names.is_empty() {
         return;
@@ -508,8 +516,9 @@ fn emit_module_lifetime_warning(
         "wide-lifetime {noun} will be rebuilt once per task group, not once per run; \
          a task group is a single module unless a `package` declaration merges a \
          subtree, so a run can build more instances than it has workers — \
-         use --serial to run them once, or narrow the lifetime of fixtures \
-         that can be function-scoped"
+         use --serial to run them once, @oxi.arrange to co-locate the tests \
+         that share one, or narrow the lifetime of fixtures that can be \
+         function-scoped"
     );
 }
 
@@ -710,8 +719,8 @@ fn execute_phases(
                 }
             }
 
-            // Emit the wide-lifetime warning when auto-arrange is disabled.
-            emit_module_lifetime_warning(py, ctx.session, ctx.cfg, worker_count);
+            // Emit the wide-lifetime warning whenever the tier is in use.
+            emit_module_lifetime_warning(py, ctx.session, worker_count);
 
             if plan.parallel_groups.is_empty() || result.interrupted {
                 return result;
