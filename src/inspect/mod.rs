@@ -32,7 +32,7 @@ use graph::InspectGraph;
 /// Python session.
 ///
 /// Accepts pre-collected file lists so that the caller can spawn Phase 2 with
-/// the declaration paths before this function begins AST extraction.
+/// the conftest paths before this function begins AST extraction.
 ///
 /// Startup filters are applied in order:
 /// 1. `--affected` — narrow test files before AST extraction
@@ -119,20 +119,28 @@ pub struct Phase2Args {
     pub(crate) plugins: Vec<String>,
     pub(crate) plugin_settings: std::collections::HashMap<String, toml::Value>,
     pub(crate) rootdir: Utf8PathBuf,
+    /// The whole config, because `register_declaration_homes_for_files` derives
+    /// the rootdir package from `declared_testpaths` and the walk from
+    /// `python_files`/`norecursedirs`. Cherry-picking those fields here would
+    /// duplicate a derivation `collection` already owns (#1722).
+    pub(crate) cfg: config::Config,
 }
 
 /// Build [`Phase2Args`] from a `Config` plus the test files the caller already
 /// collected. `test_files` comes from `collect_files`, not `Config`, so it is
 /// supplied separately rather than cloned off `cfg`.
 ///
-/// No declaration list: the session no longer loads them (#1720). The inspect
-/// graph still receives one for its Declaration node, which #1722 retires.
+/// No conftest list: the session stopped loading `conftest.py` files in #1720,
+/// and nothing replaced it for this surface — so a `@oxi.fixture` declaration
+/// reached neither the session nor the graph. `cfg` is what closes that: it
+/// lets [`spawn_phase2`] call `register_declaration_homes_for_files` (#1722).
 pub fn phase2_args(cfg: &config::Config, test_files: Vec<Utf8PathBuf>) -> Phase2Args {
     Phase2Args {
         test_files,
         plugins: cfg.features.plugins.clone(),
         plugin_settings: cfg.features.plugin_settings.clone(),
         rootdir: cfg.rootdir.clone(),
+        cfg: cfg.clone(),
     }
 }
 
@@ -149,6 +157,7 @@ pub fn spawn_phase2(args: Phase2Args, tx: mpsc::Sender<Phase2Data>) {
         plugins,
         plugin_settings,
         rootdir,
+        cfg,
     } = args;
     thread::spawn(move || {
         pyo3::Python::attach(|py| {
@@ -164,6 +173,26 @@ pub fn spawn_phase2(args: Phase2Args, tx: mpsc::Sender<Phase2Data>) {
                     session
                         .load_plugins(py, &plugins, &plugin_settings)
                         .map_err(|e| e.to_string())?;
+                }
+
+                // Register every declaration home the test files can reach, so
+                // `fixture_entries` below sees `@oxi.fixture` declarations and not
+                // just builtins. Ordering is load-bearing in both directions: after
+                // `load_plugins`, because this seeds its registered set from
+                // `plugin_anchor_dirs` so a vendored plugin is not registered twice
+                // (#1717); and before the read it exists to fix.
+                //
+                // An unimportable declaration file fails phase 2 rather than
+                // delivering a partial graph — `no fixtures` is indistinguishable
+                // from a correct empty answer, which is the same reasoning
+                // `register_declaration_homes_for_files` states for queries (#1722).
+                if let Some(err) = crate::pipeline::collection::register_declaration_homes_for_files(
+                    py,
+                    &session,
+                    &cfg,
+                    &test_files,
+                ) {
+                    return Err(err.to_string());
                 }
 
                 let fixture_raw = crate::query::bridge::fixture_entries(&session, py)
@@ -215,7 +244,7 @@ pub fn spawn_phase2(args: Phase2Args, tx: mpsc::Sender<Phase2Data>) {
 /// collect fixture and plugin data from the Python session, which is
 /// merged into the graph when ready.
 pub fn run(args: &InspectArgs, cfg: &config::Config) -> Result<(), Box<dyn std::error::Error>> {
-    // Collect files first so declaration paths are available before AST work begins.
+    // Collect files first so conftest paths are available before AST work begins.
     let (test_files, conftest_files) = crate::collector::collect_files(cfg)?;
 
     // Clone test files for phase 2 before phase 1 consumes the original.
@@ -275,6 +304,27 @@ mod tests {
              (serial-in-thread) fixture collection resolves test-tree imports; a \
              mismatched rootdir here would silently break inspect's fixture pane \
              without failing any test that exercises the TUI directly"
+        );
+    }
+
+    #[test]
+    fn phase2_args_carries_the_config_for_declaration_registration() {
+        // Arrange — `register_declaration_homes_for_files` derives the rootdir
+        // package by branching on `declared_testpaths`, so a `Phase2Args` that
+        // drops the config cannot register a declaration home at all.
+        let mut cfg = Config::default();
+        cfg.paths.declared_testpaths = vec![camino::Utf8PathBuf::from("tests")];
+
+        // Act
+        let args = phase2_args(&cfg, Vec::new());
+
+        // Assert
+        assert_eq!(
+            args.cfg.paths.declared_testpaths, cfg.paths.declared_testpaths,
+            "spawn_phase2 needs the config so it can call \
+             register_declaration_homes_for_files before reading the registry; \
+             without it no @oxi.fixture declaration ever reaches the inspect graph \
+             and the Declarations section holds only the <builtin> node (#1722)"
         );
     }
 
