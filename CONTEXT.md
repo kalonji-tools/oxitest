@@ -87,7 +87,7 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 **Scope** — The caching vocabulary `Lifetime` translates into, via `LIFETIME_SCOPES`. Five members: `each`, `module`, `package`, `process`, `session`. `session` is the one tier no `Lifetime` maps to — it holds the builtins and drains at the task boundary. The legacy `shared` tier collapsed into it in #1720; they always shared a rate.
 
-**Autouse** — A fixture that runs for every test in its B1 boundary without being requested, for its side effects; the value is discarded unless the test also requests it, in which case both routes share one instance. How often it runs follows its Lifetime, and where several apply they run widest-Lifetime-first.
+**Autouse** — A fixture that runs for every test in its B1 boundary without being requested, for its side effects; the value is discarded unless the test also requests it, in which case both routes share one instance. How often it runs follows its Lifetime, and where several apply they run widest-Lifetime-first. **Applies** and **fires** are distinct: a fixture applies to every test in its boundary, but it is built once per boundary, inside whichever test reaches it first — so which test pays depends on execution order, worker assignment and deselection. `inspect` shows the set that applies to a test, and cannot show which test builds one.
 
 **Yield Fixture** — A fixture that uses `yield` to separate setup from teardown. Return type annotated `Yields[T]`.
 
@@ -165,7 +165,7 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 **ScopeMode** — Controls which nodes are searched in inspect's search mode. `Context` restricts candidates to the nodes visible on the current screen (e.g., edges on a Node Focus, items on the Overview). `Global` searches all nodes in the entire graph. Toggle between scopes with `Tab` while in search mode.
 
-**Inspect Keybindings (normal mode)** — `q`/`Esc` quit; `j`/`k` or arrow keys move the cursor; `Enter`/`l`/`→` navigate into the selected item; `h`/`←`/`Backspace` navigate back; `H` opens the session history screen; `/` enters search mode; `?` toggles the help overlay; `r` triggers a manual refresh (re-runs file collection and rebuilds the graph, re-applying startup filters such as `-E`, `--affected`, and `--lf`).
+**Inspect Keybindings (normal mode)** — `q`/`Esc` quit; `j`/`k` or arrow keys move the cursor; `Enter`/`l`/`→` navigate into the selected item; `h`/`←`/`Backspace` navigate back; `H` opens the session history screen; `/` enters search mode; `?` toggles the help overlay; `r` triggers a manual refresh (re-runs file collection and rebuilds the graph, re-applying startup filters such as `-E`, `--affected`, and `--lf`); `s` opens the in-TUI source view for the focused node; `e` opens it in `$EDITOR`.
 
 **Inspect Keybindings (search mode)** — Characters append to the query; `Backspace` removes the last character; `↑`/`↓` navigate between results; `Tab` toggles `ScopeMode` between Context and Global; `Enter` accepts the search and returns to normal mode (results remain visible); `Esc` clears the search and returns to normal mode.
 
