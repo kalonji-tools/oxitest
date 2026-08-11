@@ -119,13 +119,6 @@ pub fn parse_oxitest_config(raw: &str) -> Result<ParseOutcome, ConfigError> {
     Ok(ParseOutcome::Present(Box::new(config)))
 }
 
-#[derive(serde::Deserialize, Debug, Clone)]
-#[serde(untagged)]
-pub(super) enum AutoArrangeToml {
-    Threshold(u8),
-    Disabled(bool),
-}
-
 /// Root-level pyproject.toml deserialization target.
 ///
 /// Deliberately lacks `#[serde(deny_unknown_fields)]` — `[project]`,
@@ -185,7 +178,6 @@ pub(super) struct OxitestConfig {
     pub(super) retries: Option<usize>,
     pub(super) retries_delay: Option<u64>,
     pub(super) keep_tmp: Option<super::KeepTmpMode>,
-    pub(super) auto_arrange: Option<AutoArrangeToml>,
     pub(super) show_locals: Option<bool>,
     pub(super) show_internals: Option<bool>,
     pub(super) use_gitignore: Option<bool>,
@@ -563,27 +555,6 @@ mod tests {
             parsed.tool.is_none(),
             "TOML without [tool] section should deserialize to tool = None"
         );
-    }
-
-    #[test]
-    fn auto_arrange_threshold_integer() {
-        let cfg = parse_oxitest("auto_arrange = 80");
-        match cfg.auto_arrange {
-            Some(AutoArrangeToml::Threshold(n)) => assert_eq!(
-                n, 80,
-                "auto_arrange integer should deserialize to Threshold(80)"
-            ),
-            other => panic!("expected Some(Threshold(80)), got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn auto_arrange_disabled_false() {
-        let cfg = parse_oxitest("auto_arrange = false");
-        match cfg.auto_arrange {
-            Some(AutoArrangeToml::Disabled(false)) => {}
-            other => panic!("expected Some(Disabled(false)), got {other:?}"),
-        }
     }
 
     #[test]

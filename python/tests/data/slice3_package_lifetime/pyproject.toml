@@ -6,7 +6,6 @@ strict = "abort"
 # run to one PID and make the exactly-once assertion prove nothing about the
 # worker path. The whole point of this project is that the guarantee survives
 # parallel execution, so arrangement must stay off.
-auto_arrange = false
 # Force parallelism regardless of test count: the serial answer was always
 # correct, so a run that quietly fell back to serial would pass vacuously.
 min_parallel_tests = 1

@@ -177,7 +177,6 @@ _PYPROJECT = """\
 [tool.oxitest]
 testpaths = ["interrupted"]
 python_files = ["test_*.py"]
-auto_arrange = false
 min_parallel_tests = 1
 """
 

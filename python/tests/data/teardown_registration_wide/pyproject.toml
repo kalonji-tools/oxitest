@@ -2,4 +2,3 @@
 testpaths = ["trw"]
 python_files = ["test_*.py"]
 strict = "abort"
-auto_arrange = false

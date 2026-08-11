@@ -234,7 +234,7 @@ def test_exactly_once_survives_parallel_execution(tmp: TempDir) -> None:
     """The guarantee holds when the scheduler distributes work across workers.
 
     This is the assertion the whole slice exists for. The data-project sets
-    ``min_parallel_tests = 1`` and ``auto_arrange = false`` so the run genuinely
+    ``min_parallel_tests = 1`` and arranges nothing, so the run genuinely
     goes through worker subprocesses rather than falling back to the main
     process, where the answer was already correct before this slice.
     """

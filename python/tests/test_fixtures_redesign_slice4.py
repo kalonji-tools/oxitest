@@ -58,8 +58,8 @@ def test_the_parallel_run_actually_uses_more_than_one_worker(tmp: TempDir) -> No
 
     If the scheduler puts everything on one worker, every other parallel
     assertion below is satisfiable by a run-scoped implementation and proves
-    nothing. The data project sets ``min_parallel_tests = 1`` and
-    ``auto_arrange = false`` precisely so this cannot happen quietly.
+    nothing. The data project sets ``min_parallel_tests = 1`` and arranges
+    nothing, precisely so this cannot happen quietly.
     """
     # Act
     run = _run_project(tmp, "-n", "4")

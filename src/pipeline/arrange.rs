@@ -112,47 +112,6 @@ pub(super) fn partition_by_fixture_groups(
     }
 }
 
-/// Result of evaluating whether auto-arrangement should proceed, fall back, or skip.
-#[derive(Debug, PartialEq)]
-pub(super) enum ArrangeDecision {
-    /// Largest group exceeds threshold — fall back to serial for all tests.
-    FallbackSerial { ratio: u8 },
-    /// Proceed with arrangement — run arranged groups serially, rest in parallel.
-    Arrange,
-}
-
-/// Evaluate whether auto-arrangement should proceed based on the threshold.
-///
-/// Pure function: no I/O, no PyO3. Testable in isolation.
-pub(super) fn evaluate_arrange_threshold(
-    arranged: &[Vec<ModuleGroup>],
-    remaining: &[ModuleGroup],
-    threshold: u8,
-) -> ArrangeDecision {
-    let total_parallel: usize = arranged
-        .iter()
-        .flat_map(|g| g.iter())
-        .map(|g| g.items.len())
-        .sum::<usize>()
-        + remaining.iter().map(|g| g.items.len()).sum::<usize>();
-    let largest_group: usize = arranged
-        .iter()
-        .map(|g| g.iter().map(|g| g.items.len()).sum::<usize>())
-        .max()
-        .unwrap_or(0);
-    let ratio = if total_parallel > 0 {
-        (largest_group as f64 / total_parallel as f64 * 100.0) as u8
-    } else {
-        0
-    };
-
-    if ratio > threshold {
-        ArrangeDecision::FallbackSerial { ratio }
-    } else {
-        ArrangeDecision::Arrange
-    }
-}
-
 // ── ExecutionPlan value object ──────────────────────────────────────────────
 
 /// How remaining (non-inprocess) tests should be dispatched.
@@ -189,7 +148,6 @@ pub(super) fn plan_execution(
     worker_count_cfg: usize,
     spawn_overhead_ms: f64,
     min_parallel_tests: usize,
-    auto_arrange_threshold: u8,
     arranged_fixture_groups: &[Vec<String>],
     estimated: Option<std::time::Duration>,
     cpu_count: usize,
@@ -229,42 +187,27 @@ pub(super) fn plan_execution(
     let optimal_worker_count =
         crate::config::compute_optimal_workers(mode, cpu_count, estimated, spawn_overhead_ms);
 
-    // Auto-arrange by shared fixture groups.
-    if auto_arrange_threshold > 0 {
-        let threshold = auto_arrange_threshold;
-        if !arranged_fixture_groups.is_empty() {
-            let FixturePartition {
-                arranged,
-                remaining,
-            } = partition_by_fixture_groups(parallel_groups, arranged_fixture_groups);
+    // Arrange by the components the tests declared with `@oxi.arrange`.
+    //
+    // No threshold guards this any more (#1848). The ratio fallback existed
+    // because the component set was *inferred* from a lifetime tier and could
+    // therefore swallow a suite nobody had asked to serialise. A component now
+    // exists only where a test named a fixture, so collapsing to one is a
+    // thing the user asked for.
+    if !arranged_fixture_groups.is_empty() {
+        let FixturePartition {
+            arranged,
+            remaining,
+        } = partition_by_fixture_groups(parallel_groups, arranged_fixture_groups);
 
-            let decision = evaluate_arrange_threshold(&arranged, &remaining, threshold);
-
-            if let ArrangeDecision::FallbackSerial { .. } = decision {
-                // Threshold exceeded — collapse everything back to serial.
-                let mut all_groups: Vec<ModuleGroup> = Vec::new();
-                for group_modules in arranged {
-                    all_groups.extend(group_modules);
-                }
-                all_groups.extend(remaining);
-
-                return ExecutionPlan {
-                    strategy: ExecutionStrategy::Serial,
-                    inprocess_groups,
-                    arranged_groups: vec![],
-                    parallel_groups: all_groups,
-                };
-            }
-
-            return ExecutionPlan {
-                strategy: ExecutionStrategy::Parallel {
-                    worker_count: optimal_worker_count,
-                },
-                inprocess_groups,
-                arranged_groups: arranged,
-                parallel_groups: remaining,
-            };
-        }
+        return ExecutionPlan {
+            strategy: ExecutionStrategy::Parallel {
+                worker_count: optimal_worker_count,
+            },
+            inprocess_groups,
+            arranged_groups: arranged,
+            parallel_groups: remaining,
+        };
     }
 
     ExecutionPlan {
@@ -430,88 +373,5 @@ mod tests {
         assert_eq!(arranged[0][0].items.len(), 2, "two tests in that module");
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].items.len(), 1, "one plain test remaining");
-    }
-
-    // ── evaluate_arrange_threshold ───────────────────────────────────────────
-
-    #[test]
-    fn test_threshold_below_allows_arrangement() {
-        // 2 arranged + 8 remaining = 20% ratio, threshold 70% → Arrange
-        let mut item = TestItem::builder_raw("test_a.py::test_db").build();
-        item.fixture_deps = vec![("db".to_string(), "DB".to_string())];
-        let arranged = vec![vec![ModuleGroup::new(
-            Utf8PathBuf::from("test_a.py"),
-            vec![Arc::new(item.clone()), Arc::new(item)],
-        )]];
-        let remaining: Vec<ModuleGroup> = (0..8)
-            .map(|i| {
-                ModuleGroup::new(
-                    Utf8PathBuf::from(format!("test_{i}.py")),
-                    vec![TestItem::builder_raw(&format!("test_{i}.py::test")).arc()],
-                )
-            })
-            .collect();
-
-        let decision = evaluate_arrange_threshold(&arranged, &remaining, 70);
-        assert_eq!(decision, ArrangeDecision::Arrange);
-    }
-
-    #[test]
-    fn test_threshold_exceeded_falls_back_to_serial() {
-        // 9 arranged + 1 remaining = 90% ratio, threshold 70% → FallbackSerial
-        let mut item = TestItem::builder_raw("test_a.py::test_db").build();
-        item.fixture_deps = vec![("db".to_string(), "DB".to_string())];
-        let arranged = vec![vec![ModuleGroup::new(
-            Utf8PathBuf::from("test_a.py"),
-            (0..9).map(|_| Arc::new(item.clone())).collect::<Vec<_>>(),
-        )]];
-        let remaining = vec![ModuleGroup::new(
-            Utf8PathBuf::from("test_b.py"),
-            vec![TestItem::builder_raw("test_b.py::test_plain").arc()],
-        )];
-
-        let decision = evaluate_arrange_threshold(&arranged, &remaining, 70);
-        assert_eq!(decision, ArrangeDecision::FallbackSerial { ratio: 90 });
-    }
-
-    #[test]
-    fn test_threshold_at_boundary_allows_arrangement() {
-        // 7 arranged + 3 remaining = 70% ratio, threshold 70% → Arrange (not >)
-        let mut item = TestItem::builder_raw("test_a.py::test_db").build();
-        item.fixture_deps = vec![("db".to_string(), "DB".to_string())];
-        let arranged = vec![vec![ModuleGroup::new(
-            Utf8PathBuf::from("test_a.py"),
-            (0..7).map(|_| Arc::new(item.clone())).collect::<Vec<_>>(),
-        )]];
-        let remaining = vec![ModuleGroup::new(
-            Utf8PathBuf::from("test_b.py"),
-            (0..3)
-                .map(|i| TestItem::builder_raw(&format!("test_b.py::test_{i}")).arc())
-                .collect::<Vec<_>>(),
-        )];
-
-        let decision = evaluate_arrange_threshold(&arranged, &remaining, 70);
-        assert_eq!(decision, ArrangeDecision::Arrange);
-    }
-
-    #[test]
-    fn test_threshold_empty_arranged_returns_arrange() {
-        let arranged: Vec<Vec<ModuleGroup>> = vec![vec![]];
-        let remaining = vec![ModuleGroup::new(
-            Utf8PathBuf::from("test_a.py"),
-            vec![TestItem::builder_raw("test_a.py::test_a").arc()],
-        )];
-
-        let decision = evaluate_arrange_threshold(&arranged, &remaining, 70);
-        assert_eq!(decision, ArrangeDecision::Arrange);
-    }
-
-    #[test]
-    fn test_threshold_no_tests_returns_arrange() {
-        let arranged: Vec<Vec<ModuleGroup>> = vec![];
-        let remaining: Vec<ModuleGroup> = vec![];
-
-        let decision = evaluate_arrange_threshold(&arranged, &remaining, 70);
-        assert_eq!(decision, ArrangeDecision::Arrange);
     }
 }

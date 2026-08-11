@@ -5,7 +5,7 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 
-use super::pyproject::{AutoArrangeToml, OxitestConfig};
+use super::pyproject::OxitestConfig;
 use super::*;
 
 /// Applies an `Option` value to a config field when `Some`.
@@ -44,7 +44,6 @@ struct Overrides {
     keep_tmp: Option<KeepTmpMode>,
     show_locals: Option<bool>,
     show_internals: Option<bool>,
-    auto_arrange_threshold: Option<u8>,
 }
 
 /// Resolve testpaths relative to a root directory.
@@ -84,11 +83,6 @@ impl Config {
         apply_if_some!(self.exec, retries_delay_secs, ovr.retries_delay_secs);
         apply_if_some!(self.filter, failed, ovr.failed, wrap);
         apply_if_some!(self.output, keep_tmp, ovr.keep_tmp);
-        apply_if_some!(
-            self.exec,
-            auto_arrange_threshold,
-            ovr.auto_arrange_threshold
-        );
 
         // ── Output ─────────────────────────────────────────────────────
         apply_if_some!(self.output, tb, ovr.tb);
@@ -176,11 +170,6 @@ impl Config {
             keep_tmp: tc.keep_tmp,
             show_locals: tc.show_locals,
             show_internals: tc.show_internals,
-            auto_arrange_threshold: tc.auto_arrange.map(|v| match v {
-                AutoArrangeToml::Threshold(n) => n,
-                AutoArrangeToml::Disabled(false) => 0,
-                AutoArrangeToml::Disabled(true) => 70,
-            }),
         });
 
         // Apply workers after overrides (workers is no longer in Overrides).
@@ -251,7 +240,6 @@ impl Config {
             } else {
                 None
             },
-            auto_arrange_threshold: None,
         });
 
         // --strict=off disables strict, overriding any config value.
@@ -308,7 +296,6 @@ impl Config {
             keep_tmp: args.keep_tmp,
             show_locals: if args.show_locals { Some(true) } else { None },
             show_internals: None,
-            auto_arrange_threshold: None,
         });
 
         self
@@ -1330,20 +1317,6 @@ async_backend = "trio"
         let toml = "[tool.oxitest]\nshow_internals = true\n";
         let cfg = Config::from_str(toml).unwrap();
         assert!(cfg.output.show_internals);
-    }
-
-    // ── auto_arrange tests (TOML only) ──────────────────────────────────
-
-    #[test]
-    fn test_auto_arrange_from_pyproject_custom() {
-        let cfg = Config::from_str("[tool.oxitest]\nauto_arrange = 50\n").unwrap();
-        assert_eq!(cfg.exec.auto_arrange_threshold, 50);
-    }
-
-    #[test]
-    fn test_auto_arrange_from_pyproject_false() {
-        let cfg = Config::from_str("[tool.oxitest]\nauto_arrange = false\n").unwrap();
-        assert_eq!(cfg.exec.auto_arrange_threshold, 0);
     }
 
     // ── use_gitignore tests ─────────────────────────────────────────────

@@ -5,7 +5,7 @@ strict = "abort"
 # No parallel settings here, deliberately. This project declares a rootdir
 # lifetime="package" fixture, which co-locates the whole subtree onto one
 # worker — the run says so in a warning. Parallelism is therefore off by
-# construction, and auto_arrange / min_parallel_tests could never take effect.
+# construction, and min_parallel_tests could never take effect.
 #
 # The per-process assertions live in slice9_autouse_process, which carries no
 # package declaration and does set both.
