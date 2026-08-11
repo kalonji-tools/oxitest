@@ -234,6 +234,392 @@ multiple plugins provide async backend '<name>': <plugin_a>, <plugin_b>
 
 ---
 
+## Fixture errors
+
+Fixture errors occur during fixture declaration, resolution, or teardown.
+
+---
+
+```text
+FixtureNotFoundError: fixture '<name>' not found.
+  Hint: declare it with @oxi.fixture in a __fixtures__.py, or have a plugin provide it, and annotate the parameter with Fixture[<type>] in the test signature.
+```
+
+**Cause:** A test parameter is annotated with `Fixture[T]`, but no fixture with
+binding type `T` is reachable. Nothing declares it with `@oxi.fixture` on this
+test's ancestor chain, no plugin `FixtureProvider` supplies it, and it is not a
+built-in fixture. The bare-name route also reports this error when the fixture
+*is* declared but is anchored outside the test's package: unlike the `fx`
+proxy, it has no namespace segment to attribute the failure to, so it cannot
+raise `BoundaryError`.
+
+**Fix:** Declare a fixture returning type `T` with `@oxi.fixture(lifetime=...)`
+in the `__fixtures__.py` or `__init__.py` of the test's own package, or of an
+ancestor of it. Check that the fixture has a return type annotation matching
+`T`. If the fixture is supposed to come from a plugin, verify that the plugin
+is declared in `pyproject.toml`.
+
+When the namespace is known, the message names it and adds a note about inline
+declarations:
+
+```text
+FixtureNotFoundError: fixture '<name>' not found in namespace '<namespace>'.
+  Hint: check that '<namespace>' declares a fixture named '<name>' — in the __fixtures__.py or __init__.py of the anchor directory '<namespace>' — or verify the spelling.
+  If '<name>' is declared inline in another test module it is capped at 'module' lifetime and cannot be used here; move it to __fixtures__.py to share it.
+```
+
+The inline note is always printed, whether or not such a declaration exists.
+Inline fixtures register on module import, so whether this process has seen one
+depends on worker assignment and import order. A hint that appeared only
+sometimes would be worse than one that is always true and sometimes irrelevant.
+
+---
+
+```text
+BoundaryError: [fixture-boundary] fixture 'api.api_conn' is not visible from this test.
+  Fixture anchor: tests/api
+  This test:      tests/admin/test_admin.py
+  B1: a fixture is usable only by tests in its anchor package or
+      below (ADR-0009 Rule 3).
+  Three ways forward:
+    1. Move the declaration to a package that is an ancestor of both
+    2. Move the test into tests/api or a package below it
+    3. Declare a fixture of the same shape in this test's own package
+```
+
+**Cause:** A test reached a `@oxi.fixture` declaration through the `fx` proxy
+that lies outside its own anchor package and outside every ancestor of it —
+the [B1 boundary](../how-to/use-fixtures.md#understand-fixture-visibility-the-b1-boundary).
+The fixture exists; it is simply not visible from here. Sibling packages and
+prefix-lookalike siblings (`tests/apiv2` against an anchor at `tests/api`) are
+both outside. The same check runs when a fixture resolves *its own*
+dependencies, against the fixture's anchor rather than the calling test's
+location.
+
+This is deliberately a distinct error from `FixtureNotFoundError`. Reporting
+"not found" for a correctly-spelled name would send you hunting for a typo that
+is not there. The stable code `fixture-boundary` is part of the message, so
+documentation can link the failure and CI can grep for it without matching on
+prose.
+
+**Fix:** Pick one of the three restructurings the diagnostic names. There is no
+allow-comment escape hatch and no `strict` position that softens it; the
+boundary is not configurable.
+
+When the leaf name is also wrong, the boundary is still reported first, with the
+missing leaf appended:
+
+```text
+  Also: namespace 'api' has no fixture named 'typo' — fixing the spelling alone will not make this access legal.
+```
+
+---
+
+```text
+FixtureCycleError: fixture cycle detected: <a> → <b> → <name>
+  Hint: break the cycle by removing a dependency or extracting shared setup into a separate fixture.
+```
+
+**Cause:** A fixture depends on itself through a chain of `Fixture[T]`
+parameters. The chain in the message is sorted, then the fixture that closed
+the cycle is appended.
+
+**Fix:** Remove one dependency in the chain, or extract the setup both fixtures
+need into a third fixture that neither depends on.
+
+---
+
+```text
+UnannotatedFixtureParamError: parameter '<name>' in <fn_name> is not injected.
+To request a fixture, annotate it: <name>: Fixture[<type>]
+Unannotated parameters are not resolved by oxitest.
+```
+
+**Cause:** A parameter name matches a declared fixture, but the parameter has
+no `Fixture[T]` annotation. Injection is explicit in oxitest: an unannotated
+parameter is never resolved, even when a fixture of that name exists.
+
+**Fix:** Annotate the parameter with `Fixture[<type>]`. If the parameter is not
+meant to be a fixture, rename it so it does not match a fixture name.
+
+---
+
+```text
+AmbiguousFixtureError: ambiguous fixture: 2 fixtures provide type 'DatabaseHandle': 'primary_db', 'replica_db'. Use the fixture name as the parameter name to disambiguate.
+```
+
+**Cause:** Two or more reachable fixtures declare the same return type, and the
+parameter was resolved by type rather than by name.
+
+**Fix:** Name the parameter after the fixture you want. Name-based resolution
+takes precedence over type-based resolution, so `primary_db: Fixture[DatabaseHandle]`
+selects one candidate unambiguously.
+
+---
+
+```text
+BroadFixtureTypeError: parameter 'x' uses Fixture[Any] which is too broad for type-based resolution. Use a concrete binding type.
+```
+
+**Cause:** A parameter is annotated `Fixture[Any]` or `Fixture[object]`. Every
+fixture matches such a type, so type-based resolution cannot choose one.
+
+**Fix:** Use the concrete type the fixture returns. If the value genuinely has
+no useful type, resolve by name instead — name the parameter after the fixture.
+
+---
+
+```text
+Error in fixture '<name>': <the exception the fixture raised>
+  Hint: check the fixture function body for the exception above. If using a yield fixture, the error is in setup (before yield).
+```
+
+**Cause:** The fixture factory itself raised. `FixtureSetupError` wraps the
+original exception rather than replacing it, so the underlying message is
+carried through. For a yield fixture, this covers the setup half only — a
+failure after `yield` is a teardown failure and is reported as the diagnostic
+below.
+
+**Fix:** Fix the exception in the fixture body. The wrapped message names it.
+
+---
+
+```text
+Error in fixture '<name>': <a lifetime refusal>
+```
+
+**Cause:** `AsyncDependencyError`, a subclass of `FixtureSetupError`, is raised
+when a fixture dependency's lifetime cannot hold its value. It covers three
+refusals: a fixture that outlives the test depending on a shorter-lived async
+fixture, a sync fixture depending on an async one, and a wider-lifetime fixture
+depending on a `function`-lifetime async one. An async value is bound to one
+test's event loop, so a wider-lived holder would hand it to tests whose loop is
+gone.
+
+It is a subclass rather than a flag because `FixtureSetupError` also wraps
+genuine exceptions from a user's fixture body, which are ordinary failures. Only
+the wiring mistake votes for exit 4.
+
+**Fix:** Match the lifetimes. Either lower the depending fixture to
+`lifetime="function"`, or raise the async dependency so it is built outside the
+test.
+
+---
+
+```text
+AsyncFixtureAccessError: async fixture 'conn' cannot be used by a sync test.
+  Accessed as: fx.pkg.conn
+  Test kind:   sync (`def test_...`)
+  Lifetime:    function
+  Three ways forward:
+    1. Make the test async — `async def test_...`, then `await fx.pkg.conn`
+    2. Raise the fixture's lifetime so it is built outside the test
+    3. Convert fixture to sync — remove `async` from def
+```
+
+**Cause:** A sync test reached an async fixture through the `fx` proxy. A sync
+test cannot `await`, so the only thing it could receive is a coroutine nothing
+will ever await.
+
+**Fix:** Pick one of the three the diagnostic names.
+
+The error fires at the access itself, before the fixture factory runs, so the
+traceback points at your line rather than into the fixture body.
+
+A related `AttributeError` covers the neighbouring mistake — an *async* test
+that forgot the `await`:
+
+```text
+AttributeError: 'conn' is an async fixture — await it before use: `value = await fx....conn`, then `value.execute`
+```
+
+See [async fixtures](../how-to/use-async-tests.md#async-fixtures).
+
+---
+
+```text
+ArrangeError: cannot arrange async fixture(s) on a sync test — 1 illegal entry.
+  Arranged at:  test_foo.py:42
+  Test kind:    sync (`def test_...`)
+  Illegal:
+    - 'redis_client' (function scope) — defined at __fixtures__.py:15
+  Three ways forward:
+    1. Make the test async — `async def test_...`
+    2. Widen the fixture lifetime to 'module', 'package' or 'process'
+    3. Convert fixture to sync — remove `async` from def
+```
+
+**Cause:** A sync test used `@oxi.arrange` on one or more async
+`function`-lifetime fixtures — the same illegal cell `AsyncFixtureAccessError`
+covers, on the other access path. It is detected during collection, not at
+decorator time. Async tests may legally arrange async `function`-lifetime
+fixtures; sync fixtures compose freely on either test kind.
+
+**Fix:** Pick one of the three the diagnostic names.
+
+Other `@arrange` failure modes surface through the errors above: a missing
+arranged fixture raises `FixtureNotFoundError`, and a factory that raises
+produces `FixtureSetupError`.
+
+See [`@arrange` with async fixtures](../how-to/use-async-tests.md#arrange-with-async-fixtures).
+
+---
+
+```text
+UsageError: <name> in <file> is an async fixture declared autouse=True with lifetime="function".
+An autouse function-lifetime fixture fires for every test in its boundary, and the sync tests among them cannot await it.
+Hint: drop autouse=True and use @oxi.arrange("<name>") on the tests that need it, or widen to lifetime="module" or wider, which applies to sync and async tests alike.
+```
+
+**Cause:** `@oxi.fixture(lifetime="function", autouse=True)` was applied to an
+`async def` factory. The combination is refused at registration, before any
+test runs. An autouse `function`-lifetime fixture fires for every test in its
+boundary, so it would manufacture the illegal sync-test-awaits-async-fixture
+cell for tests that never asked for it.
+
+**Fix:** Choose one of the two the diagnostic names — drop `autouse=True` and
+use `@oxi.arrange("<name>")` on the tests that need it, or widen the fixture to
+`lifetime="module"` or wider, which applies to sync and async tests alike.
+
+---
+
+```text
+TestContext.current() is not available inside a fixture body.
+  It is legal only from the body of a running test, and from plain functions that body calls.
+  Inside a fixture, declare `ctx: TestContext` as a parameter instead — that context supports teardown registration.
+```
+
+**Cause:** `TestContext.current()` reads ambient state, so it refuses rather
+than guessing when there is no running test to describe. The message names the
+position it fired in — a fixture body, import or collection time, a
+wider-than-`function` fixture's teardown (which runs after the test it might
+have meant is already over), or a thread the test spawned. `threading` starts
+each thread with a fresh context, so the identity does not cross that boundary.
+
+**Fix:** Inside a fixture, declare `ctx: TestContext` as a parameter — that
+context supports `on_teardown` and `module_path`. At import or collection time,
+move the call into a test. In a wide fixture's teardown there is no current test
+by construction, so capture what you need during setup instead.
+
+---
+
+```text
+TestContext.name is not available here.
+  This TestContext was built for a fixture resolution, not for a test, so
+  there is no test to name.
+  Inside a fixture, ctx supports teardown registration only:
+  ctx.addfinalizer(...) / ctx.on_teardown(...).
+  To read a test's identity, declare `ctx: TestContext` on the test itself and
+  pass what you need into the fixture.
+```
+
+**Cause:** A **fixture** body read `ctx.name`, `ctx.node_id`, `ctx.marks` or
+`ctx.param_id`. A fixture is built once per lifetime tier, for whichever test
+reaches it first, so above `function` lifetime there is no single test to name —
+and at `function` lifetime the identity is not threaded to the resolution site.
+
+**Fix:** Use `ctx` in a fixture for `addfinalizer` / `on_teardown` (and
+`module_path`, which is unaffected). If the fixture needs the test's identity,
+declare `ctx: TestContext` on the test and pass the value in from there.
+
+The error surfaces wrapped in `FixtureSetupError`, since it is raised while the
+fixture factory runs.
+
+See [`TestContext`](python-api/builtins.md#testcontext).
+
+---
+
+```text
+fixture value is frozen: cannot set attribute '<name>'
+```
+
+**Cause:** A test tried to mutate a fixture value that outlives one test. Values
+declared above `function` lifetime are wrapped in a `FrozenProxy` that
+intercepts attribute assignment, item assignment, and the setter half of an
+augmented assignment such as `x.attr += y`. The wrapper exists so that one
+test's mutation cannot leak into a sibling test. The deletion half reports
+`cannot delete attribute` instead.
+
+**Fix:** If per-test mutation is intended, declare the fixture
+`@oxi.fixture(lifetime="function")` so each test gets its own value. If it is
+not intended, treat the value as read-only and build a fresh derived value
+rather than writing to the cached one.
+
+See [`SharedFixtureMutationError`](exceptions.md#sharedfixturemutationerror) for
+the exception type and how to assert on it.
+
+---
+
+```text
+[warning] fixture teardown — fixture '<name>' teardown failed during <node_id>: <error>
+```
+
+**Cause:** A yield fixture raised after its `yield`. The exception is caught,
+the diagnostic is recorded, and execution continues, so a teardown failure
+cannot mask the test result it follows.
+
+**Fix:** Handle the error inside the teardown half of the fixture. A teardown
+that can fail should say what it could not clean up.
+
+---
+
+```text
+[warning] fixture teardown — teardown callback '<name>' failed during <node_id>: <error>
+```
+
+**Cause:** A callback registered with `ctx.on_teardown(...)` or
+`ctx.addfinalizer(...)` raised. Same handling as the entry above: caught,
+recorded, execution continues. When the callback has no readable name the
+message says `a teardown callback` instead.
+
+**Fix:** Handle the error inside the callback.
+
+---
+
+```text
+[warning] teardown registration — a callback registered from inside a running teardown is never run
+```
+
+**Cause:** `ctx.on_teardown(...)` was called while teardown was already
+running. The teardown list is being drained at that point, so a callback
+appended to it is never reached.
+
+**Fix:** Register the callback during setup, before the fixture yields.
+
+---
+
+```text
+[notice] fixture registration — fixture '<name>' in <shadower> shadows definition in <shadowed>
+```
+
+**Cause:** Two declarations provide the same fixture name, and the nearer one
+wins. This is legal — a package may deliberately override an ancestor's
+fixture — so it is a notice rather than a warning.
+
+**Fix:** No action is required if the shadowing is intended. If it is not,
+rename one of the two declarations.
+
+---
+
+```text
+[warning] <fixture> — <fixture> (lifetime="package") co-locates <count> modules onto one worker — parallelism is disabled for <dir>. Narrow the fixture's package, or drop to lifetime="module".
+```
+
+**Cause:** A `package` fixture exists exactly once per run, and oxitest
+guarantees that by scheduling every test under the declaring package onto a
+single worker. When that package holds more than one test module, the guarantee
+costs parallelism for the whole subtree — see
+[Choose a lifetime](../how-to/use-fixtures.md#choose-a-lifetime).
+
+This is a **diagnostic**, not an error. Every test still runs and the results
+are unaffected. A declaring package that holds a single test module costs no
+parallelism and emits nothing.
+
+**Fix:** Move the declaration to a narrower package, or drop the fixture to
+`lifetime="module"` if each module can hold its own value.
+
+---
+
 ## Execution errors
 
 Execution errors occur while tests are running.
