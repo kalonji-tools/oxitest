@@ -31,7 +31,7 @@ jobs:
       - run: rustup toolchain install
 
       - name: Install git-cliff
-        uses: taiki-e/install-action@v2.85.8
+        uses: taiki-e/install-action@v2.85.10
         with:
           tool: git-cliff
 
