@@ -13,13 +13,16 @@ fixture then get two instances, which is the coordinator's version of the
 per-task-group defect the worker half fixes.
 
 **Getting two coordinator phases is the whole trick, and it is easy to get
-wrong.** A project with ``auto_arrange = false`` has exactly one — the
+wrong.** A project whose modules arrange nothing has exactly one — the
 inprocess phase — and measures 3 SETUPs across 3 PIDs both before and after the
-fix, so it proves nothing. The data project here keeps arrangement enabled and
-declares a ``shared=True`` fixture precisely so the arrange stage pins those
-modules to the coordinator, giving it a second phase. Measured against that
-project, the drain-per-phase behaviour builds the fixture **twice in one PID**
-and the fix builds it **once**.
+fix, so it proves nothing. Every test module in the data project here names a
+``lifetime="module"`` fixture in ``@oxi.arrange`` precisely so the arrange
+stage pins those modules to the coordinator, giving it a second phase. Measured
+against that project, the drain-per-phase behaviour builds the fixture **twice
+in one PID** and the fix builds it **once**.
+
+The declaration is explicit because #1848 retired the lifetime-derived
+inference. Before it, the tier alone produced the pin and no module said so.
 """
 
 from __future__ import annotations

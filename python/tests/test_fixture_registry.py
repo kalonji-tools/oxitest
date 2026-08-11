@@ -1391,3 +1391,23 @@ def test_module_lifetime_names_lists_only_the_module_tier() -> None:
         "the wide-lifetime warning names module-tier fixtures only; a process-tier "
         "fixture is built once per worker and is not what the warning is about"
     )
+
+
+def test_arranged_fixture_groups_ignores_the_lifetime_tier() -> None:
+    """#1848: a component is what @oxi.arrange names, at any tier."""
+    registry = helpers.make_registry(
+        helpers.make_fixture_def("per_module", scope=FixtureScope.MODULE),
+        helpers.make_fixture_def("per_process", scope=FixtureScope.PROCESS),
+    )
+
+    arranged_only = registry.arranged_fixture_groups(frozenset({"per_process"}))
+    nothing_arranged = registry.arranged_fixture_groups(frozenset())
+
+    assert arranged_only == (("per_process",),), (
+        "a process-tier fixture named by @oxi.arrange forms a component; before "
+        "#1848 the tier filter discarded it and the decorator was a silent no-op"
+    )
+    assert nothing_arranged == (), (
+        "with nothing arranged there is no component, however wide the tiers — "
+        "this is the retired inference, and its absence is the point of #1848"
+    )

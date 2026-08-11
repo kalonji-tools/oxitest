@@ -356,7 +356,7 @@ fn emit_scheduling_diagnostics(
     plan: &arrange::ExecutionPlan,
     estimated: Option<std::time::Duration>,
     cpu_count: usize,
-    shared_fixture_groups: &[Vec<String>],
+    arranged_fixture_groups: &[Vec<String>],
 ) {
     let total_tests: usize = plan
         .inprocess_groups
@@ -447,7 +447,7 @@ fn emit_scheduling_diagnostics(
 
             // Auto-arrange diagnostics.
             if !plan.arranged_groups.is_empty() {
-                let fixture_names: Vec<String> = shared_fixture_groups
+                let fixture_names: Vec<String> = arranged_fixture_groups
                     .iter()
                     .flat_map(|g| g.iter().cloned())
                     .collect();
@@ -576,11 +576,26 @@ fn execute_phases(
 
     let cpu_count = config::cpu_count();
 
-    // Resolve shared fixture groups before plan (requires PyO3).
-    let shared_fixture_groups = if ctx.cfg.exec.auto_arrange_threshold > 0 {
-        ctx.session.shared_fixture_groups(py)
-    } else {
+    // Resolve arranged fixture groups before plan (requires PyO3). The names
+    // come from the collected items rather than from any property of the
+    // fixture: #1848 retired the lifetime-derived inference, so a component
+    // exists only where a test asked for one with `@oxi.arrange`.
+    let arranged_names: Vec<String> = {
+        let mut names: Vec<String> = clean_items
+            .iter()
+            .flat_map(|item| item.arranged.iter())
+            .map(|entry| match entry {
+                types::ArrangedEntry::Type(name) | types::ArrangedEntry::Name(name) => name.clone(),
+            })
+            .collect();
+        names.sort_unstable();
+        names.dedup();
+        names
+    };
+    let arranged_fixture_groups = if arranged_names.is_empty() {
         vec![]
+    } else {
+        ctx.session.arranged_fixture_groups(py, arranged_names)
     };
 
     // Build a pure execution plan — no I/O, no PyO3.
@@ -591,7 +606,7 @@ fn execute_phases(
         ctx.cfg.exec.spawn_overhead.as_f64(),
         ctx.cfg.exec.min_parallel_tests,
         ctx.cfg.exec.auto_arrange_threshold,
-        &shared_fixture_groups,
+        &arranged_fixture_groups,
         estimated,
         cpu_count,
     );
@@ -603,7 +618,7 @@ fn execute_phases(
     // ── Verbose scheduling diagnostics ─────────────────────────────────
 
     if ctx.cfg.output.verbosity >= config::Verbosity::Detailed {
-        emit_scheduling_diagnostics(ctx, &plan, estimated, cpu_count, &shared_fixture_groups);
+        emit_scheduling_diagnostics(ctx, &plan, estimated, cpu_count, &arranged_fixture_groups);
     }
 
     // ── Dispatch based on plan ─────────────────────────────────────────

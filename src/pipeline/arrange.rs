@@ -55,7 +55,7 @@ pub(super) struct FixturePartition {
 /// Partition test groups by shared fixture affinity.
 ///
 /// Tests whose `fixture_deps` qualifiers overlap with any connected component from
-/// `shared_fixture_groups()` are grouped together (one group per component).
+/// `arranged_fixture_groups()` are grouped together (one group per component).
 /// Tests with no shared fixture dependency stay in `remaining`.
 ///
 /// Returns a [`FixturePartition`] where `arranged[i]` contains the
@@ -190,7 +190,7 @@ pub(super) fn plan_execution(
     spawn_overhead_ms: f64,
     min_parallel_tests: usize,
     auto_arrange_threshold: u8,
-    shared_fixture_groups: &[Vec<String>],
+    arranged_fixture_groups: &[Vec<String>],
     estimated: Option<std::time::Duration>,
     cpu_count: usize,
 ) -> ExecutionPlan {
@@ -232,11 +232,11 @@ pub(super) fn plan_execution(
     // Auto-arrange by shared fixture groups.
     if auto_arrange_threshold > 0 {
         let threshold = auto_arrange_threshold;
-        if !shared_fixture_groups.is_empty() {
+        if !arranged_fixture_groups.is_empty() {
             let FixturePartition {
                 arranged,
                 remaining,
-            } = partition_by_fixture_groups(parallel_groups, shared_fixture_groups);
+            } = partition_by_fixture_groups(parallel_groups, arranged_fixture_groups);
 
             let decision = evaluate_arrange_threshold(&arranged, &remaining, threshold);
 
