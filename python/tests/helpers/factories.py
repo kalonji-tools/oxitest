@@ -30,6 +30,7 @@ def make_fixture_def(  # noqa: PLR0913 — test helper, all kwargs have defaults
     *,
     namespace: str = "",
     shared: bool = False,
+    scope: FixtureScope | None = None,
     autouse: bool = False,
     is_async: bool = False,
     declaration_path: str = "",
@@ -50,6 +51,11 @@ def make_fixture_def(  # noqa: PLR0913 — test helper, all kwargs have defaults
     annotation. Useful when the factory is defined in a module with
     ``from __future__ import annotations`` (which turns annotations into
     strings that ``get_type_hints`` cannot resolve for locally-defined types).
+
+    *scope* names the tier directly and wins over *shared* when supplied.
+    *shared* predates the redesign and reaches only two of the five rungs —
+    ``SESSION`` and ``EACH`` — so a test about ``MODULE``, ``PACKAGE`` or
+    ``PROCESS`` cannot express itself through it.
     """
     if factory is None:
 
@@ -70,7 +76,9 @@ def make_fixture_def(  # noqa: PLR0913 — test helper, all kwargs have defaults
     return FixtureDef(
         name=name,
         fixture_type=ft,
-        scope=FixtureScope.SESSION if shared else FixtureScope.EACH,
+        scope=scope
+        if scope is not None
+        else (FixtureScope.SESSION if shared else FixtureScope.EACH),
         source=FrameworkSource(func=factory, origin=declaration_path),
         autouse=autouse,
         namespace=namespace,

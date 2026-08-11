@@ -145,16 +145,16 @@ impl FixtureSession {
         Ok(())
     }
 
-    /// Returns sorted names of the fixtures Auto-Arrangement treats as inputs,
-    /// which is the `lifetime="module"` tier since #1720. The method name still
-    /// says `shared` because the Python side is reached by name.
-    /// Returns an empty Vec on any Python error (treated as "none arrange").
+    /// Returns sorted names of the fixtures declared `lifetime="module"`.
+    /// Read by the wide-lifetime warning, which is about the tier's rebuild
+    /// behaviour rather than about arrangement (#1848).
+    /// Returns an empty Vec on any Python error.
     /// Unlike `end_module`/`end_task`, errors are absorbed here because this
     /// method is advisory-only; a failure must not abort the run.
-    pub fn shared_fixture_names(&self, py: Python<'_>) -> Vec<String> {
+    pub fn module_lifetime_fixture_names(&self, py: Python<'_>) -> Vec<String> {
         self.0
             .bind(py)
-            .call_method0("shared_fixture_names")
+            .call_method0("module_lifetime_fixture_names")
             .and_then(|v| v.extract::<Vec<String>>())
             .unwrap_or_default()
     }
@@ -193,7 +193,7 @@ impl FixtureSession {
     /// Returns sorted names of fixtures declared `lifetime="process"`.
     ///
     /// Run-constant, so the caller reads it once and reuses it — the same
-    /// idiom as [`Self::shared_fixture_names`], and for the same reason:
+    /// idiom as [`Self::module_lifetime_fixture_names`], and for the same reason:
     /// the registry is fully populated before any test runs.
     ///
     /// Errors are absorbed into an empty Vec. This only decorates a warning

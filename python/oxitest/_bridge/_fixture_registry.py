@@ -754,19 +754,19 @@ class FixtureRegistry:
             return ()
         return _merge_components(shared_ancestors)
 
-    def shared_names(self) -> tuple[str, ...]:
-        """Return sorted names of the fixtures Auto-Arrangement treats as inputs.
+    def module_lifetime_names(self) -> tuple[str, ...]:
+        """Return sorted names of the fixtures declared ``lifetime="module"``.
 
-        That is the ``lifetime="module"`` tier, via :attr:`FixtureDef.arranges`.
-        The name says ``shared`` because #1720 re-pointed the reader without
-        renaming the method — the Rust caller reaches it by name through
-        ``bridge.rs``.
+        Read by the wide-lifetime warning, which tells the user a module-tier
+        fixture is rebuilt once per task group. That is a property of the tier
+        and holds whether or not anything arranges the fixture, so this reads
+        the scope directly rather than through an arrangement concept (#1848).
         """
         return tuple(
             sorted(
                 name
                 for name, defs in self._by_name.items()
-                if defs and defs[-1].arranges
+                if defs and defs[-1].scope is FixtureScope.MODULE
             )
         )
 
