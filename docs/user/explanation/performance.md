@@ -56,13 +56,26 @@ not in execution itself.
 ## Import isolation
 
 Each test module is imported using `importlib.util.spec_from_file_location` with a unique name
-derived from an MD5 hash of the file path. This means each module gets a distinct entry in
-`sys.modules` rather than sharing one with any other import of the same file.
+derived from an MD5 hash of the file path. Every module therefore gets its own entry in
+`sys.modules` under that synthesized name, so oxitest's own loads never collide with each other.
 
 The reason is correctness, not performance. If two test files import the same helper module, or
 if a test file is imported more than once, Python's normal module cache would return the
-already-imported object. That object may carry state from a previous test. The unique naming
-sidesteps the cache entirely: every import is a fresh execution of the module.
+already-imported object. That object may carry state from a previous test. Loading under a
+synthesized name sidesteps that cache: each of oxitest's loads is a fresh execution of the file.
+
+A module is **also** registered under its real dotted name whenever that name resolves back
+through `sys.path` to the same file. That is what gives a test module a working `__package__`, so
+a module-level relative import resolves and a library reading `__module__` finds the module where
+it expects to. Two consequences follow, and both are deliberate:
+
+- The dotted entry is the ordinary one. Anything else importing that name in the same process
+  receives oxitest's already-loaded object from the cache instead of executing the file again.
+- That object is assert-rewritten. pytest's `prepend` import mode makes the same trade.
+
+A module whose path yields no truthful dotted name — one outside the rootdir, or one whose
+top-level name some other `sys.path` entry owns — keeps only its synthesized name, and a relative
+import from it does not resolve.
 
 !!! note "Performance consequence"
     Import is slightly more expensive per file — there is no cache hit to exploit — but the
