@@ -148,7 +148,7 @@ The *restriction* to rootdir survives, and the rename **strengthens** its argume
 
 ### Rule 5 — Access via the `fx` proxy
 
-**Status:** shipped (#1708, #1713, #1714); amended by Amendments 2 and 3, and the `hlp` half is retracted by Amendment 5. The `namespace=` override this rule names is still unbuilt — `@oxi.fixture` accepts `lifetime=` and `autouse=`, but no `namespace=` — and is [#1782](https://github.com/kalonji-tools/oxitest/issues/1782)'s question, not a helpers-only gap. For *plugin* namespaces the override shipped in Amendment 8 as a pyproject key rather than a decorator argument.
+**Status:** shipped (#1708, #1713, #1714); amended by Amendments 2 and 3, the `hlp` half is retracted by Amendment 5, and the `namespace=` decorator override is retracted by Amendment 16. `@oxi.fixture` accepts `lifetime=` and `autouse=` and will accept no `namespace=`. For *plugin* namespaces the override shipped in Amendment 8 as a pyproject key rather than a decorator argument.
 
 Tests receive fixtures via a synthesized proxy parameter — the type annotation `Fixtures` reappears here as an access proxy (the old instance-registry meaning is retired, see Rule 8):
 
@@ -186,16 +186,14 @@ The constraint is about *reachability of both views*, not about object count. Th
 
 **Framework builtins are not shortcut-reachable.** `fx.oxi.tmp` is the only spelling for a builtin; the reserved `oxi` namespace exists so framework names cannot collide with user fixture names, and hoisting them into the flat namespace would put `log`, `patch`, and `cap` where a user's own fixture of that name would clash. The registry names builtins after their private implementation class (`_TempDirFixture`), which the proxy's leading-underscore guard already rejects, so the property holds without a filter — but it holds *incidentally*, resting on a naming convention rather than a predicate, and is pinned by a regression test rather than left to be rediscovered.
 
-**Namespace derivation.** Default namespace = the anchor-package segment name; overridable via `namespace=` on the decorator. Use overrides sparingly.
+**Namespace derivation.** Namespace = the anchor-package segment name. There is no decorator override.
 
-> **Not yet built** — the `namespace=` override. `@oxi.fixture` accepts
-> `lifetime=` and `autouse=` today (`_fixture_decorator.fixture`; `autouse`
-> shipped with #1716, recorded in Amendment 7) but no `namespace=`, and
-> whether the override should exist at all is [#1782](https://github.com/kalonji-tools/oxitest/issues/1782).
-> This marker originally attributed the gap to #1715 and listed the `hlp` proxy,
-> `HelpersProxy`, and the helper half of the naming-clash rule alongside it; those
-> are retracted rather than pending (Amendment 5), which leaves `namespace=` as
-> the only forward-looking claim in this rule.
+> **The `namespace=` override is retracted — Amendment 16 ([#1782](https://github.com/kalonji-tools/oxitest/issues/1782)).**
+> This rule originally read *"overridable via `namespace=` on the decorator. Use
+> overrides sparingly."* The override was never built and will not be; a
+> namespace that cannot be written is now reported instead. For *plugin*
+> namespaces an override does exist, as a pyproject key rather than a decorator
+> argument (Amendment 8).
 
 ### Rule 6 — Plugin convergence
 
@@ -1022,3 +1020,37 @@ Tracked by [#1750](https://github.com/kalonji-tools/oxitest/issues/1750). Amends
 **`package` is unchanged and out of scope.** Keeping a package subtree inside one phase needs a cross-module dispatch unit the planner does not have, so `reject_inprocess_inside_package` stays. #1750 carries the description.
 
 **Arrangement still cannot reduce a build at this tier**, and the wide-lifetime warning no longer advises it as though it could. A module is the task group, so the fixture is rebuilt per module whichever process the module runs on.
+
+### Amendment 16 — the `namespace=` override is retracted, and a namespace that cannot be written is reported (2026-08-11)
+
+Tracked by [#1782](https://github.com/kalonji-tools/oxitest/issues/1782). Amends Rule 5's *Namespace derivation* paragraph. Everything else in Rule 5 stands.
+
+**The override is retracted rather than deferred.** Rule 5 promised a `namespace=` argument on `@oxi.fixture` from the day this ADR was written, and it was never built. It is now withdrawn: the derivation from the anchor segment is what makes B1, the naming-clash rule and the two-catalog diagnostics key on one name, and an override is a second source of truth for the name all three read. Adding the keyword later stays backward-compatible if a real case appears.
+
+**The reason the promise looked necessary was a different defect, and that defect is real.** The namespace is a raw directory basename and nothing validated it. Measured on `main` `48e87a92`, Linux 6.18.41 x86_64, CPython 3.12.13:
+
+| Directory | Namespace | `fx.<namespace>.<name>` |
+|---|---|---|
+| `db` | `db` | resolves |
+| `int` | `int` | resolves — and the plugin path *refused* this name |
+| `class` | `class` | `SyntaxError`; the test module never collects |
+| `integration-tests` | `integration-tests` | parses as `fx.integration - tests.conn` |
+
+The last row is why this is a defect rather than an inconvenience. The expression is valid Python, so the access never reaches oxitest; the run reported `cannot resolve fixture 'integration'` and advised checking the spelling, which was correct.
+
+**One predicate, and it is exactly the grammar.** A namespace is reachable when `name.isidentifier() and not keyword.iskeyword(name)`. Nothing else: builtins (`int`, `list`, `print`) and soft keywords (`match`, `case`, `type`, `_`) are all usable as attribute names and stay legal. The predicate is pinned against `ast.parse` rather than against a hand-written table, so it cannot drift from what the parser accepts.
+
+`validate_namespace_name` is replaced by `namespace_defect`. The previous function refused builtins and soft keywords while accepting `integration-tests`, so it was wrong in both directions at once, and it ran on the plugin path only.
+
+**Severity keys on authorship, not on which path the name arrived by.**
+
+| Namespace origin | Severity |
+|---|---|
+| Written by hand — `namespace = "..."` under `[tool.oxitest.plugin_settings.<module>]` | refused |
+| Derived — a plugin module path, or an anchor directory's basename | `WARNING` diagnostic |
+
+Someone who typed the name can retype it, and the remedy is one line. A derived name was never chosen for the namespace's sake, and shortcut access (`fx.<name>`) resolves the fixture regardless — so refusing would fail a project that runs today. That is also why this change needs no major version.
+
+**The dotted plugin module is the case that set the rule.** `plugins = ["pkg.sub"]` derives the namespace `pkg.sub`, which is not an identifier. `fx.pkg.sub.dsn` parses cleanly and still does not reach it: the expression reads as two segments and looks up a namespace called `pkg`. Keying severity on the path rather than on authorship would have refused that project, which is the outcome the derived-name reasoning rejects.
+
+**The warning reports once per namespace, not once per declaration**, and holds at `-n 2` as well as serially — five declarations in one unreachable directory produce one diagnostic in both modes.

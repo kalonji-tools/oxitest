@@ -41,7 +41,7 @@ from oxitest._bridge._errors import (
     OxitestError,
     UsageError,
 )
-from oxitest._bridge._namespace_validation import validate_namespace_name
+from oxitest._bridge._namespace_validation import namespace_defect
 from oxitest._bridge._plugin_config import (
     CliExtension,
     IntrospectionError,
@@ -460,8 +460,10 @@ def plugin_fixture_homes(
         One entry per activated plugin package that has a ``__fixtures__.py``.
 
     Raises:
-        UsageError: a namespace is reserved or claimed by two plugins.
-        ValueError: a namespace is a Python keyword or builtin.
+        UsageError: a namespace is reserved, claimed by two plugins, or was
+            declared in ``plugin_settings`` and cannot be written as
+            ``fx.<namespace>``. A namespace that merely *fell back* to the
+            module path and cannot be written warns instead of raising.
     """
     module_table = sys.modules if modules is None else modules
     homes: list[PluginFixtureHome] = []
@@ -486,7 +488,8 @@ def plugin_fixture_homes(
                 )
             continue
 
-        namespace = str(settings.get("namespace") or module_name)
+        declared = settings.get("namespace")
+        namespace = str(declared or module_name)
         if namespace == _RESERVED_NAMESPACE:
             msg = (
                 f"plugin '{module_name}' claims the reserved namespace "
@@ -498,7 +501,28 @@ def plugin_fixture_homes(
                 f"[tool.oxitest.plugin_settings.{module_name}]."
             )
             raise UsageError(msg)
-        validate_namespace_name(namespace, module_name)
+
+        defect = namespace_defect(namespace)
+        if defect is not None:
+            # Severity keys on authorship, not on which path we are: someone
+            # who typed the name can retype it, so that is an error. A name
+            # that fell back to the module path was never chosen for the
+            # namespace's sake, so refusing it would break a project that
+            # works today through shortcut access — the same reason the
+            # directory-derived case warns (#1782).
+            unreachable = (
+                f"plugin '{module_name}' has namespace '{namespace}', which is "
+                f"{defect}.\n"
+                f"fx.{namespace} cannot be written, so these fixtures are "
+                f"reachable only by shortcut access (fx.<name>).\n"
+                f'Hint: set namespace = "..." under '
+                f"[tool.oxitest.plugin_settings.{module_name}]."
+            )
+            if declared:
+                raise UsageError(unreachable)
+            emit_diagnostic(
+                DiagnosticSeverity.WARNING, "fixture namespace", unreachable
+            )
 
         if namespace in claimed:
             msg = (

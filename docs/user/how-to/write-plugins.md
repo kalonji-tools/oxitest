@@ -233,8 +233,15 @@ The shortcut `fx.conn` also works, as it does for any fixture.
 
 Three namespaces are refused at activation, each because the fixtures would
 otherwise be unreachable or ambiguous: `oxi` (reserved for oxitest's built-ins),
-any Python keyword or builtin, and a namespace already claimed by another
-activated plugin.
+a namespace already claimed by another activated plugin, and one you declare
+here that cannot be written as `fx.<namespace>` — a Python keyword, or anything
+that is not an identifier.
+
+A namespace you do **not** declare is derived from the module path, and if that
+cannot be written — `plugins = ["pkg.sub"]` derives `pkg.sub` — the run warns
+rather than refusing, because you did not choose the name and shortcut access
+still reaches the fixtures. Builtins and soft keywords such as `int` and `match`
+are legal namespaces: `fx.int.conn` parses and resolves.
 
 If a user declares a fixture of the same name in their own tree, **theirs
 wins** — the same way a nearer declaration outranks a more distant one. The run

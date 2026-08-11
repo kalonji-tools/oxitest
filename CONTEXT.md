@@ -69,7 +69,9 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 **Fixtures (annotation)** — The bare `fx: Fixtures` parameter annotation, which injects the namespace accessor. Injection matches it by identity. Calling it raises: it was an instance-based registry until #1720, and ADR-0009 Rule 5 reuses the name rather than freeing it.
 
-**Namespace** — The qualifier in `fx.<namespace>.<name>`. The basename of a fixture's anchor directory (`tests/api/__fixtures__.py` → `api`). Directory-derived namespaces are **not unique in a tree** — `tests/api/v1/` and `tests/admin/v1/` both derive `v1` — so `fx.v1.conn` means whichever declaration is visible from the reading test, and resolution picks the deepest visible anchor.
+**Namespace** — The qualifier in `fx.<namespace>.<name>`. The basename of a fixture's anchor directory (`tests/api/__fixtures__.py` → `api`), or a plugin's module path. There is no decorator override (ADR-0009 Amendment 16). Directory-derived namespaces are **not unique in a tree** — `tests/api/v1/` and `tests/admin/v1/` both derive `v1` — so `fx.v1.conn` means whichever declaration is visible from the reading test, and resolution picks the deepest visible anchor.
+
+**Reachable namespace** — One that can be *written* as `fx.<namespace>`: `namespace.isidentifier() and not keyword.iskeyword(namespace)`. Because the name is derived rather than declared, it can fail this — a `class/` directory yields a `SyntaxError` and `integration-tests/` yields an expression that parses as subtraction, so the access never reaches oxitest. Builtins and soft keywords (`int`, `match`, `type`) are reachable and legal. A derived namespace that is unreachable **warns**; one written by hand in `plugin_settings` is **refused**. Shortcut access (`fx.<name>`) is unaffected either way, which is why the derived case is not fatal.
 
 **Anchor** — The directory a fixture is scoped to: the package holding its `__fixtures__.py`, or, for an inline declaration, the test module itself. Plugin, framework, and builtin fixtures have no anchor.
 
