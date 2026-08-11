@@ -39,7 +39,7 @@ The boundary maximizes the amount of work that runs in compiled code:
 3. **Parallel orchestration** in Rust avoids the GIL entirely. Workers are separate Python processes communicating over stdio JSON; the Rust side manages the subprocess pool, watchdog timeouts, and result aggregation without holding the GIL.
 4. **Reporting** runs in Rust to avoid GIL contention during progress bar updates in parallel mode.
 
-Python is used only where it is unavoidable: executing user test code, resolving fixtures (which may be defined in user conftest files), and evaluating mark conditions that reference arbitrary Python expressions.
+Python is used only where it is unavoidable: executing user test code, resolving fixtures (which are declared in user `__fixtures__.py` and `__init__.py` files), and evaluating mark conditions that reference arbitrary Python expressions.
 
 ## Module map
 
