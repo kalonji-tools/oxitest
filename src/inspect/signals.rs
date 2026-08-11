@@ -79,7 +79,7 @@ pub fn detect_signals(graph: &InspectGraph) -> Vec<Signal> {
 
 /// Flag every fixture that has no consumers and is not marked `autouse`.
 ///
-/// Only conftest-defined fixtures are checked — builtins and plugin fixtures
+/// Only declaration-defined fixtures are checked — builtins and plugin fixtures
 /// have runtime-wired consumers invisible to the graph.  Autouse fixtures are
 /// always active, so lacking an explicit consumer is expected.
 fn detect_unused_fixtures(graph: &InspectGraph, signals: &mut Vec<Signal>) {
@@ -87,7 +87,9 @@ fn detect_unused_fixtures(graph: &InspectGraph, signals: &mut Vec<Signal>) {
         .fixtures
         .iter()
         .enumerate()
-        .filter(|(_, f)| f.consumers.is_empty() && !f.autouse && f.source.ends_with("conftest.py"))
+        .filter(|(_, f)| {
+            f.consumers.is_empty() && !f.autouse && f.source.ends_with("__fixtures__.py")
+        })
         .map(|(i, _)| NodeRef {
             kind: NodeKind::Fixture,
             index: i,
@@ -209,11 +211,11 @@ mod tests {
             binding_type: String::new(),
             scope: "function".to_string(),
             autouse,
-            source: "conftest.py".to_string(),
+            source: "__fixtures__.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers,
-            conftest_idx: Some(0), // conftest-defined fixture
+            declaration_idx: Some(0), // declaration-defined fixture
             plugin_idx: None,
         }
     }
@@ -247,9 +249,9 @@ mod tests {
     #[test]
     fn unused_fixture_detected() {
         let mut graph = InspectGraph::default();
-        // Conftest node so conftest_idx=Some(0) is valid.
+        // Declaration node so declaration_idx=Some(0) is valid.
         graph.declarations.push(DeclarationNode {
-            path: "conftest.py".to_string(),
+            path: "__fixtures__.py".to_string(),
             fixtures: vec![],
         });
         // Fixture with no consumers and autouse=false.
@@ -314,7 +316,7 @@ mod tests {
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: None,
         });
         graph.fixtures.push(FixtureNode {
@@ -326,7 +328,7 @@ mod tests {
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: None,
         });
 
@@ -347,9 +349,9 @@ mod tests {
     #[test]
     fn broken_edges_detected() {
         let mut graph = InspectGraph::default();
-        // Conftest node so conftest_idx=Some(0) is valid.
+        // Declaration node so declaration_idx=Some(0) is valid.
         graph.declarations.push(DeclarationNode {
-            path: "conftest.py".to_string(),
+            path: "__fixtures__.py".to_string(),
             fixtures: vec![],
         });
         // Need at least one fixture so detect_signals doesn't return early.

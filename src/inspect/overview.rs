@@ -24,8 +24,8 @@ pub struct MarkEntry {
     pub test_count: usize,
 }
 
-/// A conftest node ranked by how many fixtures it defines.
-pub struct ConftestEntry {
+/// A declaration node ranked by how many fixtures it defines.
+pub struct DeclarationEntry {
     pub node_ref: NodeRef,
     pub path: String,
     pub fixture_count: usize,
@@ -39,7 +39,7 @@ pub struct ConftestEntry {
 pub enum OverviewItem {
     Gravity(GravityEntry),
     Mark(MarkEntry),
-    Conftest(ConftestEntry),
+    Declaration(DeclarationEntry),
     Signal(Signal),
 }
 
@@ -56,7 +56,7 @@ pub enum OverviewItem {
 pub struct OverviewSections {
     pub gravity: Vec<GravityEntry>,
     pub marks: Vec<MarkEntry>,
-    pub declarations: Vec<ConftestEntry>,
+    pub declarations: Vec<DeclarationEntry>,
     pub signals: Vec<Signal>,
 }
 
@@ -96,11 +96,11 @@ impl OverviewSections {
         marks.sort_by_key(|e| std::cmp::Reverse(e.test_count));
 
         // ── Declarations (by fixture count) ──────────────────────────────────
-        let mut declarations: Vec<ConftestEntry> = graph
+        let mut declarations: Vec<DeclarationEntry> = graph
             .declarations
             .iter()
             .enumerate()
-            .map(|(i, c)| ConftestEntry {
+            .map(|(i, c)| DeclarationEntry {
                 node_ref: NodeRef::new(NodeKind::Declaration, i),
                 path: c.path.clone(),
                 fixture_count: c.fixtures.len(),
@@ -125,7 +125,7 @@ impl OverviewSections {
 
     /// Return the item at the given flat cursor `index`.
     ///
-    /// Flat order: gravity entries, then mark entries, then conftest entries.
+    /// Flat order: gravity entries, then mark entries, then declaration entries.
     /// Returns `None` if `index >= item_count()`.
     #[cfg(test)]
     pub(crate) fn item_at(&self, index: usize) -> Option<OverviewItem> {
@@ -149,7 +149,7 @@ impl OverviewSections {
             }))
         } else if index < g + m + c {
             let e = &self.declarations[index - g - m];
-            Some(OverviewItem::Conftest(ConftestEntry {
+            Some(OverviewItem::Declaration(DeclarationEntry {
                 node_ref: e.node_ref.clone(),
                 path: e.path.clone(),
                 fixture_count: e.fixture_count,
@@ -198,11 +198,11 @@ mod tests {
             binding_type: "fixture".to_string(),
             scope: "function".to_string(),
             autouse: false,
-            source: "tests/conftest.py".to_string(),
+            source: "tests/__fixtures__.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers,
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: None,
         }
     }
@@ -228,8 +228,8 @@ mod tests {
         }
     }
 
-    /// Build a conftest node with a fixture index list.
-    fn make_conftest(path: &str, fixtures: Vec<usize>) -> DeclarationNode {
+    /// Build a declaration node with a fixture index list.
+    fn make_declaration(path: &str, fixtures: Vec<usize>) -> DeclarationNode {
         DeclarationNode {
             path: path.to_string(),
             fixtures,
@@ -258,10 +258,10 @@ mod tests {
         // One mark used by one test.
         graph.marks.push(make_mark("slow", vec![0]));
 
-        // One conftest with one fixture.
+        // One declaration with one fixture.
         graph
             .declarations
-            .push(make_conftest("tests/conftest.py", vec![0]));
+            .push(make_declaration("tests/__fixtures__.py", vec![0]));
 
         let sections = OverviewSections::from_graph(&graph);
 
@@ -299,8 +299,8 @@ mod tests {
             "all declarations should appear in the declarations section"
         );
         assert_eq!(
-            sections.declarations[0].path, "tests/conftest.py",
-            "conftest path should match"
+            sections.declarations[0].path, "tests/__fixtures__.py",
+            "declaration path should match"
         );
         assert_eq!(
             sections.declarations[0].fixture_count, 1,
@@ -352,10 +352,10 @@ mod tests {
         // Add one mark.
         graph.marks.push(make_mark("integration", vec![0]));
 
-        // Add one conftest.
+        // Add one declaration.
         graph
             .declarations
-            .push(make_conftest("tests/conftest.py", vec![0, 1]));
+            .push(make_declaration("tests/__fixtures__.py", vec![0, 1]));
 
         let sections = OverviewSections::from_graph(&graph);
         let total = sections.item_count();
@@ -409,10 +409,10 @@ mod tests {
         // One mark.
         graph.marks.push(make_mark("slow", vec![0]));
 
-        // One conftest.
+        // One declaration.
         graph
             .declarations
-            .push(make_conftest("conftest.py", vec![0]));
+            .push(make_declaration("__fixtures__.py", vec![0]));
 
         let sections = OverviewSections::from_graph(&graph);
 
@@ -426,10 +426,10 @@ mod tests {
             matches!(sections.item_at(1), Some(OverviewItem::Mark(_))),
             "index 1 should be a Mark item"
         );
-        // Index 2 → Conftest
+        // Index 2 → Declaration
         assert!(
-            matches!(sections.item_at(2), Some(OverviewItem::Conftest(_))),
-            "index 2 should be a Conftest item"
+            matches!(sections.item_at(2), Some(OverviewItem::Declaration(_))),
+            "index 2 should be a Declaration item"
         );
     }
 
@@ -446,7 +446,7 @@ mod tests {
         ));
         graph.tests.push(make_test("tests/test.py::test_it"));
         graph.marks.push(make_mark("m", vec![0]));
-        graph.declarations.push(make_conftest("c.py", vec![0]));
+        graph.declarations.push(make_declaration("c.py", vec![0]));
 
         let sections = OverviewSections::from_graph(&graph);
 
@@ -463,7 +463,7 @@ mod tests {
         assert_eq!(
             sections.node_ref_at(2).map(|r| r.kind),
             Some(NodeKind::Declaration),
-            "node_ref_at(2) should be a Conftest ref"
+            "node_ref_at(2) should be a Declaration ref"
         );
     }
 
@@ -551,22 +551,22 @@ mod tests {
     #[test]
     fn signals_populated_from_graph_with_unused_fixture() {
         let mut graph = InspectGraph::default();
-        // Conftest needed so conftest_idx is valid.
+        // Declaration node needed so declaration_idx is valid.
         graph.declarations.push(DeclarationNode {
-            path: "conftest.py".to_string(),
+            path: "__fixtures__.py".to_string(),
             fixtures: vec![],
         });
-        // Unused conftest fixture (no consumers, not autouse) triggers UnusedFixtures signal.
+        // Unused declaration fixture (no consumers, not autouse) triggers UnusedFixtures signal.
         graph.fixtures.push(FixtureNode {
             name: "orphan".to_string(),
             binding_type: String::new(),
             scope: "function".to_string(),
             autouse: false,
-            source: "conftest.py".to_string(),
+            source: "__fixtures__.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: Some(0),
+            declaration_idx: Some(0),
             plugin_idx: None,
         });
 
@@ -595,7 +595,7 @@ mod tests {
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: None,
         });
 
@@ -621,7 +621,7 @@ mod tests {
     fn item_at_returns_signal_variant_for_signal_index() {
         let mut graph = InspectGraph::default();
         graph.declarations.push(DeclarationNode {
-            path: "conftest.py".to_string(),
+            path: "__fixtures__.py".to_string(),
             fixtures: vec![],
         });
         graph.fixtures.push(FixtureNode {
@@ -629,11 +629,11 @@ mod tests {
             binding_type: String::new(),
             scope: "function".to_string(),
             autouse: false,
-            source: "conftest.py".to_string(),
+            source: "__fixtures__.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: Some(0),
+            declaration_idx: Some(0),
             plugin_idx: None,
         });
 
@@ -658,7 +658,7 @@ mod tests {
     fn node_ref_at_returns_first_affected_for_signal() {
         let mut graph = InspectGraph::default();
         graph.declarations.push(DeclarationNode {
-            path: "conftest.py".to_string(),
+            path: "__fixtures__.py".to_string(),
             fixtures: vec![],
         });
         graph.fixtures.push(FixtureNode {
@@ -666,11 +666,11 @@ mod tests {
             binding_type: String::new(),
             scope: "function".to_string(),
             autouse: false,
-            source: "conftest.py".to_string(),
+            source: "__fixtures__.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: Some(0),
+            declaration_idx: Some(0),
             plugin_idx: None,
         });
 

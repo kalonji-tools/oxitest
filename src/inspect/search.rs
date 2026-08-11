@@ -102,7 +102,7 @@ mod tests {
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: None,
         }
     }

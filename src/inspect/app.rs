@@ -752,7 +752,7 @@ mod tests {
             fixture_entries: vec![QueryEntry {
                 fields: [
                     ("name".to_string(), "db".to_string()),
-                    ("source".to_string(), "conftest.py".to_string()),
+                    ("source".to_string(), "__fixtures__.py".to_string()),
                     ("type".to_string(), "fixture".to_string()),
                     ("scope".to_string(), "function".to_string()),
                     ("autouse".to_string(), "false".to_string()),

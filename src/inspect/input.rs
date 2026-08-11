@@ -1065,7 +1065,7 @@ mod tests {
         // Context-scoped search while focused on a fixture node must restrict
         // candidates to that fixture's selectable edges (consumers + owner),
         // not the entire graph.  Here: one fixture "db" consumed by one test
-        // "test_login", plus a conftest owner.  Searching "login" in Context
+        // "test_login", plus a declaration owner.  Searching "login" in Context
         // mode must find the consumer test; searching "db" must find nothing
         // (the fixture itself is not a selectable edge of itself).
         use crate::inspect::app::ScopeMode;
@@ -1074,20 +1074,20 @@ mod tests {
         use crate::inspect::nav::Screen;
 
         let mut graph = InspectGraph::default();
-        // fixture at index 0 with one consumer (test index 0) and conftest at index 0
+        // fixture at index 0 with one consumer (test index 0) and declaration at index 0
         graph.fixtures.push(FixtureNode {
             name: "db".to_string(),
             binding_type: "fixture".to_string(),
             scope: "session".to_string(),
             autouse: false,
-            source: "conftest.py".to_string(),
+            source: "__fixtures__.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers: vec![GraphNodeRef {
                 kind: NodeKind::Test,
                 index: 0,
             }],
-            conftest_idx: Some(0),
+            declaration_idx: Some(0),
             plugin_idx: None,
         });
         graph.tests.push(TestNode {
@@ -1100,7 +1100,7 @@ mod tests {
             marks: vec![],
         });
         graph.declarations.push(DeclarationNode {
-            path: "conftest.py".to_string(),
+            path: "__fixtures__.py".to_string(),
             fixtures: vec![0],
         });
 
@@ -1361,15 +1361,15 @@ mod tests {
             binding_type: String::new(),
             scope: "function".to_string(),
             autouse: false,
-            source: "tests/conftest.py".to_string(),
+            source: "tests/__fixtures__.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: Some(0),
+            declaration_idx: Some(0),
             plugin_idx: None,
         });
         graph.declarations.push(DeclarationNode {
-            path: "tests/conftest.py".to_string(),
+            path: "tests/__fixtures__.py".to_string(),
             fixtures: vec![0],
         });
 
@@ -1389,7 +1389,7 @@ mod tests {
         );
         assert_eq!(
             app.source_view.as_ref().unwrap().path,
-            "tests/conftest.py",
+            "tests/__fixtures__.py",
             "source view path should match the fixture's source field"
         );
     }
@@ -1483,15 +1483,15 @@ mod tests {
             binding_type: String::new(),
             scope: "function".to_string(),
             autouse: false,
-            source: "tests/conftest.py".to_string(),
+            source: "tests/__fixtures__.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: Some(0),
+            declaration_idx: Some(0),
             plugin_idx: None,
         });
         graph.declarations.push(DeclarationNode {
-            path: "tests/conftest.py".to_string(),
+            path: "tests/__fixtures__.py".to_string(),
             fixtures: vec![0],
         });
 

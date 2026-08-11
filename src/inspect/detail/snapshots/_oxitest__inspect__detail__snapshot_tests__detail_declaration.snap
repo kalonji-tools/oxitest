@@ -2,12 +2,12 @@
 source: src/inspect/detail/mod.rs
 expression: "render_to_string(&app, 120, 24)"
 ---
-" ○ overview › D tests/conftest.py                                                                                       "
+" ○ overview › D tests/__fixtures__.py                                                                                   "
 "┌────────────────────────────────────────────────────────────────┐┌ Preview ───────────────────────────────────────────┐"
-"│C tests/conftest.py                                             ││F db                                                │"
+"│C tests/__fixtures__.py                                         ││F db                                                │"
 "│                                                                ││                                                    │"
 "│  fixtures_count: 1                                             ││  scope: session                                    │"
-"│                                                                ││  source: tests/conftest.py                         │"
+"│                                                                ││  source: tests/__fixtures__.py                     │"
 "│  Fixtures                                                      ││                                                    │"
 "│    F db                                                        ││                                                    │"
 "│                                                                ││                                                    │"

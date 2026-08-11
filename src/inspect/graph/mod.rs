@@ -264,7 +264,7 @@ mod tests {
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: None,
         });
         graph.tests.push(TestNode {
@@ -281,7 +281,7 @@ mod tests {
             used_by: vec![],
         });
         graph.declarations.push(DeclarationNode {
-            path: "tests/conftest.py".to_string(),
+            path: "tests/__fixtures__.py".to_string(),
             fixtures: vec![],
         });
         graph.plugins.push(PluginNode {
@@ -317,7 +317,7 @@ mod tests {
                     kind: NodeKind::Declaration,
                     index: 0,
                 },
-                "tests/conftest.py",
+                "tests/__fixtures__.py",
             ),
             (
                 NodeRef {
@@ -439,7 +439,7 @@ mod tests {
         // 1 fixture
         builder.add_fixture_entries(&[entry(&[
             ("name", "fx"),
-            ("source", "conftest.py"),
+            ("source", "__fixtures__.py"),
             ("type", "str"),
             ("scope", "each"),
             ("autouse", "false"),
@@ -457,11 +457,11 @@ mod tests {
         let graph = builder.build();
         let refs = graph.all_node_refs();
         // resolve_edges auto-creates a DeclarationNode for the fixture's source path,
-        // so the graph contains 1 test + 1 fixture + 1 conftest = 3 nodes total.
+        // so the graph contains 1 test + 1 fixture + 1 declaration = 3 nodes total.
         assert_eq!(
             refs.len(),
             3,
-            "1 test + 1 fixture + 1 auto-created conftest = 3 node refs"
+            "1 test + 1 fixture + 1 auto-created declaration = 3 node refs"
         );
     }
 
@@ -475,11 +475,11 @@ mod tests {
             binding_type: String::new(),
             scope: "function".to_string(),
             autouse: false,
-            source: "/home/user/project/conftest.py".to_string(),
+            source: "/home/user/project/__fixtures__.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: None,
         });
         graph.tests.push(TestNode {
@@ -492,14 +492,14 @@ mod tests {
             marks: vec![],
         });
         graph.declarations.push(DeclarationNode {
-            path: "/home/user/project/tests/conftest.py".to_string(),
+            path: "/home/user/project/tests/__fixtures__.py".to_string(),
             fixtures: vec![],
         });
 
         graph.relativize_paths("/home/user/project");
 
         assert_eq!(
-            graph.fixtures[0].source, "conftest.py",
+            graph.fixtures[0].source, "__fixtures__.py",
             "fixture source should have rootdir prefix stripped"
         );
         assert_eq!(
@@ -507,8 +507,8 @@ mod tests {
             "test node_id should have rootdir prefix stripped"
         );
         assert_eq!(
-            graph.declarations[0].path, "tests/conftest.py",
-            "conftest path should have rootdir prefix stripped"
+            graph.declarations[0].path, "tests/__fixtures__.py",
+            "declaration path should have rootdir prefix stripped"
         );
     }
 
@@ -520,18 +520,18 @@ mod tests {
             binding_type: String::new(),
             scope: "function".to_string(),
             autouse: false,
-            source: "/other/path/conftest.py".to_string(),
+            source: "/other/path/__fixtures__.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: None,
         });
 
         graph.relativize_paths("/home/user/project");
 
         assert_eq!(
-            graph.fixtures[0].source, "/other/path/conftest.py",
+            graph.fixtures[0].source, "/other/path/__fixtures__.py",
             "path that does not start with rootdir should remain unchanged"
         );
     }
@@ -565,18 +565,18 @@ mod tests {
             binding_type: String::new(),
             scope: "function".to_string(),
             autouse: false,
-            source: "/home/user/project/conftest.py".to_string(),
+            source: "/home/user/project/__fixtures__.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: None,
         });
 
         graph.relativize_paths("/home/user/project/");
 
         assert_eq!(
-            graph.fixtures[0].source, "conftest.py",
+            graph.fixtures[0].source, "__fixtures__.py",
             "rootdir with trailing slash should work the same as without"
         );
     }
@@ -593,7 +593,7 @@ mod tests {
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: None,
         });
 
