@@ -299,25 +299,39 @@ pub fn run_coverage_check(
             continue;
         }
         let full = root.root.join(file);
-        let Some((src, stmts)) = crate::python_ast::parse_file(&full) else {
-            // The scan asked for this file and could not read it — that is a
-            // finding, not a silent drop (#1800). Everything pruned before
-            // this point (norecursedirs, python_files, conftest.py, the
-            // List-scope prescreen, the privacy gate above) was never asked
-            // for and stays silent. `parse_file` discards the concrete error,
-            // so the message names both possible causes.
-            scanned.parse_failed.push(file.clone());
-            diagnostics.push(DiagnosticEntry {
-                severity: severity.clone(),
-                context: Arc::from("doctest.coverage.parse-error"),
-                message: format!(
-                    "`{file}` could not be parsed (syntax error or I/O error) — \
-                     its definitions are invisible to doctest coverage"
-                ),
-                file: Some(file.clone()),
-                lineno: Some(LineNo::new(1)),
-            });
-            continue;
+        let (src, stmts) = match crate::python_ast::try_parse_file(&full) {
+            Ok(parsed) => parsed,
+            Err(failure) => {
+                // The scan asked for this file and could not read it — that is
+                // a finding, not a silent drop (#1800). Everything pruned
+                // before this point (norecursedirs, python_files, conftest.py,
+                // the List-scope prescreen, the privacy gate above) was never
+                // asked for and stays silent.
+                //
+                // `try_parse_file` keeps the concrete error, so the message
+                // names one cause rather than both. It used to name both, which
+                // helped with neither (#1727).
+                scanned.parse_failed.push(file.clone());
+                let (detail, lineno) = match failure {
+                    crate::python_ast::ParseFailure::Parse { line, cause } => (
+                        format!("`{file}:{line}` {cause}"),
+                        Some(LineNo::from_u32(line)),
+                    ),
+                    crate::python_ast::ParseFailure::Io { cause } => {
+                        (format!("`{file}` could not be read: {cause}"), None)
+                    }
+                };
+                diagnostics.push(DiagnosticEntry {
+                    severity: severity.clone(),
+                    context: Arc::from("doctest.coverage.parse-error"),
+                    message: format!(
+                        "{detail} — its definitions are invisible to doctest coverage"
+                    ),
+                    file: Some(file.clone()),
+                    lineno,
+                });
+                continue;
+            }
         };
         scanned.parsed.push(file.clone());
         let line_index = crate::python_ast::build_line_index(&src);

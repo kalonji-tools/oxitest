@@ -6,14 +6,63 @@
 use camino::Utf8Path;
 use rustpython_parser::{Parse, ast};
 
+/// Why a Python file could not be turned into an AST.
+///
+/// The two arms are the two ways parsing gives up, and they need different
+/// words: a parse failure is a typo the user can fix from the message, a read
+/// failure is not. Reporting both as "syntax error or I/O error" told the user
+/// neither (#1727).
+///
+/// Reading a file that is not valid UTF-8 fails at the *read*, not the parse,
+/// so it arrives as `Io` carrying `std::io::Error`'s own wording ("stream did
+/// not contain valid UTF-8"). That is accurate and needs no third arm;
+/// `prescan_fixture_module_rejects_invalid_utf8` pins the routing so it stays
+/// a decision rather than an accident.
+#[derive(Debug)]
+pub enum ParseFailure {
+    /// The file could not be read.
+    Io { cause: String },
+    /// The file was read but did not parse. `line` is 1-based.
+    Parse { line: u32, cause: String },
+}
+
+/// Parse already-read source, naming the failure rather than discarding it.
+pub fn parse_source(path: &Utf8Path, source: &str) -> Result<Vec<ast::Stmt>, ParseFailure> {
+    ast::Suite::parse(source, path.as_str()).map_err(|e| {
+        // An unclosed delimiter is reported at EOF, which is one line past the
+        // end of the file — "line 8" for a seven-line file, a number naming no
+        // line the user can open. Clamp into the source so the answer is always
+        // a line that exists. A mid-file error is already inside the range, so
+        // this only moves the EOF case.
+        let offset = u32::from(e.offset).min(source.len().saturating_sub(1) as u32);
+        ParseFailure::Parse {
+            line: offset_to_line(&build_line_index(source), offset),
+            cause: e.error.to_string(),
+        }
+    })
+}
+
+/// Read and parse a Python file, naming the failure rather than discarding it.
+///
+/// [`parse_file`] is this function with the reason dropped. Prefer this one
+/// wherever the failure reaches a user: a diagnostic that cannot say which of
+/// the two causes applied helps with neither (#1727).
+pub fn try_parse_file(path: &Utf8Path) -> Result<(String, Vec<ast::Stmt>), ParseFailure> {
+    let source = std::fs::read_to_string(path.as_std_path()).map_err(|e| ParseFailure::Io {
+        cause: e.to_string(),
+    })?;
+    let stmts = parse_source(path, &source)?;
+    Ok((source, stmts))
+}
+
 /// Read and parse a Python file into its AST statements.
 ///
 /// Returns `None` on read error or syntax error — callers should fall through
-/// to Python-side handling, which provides proper diagnostics.
+/// to Python-side handling, which provides proper diagnostics. Where the
+/// failure is reported to a user instead, call [`try_parse_file`], which keeps
+/// the reason.
 pub fn parse_file(path: &Utf8Path) -> Option<(String, Vec<ast::Stmt>)> {
-    let source = std::fs::read_to_string(path.as_std_path()).ok()?;
-    let stmts = ast::Suite::parse(&source, path.as_str()).ok()?;
-    Some((source, stmts))
+    try_parse_file(path).ok()
 }
 
 /// Check whether a name follows the `test_*` convention.

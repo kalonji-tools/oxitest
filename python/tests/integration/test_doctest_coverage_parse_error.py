@@ -58,6 +58,15 @@ def test_full_run_reports_unparsable_file_under_enforce(tmp: TempDir) -> None:
         "the diagnostic must name the file that failed to parse, otherwise "
         f"the user cannot find what to fix: {combined!r}"
     )
+    assert "broken.py:1" in combined, (
+        "naming the file is not enough to find the fault in a long module — "
+        "the line comes from the parser's own offset and costs nothing to "
+        f"carry (#1727): {combined!r}"
+    )
+    assert "syntax error or I/O error" not in combined, (
+        "the message must name the cause it actually hit; offering both told "
+        f"the user neither, and only one of the two can be true (#1727): {combined!r}"
+    )
     assert rc == 0, (
         "strict = enforce reports parse failures as warnings — the run itself "
         f"must still pass, only abort may turn it into a hard failure: {combined!r}"
