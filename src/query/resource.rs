@@ -26,7 +26,7 @@ impl ResourceKind {
     pub(crate) const fn valid_predicates(&self) -> &'static [&'static str] {
         match self {
             Self::Tests => &["name", "source", "mark", "async", "uses"],
-            Self::Fixtures => &["name", "source", "shared", "autouse", "async", "uses"],
+            Self::Fixtures => &["name", "source", "autouse", "async", "uses"],
             Self::Marks => &["name", "used_in"],
             Self::Plugins => &["name", "protocol"],
         }

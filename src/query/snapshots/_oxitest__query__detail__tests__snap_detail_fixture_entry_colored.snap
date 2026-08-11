@@ -5,6 +5,6 @@ expression: result
 [2m───[0m [36m[1mdb_session[0m [2m───[0m
 
   [2msource:[0m[34m__fixtures__.py[0m
-  [2mshared:[0m[32m[2mtrue[0m
+  [2mlifetime:[0mmodule
   [2mautouse:[0m[32m[2mtrue[0m
   [2masync:[0m[2mfalse[0m

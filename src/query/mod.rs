@@ -41,7 +41,7 @@ fn expr_needs_python(expr: &ast::Expr) -> bool {
         ast::Expr::And(a, b) | ast::Expr::Or(a, b) => expr_needs_python(a) || expr_needs_python(b),
         ast::Expr::Not(inner) => expr_needs_python(inner),
         ast::Expr::Predicate { name, .. } => {
-            matches!(name.as_str(), "shared" | "autouse" | "protocol" | "uses")
+            matches!(name.as_str(), "autouse" | "protocol" | "uses")
         }
     }
 }
@@ -247,8 +247,8 @@ mod tests {
     }
 
     #[test]
-    fn needs_python_tests_with_shared_expr_is_true() {
-        assert!(needs_python(ResourceKind::Tests, Some("shared()")));
+    fn needs_python_tests_with_autouse_expr_is_true() {
+        assert!(needs_python(ResourceKind::Tests, Some("autouse()")));
     }
 
     #[test]

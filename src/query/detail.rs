@@ -14,7 +14,7 @@ use camino::Utf8Path;
 const fn fields_for(resource: ResourceKind) -> &'static [&'static str] {
     match resource {
         ResourceKind::Tests => &["source", "mark", "async"],
-        ResourceKind::Fixtures => &["description", "source", "shared", "autouse", "async"],
+        ResourceKind::Fixtures => &["description", "source", "lifetime", "autouse", "async"],
         ResourceKind::Marks => &["used_in"],
         ResourceKind::Plugins => &["protocol"],
     }
@@ -29,7 +29,7 @@ const fn fields_for(resource: ResourceKind) -> &'static [&'static str] {
 /// ─── {name} ───
 ///
 ///   source:      path/to/file.py
-///   shared:      true
+///   lifetime:    module
 ///   autouse:     true
 /// ```
 ///
@@ -232,13 +232,13 @@ mod tests {
         let e = entry(&[
             ("name", "db_session"),
             ("source", "__fixtures__.py"),
-            ("shared", "true"),
+            ("lifetime", "module"),
             ("autouse", "true"),
             ("async", "false"),
         ]);
         let out = format_detail(&e, ResourceKind::Fixtures, false);
-        assert!(out.contains("shared:"), "shared field missing: {out:?}");
-        assert!(out.contains("true"), "shared value missing: {out:?}");
+        assert!(out.contains("lifetime:"), "lifetime field missing: {out:?}");
+        assert!(out.contains("module"), "lifetime value missing: {out:?}");
         assert!(out.contains("autouse:"), "autouse field missing: {out:?}");
         assert!(out.contains("true"), "autouse value missing: {out:?}");
     }
@@ -276,7 +276,7 @@ mod tests {
         let e = entry(&[
             ("name", "db_session"),
             ("source", "__fixtures__.py"),
-            ("shared", "true"),
+            ("lifetime", "module"),
             ("autouse", "true"),
             ("async", "false"),
         ]);
@@ -302,7 +302,7 @@ mod tests {
         let e = entry(&[
             ("name", "db_session"),
             ("source", "__fixtures__.py"),
-            ("shared", "true"),
+            ("lifetime", "module"),
             ("autouse", "true"),
             ("async", "false"),
         ]);
