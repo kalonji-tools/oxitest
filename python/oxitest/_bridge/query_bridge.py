@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-__all__ = ["fixture_entries", "plugin_entries", "test_fixture_deps"]
+__all__ = [
+    "autouse_entries",
+    "fixture_entries",
+    "plugin_entries",
+    "test_fixture_deps",
+]
 
 from pathlib import PurePath
 from types import MappingProxyType
@@ -108,6 +113,51 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
                 "home": home,
                 "type": getattr(defn.fixture_type, "__name__", "None"),
                 "uses": deps,
+            }
+        )
+    return entries
+
+
+def autouse_entries(module_paths: list[str], session: Any) -> list[dict[str, str]]:
+    """Return the autouse fixtures that apply to each module, in firing order.
+
+    Keyed on the module rather than on the test because
+    :meth:`FixtureRegistry.get_autouse` is: every test in one module has the
+    same autouse set.
+
+    This reports which fixtures **apply**, never which test builds one. ADR-0009
+    Rule 7 makes the counts a rate rather than a boundary event — the build
+    happens inside the first test to reach the boundary, and a boundary whose
+    tests are all skipped or deselected never fires at all — so which test pays
+    depends on execution order, worker assignment and deselection. ``inspect``
+    runs no tests and cannot know it.
+
+    ``get_autouse`` is what makes this correct rather than a filter on the
+    declared ``autouse`` flag: it resolves each name through ``_deepest_visible``
+    and yields the winner only when the winner is itself autouse, which is what
+    implements Rule 7's opt-out (declare the same name without ``autouse`` at a
+    deeper anchor). Yield order is widest lifetime first, so it is preserved
+    here rather than re-sorted (#1722).
+    """
+    entries: list[dict[str, str]] = []
+    for path in module_paths:
+        names: list[str] = []
+        lifetimes: list[str] = []
+        for defn in session.registry.get_autouse(path):
+            names.append(defn.name)
+            # Always the Lifetime, never the Scope. Only a `ModuleSource` or a
+            # `PluginModuleSource` can carry `autouse` — those are the two
+            # registration sites in `_module_source_registrar` — and both carry
+            # a Lifetime, so the fallback below is unreachable rather than
+            # merely unlikely. It exists so a new autouse-bearing source cannot
+            # silently render an empty column.
+            _, _, lifetime = _declaration_facts(defn.source)
+            lifetimes.append(lifetime or defn.scope.value)
+        entries.append(
+            {
+                "module_path": path,
+                "fixture_names": ",".join(names),
+                "lifetimes": ",".join(lifetimes),
             }
         )
     return entries

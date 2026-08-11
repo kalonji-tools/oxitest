@@ -192,6 +192,36 @@ impl GraphBuilder {
         }
     }
 
+    /// Store the autouse sets that apply to each module.
+    ///
+    /// Expected entry fields: `module_path`, `fixture_names`, `lifetimes` —
+    /// the last two comma-separated and index-aligned. Order is preserved:
+    /// `get_autouse` yields widest lifetime first and re-sorting here would
+    /// contradict ADR-0009 Rule 7's documented firing order.
+    pub(crate) fn add_autouse_entries(&mut self, entries: &[QueryEntry], rootdir: &str) {
+        for entry in entries {
+            let Some(module_path) = entry.get("module_path") else {
+                continue;
+            };
+            let names = entry.get("fixture_names").unwrap_or_default();
+            let lifetimes = entry.get("lifetimes").unwrap_or_default();
+            let fixtures: Vec<super::AutouseFixture> = names
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .zip(lifetimes.split(','))
+                .map(|(name, lifetime)| super::AutouseFixture {
+                    name: name.to_string(),
+                    lifetime: lifetime.to_string(),
+                })
+                .collect();
+            // Keyed rootdir-relative so a Test node's `node_id` prefix matches.
+            let key = camino::Utf8Path::new(module_path)
+                .strip_prefix(rootdir)
+                .map_or_else(|_| module_path.to_string(), |rel| rel.to_string());
+            self.graph.autouse_by_module.insert(key, fixtures);
+        }
+    }
+
     /// Add plugin nodes from Python-tier collection.
     ///
     /// Expected entry fields: `name`, `protocol`.
@@ -959,6 +989,78 @@ mod tests {
         assert!(
             graph.fixtures[0].declaration_idx.is_none(),
             "plugin-sourced fixture should not have declaration_idx"
+        );
+    }
+
+    #[test]
+    fn autouse_entries_pair_each_name_with_its_lifetime_in_order() {
+        // Arrange — the bridge sends two comma-separated, index-aligned lists.
+        let mut builder = GraphBuilder::new();
+        builder.add_autouse_entries(
+            &[entry(&[
+                ("module_path", "/proj/tests/test_a.py"),
+                ("fixture_names", "seed_admin,db_txn"),
+                ("lifetimes", "package,module"),
+            ])],
+            "/proj",
+        );
+
+        // Act
+        let graph = builder.build();
+        let fixtures = graph.autouse_by_module.get("tests/test_a.py").expect(
+            "the key must be rootdir-relative: TestNode.node_id is relativized, \
+                     so an absolute key here would never be found by the detail view",
+        );
+
+        // Assert
+        assert_eq!(
+            fixtures.len(),
+            2,
+            "both names must survive the split; a mismatched zip would silently drop one"
+        );
+        assert_eq!(
+            fixtures[0],
+            crate::inspect::graph::AutouseFixture {
+                name: "seed_admin".to_string(),
+                lifetime: "package".to_string(),
+            },
+            "each name keeps its own lifetime, and the widest tier stays first — \
+             get_autouse yields in firing order and re-sorting would contradict \
+             ADR-0009 Rule 7"
+        );
+        assert_eq!(
+            fixtures[1],
+            crate::inspect::graph::AutouseFixture {
+                name: "db_txn".to_string(),
+                lifetime: "module".to_string(),
+            },
+            "the second pair must not be shifted by the first"
+        );
+    }
+
+    #[test]
+    fn autouse_entries_store_an_empty_set_for_a_module_with_none() {
+        // Arrange — a module the bridge measured and found nothing for.
+        let mut builder = GraphBuilder::new();
+        builder.add_autouse_entries(
+            &[entry(&[
+                ("module_path", "/proj/tests/test_b.py"),
+                ("fixture_names", ""),
+                ("lifetimes", ""),
+            ])],
+            "/proj",
+        );
+
+        // Act
+        let graph = builder.build();
+
+        // Assert
+        assert_eq!(
+            graph.autouse_by_module.get("tests/test_b.py"),
+            Some(&vec![]),
+            "an empty list must not become a phantom entry: splitting \"\" on ',' \
+             yields one empty string, so an unfiltered split would invent a fixture \
+             with no name"
         );
     }
 

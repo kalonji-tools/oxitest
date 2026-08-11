@@ -323,7 +323,9 @@ fn build_left_pane(app: &InspectApp) -> (Vec<Line<'static>>, Option<usize>) {
         Screen::Overview { selected } => {
             build_overview_content(&app.overview_sections, *selected, is_loading)
         }
-        Screen::NodeFocus { node, selected } => build_node_focus_content(graph, node, *selected),
+        Screen::NodeFocus { node, selected } => {
+            build_node_focus_content(graph, node, *selected, app.fixture_data_state())
+        }
         Screen::Disambiguation {
             matches, selected, ..
         } => build_disambiguation_content(graph, matches, *selected),
@@ -499,9 +501,10 @@ fn build_node_focus_content(
     graph: &super::graph::InspectGraph,
     node: &NodeRef,
     selected: usize,
+    state: super::app::FixtureDataState,
 ) -> (Vec<Line<'static>>, Option<usize>) {
     // Show detailed properties from the detail module
-    let mut lines = detail::render_detail(graph, Some(node));
+    let mut lines = detail::render_detail(graph, Some(node), state);
 
     // Append selectable edges with cursor indicators
     let edge_count = detail::selectable_edge_count(graph, node);

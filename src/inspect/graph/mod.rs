@@ -90,6 +90,25 @@ pub struct InspectGraph {
     pub declarations: Vec<DeclarationNode>,
     pub plugins: Vec<PluginNode>,
     pub broken_edges: Vec<BrokenEdge>,
+    /// Autouse fixtures that **apply** to each module, keyed by module path and
+    /// held in firing order (widest lifetime first, ADR-0009 Rule 7).
+    ///
+    /// Keyed by module rather than by test because `get_autouse` is: every test
+    /// in one module has the same set. This says which fixtures apply, never
+    /// which test builds one — Rule 7 makes the counts a rate, so the build
+    /// lands in whichever test reaches the boundary first, and that depends on
+    /// order, worker assignment and deselection (#1722).
+    pub autouse_by_module: ahash::AHashMap<String, Vec<AutouseFixture>>,
+}
+
+// ── AutouseFixture ───────────────────────────────────────────────────────────
+
+/// One autouse fixture that applies to a module.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AutouseFixture {
+    pub name: String,
+    /// The `Lifetime` the declaration wrote, never the caching `Scope`.
+    pub lifetime: String,
 }
 
 impl InspectGraph {

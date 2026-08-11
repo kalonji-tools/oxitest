@@ -132,8 +132,30 @@ enum Phase2State {
         rx: mpsc::Receiver<Phase2Data>,
         started: std::time::Instant,
     },
-    /// All data has been loaded (or timed out / thread disconnected).
+    /// Data arrived and was merged into the graph.
     Complete,
+    /// The background thread finished without delivering data — it errored, or
+    /// it exceeded `phase2_timeout`.
+    ///
+    /// Distinct from [`Self::Complete`] because a view that renders "none" for
+    /// an empty result must not render it when nothing was ever measured. For
+    /// the autouse view that distinction is the whole point: ADR-0009 Rule 7
+    /// rests on that view answering the invisibility objection, and a false
+    /// "no autouse fixtures apply here" is worse than no answer (#1722).
+    Unavailable,
+}
+
+// ── FixtureDataState ────────────────────────────────────────────────────────
+
+/// What a detail view may claim about phase-2 data.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum FixtureDataState {
+    /// The background session is still running.
+    Loading,
+    /// Phase-2 data arrived; an empty result really means empty.
+    Ready,
+    /// Phase-2 delivered nothing. An empty result means "not measured".
+    Unavailable,
 }
 
 // ── Phase2Data ──────────────────────────────────────────────────────────────
@@ -141,6 +163,8 @@ enum Phase2State {
 /// Payload sent from the background thread once Python-tier data is ready.
 pub struct Phase2Data {
     pub(crate) fixture_entries: Vec<crate::query::resource::QueryEntry>,
+    /// Autouse sets keyed by module path — see `query_bridge.autouse_entries`.
+    pub(crate) autouse_entries: Vec<crate::query::resource::QueryEntry>,
     pub(crate) plugin_entries: Vec<crate::query::resource::QueryEntry>,
     pub(crate) fixture_dep_entries: Vec<crate::query::resource::QueryEntry>,
 }
@@ -380,13 +404,14 @@ impl InspectApp {
                         timeout_secs = self.phase2_timeout.as_secs(),
                         "phase-2 loading timed out; proceeding with instant-tier data only"
                     );
-                    self.phase2 = Phase2State::Complete;
+                    self.phase2 = Phase2State::Unavailable;
                 }
             }
             Err(mpsc::TryRecvError::Disconnected) => {
                 // Background thread finished without sending data (error path).
-                // Transition to Complete so loading indicators disappear.
-                self.phase2 = Phase2State::Complete;
+                // Not Complete: the loading indicator must clear, but a view that
+                // renders "none" for an empty result must not do so here.
+                self.phase2 = Phase2State::Unavailable;
             }
         }
     }
@@ -394,6 +419,18 @@ impl InspectApp {
     /// Returns `true` while phase-2 (fixture/plugin) data is still loading.
     pub(crate) const fn is_loading(&self) -> bool {
         matches!(self.phase2, Phase2State::Loading { .. })
+    }
+
+    /// What a detail view may claim about phase-2 data right now.
+    ///
+    /// `Complete` and `Unavailable` both clear the loading indicator, but only
+    /// `Complete` licenses a view to report an empty result as "none".
+    pub(crate) const fn fixture_data_state(&self) -> FixtureDataState {
+        match self.phase2 {
+            Phase2State::Loading { .. } => FixtureDataState::Loading,
+            Phase2State::Complete => FixtureDataState::Ready,
+            Phase2State::Unavailable => FixtureDataState::Unavailable,
+        }
     }
 
     /// Merge phase-2 fixture and plugin data into the existing graph.
@@ -405,6 +442,7 @@ impl InspectApp {
             builder.add_fixture_entries(&data.fixture_entries);
             builder.add_plugin_entries(&data.plugin_entries);
             builder.add_fixture_dep_entries(&data.fixture_dep_entries, &self.rootdir);
+            builder.add_autouse_entries(&data.autouse_entries, &self.rootdir);
             builder.resolve_edges();
             let mut new_graph = builder.build();
             // Normalize paths from phase-2 (Python bridge sends absolute paths).
@@ -749,6 +787,7 @@ mod tests {
         );
 
         let data = Phase2Data {
+            autouse_entries: vec![],
             fixture_entries: vec![QueryEntry {
                 fields: [
                     ("name".to_string(), "db".to_string()),
@@ -797,6 +836,7 @@ mod tests {
         );
 
         tx.send(Phase2Data {
+            autouse_entries: vec![],
             fixture_entries: vec![QueryEntry {
                 fields: [
                     ("name".to_string(), "cache".to_string()),
@@ -861,11 +901,14 @@ mod tests {
 
         assert!(
             !app.is_loading(),
-            "poll_phase2 should transition to Complete (is_loading false) on Disconnected"
+            "the loading indicator must clear on Disconnected"
         );
         assert!(
-            matches!(app.phase2, Phase2State::Complete),
-            "phase2 must be Complete after Disconnected so no further polls are attempted"
+            matches!(app.phase2, Phase2State::Unavailable),
+            "a background thread that finished without sending data delivered nothing, \
+             so the state is Unavailable rather than Complete: a detail view may stop \
+             showing a spinner, but it must not report an empty result as a measured \
+             'none' (#1722)"
         );
     }
 
@@ -926,12 +969,14 @@ mod tests {
 
         assert!(
             !app.is_loading(),
-            "poll_phase2 must transition to Complete (is_loading false) once the 30s deadline \
-             is exceeded so loading indicators disappear and the UI is not stuck indefinitely"
+            "the loading indicator must clear once the 30s deadline is exceeded so the \
+             UI is not stuck indefinitely"
         );
         assert!(
-            matches!(app.phase2, Phase2State::Complete),
-            "phase2 must be Complete after timeout so no further polls are attempted"
+            matches!(app.phase2, Phase2State::Unavailable),
+            "a timed-out phase 2 measured nothing, so the state is Unavailable rather \
+             than Complete — otherwise the autouse view would report 'none' for a \
+             module whose autouse set was never computed (#1722)"
         );
     }
 
@@ -993,6 +1038,7 @@ mod tests {
         // Simulate phase-2 data arrival
         app.phase2 = Phase2State::Complete; // mirror what poll_phase2 does
         app.merge_phase2(Phase2Data {
+            autouse_entries: vec![],
             fixture_entries: vec![],
             plugin_entries: vec![],
             fixture_dep_entries: vec![],

@@ -23,14 +23,18 @@ use styles::{bool_field, connection_line, field_line, section_header, sigil_styl
 ///
 /// Returns a `Vec<Line>` suitable for embedding in a `Paragraph` widget.
 /// When `node_ref` is `None`, returns a placeholder message.
-pub fn render_detail<'a>(graph: &InspectGraph, node_ref: Option<&NodeRef>) -> Vec<Line<'a>> {
+pub fn render_detail<'a>(
+    graph: &InspectGraph,
+    node_ref: Option<&NodeRef>,
+    state: crate::inspect::app::FixtureDataState,
+) -> Vec<Line<'a>> {
     let Some(node_ref) = node_ref else {
         return vec![Line::from("Select a node to view details")];
     };
 
     match node_ref.kind {
         NodeKind::Fixture => fixture::render_fixture(graph, node_ref),
-        NodeKind::Test => test::render_test(graph, node_ref),
+        NodeKind::Test => test::render_test(graph, node_ref, state),
         NodeKind::Mark => mark::render_mark(graph, node_ref),
         NodeKind::Declaration => declaration::render_declaration(graph, node_ref),
         NodeKind::Plugin => plugin::render_plugin(graph, node_ref),
@@ -179,7 +183,11 @@ mod tests {
         for (graph, kind) in cases {
             // Act
             let node = NodeRef::new(kind, 0);
-            let lines = render_detail(&graph, Some(&node));
+            let lines = render_detail(
+                &graph,
+                Some(&node),
+                crate::inspect::app::FixtureDataState::Ready,
+            );
             let rendered = lines[0].spans[0].content.to_string();
 
             // Assert
@@ -192,6 +200,104 @@ mod tests {
                  'D' and the detail pane as 'C' for the same node (#1722)"
             );
         }
+    }
+
+    /// A test node whose module has two autouse fixtures, widest tier first.
+    fn autouse_graph() -> InspectGraph {
+        let mut graph = test_graph();
+        graph.autouse_by_module.insert(
+            "tests/test_db.py".to_string(),
+            vec![
+                crate::inspect::graph::AutouseFixture {
+                    name: "seed_admin".to_string(),
+                    lifetime: "package".to_string(),
+                },
+                crate::inspect::graph::AutouseFixture {
+                    name: "db_txn".to_string(),
+                    lifetime: "module".to_string(),
+                },
+            ],
+        );
+        graph
+    }
+
+    #[test]
+    fn autouse_section_distinguishes_its_three_states() {
+        // Arrange — one graph, rendered under each state.
+        let graph = autouse_graph();
+        let node = NodeRef::new(NodeKind::Test, 0);
+        let text = |state| {
+            render_detail(&graph, Some(&node), state)
+                .iter()
+                .map(|line| {
+                    line.spans
+                        .iter()
+                        .map(|s| s.content.as_ref())
+                        .collect::<String>()
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
+        // Act
+        let ready = text(crate::inspect::app::FixtureDataState::Ready);
+        let loading = text(crate::inspect::app::FixtureDataState::Loading);
+        let unavailable = text(crate::inspect::app::FixtureDataState::Unavailable);
+
+        // Assert
+        for rendered in [&ready, &loading, &unavailable] {
+            assert!(
+                rendered.contains("Autouse (applies here)"),
+                "the section renders in every state; one that vanishes when it has \
+                 nothing to say is indistinguishable from a tool that never looked, \
+                 which is the invisibility ADR-0009 Rule 7 cites this view to answer"
+            );
+        }
+        assert!(
+            ready.contains("seed_admin") && ready.contains("db_txn"),
+            "a populated set lists every fixture that applies to the module"
+        );
+        assert!(
+            ready.find("seed_admin") < ready.find("db_txn"),
+            "Rule 7 fires widest lifetime first — package before module — and \
+             get_autouse yields in that order, so the rows must not be re-sorted"
+        );
+        assert!(
+            loading.contains("loading…") && !loading.contains("none"),
+            "while phase 2 runs the section must say so, never 'none'"
+        );
+        assert!(
+            unavailable.contains("unavailable") && !unavailable.contains("none"),
+            "when phase 2 delivered nothing, 'none' would assert that no autouse \
+             fixture applies — a claim nothing measured, and a false one that Rule 7 \
+             makes worse than no answer at all"
+        );
+    }
+
+    #[test]
+    fn autouse_section_says_none_only_when_data_arrived_and_was_empty() {
+        // Arrange — Ready, but the module has no autouse entry at all.
+        let graph = test_graph();
+        let node = NodeRef::new(NodeKind::Test, 0);
+
+        // Act
+        let lines = render_detail(
+            &graph,
+            Some(&node),
+            crate::inspect::app::FixtureDataState::Ready,
+        );
+        let rendered: String = lines
+            .iter()
+            .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+            .collect::<Vec<_>>()
+            .join("");
+
+        // Assert
+        assert!(
+            rendered.contains("none"),
+            "an absent key under Ready means the module genuinely has no autouse \
+             fixtures, which is a measured answer and must be stated"
+        );
     }
 
     /// Build a minimal graph for testing a fixture detail view.
@@ -426,7 +532,7 @@ mod tests {
     #[test]
     fn render_detail_none_shows_placeholder() {
         let graph = InspectGraph::default();
-        let lines = render_detail(&graph, None);
+        let lines = render_detail(&graph, None, crate::inspect::app::FixtureDataState::Ready);
         assert_eq!(
             lines.len(),
             1,
@@ -441,7 +547,11 @@ mod tests {
             kind: NodeKind::Fixture,
             index: 0,
         };
-        let lines = render_detail(&graph, Some(&node_ref));
+        let lines = render_detail(
+            &graph,
+            Some(&node_ref),
+            crate::inspect::app::FixtureDataState::Ready,
+        );
         let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
         assert!(
             text.contains("db_session"),
@@ -472,7 +582,11 @@ mod tests {
             kind: NodeKind::Fixture,
             index: 0,
         };
-        let lines = render_detail(&graph, Some(&node_ref));
+        let lines = render_detail(
+            &graph,
+            Some(&node_ref),
+            crate::inspect::app::FixtureDataState::Ready,
+        );
         let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
         assert!(
             text.contains("missing_dep"),
@@ -491,7 +605,11 @@ mod tests {
             kind: NodeKind::Test,
             index: 0,
         };
-        let lines = render_detail(&graph, Some(&node_ref));
+        let lines = render_detail(
+            &graph,
+            Some(&node_ref),
+            crate::inspect::app::FixtureDataState::Ready,
+        );
         let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
         assert!(
             text.contains("test_create_user"),
@@ -518,7 +636,11 @@ mod tests {
             kind: NodeKind::Test,
             index: 0,
         };
-        let lines = render_detail(&graph, Some(&node_ref));
+        let lines = render_detail(
+            &graph,
+            Some(&node_ref),
+            crate::inspect::app::FixtureDataState::Ready,
+        );
         let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
         assert!(
             text.contains("param_id"),
@@ -537,7 +659,11 @@ mod tests {
             kind: NodeKind::Mark,
             index: 0,
         };
-        let lines = render_detail(&graph, Some(&node_ref));
+        let lines = render_detail(
+            &graph,
+            Some(&node_ref),
+            crate::inspect::app::FixtureDataState::Ready,
+        );
         let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
         assert!(
             text.contains("slow"),
@@ -560,7 +686,11 @@ mod tests {
             kind: NodeKind::Declaration,
             index: 0,
         };
-        let lines = render_detail(&graph, Some(&node_ref));
+        let lines = render_detail(
+            &graph,
+            Some(&node_ref),
+            crate::inspect::app::FixtureDataState::Ready,
+        );
         let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
         assert!(
             text.contains("tests/__fixtures__.py"),
@@ -579,7 +709,11 @@ mod tests {
             kind: NodeKind::Plugin,
             index: 0,
         };
-        let lines = render_detail(&graph, Some(&node_ref));
+        let lines = render_detail(
+            &graph,
+            Some(&node_ref),
+            crate::inspect::app::FixtureDataState::Ready,
+        );
         let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
         assert!(
             text.contains("capture"),
