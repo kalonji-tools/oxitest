@@ -1236,6 +1236,9 @@ mod snapshot_tests {
             marks: vec![],
         });
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: "tests".to_string(),
+            home: "fixtures-file".to_string(),
             name: "db".to_string(),
             binding_type: "fixture".to_string(),
             scope: "each".to_string(),
@@ -1251,6 +1254,8 @@ mod snapshot_tests {
             plugin_idx: None,
         });
         graph.declarations.push(DeclarationNode {
+            anchor: "tests".to_string(),
+            home: "fixtures-file".to_string(),
             path: "tests/__fixtures__.py".to_string(),
             fixtures: vec![0],
         });

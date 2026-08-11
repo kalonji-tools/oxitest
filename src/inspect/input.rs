@@ -1076,9 +1076,12 @@ mod tests {
         let mut graph = InspectGraph::default();
         // fixture at index 0 with one consumer (test index 0) and declaration at index 0
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             name: "db".to_string(),
             binding_type: "fixture".to_string(),
-            scope: "session".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "__fixtures__.py".to_string(),
             is_async: false,
@@ -1100,6 +1103,8 @@ mod tests {
             marks: vec![],
         });
         graph.declarations.push(DeclarationNode {
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             path: "__fixtures__.py".to_string(),
             fixtures: vec![0],
         });
@@ -1357,9 +1362,12 @@ mod tests {
 
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             name: "db".to_string(),
             binding_type: String::new(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "tests/__fixtures__.py".to_string(),
             is_async: false,
@@ -1369,6 +1377,8 @@ mod tests {
             plugin_idx: None,
         });
         graph.declarations.push(DeclarationNode {
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             path: "tests/__fixtures__.py".to_string(),
             fixtures: vec![0],
         });
@@ -1479,9 +1489,12 @@ mod tests {
 
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             name: "db".to_string(),
             binding_type: String::new(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "tests/__fixtures__.py".to_string(),
             is_async: false,
@@ -1491,6 +1504,8 @@ mod tests {
             plugin_idx: None,
         });
         graph.declarations.push(DeclarationNode {
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             path: "tests/__fixtures__.py".to_string(),
             fixtures: vec![0],
         });

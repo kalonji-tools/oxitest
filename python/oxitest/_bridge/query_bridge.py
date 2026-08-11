@@ -4,7 +4,9 @@ from __future__ import annotations
 
 __all__ = ["fixture_entries", "plugin_entries", "test_fixture_deps"]
 
-from typing import Any
+from pathlib import PurePath
+from types import MappingProxyType
+from typing import Any, Final
 
 from oxitest._bridge._fixture_registry import (
     BuiltinSource,
@@ -27,6 +29,41 @@ _PROTOCOL_FIELDS = (
     ("async_backend", "AsyncBackend"),
     ("debugger_backend", "DebuggerBackend"),
 )
+
+
+#: Declaration-home basenames, per ADR-0009 Rule 5. Anything else a
+#: ``ModuleSource`` can name is an inline declaration, because only a collected
+#: test module can host one — so this does not need ``python_files``.
+_DECLARATION_HOMES: Final = MappingProxyType(
+    {"__fixtures__.py": "fixtures-file", "__init__.py": "package-init"}
+)
+
+
+def _declaration_facts(source: Any) -> tuple[str, str, str]:
+    """Return ``(anchor, home, lifetime)`` for one fixture source.
+
+    An empty *home* means the fixture is ambient — a builtin, a framework
+    fixture, or a plugin's. ``CONTEXT.md``: "Plugin, framework, and builtin
+    fixtures have no anchor." The Rust graph reads that emptiness as "do not
+    build a declaration node for this fixture" (#1722).
+
+    ``PluginModuleSource`` carries a lifetime but is ambient by construction,
+    so it reports a lifetime and no home.
+    """
+    match source:
+        case ModuleSource(
+            defining_module_path=path, anchor_package_path=anchor, lifetime=lifetime
+        ):
+            # An empty path reports no home rather than "inline": a home is what
+            # makes the Rust graph build a declaration node, and one built from
+            # an empty path would render a nameless row.
+            name = PurePath(path).name if path else ""
+            home = _DECLARATION_HOMES.get(name, "inline") if name else ""
+            return anchor, home, lifetime.value
+        case PluginModuleSource(lifetime=lifetime):
+            return "", "", lifetime.value
+        case _:
+            return "", "", ""
 
 
 def fixture_entries(registry: Any) -> list[dict[str, str]]:
@@ -56,6 +93,7 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
             doc = (defn.source.impl_cls.__doc__ or "").strip()
 
         deps = ",".join(q for q, _ in defn.depends_on) if defn.depends_on else ""
+        anchor, home, lifetime = _declaration_facts(defn.source)
 
         entries.append(
             {
@@ -65,6 +103,9 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
                 "async": str(defn.is_async).lower(),
                 "description": doc,
                 "scope": defn.scope.value,
+                "lifetime": lifetime,
+                "anchor": anchor,
+                "home": home,
                 "type": getattr(defn.fixture_type, "__name__", "None"),
                 "uses": deps,
             }

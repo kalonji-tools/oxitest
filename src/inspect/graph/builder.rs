@@ -161,13 +161,22 @@ impl GraphBuilder {
             }
             let source = entry.get("source").unwrap_or_default().to_string();
             let binding_type = entry.get("type").unwrap_or("fixture").to_string();
-            let scope = entry.get("scope").unwrap_or("function").to_string();
+            // `each`, not `function`: this field carries the `Scope` vocabulary,
+            // and `function` is a `Lifetime` word. The old default mixed the two
+            // (#1722).
+            let scope = entry.get("scope").unwrap_or("each").to_string();
+            let lifetime = entry.get("lifetime").unwrap_or_default().to_string();
+            let anchor = entry.get("anchor").unwrap_or_default().to_string();
+            let home = entry.get("home").unwrap_or_default().to_string();
             let autouse = entry.get("autouse").is_some_and(|v| v == "true");
             let is_async = entry.get("async").is_some_and(|v| v == "true");
             let description = entry.get("description").unwrap_or_default().to_string();
 
             let idx = self.graph.fixtures.len();
             self.graph.fixtures.push(FixtureNode {
+                lifetime,
+                anchor,
+                home,
                 name: name.clone(),
                 binding_type,
                 scope,
@@ -311,12 +320,14 @@ impl GraphBuilder {
     // ── Private helpers ──────────────────────────────────────────────────
 
     /// Ensure a declaration node exists for the given path, returning its index.
-    fn ensure_declaration(&mut self, path: &str) -> usize {
+    fn ensure_declaration(&mut self, path: &str, anchor: &str, home: &str) -> usize {
         if let Some(&idx) = self.declaration_by_path.get(path) {
             return idx;
         }
         let idx = self.graph.declarations.len();
         self.graph.declarations.push(DeclarationNode {
+            anchor: anchor.to_string(),
+            home: home.to_string(),
             path: path.to_string(),
             fixtures: vec![],
         });
@@ -389,11 +400,21 @@ impl GraphBuilder {
         }
 
         for fix_idx in 0..self.graph.fixtures.len() {
-            let source = self.graph.fixtures[fix_idx].source.clone();
-            if source.is_empty() || source.starts_with("<plugin:") {
+            // A fixture with no declaration home is ambient — builtin, framework
+            // or plugin — and CONTEXT.md says those have no anchor, so there is
+            // no file to build a declaration node from.
+            //
+            // This replaces a blacklist of sentinel source strings that listed
+            // `<plugin:` and missed `<builtin>`, so nine builtins fabricated a
+            // declaration node whose path was the literal `<builtin>` and ranked
+            // it first in the Overview by fixture count (#1722).
+            if self.graph.fixtures[fix_idx].home.is_empty() {
                 continue;
             }
-            let declaration_idx = self.ensure_declaration(&source);
+            let source = self.graph.fixtures[fix_idx].source.clone();
+            let anchor = self.graph.fixtures[fix_idx].anchor.clone();
+            let home = self.graph.fixtures[fix_idx].home.clone();
+            let declaration_idx = self.ensure_declaration(&source, &anchor, &home);
             self.graph.fixtures[fix_idx].declaration_idx = Some(declaration_idx);
             // Inverse: declaration -> fixture
             if seen_declaration_fixtures
@@ -534,6 +555,7 @@ mod tests {
         builder.add_fixture_entries(&[entry(&[
             ("name", "db"),
             ("source", "tests/__fixtures__.py"),
+            ("home", "fixtures-file"),
             ("type", "fixture"),
             ("scope", "session"),
             ("autouse", "false"),
@@ -619,6 +641,7 @@ mod tests {
         builder.add_fixture_entries(&[entry(&[
             ("name", "db"),
             ("source", "tests/__fixtures__.py"),
+            ("home", "fixtures-file"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),
@@ -815,6 +838,7 @@ mod tests {
         let fx_entry = entry(&[
             ("name", "db"),
             ("source", "tests/__fixtures__.py"),
+            ("home", "fixtures-file"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),
@@ -883,6 +907,7 @@ mod tests {
             entry(&[
                 ("name", "fixture_a"),
                 ("source", "tests/__fixtures__.py"),
+                ("home", "fixtures-file"),
                 ("type", "fixture"),
                 ("scope", "function"),
                 ("autouse", "false"),
@@ -892,6 +917,7 @@ mod tests {
             entry(&[
                 ("name", "fixture_b"),
                 ("source", "tests/__fixtures__.py"),
+                ("home", "fixtures-file"),
                 ("type", "fixture"),
                 ("scope", "function"),
                 ("autouse", "false"),
@@ -936,6 +962,84 @@ mod tests {
         );
     }
 
+    #[test]
+    fn builtin_fixture_creates_no_declaration_node() {
+        // Arrange — query_bridge emits no `home` for an ambient source.
+        let mut builder = GraphBuilder::new();
+        builder.add_fixture_entries(&[entry(&[
+            ("name", "_TempDirFixture"),
+            ("source", "<builtin>"),
+            ("type", "TempDir"),
+            ("scope", "each"),
+            ("autouse", "false"),
+            ("async", "false"),
+            ("description", ""),
+        ])]);
+
+        // Act
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        // Assert
+        assert!(
+            graph.declarations.is_empty(),
+            "a builtin has no anchor (CONTEXT.md: \"Plugin, framework, and builtin \
+             fixtures have no anchor\"), so it must build no declaration node; before \
+             #1722 the skip list named <plugin: and missed <builtin>, so nine builtins \
+             fabricated a node whose path was the literal \"<builtin>\" and the Overview \
+             ranked it first by fixture count"
+        );
+        assert!(
+            graph.fixtures[0].declaration_idx.is_none(),
+            "an ambient fixture must not point at a declaration node"
+        );
+    }
+
+    #[test]
+    fn declaration_node_carries_anchor_and_home() {
+        // Arrange
+        let mut builder = GraphBuilder::new();
+        builder.add_fixture_entries(&[entry(&[
+            ("name", "db"),
+            ("source", "tests/api/__fixtures__.py"),
+            ("home", "fixtures-file"),
+            ("anchor", "tests/api"),
+            ("home", "fixtures-file"),
+            ("lifetime", "package"),
+            ("scope", "package"),
+            ("type", "fixture"),
+            ("autouse", "false"),
+            ("async", "false"),
+            ("description", ""),
+        ])]);
+
+        // Act
+        builder.resolve_edges();
+        let graph = builder.build();
+
+        // Assert
+        assert_eq!(
+            graph.declarations.len(),
+            1,
+            "a fixture with a declaration home must build exactly one declaration node"
+        );
+        assert_eq!(
+            graph.declarations[0].anchor, "tests/api",
+            "the anchor must reach the node: it is what the Declaration detail view \
+             shows as the B1 boundary the fixtures here are scoped to"
+        );
+        assert_eq!(
+            graph.declarations[0].home, "fixtures-file",
+            "the home must reach the node so the detail view can tell the three \
+             declaration homes apart (ADR-0009 Rule 5)"
+        );
+        assert_eq!(
+            graph.fixtures[0].lifetime, "package",
+            "the declared Lifetime must reach the node; `scope` carries the caching \
+             vocabulary and cannot answer what the user wrote"
+        );
+    }
+
     // ── from_graph (progressive loading) ────────────────────────────────
 
     #[test]
@@ -956,6 +1060,7 @@ mod tests {
         builder2.add_fixture_entries(&[entry(&[
             ("name", "db"),
             ("source", "tests/__fixtures__.py"),
+            ("home", "fixtures-file"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),
@@ -1017,6 +1122,7 @@ mod tests {
         builder.add_fixture_entries(&[entry(&[
             ("name", "existing"),
             ("source", "tests/__fixtures__.py"),
+            ("home", "fixtures-file"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),
@@ -1031,6 +1137,7 @@ mod tests {
         builder2.add_fixture_entries(&[entry(&[
             ("name", "thing"),
             ("source", "tests/__fixtures__.py"),
+            ("home", "fixtures-file"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),
@@ -1144,6 +1251,7 @@ mod tests {
         builder.add_fixture_entries(&[entry(&[
             ("name", "db"),
             ("source", "__fixtures__.py"),
+            ("home", "fixtures-file"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),
@@ -1192,6 +1300,7 @@ mod tests {
             entry(&[
                 ("name", "db"),
                 ("source", "__fixtures__.py"),
+                ("home", "fixtures-file"),
                 ("type", "fixture"),
                 ("scope", "function"),
                 ("autouse", "false"),
@@ -1201,6 +1310,7 @@ mod tests {
             entry(&[
                 ("name", "cache"),
                 ("source", "__fixtures__.py"),
+                ("home", "fixtures-file"),
                 ("type", "fixture"),
                 ("scope", "function"),
                 ("autouse", "false"),
@@ -1236,6 +1346,7 @@ mod tests {
         builder.add_fixture_entries(&[entry(&[
             ("name", "db"),
             ("source", "__fixtures__.py"),
+            ("home", "fixtures-file"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),
@@ -1299,6 +1410,7 @@ mod tests {
         builder.add_fixture_entries(&[entry(&[
             ("name", "db"),
             ("source", "__fixtures__.py"),
+            ("home", "fixtures-file"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),
@@ -1348,6 +1460,7 @@ mod tests {
             entry(&[
                 ("name", "db"),
                 ("source", "__fixtures__.py"),
+                ("home", "fixtures-file"),
                 ("type", "fixture"),
                 ("scope", "function"),
                 ("autouse", "false"),
@@ -1357,6 +1470,7 @@ mod tests {
             entry(&[
                 ("name", "cache"),
                 ("source", "__fixtures__.py"),
+                ("home", "fixtures-file"),
                 ("type", "fixture"),
                 ("scope", "function"),
                 ("autouse", "false"),
@@ -1427,6 +1541,7 @@ mod tests {
         builder2.add_fixture_entries(&[entry(&[
             ("name", "db"),
             ("source", "__fixtures__.py"),
+            ("home", "fixtures-file"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),

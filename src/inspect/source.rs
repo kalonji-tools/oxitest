@@ -85,9 +85,12 @@ mod tests {
 
     fn make_fixture(source: &str) -> FixtureNode {
         FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             name: "fx".to_string(),
             binding_type: String::new(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: source.to_string(),
             is_async: false,
@@ -226,6 +229,8 @@ mod tests {
         use crate::inspect::graph::nodes::DeclarationNode;
         let mut graph = InspectGraph::default();
         graph.declarations.push(DeclarationNode {
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             path: "tests/__fixtures__.py".to_string(),
             fixtures: vec![],
         });

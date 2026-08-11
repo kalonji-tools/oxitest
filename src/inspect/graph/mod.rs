@@ -109,6 +109,11 @@ impl InspectGraph {
             if let Ok(rel) = camino::Utf8Path::new(&f.source).strip_prefix(root) {
                 f.source = rel.to_string();
             }
+            // The anchor is shown beside the source, so an absolute one here
+            // would mix two path conventions in a single detail pane (#1722).
+            if let Ok(rel) = camino::Utf8Path::new(&f.anchor).strip_prefix(root) {
+                f.anchor = rel.to_string();
+            }
         }
         for t in &mut self.tests {
             if let Ok(rel) = camino::Utf8Path::new(&t.node_id).strip_prefix(root) {
@@ -118,6 +123,9 @@ impl InspectGraph {
         for c in &mut self.declarations {
             if let Ok(rel) = camino::Utf8Path::new(&c.path).strip_prefix(root) {
                 c.path = rel.to_string();
+            }
+            if let Ok(rel) = camino::Utf8Path::new(&c.anchor).strip_prefix(root) {
+                c.anchor = rel.to_string();
             }
         }
     }
@@ -256,9 +264,12 @@ mod tests {
     fn node_name_returns_correct_name_for_each_kind() {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             name: "db".to_string(),
             binding_type: String::new(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: String::new(),
             is_async: false,
@@ -281,6 +292,8 @@ mod tests {
             used_by: vec![],
         });
         graph.declarations.push(DeclarationNode {
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             path: "tests/__fixtures__.py".to_string(),
             fixtures: vec![],
         });
@@ -440,6 +453,7 @@ mod tests {
         builder.add_fixture_entries(&[entry(&[
             ("name", "fx"),
             ("source", "__fixtures__.py"),
+            ("home", "fixtures-file"),
             ("type", "str"),
             ("scope", "each"),
             ("autouse", "false"),
@@ -471,9 +485,12 @@ mod tests {
     fn relativize_paths_strips_prefix() {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             name: "db".to_string(),
             binding_type: String::new(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "/home/user/project/__fixtures__.py".to_string(),
             is_async: false,
@@ -492,6 +509,8 @@ mod tests {
             marks: vec![],
         });
         graph.declarations.push(DeclarationNode {
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             path: "/home/user/project/tests/__fixtures__.py".to_string(),
             fixtures: vec![],
         });
@@ -516,9 +535,12 @@ mod tests {
     fn relativize_paths_no_match_unchanged() {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             name: "fx".to_string(),
             binding_type: String::new(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "/other/path/__fixtures__.py".to_string(),
             is_async: false,
@@ -561,9 +583,12 @@ mod tests {
     fn relativize_paths_trailing_slash() {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             name: "db".to_string(),
             binding_type: String::new(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "/home/user/project/__fixtures__.py".to_string(),
             is_async: false,
@@ -585,9 +610,12 @@ mod tests {
     fn relativize_paths_plugin_source_unchanged() {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: String::new(),
+            anchor: String::new(),
+            home: String::new(),
             name: "cache".to_string(),
             binding_type: String::new(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "<plugin:cache>".to_string(),
             is_async: false,

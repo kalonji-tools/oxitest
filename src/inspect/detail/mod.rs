@@ -198,9 +198,12 @@ mod tests {
     fn fixture_graph() -> InspectGraph {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: "tests".to_string(),
+            home: "fixtures-file".to_string(),
             name: "db_session".to_string(),
             binding_type: "fixture".to_string(),
-            scope: "session".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "tests/__fixtures__.py".to_string(),
             is_async: false,
@@ -222,6 +225,8 @@ mod tests {
             marks: vec![],
         });
         graph.declarations.push(DeclarationNode {
+            anchor: "tests".to_string(),
+            home: "fixtures-file".to_string(),
             path: "tests/__fixtures__.py".to_string(),
             fixtures: vec![0],
         });
@@ -234,9 +239,12 @@ mod tests {
 
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: "tests".to_string(),
+            home: "fixtures-file".to_string(),
             name: "db_session".to_string(),
             binding_type: "fixture".to_string(),
-            scope: "session".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "tests/__fixtures__.py".to_string(),
             is_async: true,
@@ -260,9 +268,12 @@ mod tests {
     fn test_graph() -> InspectGraph {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: "tests".to_string(),
+            home: "fixtures-file".to_string(),
             name: "db_session".to_string(),
             binding_type: "fixture".to_string(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: String::new(),
             is_async: false,
@@ -343,9 +354,12 @@ mod tests {
     fn declaration_graph() -> InspectGraph {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: "tests".to_string(),
+            home: "fixtures-file".to_string(),
             name: "db".to_string(),
             binding_type: "fixture".to_string(),
-            scope: "session".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "tests/__fixtures__.py".to_string(),
             is_async: false,
@@ -355,9 +369,12 @@ mod tests {
             plugin_idx: None,
         });
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: "tests".to_string(),
+            home: "fixtures-file".to_string(),
             name: "cache".to_string(),
             binding_type: "fixture".to_string(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "tests/__fixtures__.py".to_string(),
             is_async: false,
@@ -367,6 +384,8 @@ mod tests {
             plugin_idx: None,
         });
         graph.declarations.push(DeclarationNode {
+            anchor: "tests".to_string(),
+            home: "fixtures-file".to_string(),
             path: "tests/__fixtures__.py".to_string(),
             fixtures: vec![0, 1],
         });
@@ -377,9 +396,12 @@ mod tests {
     fn plugin_graph() -> InspectGraph {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: String::new(),
+            anchor: String::new(),
+            home: String::new(),
             name: "std_capture".to_string(),
             binding_type: "fixture".to_string(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "<plugin:capture>".to_string(),
             is_async: false,
@@ -707,9 +729,12 @@ mod tests {
             });
         }
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: "tests".to_string(),
+            home: "fixtures-file".to_string(),
             name: "shared_fixture".to_string(),
             binding_type: "fixture".to_string(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "__fixtures__.py".to_string(),
             is_async: false,
@@ -1073,9 +1098,12 @@ mod snapshot_tests {
     fn snap_detail_fixture() {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: "tests".to_string(),
+            home: "fixtures-file".to_string(),
             name: "db_session".to_string(),
             binding_type: "fixture".to_string(),
-            scope: "session".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "tests/__fixtures__.py".to_string(),
             is_async: false,
@@ -1097,6 +1125,8 @@ mod snapshot_tests {
             marks: vec![],
         });
         graph.declarations.push(DeclarationNode {
+            anchor: "tests".to_string(),
+            home: "fixtures-file".to_string(),
             path: "tests/__fixtures__.py".to_string(),
             fixtures: vec![0],
         });
@@ -1116,9 +1146,12 @@ mod snapshot_tests {
     fn snap_detail_test() {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: "tests".to_string(),
+            home: "fixtures-file".to_string(),
             name: "db_session".to_string(),
             binding_type: "fixture".to_string(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: String::new(),
             is_async: false,
@@ -1226,9 +1259,12 @@ mod snapshot_tests {
     fn snap_detail_declaration() {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: "tests".to_string(),
+            home: "fixtures-file".to_string(),
             name: "db".to_string(),
             binding_type: "fixture".to_string(),
-            scope: "session".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "tests/__fixtures__.py".to_string(),
             is_async: false,
@@ -1238,6 +1274,8 @@ mod snapshot_tests {
             plugin_idx: None,
         });
         graph.declarations.push(DeclarationNode {
+            anchor: "tests".to_string(),
+            home: "fixtures-file".to_string(),
             path: "tests/__fixtures__.py".to_string(),
             fixtures: vec![0],
         });
@@ -1257,9 +1295,12 @@ mod snapshot_tests {
     fn snap_detail_plugin() {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: String::new(),
+            anchor: String::new(),
+            home: String::new(),
             name: "std_capture".to_string(),
             binding_type: "fixture".to_string(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "<plugin:capture>".to_string(),
             is_async: false,
@@ -1292,9 +1333,12 @@ mod snapshot_tests {
     fn snap_detail_fixture_broken_edge() {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: "tests".to_string(),
+            home: "fixtures-file".to_string(),
             name: "db_session".to_string(),
             binding_type: "fixture".to_string(),
-            scope: "session".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "tests/__fixtures__.py".to_string(),
             is_async: true,
