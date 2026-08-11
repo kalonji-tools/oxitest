@@ -87,9 +87,13 @@ fn detect_unused_fixtures(graph: &InspectGraph, signals: &mut Vec<Signal>) {
         .fixtures
         .iter()
         .enumerate()
-        .filter(|(_, f)| {
-            f.consumers.is_empty() && !f.autouse && f.source.ends_with("__fixtures__.py")
-        })
+        // `home` is non-empty for exactly the fixtures a user declared, across
+        // all three of ADR-0009 Rule 5's homes. It replaces a filename test
+        // that asked `ends_with("conftest.py")` — unsatisfiable after #1720,
+        // so the signal could never fire — and which a rename would have
+        // narrowed to `__fixtures__.py`, silently skipping declarations in an
+        // `__init__.py` or inline in a test module (#1722).
+        .filter(|(_, f)| f.consumers.is_empty() && !f.autouse && !f.home.is_empty())
         .map(|(i, _)| NodeRef {
             kind: NodeKind::Fixture,
             index: i,
@@ -207,9 +211,12 @@ mod tests {
 
     fn make_fixture(name: &str, autouse: bool, consumers: Vec<NodeRef>) -> FixtureNode {
         FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             name: name.to_string(),
             binding_type: String::new(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse,
             source: "__fixtures__.py".to_string(),
             is_async: false,
@@ -244,6 +251,67 @@ mod tests {
         );
     }
 
+    #[test]
+    fn unused_fixture_detected_in_all_three_declaration_homes() {
+        // Arrange — one orphan per home. A filename filter sees only the first.
+        let mut graph = InspectGraph::default();
+        graph.declarations.push(DeclarationNode {
+            anchor: "tests".to_string(),
+            home: "fixtures-file".to_string(),
+            path: "tests/__fixtures__.py".to_string(),
+            fixtures: vec![0, 1, 2],
+        });
+        for (name, home, source) in [
+            ("orphan_a", "fixtures-file", "tests/__fixtures__.py"),
+            ("orphan_b", "package-init", "tests/__init__.py"),
+            ("orphan_c", "inline", "tests/test_thing.py"),
+        ] {
+            let mut fixture = make_fixture(name, false, vec![]);
+            fixture.home = home.to_string();
+            fixture.source = source.to_string();
+            graph.fixtures.push(fixture);
+        }
+
+        // Act
+        let signals = detect_signals(&graph);
+        let unused: Vec<_> = signals
+            .iter()
+            .filter(|s| s.kind == SignalKind::UnusedFixtures)
+            .collect();
+
+        // Assert
+        assert_eq!(
+            unused[0].affected.len(),
+            3,
+            "all three of ADR-0009 Rule 5's declaration homes must be checked for \
+             orphans; the predicate this replaced tested the source filename, so it \
+             saw __fixtures__.py and silently skipped an __init__.py declaration and \
+             an inline one (#1722)"
+        );
+    }
+
+    #[test]
+    fn ambient_fixture_is_never_reported_unused() {
+        // Arrange — a builtin has no consumers in the graph because its
+        // consumers are wired at runtime, not statically.
+        let mut graph = InspectGraph::default();
+        let mut builtin = make_fixture("_TempDirFixture", false, vec![]);
+        builtin.home = String::new();
+        builtin.source = "<builtin>".to_string();
+        builtin.declaration_idx = None;
+        graph.fixtures.push(builtin);
+
+        // Act
+        let signals = detect_signals(&graph);
+
+        // Assert
+        assert!(
+            !signals.iter().any(|s| s.kind == SignalKind::UnusedFixtures),
+            "an ambient fixture has runtime-wired consumers the graph cannot see, so \
+             reporting it as unused would be a false positive on every project"
+        );
+    }
+
     // ── Test: unused fixture is detected ─────────────────────────────────────
 
     #[test]
@@ -251,6 +319,8 @@ mod tests {
         let mut graph = InspectGraph::default();
         // Declaration node so declaration_idx=Some(0) is valid.
         graph.declarations.push(DeclarationNode {
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             path: "__fixtures__.py".to_string(),
             fixtures: vec![],
         });
@@ -308,9 +378,12 @@ mod tests {
     fn builtin_fixture_not_flagged() {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: String::new(),
+            anchor: String::new(),
+            home: String::new(),
             name: "_TempDir".to_string(),
             binding_type: String::new(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "<builtin>".to_string(),
             is_async: false,
@@ -320,9 +393,12 @@ mod tests {
             plugin_idx: None,
         });
         graph.fixtures.push(FixtureNode {
+            lifetime: String::new(),
+            anchor: String::new(),
+            home: String::new(),
             name: "cache".to_string(),
             binding_type: String::new(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "<plugin:cache>".to_string(),
             is_async: false,
@@ -351,6 +427,8 @@ mod tests {
         let mut graph = InspectGraph::default();
         // Declaration node so declaration_idx=Some(0) is valid.
         graph.declarations.push(DeclarationNode {
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             path: "__fixtures__.py".to_string(),
             fixtures: vec![],
         });

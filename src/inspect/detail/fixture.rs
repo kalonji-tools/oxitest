@@ -9,6 +9,25 @@ use super::styles::{
     section_header, sigil_style,
 };
 
+/// The tier row to show a user for this fixture, as `(label, value)`.
+///
+/// A declared fixture reports the `Lifetime` its declaration wrote, because
+/// that is the word the user typed. An ambient fixture — builtin, framework or
+/// plugin — declares none, and `session` is a `Scope` that no `Lifetime` maps
+/// to, so its caching tier is the only answer available.
+///
+/// **The label moves with the value.** Rendering a `Scope` word under the
+/// `lifetime` label would print `lifetime: each`, presenting one vocabulary as
+/// the other — the same confusion this row exists to remove, inverted. One
+/// word, one meaning (#1722).
+fn tier_row(fixture: &super::super::graph::nodes::FixtureNode) -> (&str, &str) {
+    if fixture.lifetime.is_empty() {
+        ("scope", &fixture.scope)
+    } else {
+        ("lifetime", &fixture.lifetime)
+    }
+}
+
 pub fn render_fixture<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
     let fixture = &graph.fixtures[node_ref.index];
     let mut lines = vec![
@@ -17,7 +36,10 @@ pub fn render_fixture<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<
             Span::raw(format!(" {}", fixture.name)),
         ]),
         Line::from(""),
-        field_line("scope", &fixture.scope),
+        {
+            let (label, value) = tier_row(fixture);
+            field_line(label, value)
+        },
         field_line("binding", &fixture.binding_type),
         bool_field("autouse", fixture.autouse),
         bool_field("async", fixture.is_async),
@@ -74,7 +96,10 @@ pub fn preview_fixture<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line
             Span::raw(format!(" {}", fixture.name)),
         ]),
         Line::from(""),
-        field_line("scope", &fixture.scope),
+        {
+            let (label, value) = tier_row(fixture);
+            field_line(label, value)
+        },
         field_line("source", &fixture.source),
     ];
 

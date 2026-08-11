@@ -194,9 +194,12 @@ mod tests {
     /// Build a fixture node with the given name and a pre-set consumer list.
     fn make_fixture(name: &str, consumers: Vec<NodeRef>) -> FixtureNode {
         FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             name: name.to_string(),
             binding_type: "fixture".to_string(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "tests/__fixtures__.py".to_string(),
             is_async: false,
@@ -231,6 +234,8 @@ mod tests {
     /// Build a declaration node with a fixture index list.
     fn make_declaration(path: &str, fixtures: Vec<usize>) -> DeclarationNode {
         DeclarationNode {
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             path: path.to_string(),
             fixtures,
         }
@@ -553,14 +558,19 @@ mod tests {
         let mut graph = InspectGraph::default();
         // Declaration node needed so declaration_idx is valid.
         graph.declarations.push(DeclarationNode {
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             path: "__fixtures__.py".to_string(),
             fixtures: vec![],
         });
         // Unused declaration fixture (no consumers, not autouse) triggers UnusedFixtures signal.
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             name: "orphan".to_string(),
             binding_type: String::new(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "__fixtures__.py".to_string(),
             is_async: false,
@@ -587,9 +597,12 @@ mod tests {
     fn signals_included_in_item_count() {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             name: "orphan".to_string(),
             binding_type: String::new(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: String::new(),
             is_async: false,
@@ -621,13 +634,18 @@ mod tests {
     fn item_at_returns_signal_variant_for_signal_index() {
         let mut graph = InspectGraph::default();
         graph.declarations.push(DeclarationNode {
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             path: "__fixtures__.py".to_string(),
             fixtures: vec![],
         });
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             name: "orphan".to_string(),
             binding_type: String::new(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "__fixtures__.py".to_string(),
             is_async: false,
@@ -658,13 +676,18 @@ mod tests {
     fn node_ref_at_returns_first_affected_for_signal() {
         let mut graph = InspectGraph::default();
         graph.declarations.push(DeclarationNode {
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             path: "__fixtures__.py".to_string(),
             fixtures: vec![],
         });
         graph.fixtures.push(FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             name: "orphan".to_string(),
             binding_type: String::new(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: "__fixtures__.py".to_string(),
             is_async: false,

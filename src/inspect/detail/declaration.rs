@@ -14,6 +14,13 @@ pub fn render_declaration<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<L
             Span::raw(format!(" {}", declaration.path)),
         ]),
         Line::from(""),
+        // Which of ADR-0009 Rule 5's three homes this is, and the anchor
+        // package its fixtures are scoped to (the B1 boundary). An
+        // unrecognised home renders verbatim: Python is the single writer and
+        // the set is closed, so an unknown value is a bug in the writer, and
+        // showing it surfaces that bug where dropping it would hide it (#1722).
+        field_line("home", &declaration.home),
+        field_line("anchor", &declaration.anchor),
         field_line("fixtures_count", &declaration.fixtures.len().to_string()),
     ];
 

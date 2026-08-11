@@ -94,9 +94,12 @@ mod tests {
 
     fn fixture(name: &str) -> FixtureNode {
         FixtureNode {
+            lifetime: "function".to_string(),
+            anchor: String::new(),
+            home: "fixtures-file".to_string(),
             name: name.to_string(),
             binding_type: String::new(),
-            scope: "function".to_string(),
+            scope: "each".to_string(),
             autouse: false,
             source: String::new(),
             is_async: false,
