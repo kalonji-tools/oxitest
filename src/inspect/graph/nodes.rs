@@ -19,7 +19,7 @@ pub struct FixtureNode {
     // Edges
     /// Node references for tests and fixtures that consume this fixture.
     pub consumers: Vec<super::NodeRef>,
-    /// Index into `InspectGraph::declarations` if this fixture lives in a declaration.
+    /// Index into `InspectGraph::declarations` if this fixture lives in a declaration file.
     pub declaration_idx: Option<usize>,
     /// Index into `InspectGraph::plugins` if this fixture is plugin-provided.
     pub plugin_idx: Option<usize>,
