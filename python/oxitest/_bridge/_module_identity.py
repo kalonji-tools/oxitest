@@ -29,7 +29,6 @@ spelling (#1957, #2018).
 
 from __future__ import annotations
 
-import keyword
 import os
 import sys
 from functools import lru_cache
@@ -80,7 +79,13 @@ def _candidate_parts(path: Path, rootdir: str) -> tuple[str, ...] | None:
     if parts[-1] == "__init__":
         # 'pkg.__init__' would build a second copy of the package 'pkg'.
         return None
-    if any(not part.isidentifier() or keyword.iskeyword(part) for part in parts):
+    # Keywords are deliberately allowed. `lambda.test_mod` cannot be written
+    # in an import statement, but nothing here writes one: the name is a
+    # `sys.modules` key and a `__package__`, both plain strings, and
+    # `importlib` addresses them by string. Refusing a keyword segment would
+    # only send an ordinary `lambda/` package back to its synthesized name,
+    # which has no parent and so cannot anchor a relative import.
+    if any(not part.isidentifier() for part in parts):
         return None
     return parts
 
