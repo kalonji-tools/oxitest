@@ -1109,8 +1109,7 @@ fn reject_inprocess_inside_package(
                  inprocess tests run on the main process while the rest of the \
                  package runs on a worker, so the package fixture would be built \
                  once in each — the exactly-once guarantee cannot hold.\n\
-                 Hint: drop the inprocess mark, or move the fixture to \
-                 lifetime=\"module\".",
+                 Hint: drop the inprocess mark.",
                 item.node_id,
             )))
         })
