@@ -20,7 +20,11 @@ pub fn suggest_fix(outcome: &TestOutcome) -> Option<String> {
         );
     }
 
-    if message.contains("SharedFixtureMutationError") || message.contains("shared fixture") {
+    // Matched on the error class alone. The prose clause that also matched
+    // "shared fixture" collected _async_orchestrator.py's lifetime-mismatch
+    // error, which this hint does not answer (#2036). The class name always
+    // reaches here: the rendered message is "<ErrorClass>: <message>".
+    if message.contains("SharedFixtureMutationError") {
         return Some(
             "Shared fixtures are frozen to prevent cross-test mutation. \
              Use `shared=False` for a mutable per-test copy."
@@ -99,6 +103,33 @@ mod tests {
             .source("def test(db):")
             .build();
         assert!(suggest_fix(&outcome).is_none());
+    }
+
+    #[test]
+    fn no_suggestion_for_async_lifetime_mismatch() {
+        // _async_orchestrator.py rejects a fixture that depends on an async
+        // fixture of a narrower lifetime. This hint answers a frozen-value
+        // mutation, not a lifetime mismatch (#2036).
+        //
+        // Both spellings are asserted on purpose. The first is the message that
+        // shipped before #2036: it carries the phrase "shared fixture", which
+        // the retired prose clause matched, so it is the only input that can
+        // detect the clause coming back. The second is what the same function
+        // emits today, and is the live path. Dropping either one leaves a real
+        // route uncovered.
+        for message in [
+            "Error in fixture 'outer': shared fixture 'outer' cannot depend on \
+             non-shared async fixture 'inner' — lifetime mismatch",
+            "Error in fixture 'outer': fixture 'outer' cannot depend on \
+             async fixture 'inner' — lifetime mismatch",
+        ] {
+            let outcome = TestOutcome::error(message)
+                .file("test.py")
+                .lineno(5)
+                .source("def test(outer):")
+                .build();
+            assert!(suggest_fix(&outcome).is_none());
+        }
     }
 
     #[test]
