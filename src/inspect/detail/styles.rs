@@ -102,3 +102,26 @@ pub fn preview_edges<'a>(
         )));
     }
 }
+
+/// Render one autouse row: the fixture sigil, its name, and its Lifetime.
+///
+/// The tier is a column rather than a labelled field, so the rows line up and
+/// read as a list. The value is always a `Lifetime` — only a `ModuleSource` or
+/// a `PluginModuleSource` can carry `autouse`, and both declare one (#1722).
+pub fn autouse_line<'a>(name: &str, lifetime: &str) -> Line<'a> {
+    Line::from(vec![
+        Span::raw("    "),
+        Span::styled("F", sigil_style()),
+        Span::raw(format!(" {name:<24} ")),
+        Span::styled(lifetime.to_string(), label_style()),
+    ])
+}
+
+/// Render an indented status row inside a section — "none", "loading…" — for
+/// a section that renders even when it has no rows to show.
+pub fn note_line<'a>(text: &str) -> Line<'a> {
+    Line::from(vec![
+        Span::raw("    "),
+        Span::styled(text.to_string(), value_style()),
+    ])
+}

@@ -42,6 +42,23 @@ pub fn fixture_entries(
     result.extract()
 }
 
+/// Return the autouse fixtures that apply to each module, in firing order.
+///
+/// Each map has `module_path`, `fixture_names` and `lifetimes`, the last two
+/// comma-separated and index-aligned. Keyed on the module because
+/// `get_autouse` is: every test in one module has the same set.
+pub fn autouse_entries(
+    session: &FixtureSession,
+    py: Python<'_>,
+    test_files: &[Utf8PathBuf],
+) -> PyResult<Vec<HashMap<String, String>>> {
+    let obj = session.as_py_object(py);
+    let module = py.import("oxitest._bridge.query_bridge")?;
+    let paths: Vec<&str> = test_files.iter().map(|p| p.as_str()).collect();
+    let result = module.call_method1("autouse_entries", (paths, obj))?;
+    result.extract()
+}
+
 /// Return plugin entries as a list of field maps for the query engine.
 pub fn plugin_entries(
     session: &FixtureSession,

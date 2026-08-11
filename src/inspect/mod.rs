@@ -202,6 +202,8 @@ pub fn spawn_phase2(args: Phase2Args, tx: mpsc::Sender<Phase2Data>) {
                 let fixture_dep_raw =
                     crate::query::bridge::test_fixture_deps(&session, py, &test_files)
                         .map_err(|e| e.to_string())?;
+                let autouse_raw = crate::query::bridge::autouse_entries(&session, py, &test_files)
+                    .map_err(|e| e.to_string())?;
 
                 let fixture_entries = fixture_raw
                     .into_iter()
@@ -215,9 +217,14 @@ pub fn spawn_phase2(args: Phase2Args, tx: mpsc::Sender<Phase2Data>) {
                     .into_iter()
                     .map(|fields| QueryEntry { fields })
                     .collect();
+                let autouse_entries = autouse_raw
+                    .into_iter()
+                    .map(|fields| QueryEntry { fields })
+                    .collect();
 
                 Ok(Phase2Data {
                     fixture_entries,
+                    autouse_entries,
                     plugin_entries,
                     fixture_dep_entries,
                 })

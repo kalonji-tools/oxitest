@@ -2,14 +2,19 @@
 
 use ratatui::text::{Line, Span};
 
+use crate::inspect::app::FixtureDataState;
 use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef};
 
 use super::styles::{
-    bool_field, broken_edge_line, broken_edges_for, connection_line, field_line, preview_edges,
-    section_header, sigil_style,
+    autouse_line, bool_field, broken_edge_line, broken_edges_for, connection_line, field_line,
+    note_line, preview_edges, section_header, sigil_style,
 };
 
-pub fn render_test<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
+pub fn render_test<'a>(
+    graph: &InspectGraph,
+    node_ref: &NodeRef,
+    state: FixtureDataState,
+) -> Vec<Line<'a>> {
     let test = &graph.tests[node_ref.index];
     let mut lines = vec![
         Line::from(vec![
@@ -43,6 +48,36 @@ pub fn render_test<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>
         }
         for edge in &broken {
             lines.push(broken_edge_line(&edge.qualifier, &edge.binding_type));
+        }
+    }
+
+    // Autouse fixtures that apply to this test's module.
+    //
+    // Always rendered, unlike the sections around it. ADR-0009 Rule 7 keeps
+    // autouse specifically because "the invisibility concern ... is solved by
+    // tooling", and a section that disappears when it has nothing to say is
+    // indistinguishable from a tool that never looked. The three states are
+    // distinguishable for the same reason: "none" must never stand in for
+    // "not measured" (#1722).
+    lines.push(Line::from(""));
+    lines.push(section_header("Autouse (applies here)"));
+    match state {
+        FixtureDataState::Loading => lines.push(note_line("loading…")),
+        FixtureDataState::Unavailable => {
+            lines.push(note_line("unavailable — fixture data did not load"));
+        }
+        FixtureDataState::Ready => {
+            // The `[param]` suffix always sits after the `::`, so the first segment
+            // is the module either way.
+            let module = test.node_id.split("::").next().unwrap_or("");
+            match graph.autouse_by_module.get(module) {
+                Some(fixtures) if !fixtures.is_empty() => {
+                    for fixture in fixtures {
+                        lines.push(autouse_line(&fixture.name, &fixture.lifetime));
+                    }
+                }
+                _ => lines.push(note_line("none")),
+            }
         }
     }
 
