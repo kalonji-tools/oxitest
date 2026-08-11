@@ -141,8 +141,10 @@ tree**. That is legal: no test can see two anchors that derive the same one.
 
 A fixture is usable only by tests in its anchor package or a descendant of it
 (ADR-0009 Rule 3, the "B1 boundary"), and the same rule governs a fixture's own
-dependencies against its own anchor. Violations are refused at access time —
-see the errors below.
+dependencies against its own anchor. A violation written as a literal `fx.`
+access is refused at collection, before any test runs; one oxitest cannot see
+until it executes — `getattr(fx, name)` — is refused at access time. See the
+errors below.
 
 The rules, the worked tree, and the rendered diagnostic are in
 [Use fixtures](../../how-to/use-fixtures.md#understand-fixture-visibility-the-b1-boundary).

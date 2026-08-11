@@ -37,9 +37,11 @@ Two cases stay at exit `0`, deliberately:
 
 ## Fixture wiring errors
 
-Most sources of exit `4` are refused before any test runs. A **fixture wiring error** is not: it is found while a test runs, because a fixture is resolved at the moment the test asks for it.
+A **fixture wiring error** is refused at whichever of two points can catch it, and the exit code is `4` either way — the code is fixed by the *class* of the error, not by when oxitest detects it.
 
-The run is **not** stopped. Every test still executes and still reports its own outcome. Only the final exit code changes:
+A `fx.` access written literally is read out of the test body during collection, so it is refused **before any test runs** and the whole run stops. An access oxitest cannot see until it executes — `getattr(fx, name)` — is found while a test runs, because a fixture is resolved at the moment the test asks for it.
+
+In that second case the run is **not** stopped. Every test still executes and still reports its own outcome. Only the final exit code changes:
 
 ```bash
 oxitest                      # exit 4 — "3 errors · 1 passed"

@@ -296,6 +296,15 @@ both outside. The same check runs when a fixture resolves *its own*
 dependencies, against the fixture's anchor rather than the calling test's
 location.
 
+**When it fires.** An access written literally — `fx.api.api_conn` — is read
+out of the test body before the run starts, so the error refuses collection and
+no test executes. An access oxitest cannot see until it runs, such as
+`getattr(fx, name)`, reports as an errored test instead. Both exit `4`. The
+first form is refused even when the code holding it would never have run: a
+violation inside a skipped test, an `xfail`, or a branch that is never taken is
+still a violation, and reporting it only when the line happens to execute meant
+an `xfail` could absorb it and report the run as passing.
+
 This is deliberately a distinct error from `FixtureNotFoundError`. Reporting
 "not found" for a correctly-spelled name would send you hunting for a typo that
 is not there. The stable code `fixture-boundary` is part of the message, so
