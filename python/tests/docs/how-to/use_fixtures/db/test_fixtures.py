@@ -1,22 +1,13 @@
-"""Test functions for the use-fixtures how-to guide."""
+"""Test functions for the use-fixtures how-to guide.
+
+These sit in the `db` anchor package so that `fx.db.conn` is visible to them.
+"""
 
 import oxitest
-from oxitest import Fixture, Fixtures
+from oxitest import Fixtures
 
 
 # fmt: off
-# --8<-- [start:inject-fixture]
-def test_sum(sample_data: Fixture[list[int]]) -> None:
-    assert sum(sample_data) == 15, "fixture should inject sample_data"
-# --8<-- [end:inject-fixture]
-
-# --8<-- [start:namespace-test]
-def test_api_writes_to_db(fx: Fixtures) -> None:
-    response = fx.http.client.post("/users", json={"name": "Alice"})
-    row = fx.db.conn.query("SELECT name FROM users WHERE id = ?", response.json()["id"])
-    assert row["name"] == "Alice", "should read back written data"
-# --8<-- [end:namespace-test]
-
 # --8<-- [start:fx-oxi-test]
 def test_export(fx: Fixtures) -> None:
     result = fx.db.conn.export()
