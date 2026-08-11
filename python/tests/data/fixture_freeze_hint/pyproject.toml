@@ -1,0 +1,3 @@
+[tool.oxitest]
+testpaths = ["fixture_freeze_hint"]
+python_files = ["test_*.py"]
