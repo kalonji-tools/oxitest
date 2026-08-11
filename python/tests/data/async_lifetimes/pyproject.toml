@@ -5,4 +5,3 @@ strict = "abort"
 # Arrangement would pin modules to the main process, collapsing a parallel
 # run to one PID. Off so the module-lifetime assertions stay meaningful if
 # this project is ever exercised through the worker path.
-auto_arrange = false

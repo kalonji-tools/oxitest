@@ -110,8 +110,8 @@ fn declaring_package_dirs(fixture_modules: &[types::FixtureModule]) -> Vec<Utf8P
 
 /// Move any arranged group inside a declaring subtree back to the parallel set.
 ///
-/// Auto-arrange (on by default — `auto_arrange_threshold` is 70) groups modules
-/// by shared-fixture usage and runs those groups serially on the main process,
+/// Arrangement groups the modules whose tests named a fixture in `@oxi.arrange`
+/// and runs those groups serially on the main process,
 /// while everything else goes to workers. That splits a package-lifetime
 /// subtree across two phases, and phases use different fixture sessions, so the
 /// fixture is built once in each — the same duplicate `@oxi.mark.inprocess`
@@ -388,25 +388,6 @@ fn emit_scheduling_diagnostics(
                     total_tests, ctx.cfg.exec.min_parallel_tests,
                 );
             }
-            // Check if this was an auto-arrange fallback.
-            if !plan.inprocess_groups.is_empty() && ctx.cfg.exec.auto_arrange_threshold > 0 {
-                {
-                    let threshold = ctx.cfg.exec.auto_arrange_threshold;
-                    let arranged_count: usize = plan
-                        .arranged_groups
-                        .iter()
-                        .flat_map(|g| g.iter())
-                        .map(|g| g.items.len())
-                        .sum();
-                    // If there are inprocess groups but no arranged groups, this was a
-                    // threshold fallback. Recalculate ratio for diagnostic.
-                    if arranged_count == 0 && !plan.parallel_groups.is_empty() {
-                        // This is a fallback-to-serial case from arrange threshold.
-                        // The parallel_groups contain the collapsed groups.
-                    }
-                    let _ = threshold; // suppress unused
-                }
-            }
         }
         ExecutionStrategy::Parallel { worker_count } => {
             let force_parallel = matches!(
@@ -614,7 +595,6 @@ fn execute_phases(
         ctx.cfg.worker_count(),
         ctx.cfg.exec.spawn_overhead.as_f64(),
         ctx.cfg.exec.min_parallel_tests,
-        ctx.cfg.exec.auto_arrange_threshold,
         &arranged_fixture_groups,
         estimated,
         cpu_count,
@@ -703,8 +683,6 @@ fn execute_phases(
 
             // Run arranged fixture groups serially on main process.
             if !plan.arranged_groups.is_empty() {
-                // Auto-arrange disabled warning is not needed here because
-                // arranged_groups is only populated when auto_arrange is active.
                 let mut serial = ExecutionDispatch::serial_from_ctx(py, ctx);
                 for group_modules in plan.arranged_groups {
                     if result.interrupted {

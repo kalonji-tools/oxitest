@@ -28,8 +28,9 @@ _PACKAGES = ("pkg_a", "pkg_b", "pkg_c", "pkg_d")
 def _write_multi_package_project(root: Path, log: Path, *, cross_package: bool) -> None:
     """A project of N packages, each with its own ``__fixtures__.py``.
 
-    ``auto_arrange = false`` is what pushes modules into workers; arrangement
-    otherwise pins them to the main process and the run never fans out.
+    Nothing here arranges, so no component exists and the modules reach
+    workers; an arranged component would pin them to the main process and the
+    run would never fan out (#1848).
 
     Each fixture records the PID that built it, so a test can prove the run
     genuinely used more than one process before asserting anything about
@@ -37,10 +38,7 @@ def _write_multi_package_project(root: Path, log: Path, *, cross_package: bool) 
     """
     testpaths = ", ".join(f'"{p}"' for p in _PACKAGES)
     (root / "pyproject.toml").write_text(
-        "[tool.oxitest]\n"
-        f"testpaths = [{testpaths}]\n"
-        'python_files = ["test_*.py"]\n'
-        "auto_arrange = false\n",
+        f'[tool.oxitest]\ntestpaths = [{testpaths}]\npython_files = ["test_*.py"]\n',
         encoding="utf-8",
     )
     for pkg in _PACKAGES:

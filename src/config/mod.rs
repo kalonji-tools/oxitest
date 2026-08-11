@@ -304,8 +304,6 @@ pub struct ExecConfig {
     pub retries: usize,
     /// Delay in seconds between retries.
     pub retries_delay_secs: u64,
-    /// Auto-arrange threshold percentage (0 = disabled).
-    pub auto_arrange_threshold: u8,
     /// Phase-2 (Python-tier) loading timeout for `oxitest inspect` in seconds.
     pub inspect_timeout_secs: u64,
 }
@@ -321,7 +319,6 @@ impl Default for ExecConfig {
             min_parallel_tests: 100,
             retries: 0,
             retries_delay_secs: 0,
-            auto_arrange_threshold: 70,
             inspect_timeout_secs: 30,
         }
     }
@@ -1367,12 +1364,6 @@ mod tests {
     fn test_show_internals_default_is_false() {
         let cfg = Config::default();
         assert!(!cfg.output.show_internals);
-    }
-
-    #[test]
-    fn test_auto_arrange_default_is_70() {
-        let cfg = Config::default();
-        assert_eq!(cfg.exec.auto_arrange_threshold, 70);
     }
 
     #[test]

@@ -2,4 +2,3 @@
 testpaths = ["slice9_autouse_optout"]
 python_files = ["test_*.py"]
 strict = "abort"
-auto_arrange = false

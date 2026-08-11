@@ -86,9 +86,10 @@ _MULTI_GROUP_MODULES = ("a", "b", "c", "d")
 def _write_multi_group_project(root: Path, log: Path) -> None:
     """Four single-test modules, forced into four separate task groups.
 
-    ``auto_arrange = false`` stops the arrange stage pinning modules to the
-    main process, and ``min_parallel_tests = 1`` stops a small suite falling
-    back to serial. Four groups over two workers is what makes at least one
+    Nothing here arranges, so no component exists and the arrange stage
+    cannot pin these modules to the main process (#1848).
+    ``min_parallel_tests = 1`` stops a small suite falling back to serial.
+    Four groups over two workers is what makes at least one
     worker drain more than one group — the shape that only exists at all once
     a worker's session spans task groups (#1777).
     """
@@ -112,7 +113,6 @@ def _write_multi_group_project(root: Path, log: Path) -> None:
         "[tool.oxitest]\n"
         'testpaths = ["pkg"]\n'
         'python_files = ["test_*.py"]\n'
-        "auto_arrange = false\n"
         "min_parallel_tests = 1\n",
         encoding="utf-8",
     )
@@ -241,8 +241,9 @@ def test_shared_fixture_teardown_runs_in_worker(tmp: TempDir) -> None:
 
     Was a ``shared=True`` fixture with ``auto_arrange = false``, which the
     docstring explained was required: modules using a shared fixture were
-    pinned to the main process by the arrange stage, masking this entirely.
-    Neither is needed now. ``process`` is per worker process by definition, so
+    pinned to the main process by the inference the arrange stage used to run,
+    masking this entirely. Neither is needed now, and since #1848 neither
+    exists. ``process`` is per worker process by definition, so
     there is no inference to disable — #1720 retires both the tier and the key.
     """
     root = Path(tmp) / "proj"
@@ -286,9 +287,10 @@ def test_shared_fixture_teardown_runs_in_worker(tmp: TempDir) -> None:
     teardowns = [e for e in events if e.startswith("TEARDOWN")]
     pids = {e.split()[1] for e in setups}
     assert len(pids) > 1, (
-        f"the fixture was built in one process ({pids}) — auto_arrange=false "
-        "should have pushed these modules into workers; if arrangement now "
-        "pins them to the main process anyway, the teardown assertion below "
+        f"the fixture was built in one process ({pids}) — nothing here "
+        "arranges, so no component exists and these modules should reach "
+        "workers; if arrangement pins them to the main process anyway, the "
+        "teardown assertion below "
         f"passes on the serial path and proves nothing\nstdout:\n{out}"
     )
     assert len(teardowns) == len(setups), (
