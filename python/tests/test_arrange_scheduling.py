@@ -170,13 +170,20 @@ def test_{n}(fx: Fixtures) -> None:
 _FORM_ARRANGE_TYPE_BUILTIN = """\
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import oxitest as oxi
 from oxitest import TempDir
 
 
 @oxi.arrange(TempDir)
 def test_{n}() -> None:
-    assert True, "the type entry is accepted; only its scheduling half is inert"
+    with Path(f"{{os.environ['ARRANGE_TIERS_LOG']}}.{{os.getpid()}}").open(
+        "a", encoding="utf-8"
+    ) as fh:
+        fh.write(f"USE type_entry {{os.getpid()}} -\\n")
+    assert True, "the type entry must co-locate its tests, as a name entry does"
 """
 
 # A module that never touches the fixture, so it stays outside every component.
@@ -523,31 +530,110 @@ def test_arrange_through_a_helper_groups_the_same(tmp: TempDir) -> None:
     )
 
 
-def test_type_entry_arrange_does_not_group_yet(tmp: TempDir) -> None:
-    """A known gap, pinned so it cannot change silently. Filed as a follow-up.
+def test_a_type_entry_co_locates_its_tests(tmp: TempDir) -> None:
+    """#2045: the type spelling groups, exactly as the name spelling does.
 
     ``@oxi.arrange`` accepts a type as well as a name, but only for an
-    ``@injectable`` one — a builtin or a plugin type. That form does **not**
-    put its consumers in a component.
+    ``@injectable`` one — a builtin or a plugin type. Before #2045 that form
+    was accepted and then ignored: ``ArrangedEntry::Type`` and
+    ``ArrangedEntry::Name`` were flattened to the same string before crossing
+    to Python, and a type's ``__name__`` is not a registry key. A builtin
+    registers under its **impl** class name, so ``TempDir`` could never match
+    ``_TempDirFixture`` and the component never formed.
 
-    Not introduced by #1848 and not fixed by it. ``_augment_fixture_deps``
-    writes the *type*'s ``__name__`` into ``fixture_deps``, while a component
-    is keyed by the *fixture*'s name, so the two never meet. Before #1848 the
-    same cell also failed to group, because a builtin's scope is never
-    ``module`` and the tier was what the inference read.
-
-    It matters more now than it did then: #1848 makes ``@oxi.arrange`` the only
-    source of components, so a legal spelling that quietly does nothing is
-    exactly the shape of defect the issue exists to remove.
+    The predecessor of this test asserted only ``rc == 0`` and ``"4 passed"``,
+    so it passed both before and after the behaviour changed and pinned nothing
+    about grouping at all. Placement is what the issue is about, so placement
+    is what this asserts.
     """
     root = _build_project(
         tmp, "type_entry", tier="module", form=_FORM_ARRANGE_TYPE_BUILTIN
     )
+    run = run_with_event_log(root, tmp, _LOG_ENV, "-n", "4", log_name="type_entry.log")
+
+    assert run.rc == 0, f"the probe project must pass:\n{run.stdout}\n{run.stderr}"
+    assert len(run.uses) == 4, (
+        f"all four tests must run, or a placement count means nothing; got {run.uses}"
+    )
+    assert len(run.running_pids) == 1, (
+        f"the type entry must put its four tests in one process, which is what a "
+        f"name entry already does; four processes is the silent no-op #2045 "
+        f"removes. Got {run.running_pids}"
+    )
+
+
+# ── The type entry's two edges: refusal, and how it is named back (#2045) ────
+
+_FORM_ARRANGE_UNRESOLVABLE_TYPE = """\
+from __future__ import annotations
+
+import oxitest as oxi
+
+
+@oxi.injectable
+class NotAFixture:
+    \"\"\"Injectable, so the decorator accepts it, and no fixture provides it.\"\"\"
+
+
+@oxi.arrange(NotAFixture)
+def test_{n}() -> None:
+    assert True, "collection must refuse before this runs"
+"""
+
+
+def test_a_type_entry_that_resolves_to_nothing_is_refused(tmp: TempDir) -> None:
+    """#2045: an accepted spelling that does nothing is the defect, one level out.
+
+    ``oxitest.injectable`` is public, so a user can mark their own class and
+    clear the decorator's ``__oxitest_injectable__`` check. The decorator cannot
+    do better — it runs before any registry exists.
+
+    The refusal is ``validate_fixture_names``, which this branch deliberately
+    does not change: ``_augment_fixture_deps`` writes the type name as the
+    qualifier, and only *builtin* type names are exempt from that check. Pinned
+    here because the fix depends on that gate staying where it is — rewriting
+    the qualifier would move the refusal without replacing it.
+    """
+    root = _build_project(
+        tmp, "unresolvable", tier="module", form=_FORM_ARRANGE_UNRESOLVABLE_TYPE
+    )
 
     stdout, stderr, rc = run_oxitest(root, "-n", "4")
 
-    assert rc == 0, f"the probe project must pass:\n{stdout}\n{stderr}"
-    assert "4 passed" in stdout, (
-        f"the type entry is accepted at collection — it is only the scheduling "
-        f"half that does nothing\n{stdout}"
+    assert rc != 0, (
+        f"an @injectable type that no fixture provides must refuse the run; exiting 0 "
+        f"is the silent no-op #2045 removes\n{stdout}\n{stderr}"
+    )
+    assert "NotAFixture" in stdout + stderr, (
+        f"the refusal must name the type the user wrote, or they cannot tell which "
+        f"entry is wrong\n{stdout}\n{stderr}"
+    )
+
+
+def test_the_scheduling_diagnostic_names_the_user_spelling(tmp: TempDir) -> None:
+    """#2045: the diagnostic says ``TempDir`` and never ``_TempDirFixture``.
+
+    A component is keyed by the registry name. For a builtin that is the private
+    impl class, so printing the component verbatim would show a name the user
+    never typed and cannot look up. The display map exists for this line alone,
+    which is why it is pinned here.
+    """
+    root = _build_project(
+        tmp, "display", tier="module", form=_FORM_ARRANGE_TYPE_BUILTIN
+    )
+    env = {**os.environ, _LOG_ENV: str(Path(tmp) / "display.log")}
+
+    stdout, stderr, _rc = run_oxitest(root, "-n", "4", "-v", env=env)
+
+    output = stdout + stderr
+    assert "auto-arranged" in output, (
+        f"the scheduling diagnostic must appear at all, or the naming assertion "
+        f"below cannot fire\n{output}"
+    )
+    assert "TempDir" in output, (
+        f"the diagnostic must name the fixture as the user spelled it\n{output}"
+    )
+    assert "_TempDirFixture" not in output, (
+        f"the private impl class name must never reach the user — showing it invites "
+        f"them to type a name that is not public API\n{output}"
     )

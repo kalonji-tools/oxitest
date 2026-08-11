@@ -19,6 +19,14 @@ fn py_collect_err(e: PyErr) -> CollectError {
     CollectError::PyError(e.to_string())
 }
 
+/// What `@oxi.arrange` resolves to: the connected components, and a map from
+/// each resolved fixture name back to the spelling the user wrote.
+///
+/// The second half exists because a builtin is registered under its private
+/// impl class name — `TempDir` resolves to `_TempDirFixture` — and a diagnostic
+/// must never show a name the user cannot type (#2045).
+pub type ArrangedComponents = (Vec<Vec<String>>, HashMap<String, String>);
+
 impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for crate::worker_result::RawFrame {
     type Error = pyo3::PyErr;
 
@@ -243,19 +251,27 @@ impl FixtureSession {
 
     /// Returns connected components of the fixtures named by `@oxi.arrange`.
     /// Each inner Vec is a sorted group of fixture names that must co-locate.
-    /// `arranged` is every name a collected test arranges; membership is a
-    /// declaration rather than a property of the fixture (#1848).
-    /// Returns an empty Vec on any Python error (advisory-only).
+    /// `arranged` carries `(kind, value)` pairs, where `kind` is `"Type"` or
+    /// `"Name"` — the two [`crate::types::ArrangedEntry`] variants. The tag has
+    /// to cross: a type's `__name__` is not a registry key, and only the
+    /// registry knows a public type maps to a private impl class (#2045).
+    ///
+    /// Returns the components, plus a map from each resolved fixture name back
+    /// to the spelling the user wrote, so a diagnostic never shows a private
+    /// name such as `_TempDirFixture`.
+    ///
+    /// A Python error is **not** swallowed here. An `@injectable` type that
+    /// resolves to no fixture must refuse the run rather than silently forming
+    /// no component, which is the defect #2045 removes.
     pub fn arranged_fixture_groups(
         &self,
         py: Python<'_>,
-        arranged: Vec<String>,
-    ) -> Vec<Vec<String>> {
+        arranged: Vec<(String, String)>,
+    ) -> PyResult<ArrangedComponents> {
         self.0
             .bind(py)
             .call_method1("arranged_fixture_groups", (arranged,))
-            .and_then(|v| v.extract::<Vec<Vec<String>>>())
-            .unwrap_or_default()
+            .and_then(|v| v.extract::<ArrangedComponents>())
     }
 
     /// Returns the subset of `module_paths` that can resolve a `lifetime="module"`

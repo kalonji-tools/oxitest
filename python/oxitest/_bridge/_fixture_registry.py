@@ -798,8 +798,6 @@ class FixtureRegistry:
             for defn in defs
             if defn.scope is FixtureScope.MODULE and defn.anchor is not None
         ]
-        if not anchored:
-            return ()
         return tuple(
             path
             for path in module_paths
@@ -868,6 +866,41 @@ class FixtureRegistry:
                 lineno: int = getattr(code, "co_firstlineno", 0)
                 out.append((defn.name, str(source.lifetime), lineno))
         return tuple(sorted(out))
+
+    def resolve_arranged_type(self, type_name: str) -> str:
+        """Return the fixture name an ``@oxi.arrange`` type entry resolves to.
+
+        ``@oxi.arrange`` accepts an ``@injectable`` class, but only the class's
+        ``__name__`` survives the PyO3 boundary, so the class is recovered from
+        the ``_by_type`` index before the injector's own precedence rule
+        decides. Delegating to :meth:`resolve` rather than reimplementing it is
+        what keeps a type entry and a ``Fixture[T]`` parameter agreeing about
+        which fixture a type means.
+
+        A builtin registers under its **impl** class name — ``TempDir`` is
+        registered as ``_TempDirFixture`` — so the public type name is never a
+        registry key and a component could never form from it (#2045). A plugin
+        registers under ``provider.name``, an author's free choice, so there the
+        two names matched only by coincidence.
+
+        Raises:
+            FixtureNotFoundError: nothing injectable carries that name. The
+                decorator cannot catch this: it runs before any registry
+                exists, which is why it checks only ``__oxitest_injectable__``.
+            AmbiguousFixtureError: two injectable classes share the name.
+        """
+        matches = [
+            fixture_type
+            for fixture_type in self._by_type
+            if fixture_type.__name__ == type_name
+        ]
+        if not matches:
+            raise FixtureNotFoundError(type_name)
+        if len(matches) > 1:
+            raise AmbiguousFixtureError(
+                type_name, [defn.name for m in matches for defn in self._by_type[m]]
+            )
+        return self.resolve(matches[0]).name
 
     def resolve(
         self, fixture_type: type, qualifier: str | None = None
