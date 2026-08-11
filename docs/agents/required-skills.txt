@@ -1,3 +1,16 @@
+# Required agent skills, checked by `just agent-health`. See #1820.
+#
+# MEMBERSHIP MEANS INSTALLED, NOT INVOKED. An entry must be present on disk for
+# the pipeline to work. It does not have to be named by a CLAUDE.md stage,
+# because a skill that CLAUDE.md does name may reach it. An entry no stage
+# mentions is not dead until you have looked for the skill that reaches it — but
+# one that nothing here reaches and no stage names is dead, and it comes out.
+#
+# GRANULARITY IS PER PLUGIN, NOT PER SKILL. Lines sharing a plugin share one
+# result, so no single line can fail alone — see the `agent-health` recipe for
+# how. A plugin installs as one versioned unit, so a partial install cannot
+# occur, and a per-skill check would measure a state that cannot happen.
+
 # Standalone skills
 grilling
 grill-with-docs
@@ -10,8 +23,11 @@ superpowers:brainstorming
 superpowers:writing-plans
 superpowers:subagent-driven-development
 superpowers:executing-plans
+
+# No CLAUDE.md stage names this one. superpowers:subagent-driven-development
+# reaches it as the "Code review template for reviewer subagents".
+# Stage 7 breaks without it.
 superpowers:requesting-code-review
-superpowers:verification-before-completion
 
 # Invoked by CLAUDE.md stage 1 when no user-driven grilling took place
 domain-modeling
