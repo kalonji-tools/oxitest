@@ -335,11 +335,12 @@ pub(super) enum ExecutionStrategy {
 - **`inprocess_groups`** -- Tests marked with `@oxi.mark.inprocess`. These always run on the
   main Python process, never in subprocess workers. Partitioned out first by
   `partition_inprocess_groups()`.
-- **`arranged_groups`** -- Groups of tests that share session-scoped fixtures. These run
-  serially on the main process to avoid fixture duplication across workers. Built by
-  `partition_by_fixture_groups()` and subject to an `auto_arrange_threshold` check: if any
-  single fixture group exceeds the threshold percentage of total tests, the entire plan falls
-  back to serial to avoid starving the parallel pool.
+- **`arranged_groups`** -- Groups of tests that named a fixture in `@oxi.arrange`. These run
+  serially on the main process. Built by `partition_by_fixture_groups()` over the connected
+  components of the arranged names. No threshold guards this: before #1848 the component set
+  was inferred from a lifetime tier and could swallow a suite nobody had asked to serialise,
+  so a ratio fallback existed to catch that. A component now exists only where a test asked
+  for one.
 - **`parallel_groups`** -- Everything else. When `strategy` is `Parallel`, these are dispatched
   to subprocess workers. When `Serial`, they run on the main process.
 

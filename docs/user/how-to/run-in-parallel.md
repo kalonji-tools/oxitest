@@ -97,16 +97,11 @@ a subtree, so a run can build **more instances than it has workers**. Four
 single-module test files across two workers build the fixture four times, not
 twice.
 
-By default you will not see a warning about this, because auto-arrange usually
-prevents it: tests sharing a fixture are grouped together and run serially on the
-main process, and when that group exceeds `auto_arrange`'s threshold (70% of the
-tests eligible for parallel execution, by default) the whole run collapses to
-serial and the fixture is built exactly once. The warning
-is emitted only when auto-arrange is **disabled** (`auto_arrange = false`). With
-the default `fmt` log layer and `RUST_LOG=warn`:
+A parallel run warns about this whenever a `lifetime="module"` fixture is
+declared. With the default `fmt` log layer and `RUST_LOG=warn`:
 
 ```console
-WARN _oxitest::pipeline::execution: wide-lifetime fixture will be rebuilt once per task group, not once per run; a task group is a single module unless a `package` declaration merges a subtree, so a run can build more instances than it has workers — use --serial to run them once, or narrow the lifetime of fixtures that can be function-scoped fixtures=my_db fixture_count=1 workers=2
+WARN _oxitest::pipeline::execution: wide-lifetime fixture will be rebuilt once per task group, not once per run; a task group is a single module unless a `package` declaration merges a subtree, so a run can build more instances than it has workers — use --serial to run them once, @oxi.arrange to co-locate the tests that share one, or narrow the lifetime of fixtures that can be function-scoped fixtures=my_db fixture_count=1 workers=2
 ```
 
 To resolve it, choose one of these options:
@@ -117,7 +112,17 @@ To resolve it, choose one of these options:
     $ oxitest --serial
     ```
 
-2. **Narrow the lifetime** of fixtures that do not need a wide one.
+    This is the only option that reduces a `lifetime="module"` fixture to a
+    single build, and it does so by removing the parallelism.
+
+2. **Arrange the tests that share it** with
+   [`@oxi.arrange`](../reference/python-api/arrange.md), which co-locates them
+   on the main process. At `lifetime="module"` this changes *where* they run
+   and not how often the fixture is built — a module is the task group, so it
+   is rebuilt per module either way. At `lifetime="process"` it does reduce the
+   build count, to one.
+
+3. **Narrow the lifetime** of fixtures that do not need a wide one.
    `lifetime="function"` builds the fixture once per test, which is safe across
    workers.
 
@@ -150,7 +155,7 @@ $ oxitest -v
 
 The diagnostics print to stderr and include: the serial/parallel decision reason,
 the schedule strategy, the worker count formula, inprocess partitions, and
-auto-arrange groups.
+arranged groups.
 
 ## See also
 
