@@ -1,0 +1,4 @@
+[tool.oxitest]
+testpaths = ["b1_static_reach"]
+python_files = ["test_*.py"]
+strict = "abort"
