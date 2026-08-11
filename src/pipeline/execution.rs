@@ -497,9 +497,10 @@ fn emit_module_lifetime_warning(
         "wide-lifetime {noun} will be rebuilt once per task group, not once per run; \
          a task group is a single module unless a `package` declaration merges a \
          subtree, so a run can build more instances than it has workers — \
-         use --serial to run them once, @oxi.arrange to co-locate the tests \
-         that share one, or narrow the lifetime of fixtures that can be \
-         function-scoped"
+         use --serial to run them once, or narrow the lifetime of fixtures that \
+         can be function-scoped. @oxi.arrange co-locates the tests that share one \
+         onto the main process, but a module is the scheduling unit, so it \
+         cannot reduce this count"
     );
 }
 
@@ -588,6 +589,30 @@ fn execute_phases(
         ctx.session.arranged_fixture_groups(py, arranged_names)
     };
 
+    // Modules that can resolve a `lifetime="module"` fixture must not span two
+    // dispatch phases (#1750). Resolved here rather than inside `plan_execution`,
+    // which is pure by contract — the same shape `arranged_fixture_groups` above
+    // already uses.
+    //
+    // Visibility, not usage: `fixture_deps` carries only annotated parameters, so
+    // a usage test cannot see `fx.<ns>.<name>` access, which reaches the same
+    // fixture and builds it twice the same way.
+    //
+    // `module_path()` derives from the item's `node_id`, which is the spelling
+    // `ModuleGroup` is keyed by. The Python side compares it against a
+    // declaration anchor, so both halves must stay in that one spelling — do not
+    // canonicalise on either side, or an inline declaration is misread as a
+    // package one the moment a symlink separates the two forms.
+    let declaring_modules: Vec<String> = {
+        let mut paths: Vec<String> = clean_items
+            .iter()
+            .map(|item| item.module_path().to_owned())
+            .collect();
+        paths.sort_unstable();
+        paths.dedup();
+        ctx.session.modules_with_visible_module_lifetime(py, paths)
+    };
+
     // Build a pure execution plan — no I/O, no PyO3.
     let mut plan = arrange::plan_execution(
         groups,
@@ -596,6 +621,7 @@ fn execute_phases(
         ctx.cfg.exec.spawn_overhead.as_f64(),
         ctx.cfg.exec.min_parallel_tests,
         &arranged_fixture_groups,
+        &declaring_modules,
         estimated,
         cpu_count,
     );

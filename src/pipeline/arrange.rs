@@ -21,11 +21,30 @@ pub(super) struct InprocessPartition {
 /// Tests marked `@oxi.mark.inprocess` are extracted into their own group list.
 /// If a module has a mix of inprocess and non-inprocess tests, the module appears
 /// in both lists with the appropriate subset.
-pub(super) fn partition_inprocess_groups(groups: Vec<ModuleGroup>) -> InprocessPartition {
+pub(super) fn partition_inprocess_groups(
+    groups: Vec<ModuleGroup>,
+    declaring_modules: &[String],
+) -> InprocessPartition {
     let mut inprocess = Vec::new();
     let mut parallel = Vec::new();
 
     for ModuleGroup { module_path, items } in groups {
+        // A module that can resolve a `lifetime="module"` fixture must not span
+        // two dispatch phases: each phase owns a fixture session, so a split
+        // builds that fixture twice and the tier's once-per-module promise does
+        // not hold (#1750).
+        //
+        // The mark wins, rather than being dropped for the tier. `inprocess` is
+        // a semantic the user asked for explicitly, and the cost of honouring it
+        // here is small: the module's items already travelled together as one
+        // `ModuleGroup`, so this moves one group to the coordinator rather than
+        // sacrificing parallelism across the suite.
+        let declares = declaring_modules.iter().any(|m| m == module_path.as_str());
+        if declares && items.iter().any(|item| item.markers.has_inprocess()) {
+            inprocess.push(ModuleGroup::new(module_path, items));
+            continue;
+        }
+
         let (inp, par): (Vec<_>, Vec<_>) = items
             .into_iter()
             .partition(|item| item.markers.has_inprocess());
@@ -63,6 +82,7 @@ pub(super) struct FixturePartition {
 pub(super) fn partition_by_fixture_groups(
     groups: Vec<ModuleGroup>,
     fixture_groups: &[Vec<String>],
+    declaring_modules: &[String],
 ) -> FixturePartition {
     if fixture_groups.is_empty() {
         return FixturePartition {
@@ -82,6 +102,38 @@ pub(super) fn partition_by_fixture_groups(
     let mut remaining = Vec::new();
 
     for ModuleGroup { module_path, items } in groups {
+        // A declaring module travels whole, and stays *arranged* if any of its
+        // items asked to be (#1750).
+        //
+        // Not excluded from arrangement the way `unarrange_declaring_subtrees`
+        // excludes a declaring subtree one tier up. That asymmetry is the point:
+        // a subtree spans modules and cannot be forced into one bucket, whereas
+        // a module is already the scheduling unit. Excluding it would send it to
+        // a worker and silently drop the co-location `@oxi.arrange` promises —
+        // pinned by `test_arrange_groups_at_module_tier_on_the_runner`, which
+        // asserts the component runs on the runner rather than in a worker.
+        //
+        // Decided before bucketing rather than moved back afterwards: moving
+        // afterwards would reunite the items as *two* `ModuleGroup`s sharing one
+        // path, which the scheduler may hand to two workers — two sessions
+        // again, which is the defect this removes.
+        //
+        // First matching component wins when a module's items would fall into
+        // two. A module is one scheduling unit and cannot sit in two buckets,
+        // and `fixture_groups` order is deterministic, so the choice is stable.
+        if declaring_modules.iter().any(|m| m == module_path.as_str()) {
+            let bucket = items.iter().find_map(|item| {
+                item.fixture_deps
+                    .iter()
+                    .find_map(|(q, _)| fixture_to_group.get(q.as_str()).copied())
+            });
+            match bucket {
+                Some(gi) => arranged[gi].push(ModuleGroup::new(module_path, items)),
+                None => remaining.push(ModuleGroup::new(module_path, items)),
+            }
+            continue;
+        }
+
         let mut group_buckets: Vec<Vec<Arc<TestItem>>> = vec![vec![]; fixture_groups.len()];
         let mut unassigned: Vec<Arc<TestItem>> = Vec::new();
 
@@ -149,6 +201,7 @@ pub(super) fn plan_execution(
     spawn_overhead_ms: f64,
     min_parallel_tests: usize,
     arranged_fixture_groups: &[Vec<String>],
+    declaring_modules: &[String],
     estimated: Option<std::time::Duration>,
     cpu_count: usize,
 ) -> ExecutionPlan {
@@ -182,7 +235,7 @@ pub(super) fn plan_execution(
     let InprocessPartition {
         inprocess: inprocess_groups,
         parallel: parallel_groups,
-    } = partition_inprocess_groups(groups);
+    } = partition_inprocess_groups(groups, declaring_modules);
 
     let optimal_worker_count =
         crate::config::compute_optimal_workers(mode, cpu_count, estimated, spawn_overhead_ms);
@@ -198,7 +251,11 @@ pub(super) fn plan_execution(
         let FixturePartition {
             arranged,
             remaining,
-        } = partition_by_fixture_groups(parallel_groups, arranged_fixture_groups);
+        } = partition_by_fixture_groups(
+            parallel_groups,
+            arranged_fixture_groups,
+            declaring_modules,
+        );
 
         return ExecutionPlan {
             strategy: ExecutionStrategy::Parallel {
@@ -242,13 +299,83 @@ mod tests {
         let InprocessPartition {
             inprocess: inp,
             parallel: par,
-        } = partition_inprocess_groups(groups);
+        } = partition_inprocess_groups(groups, &[]);
         assert_eq!(inp.len(), 1, "one module in inprocess");
         assert_eq!(inp[0].items.len(), 1);
         assert_eq!(inp[0].items[0].node_id.as_ref(), "test_a.py::test_serial");
         assert_eq!(par.len(), 1, "one module in parallel");
         assert_eq!(par[0].items.len(), 1);
         assert_eq!(par[0].items[0].node_id.as_ref(), "test_a.py::test_normal");
+    }
+
+    #[test]
+    fn test_a_declaring_module_follows_the_inprocess_mark() {
+        let normal = TestItem::builder_raw("pkg/test_a.py::test_normal").arc();
+        let inproc = TestItem::builder_raw("pkg/test_a.py::test_serial")
+            .markers(vec!["inprocess".to_string()])
+            .arc();
+        let groups = vec![ModuleGroup::new(
+            Utf8PathBuf::from("pkg/test_a.py"),
+            vec![normal, inproc],
+        )];
+        let declaring = ["pkg/test_a.py".to_string()];
+
+        let InprocessPartition {
+            inprocess: inp,
+            parallel: par,
+        } = partition_inprocess_groups(groups, &declaring);
+
+        assert_eq!(
+            inp.len(),
+            1,
+            "the declaring module goes wholly in-process, as one group"
+        );
+        assert_eq!(
+            inp[0].items.len(),
+            2,
+            "both items travel together — splitting them puts the module's fixture in \
+             two sessions, which is the #1750 double build"
+        );
+        assert!(
+            par.is_empty(),
+            "nothing is left in the parallel set; a remainder here is the second session"
+        );
+    }
+
+    #[test]
+    fn test_a_declaring_module_stays_whole_inside_its_component() {
+        let arranged_item = TestItem::builder_raw("pkg/test_a.py::test_one")
+            .fixture_deps(vec![("side".to_string(), String::new())])
+            .arc();
+        let plain = TestItem::builder_raw("pkg/test_a.py::test_two").arc();
+        let groups = vec![ModuleGroup::new(
+            Utf8PathBuf::from("pkg/test_a.py"),
+            vec![arranged_item, plain],
+        )];
+        let components = vec![vec!["side".to_string()]];
+        let declaring = ["pkg/test_a.py".to_string()];
+
+        let FixturePartition {
+            arranged,
+            remaining,
+        } = partition_by_fixture_groups(groups, &components, &declaring);
+
+        assert_eq!(
+            arranged[0].len(),
+            1,
+            "the module stays arranged — excluding it would send it to a worker and \
+             drop the co-location @oxi.arrange promises"
+        );
+        assert_eq!(
+            arranged[0][0].items.len(),
+            2,
+            "and it travels whole, so the item that named no fixture is not stranded \
+             in the parallel remainder in a second session"
+        );
+        assert!(
+            remaining.is_empty(),
+            "nothing is left behind; a remainder here is that second session"
+        );
     }
 
     #[test]
@@ -260,7 +387,7 @@ mod tests {
         let InprocessPartition {
             inprocess: inp,
             parallel: par,
-        } = partition_inprocess_groups(groups);
+        } = partition_inprocess_groups(groups, &[]);
         assert!(inp.is_empty());
         assert_eq!(par.len(), 1);
         assert_eq!(par[0].items.len(), 2);
@@ -279,7 +406,7 @@ mod tests {
         let InprocessPartition {
             inprocess: inp,
             parallel: par,
-        } = partition_inprocess_groups(groups);
+        } = partition_inprocess_groups(groups, &[]);
         assert_eq!(inp.len(), 1);
         assert_eq!(inp[0].items.len(), 2);
         assert!(par.is_empty());
@@ -300,7 +427,7 @@ mod tests {
         let InprocessPartition {
             inprocess: inp,
             parallel: par,
-        } = partition_inprocess_groups(groups);
+        } = partition_inprocess_groups(groups, &[]);
         assert_eq!(inp.len(), 1, "only test_a.py has inprocess items");
         assert_eq!(par.len(), 2, "both modules have parallel items");
     }
@@ -314,7 +441,7 @@ mod tests {
         let FixturePartition {
             arranged,
             remaining,
-        } = partition_by_fixture_groups(groups, &fixture_groups);
+        } = partition_by_fixture_groups(groups, &fixture_groups, &[]);
         assert!(arranged.is_empty());
         assert_eq!(remaining.len(), 1);
     }
@@ -334,7 +461,7 @@ mod tests {
         let FixturePartition {
             arranged,
             remaining,
-        } = partition_by_fixture_groups(groups, &fixture_groups);
+        } = partition_by_fixture_groups(groups, &fixture_groups, &[]);
         assert_eq!(arranged.len(), 1, "one fixture group");
         assert_eq!(arranged[0].len(), 1, "one module in fixture group");
         assert_eq!(arranged[0][0].items.len(), 1, "one test in fixture group");
@@ -367,7 +494,7 @@ mod tests {
         let FixturePartition {
             arranged,
             remaining,
-        } = partition_by_fixture_groups(groups, &fixture_groups);
+        } = partition_by_fixture_groups(groups, &fixture_groups, &[]);
         assert_eq!(arranged.len(), 1);
         assert_eq!(arranged[0].len(), 1, "one module in fixture group 0");
         assert_eq!(arranged[0][0].items.len(), 2, "two tests in that module");
@@ -412,7 +539,17 @@ mod tests {
         mode: &crate::config::ExecutionMode,
         arranged_fixture_groups: &[Vec<String>],
     ) -> ExecutionPlan {
-        plan_execution(groups, mode, 4, 250.0, 1, arranged_fixture_groups, None, 8)
+        plan_execution(
+            groups,
+            mode,
+            4,
+            250.0,
+            1,
+            arranged_fixture_groups,
+            &[],
+            None,
+            8,
+        )
     }
 
     fn parallel_mode() -> crate::config::ExecutionMode {

@@ -1411,3 +1411,81 @@ def test_arranged_fixture_groups_ignores_the_lifetime_tier() -> None:
         "with nothing arranged there is no component, however wide the tiers — "
         "this is the retired inference, and its absence is the point of #1848"
     )
+
+
+# ── Declaring modules for the dispatch-phase guarantee (#1750) ────────────────
+
+
+def _module_tier_def(*, name: str, anchor: str, defining: str) -> FixtureDef:
+    """A module-tier def anchored the way ``_module_source_registrar`` builds one."""
+
+    def _factory() -> str:
+        return "r"
+
+    return FixtureDef(
+        name=name,
+        fixture_type=str,
+        scope=FixtureScope.MODULE,
+        source=ModuleSource(
+            func=_factory,
+            defining_module_path=defining,
+            anchor_package_path=anchor,
+            lifetime=Lifetime.MODULE,
+        ),
+    )
+
+
+def test_a_package_declaration_reports_every_module_below_its_anchor() -> None:
+    """#1750: a package anchor's whole subtree resolves the fixture."""
+    registry = helpers.make_registry(
+        _module_tier_def(name="resource", anchor="pkg", defining="pkg/__fixtures__.py")
+    )
+
+    declaring = registry.modules_with_visible_module_lifetime(
+        ("pkg/test_a.py", "pkg/nested/test_b.py", "other/test_c.py")
+    )
+
+    assert declaring == ("pkg/test_a.py", "pkg/nested/test_b.py"), (
+        "the scheduler keeps every reported module inside one dispatch phase. A "
+        "module that can resolve the fixture must be reported, or its items split "
+        "across two fixture sessions and build the fixture twice. A module that "
+        "cannot resolve it must not be reported, or it loses parallelism to "
+        "protect nothing"
+    )
+
+
+def test_an_inline_declaration_reports_only_its_own_module() -> None:
+    """#1750: an inline declaration is capped at its own file."""
+    registry = helpers.make_registry(
+        _module_tier_def(
+            name="resource", anchor="pkg/test_a.py", defining="pkg/test_a.py"
+        )
+    )
+
+    declaring = registry.modules_with_visible_module_lifetime(
+        ("pkg/test_a.py", "pkg/test_b.py")
+    )
+
+    assert declaring == ("pkg/test_a.py",), (
+        "an inline declaration is visible only from the file that wrote it, so "
+        "keeping a sibling module whole would cost parallelism for a fixture that "
+        "sibling can never resolve"
+    )
+
+
+def test_an_unanchored_module_tier_def_reports_nothing() -> None:
+    """#1750: an ambient def would report every module, which is the blanket rule."""
+    registry = helpers.make_registry(
+        helpers.make_fixture_def("ambient", scope=FixtureScope.MODULE)
+    )
+
+    declaring = registry.modules_with_visible_module_lifetime(
+        ("pkg/test_a.py", "other/test_b.py")
+    )
+
+    assert declaring == (), (
+        "an unanchored def is visible from everywhere, so counting it would move "
+        "every mixed module onto the coordinator. No documented declaration path "
+        "produces one, and the safe direction for undocumented plugin surface is "
+        "today's partitioning"
+    )

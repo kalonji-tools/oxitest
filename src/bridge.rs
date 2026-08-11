@@ -258,6 +258,28 @@ impl FixtureSession {
             .unwrap_or_default()
     }
 
+    /// Returns the subset of `module_paths` that can resolve a `lifetime="module"`
+    /// fixture. Each of those modules must stay inside one dispatch phase (#1750):
+    /// a phase owns its own fixture session, so a split builds the fixture twice.
+    ///
+    /// Visibility rather than usage — `fixture_deps` carries only annotated
+    /// parameters, so a usage test cannot see `fx.<ns>.<name>` access.
+    ///
+    /// Returns an empty Vec on any Python error. The caller then keeps today's
+    /// partitioning, which is the pre-#1750 behaviour rather than a suite-wide
+    /// serialisation.
+    pub fn modules_with_visible_module_lifetime(
+        &self,
+        py: Python<'_>,
+        module_paths: Vec<String>,
+    ) -> Vec<String> {
+        self.0
+            .bind(py)
+            .call_method1("modules_with_visible_module_lifetime", (module_paths,))
+            .and_then(|v| v.extract::<Vec<String>>())
+            .unwrap_or_default()
+    }
+
     /// Returns this session as a bound Python object for passing to bridge calls.
     pub(crate) fn as_py_object<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
         self.0.bind(py).clone()

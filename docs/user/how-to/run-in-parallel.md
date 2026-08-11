@@ -101,7 +101,7 @@ A parallel run warns about this whenever a `lifetime="module"` fixture is
 declared. With the default `fmt` log layer and `RUST_LOG=warn`:
 
 ```console
-WARN _oxitest::pipeline::execution: wide-lifetime fixture will be rebuilt once per task group, not once per run; a task group is a single module unless a `package` declaration merges a subtree, so a run can build more instances than it has workers — use --serial to run them once, @oxi.arrange to co-locate the tests that share one, or narrow the lifetime of fixtures that can be function-scoped fixtures=my_db fixture_count=1 workers=2
+WARN _oxitest::pipeline::execution: wide-lifetime fixture will be rebuilt once per task group, not once per run; a task group is a single module unless a `package` declaration merges a subtree, so a run can build more instances than it has workers — use --serial to run them once, or narrow the lifetime of fixtures that can be function-scoped. @oxi.arrange co-locates the tests that share one onto the main process, but a module is the scheduling unit, so it cannot reduce this count fixtures=my_db fixture_count=1 workers=2
 ```
 
 To resolve it, choose one of these options:
