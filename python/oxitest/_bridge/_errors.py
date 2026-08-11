@@ -527,7 +527,7 @@ class ArrangeError(OxitestError):
         Three options:
 
         - Make the test async — ``async def test_...``.
-        - Widen the fixture scope to ``shared`` or ``session``.
+        - Widen the fixture lifetime to ``module``, ``package`` or ``process``.
         - Convert the fixture to sync (remove ``async`` from its ``def``).
 
     See Also:
