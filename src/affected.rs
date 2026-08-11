@@ -275,7 +275,7 @@ pub fn filter_affected_with_diagnostics(
     diag.direct_matches = affected.iter().map(|p| p.to_string()).collect();
     diag.direct_matches.sort();
 
-    // Stage 4: Conftest matches
+    // Stage 4: Declaration matches
     declaration_affected_tests(
         test_files,
         &classified.declaration_files,
@@ -416,42 +416,62 @@ mod tests {
     // ── declaration_affected_tests ──────────────────────────────────────
 
     #[test]
-    fn conftest_subtree_includes_tests_below() {
+    fn declaration_subtree_includes_tests_below() {
         let test_files = vec![
             Utf8PathBuf::from("/project/tests/test_a.py"),
             Utf8PathBuf::from("/project/tests/sub/test_b.py"),
             Utf8PathBuf::from("/project/other/test_c.py"),
         ];
-        let changed_declarations = vec!["tests/conftest.py".to_string()];
+        let changed_declarations = vec!["tests/__fixtures__.py".to_string()];
         let rootdir = Utf8Path::new("/project");
         let mut affected = std::collections::HashSet::new();
         declaration_affected_tests(&test_files, &changed_declarations, rootdir, &mut affected);
-        assert_eq!(affected.len(), 2);
-        assert!(affected.contains(&Utf8PathBuf::from("/project/tests/test_a.py")));
-        assert!(affected.contains(&Utf8PathBuf::from("/project/tests/sub/test_b.py")));
+        assert_eq!(
+            affected.len(),
+            2,
+            "a changed declaration affects its whole subtree and nothing outside it, \
+             so other/test_c.py must stay unselected"
+        );
+        assert!(
+            affected.contains(&Utf8PathBuf::from("/project/tests/test_a.py")),
+            "a test beside the declaration is in its subtree"
+        );
+        assert!(
+            affected.contains(&Utf8PathBuf::from("/project/tests/sub/test_b.py")),
+            "the subtree is recursive, not just the declaration's own directory"
+        );
     }
 
     #[test]
-    fn conftest_subtree_root_conftest_affects_all() {
+    fn declaration_subtree_root_declaration_affects_all() {
         let test_files = vec![
             Utf8PathBuf::from("/project/tests/test_a.py"),
             Utf8PathBuf::from("/project/other/test_b.py"),
         ];
-        let changed_declarations = vec!["conftest.py".to_string()];
+        let changed_declarations = vec!["__fixtures__.py".to_string()];
         let rootdir = Utf8Path::new("/project");
         let mut affected = std::collections::HashSet::new();
         declaration_affected_tests(&test_files, &changed_declarations, rootdir, &mut affected);
-        assert_eq!(affected.len(), 2);
+        assert_eq!(
+            affected.len(),
+            2,
+            "a declaration at the rootdir has the whole project as its subtree, so \
+             every test file is affected however deeply nested"
+        );
     }
 
     #[test]
-    fn conftest_subtree_no_match() {
+    fn declaration_subtree_no_match() {
         let test_files = vec![Utf8PathBuf::from("/project/other/test_a.py")];
-        let changed_declarations = vec!["tests/conftest.py".to_string()];
+        let changed_declarations = vec!["tests/__fixtures__.py".to_string()];
         let rootdir = Utf8Path::new("/project");
         let mut affected = std::collections::HashSet::new();
         declaration_affected_tests(&test_files, &changed_declarations, rootdir, &mut affected);
-        assert!(affected.is_empty());
+        assert!(
+            affected.is_empty(),
+            "a declaration in tests/ must not select a test in other/ — the subtree \
+             rule is a prefix match, not a project-wide trigger"
+        );
     }
 
     // ── directly_changed_tests ───────────────────────────────────────
@@ -520,7 +540,7 @@ mod tests {
         assert_eq!(
             classified.declaration_files.len(),
             1,
-            "tests/conftest.py is a conftest"
+            "tests/__fixtures__.py is a declaration file"
         );
     }
 }
