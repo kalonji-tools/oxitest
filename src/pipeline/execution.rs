@@ -505,7 +505,7 @@ fn emit_shared_fixture_warning(
         fixtures = %list,
         fixture_count = shared_names.len(),
         workers = worker_count,
-        "shared {noun} will be rebuilt once per task group, not once per run; \
+        "wide-lifetime {noun} will be rebuilt once per task group, not once per run; \
          a task group is a single module unless a `package` declaration merges a \
          subtree, so a run can build more instances than it has workers — \
          use --serial to run them once, or narrow the lifetime of fixtures \

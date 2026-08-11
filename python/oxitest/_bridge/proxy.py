@@ -10,7 +10,7 @@ __all__ = ["FrozenProxy", "SharedFixtureMutationError"]
 
 
 class FrozenProxy:
-    """Transparent proxy for a shared fixture value.
+    """Transparent proxy for a fixture value that outlives one test.
 
     Attribute reads, item reads, and string conversion (``str``, ``format``)
     pass through to the wrapped object. ``repr`` deliberately does not — it
@@ -31,22 +31,22 @@ class FrozenProxy:
         return getattr(object.__getattribute__(self, "_wrapped"), name)
 
     def __setattr__(self, name: str, value: Any) -> None:
-        msg = f"shared fixture is immutable: cannot set attribute '{name}'"
+        msg = f"fixture value is frozen: cannot set attribute '{name}'"
         raise SharedFixtureMutationError(msg)
 
     def __delattr__(self, name: str) -> None:
-        msg = f"shared fixture is immutable: cannot delete attribute '{name}'"
+        msg = f"fixture value is frozen: cannot delete attribute '{name}'"
         raise SharedFixtureMutationError(msg)
 
     def __getitem__(self, key: Any) -> Any:
         return object.__getattribute__(self, "_wrapped")[key]
 
     def __setitem__(self, key: Any, value: Any) -> None:
-        msg = f"shared fixture is immutable: cannot set item {key!r}"
+        msg = f"fixture value is frozen: cannot set item {key!r}"
         raise SharedFixtureMutationError(msg)
 
     def __delitem__(self, key: Any) -> None:
-        msg = f"shared fixture is immutable: cannot delete item {key!r}"
+        msg = f"fixture value is frozen: cannot delete item {key!r}"
         raise SharedFixtureMutationError(msg)
 
     def __len__(self) -> int:

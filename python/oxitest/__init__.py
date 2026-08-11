@@ -13,14 +13,13 @@ fixture    — Declare a fixture: the framework owns when the value is built and
     def tenant() -> str:
         return "acme"
 
-Fixtures   — Legacy instance-based fixture registry, one per conftest.py.
-             Superseded by @oxi.fixture; still supported:
+Fixtures   — The `fx:` injection annotation, not a registry. A bare
+             `fx: Fixtures` parameter injects the namespace accessor, so
+             `fx.db.conn` reads the fixture `conn` declared under the anchor
+             `db`. Calling it raises:
 
-    fixtures = Fixtures()
-
-    @fixtures.fixture
-    def my_db() -> Database:
-        ...
+    def test_example(fx: Fixtures) -> None:
+        assert fx.db.conn.is_open()
 
 Fixture[T] — Injection signal for test and fixture parameters. An annotation
              of Fixture[T] tells oxitest to inject the matching fixture value.

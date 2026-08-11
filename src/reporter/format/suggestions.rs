@@ -26,8 +26,9 @@ pub fn suggest_fix(outcome: &TestOutcome) -> Option<String> {
     // reaches here: the rendered message is "<ErrorClass>: <message>".
     if message.contains("SharedFixtureMutationError") {
         return Some(
-            "Shared fixtures are frozen to prevent cross-test mutation. \
-             Use `shared=False` for a mutable per-test copy."
+            "A fixture value that outlives one test is frozen to prevent cross-test \
+             mutation. Declare the fixture with `lifetime=\"function\"` for a mutable \
+             per-test copy."
                 .to_string(),
         );
     }
@@ -87,7 +88,7 @@ mod tests {
             .build();
         let hint = suggest_fix(&outcome);
         assert!(hint.is_some());
-        assert!(hint.unwrap().contains("shared=False"));
+        assert!(hint.unwrap().contains("lifetime=\"function\""));
     }
 
     #[test]

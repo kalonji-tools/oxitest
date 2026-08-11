@@ -121,8 +121,7 @@ failure output. Current patterns:
 | Error | Hint |
 |-------|------|
 | Async/sync fixture mismatch (`can't be used in 'await'`) | Mark the fixture `async def` or make the test synchronous. |
-| `SharedFixtureMutationError` | Use `shared=False` for a mutable per-test copy. |
-| Fixture not found | Check the `@fixtures.fixture` definition and `Fixture[T]` annotation. |
+| `SharedFixtureMutationError` | Declare the fixture with `lifetime="function"` for a mutable per-test copy. |
 
 ## Frame truncation
 
