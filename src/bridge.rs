@@ -690,6 +690,71 @@ pub fn register_plugin_fixture_module(
 ///
 /// Returns `(node_id, fixture_name)` pairs for names that cannot resolve.
 /// FixtureRef-resolved parameters (from `@parametrize`) are excluded.
+/// Resolve every static `fx.` access prescan found, before any test runs (#1758).
+///
+/// Returns `(module_path, lineno, message)` per access that cannot resolve.
+///
+/// The verdict is computed in Python against the live registry rather than in
+/// Rust against a second model of it. B1 exemptions live on `FixtureDef.anchor`
+/// — conftest, plugin and builtin declarations are ambient — and a Rust
+/// reimplementation would have to re-derive them, which is exactly where the
+/// validated prototype for this issue was thin.
+/// `collected` scopes the check to the modules that were actually imported.
+/// Prescan fills `fx_usages` before the import set is narrowed, and the
+/// registry is filled from what survives that narrowing — so the two must be
+/// intersected or a deselected module's access is judged against a catalog that
+/// never loaded its declaring package.
+pub fn validate_fx_boundaries(
+    py: Python<'_>,
+    session: &FixtureSession,
+    fx_usages: &std::collections::HashMap<Utf8PathBuf, Vec<crate::prescan::FxUsage>>,
+    collected: &std::collections::HashSet<&str>,
+) -> Result<Vec<(String, usize, String)>, CollectError> {
+    if fx_usages.is_empty() {
+        return Ok(vec![]);
+    }
+    let session_obj = session.as_py_object(py);
+
+    // Sorted so a multi-module refusal reports in a stable order; a HashMap
+    // walk would reorder the diagnostic between runs of the same tree.
+    let mut paths: Vec<&Utf8PathBuf> = fx_usages
+        .keys()
+        .filter(|path| collected.contains(path.as_str()))
+        .collect();
+    paths.sort();
+    if paths.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let modules = pyo3::types::PyList::empty(py);
+    for path in paths {
+        let dict = pyo3::types::PyDict::new(py);
+        dict.set_item("module_path", path.as_str())
+            .map_err(py_collect_err)?;
+        let usages = pyo3::types::PyList::empty(py);
+        for usage in &fx_usages[path] {
+            let entry = pyo3::types::PyDict::new(py);
+            entry
+                .set_item("namespace", usage.namespace.as_deref())
+                .map_err(py_collect_err)?;
+            entry
+                .set_item("name", &usage.name)
+                .map_err(py_collect_err)?;
+            entry
+                .set_item("lineno", *usage.lineno)
+                .map_err(py_collect_err)?;
+            usages.append(entry).map_err(py_collect_err)?;
+        }
+        dict.set_item("usages", usages).map_err(py_collect_err)?;
+        modules.append(dict).map_err(py_collect_err)?;
+    }
+
+    let result = session_obj
+        .call_method1("validate_fx_boundaries", (modules,))
+        .map_err(py_collect_err)?;
+    result.extract().map_err(py_collect_err)
+}
+
 pub fn validate_fixture_names(
     py: Python<'_>,
     session: &FixtureSession,

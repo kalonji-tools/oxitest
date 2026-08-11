@@ -20,6 +20,23 @@ impl Pipeline {
             unreachable!("validate called outside Collected phase")
         };
 
+        // B1 first, and it exits differently on purpose — see below.
+        //
+        // Scoped to the modules that were actually collected. `fx_usages` is
+        // filled during prescan, which runs *before* `filter_metadata` narrows
+        // the import set for a node ID, `-E`, `--failed=only` or `--affected`.
+        // The registry is filled by the imports that survive that narrowing, so
+        // an unscoped check reads a deselected module's accesses against a
+        // catalog missing its declaring package and refuses legal code.
+        let collected: std::collections::HashSet<&str> =
+            items.iter().map(|item| item.module_path()).collect();
+        let boundary =
+            bridge::validate_fx_boundaries(py, session, &self.shared.fx_usages, &collected)
+                .map_err(|_| ExitCode::CollectError)?;
+        if !boundary.is_empty() {
+            return Err(self.refuse_fx_boundaries(&boundary));
+        }
+
         let errors = bridge::validate_fixture_names(py, session, items)
             .map_err(|_| ExitCode::CollectError)?;
 
@@ -33,6 +50,29 @@ impl Pipeline {
         Err(helpers::early_exit_with_error(&[err], &|| {
             self.make_error_reporter()
         }))
+    }
+
+    /// Refuse the run over statically-visible `fx.` accesses that cannot resolve.
+    ///
+    /// Exits `UsageError`, **not** the `CollectError` its sibling above uses.
+    /// `exit-codes.md` defines exit 4 by the *class* of the error and not by when
+    /// oxitest detects it, and it defines exit 3 narrowly as a test file that
+    /// could not be imported or a `--strict=abort` violation. A fixture wiring
+    /// error is neither, so it keeps the class it has at access time — where the
+    /// same access already exits 4 — rather than inheriting the exit code of the
+    /// transition it happens to be caught in.
+    ///
+    /// Every violation is reported, not the first: a run refused over one line
+    /// would need re-running to find the next, which is the loop #1797 removed
+    /// for absent targets.
+    fn refuse_fx_boundaries(&self, violations: &[(String, usize, String)]) -> ExitCode {
+        let mut out = String::from("fixture boundary violations found during collection:\n");
+        for (module_path, lineno, message) in violations {
+            out.push_str(&format!("\n  {module_path}:{lineno}\n    {message}\n"));
+        }
+        let err = types::CollectError::PyError(out);
+        helpers::early_exit_with_error(&[err], &|| self.make_error_reporter());
+        ExitCode::UsageError
     }
 
     // 10. strict_or_skip: Collected -> Ready

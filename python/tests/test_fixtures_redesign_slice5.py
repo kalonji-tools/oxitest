@@ -24,9 +24,18 @@ _INLINE_PACKAGE = _DATA_ROOT / "slice5_inline_package"
 _INLINE_SESSION_AT_ROOT = _DATA_ROOT / "slice5_inline_session_at_root"
 _CROSS_FILE_INJECTION = _DATA_ROOT / "slice5_inline_cross_file_injection"
 _MARK_BESIDE_FIXTURE = _DATA_ROOT / "slice5_mark_beside_fixture"
+_INLINE_CROSS = _DATA_ROOT / "slice5_inline_cross"
 
-#: 3 tests in test_inline.py + 2 in test_sibling.py.
-_TOTAL_TESTS = 5
+#: 3 tests in test_inline.py + 1 in test_sibling.py.
+#:
+#: Was 5. The cross-file negative moved to ``slice5_inline_cross`` when the
+#: collection-time B1 gate shipped (#1758) — see that project's docstrings.
+_TOTAL_TESTS = 4
+
+#: ``ExitCode::UsageError``. A fixture wiring error keeps its class wherever it
+#: is caught, so a collection-time B1 refusal exits 4 and not 3 — see
+#: ``docs/user/reference/exit-codes.md``.
+_EXIT_USAGE = 4
 
 
 def test_inline_fixtures_work_end_to_end() -> None:
@@ -42,6 +51,52 @@ def test_inline_fixtures_work_end_to_end() -> None:
         f"all {_TOTAL_TESTS} tests must run — a collection-level failure would "
         f"skip every isolation assertion and still leave rc==0 unexamined; "
         f"got:\n{stdout}"
+    )
+
+
+def test_another_files_inline_fixture_is_refused_at_collection() -> None:
+    """The cross-file negative, now asserted from outside the run (#1758)."""
+    # Act
+    stdout, stderr, rc = helpers.run_oxitest(_INLINE_CROSS)
+    output = stdout + stderr
+
+    # Assert
+    assert rc == _EXIT_USAGE, (
+        f"an inline fixture declared in another module is capped at that "
+        f"module (ADR-0009 Rule 1), so reaching it must refuse the run with a "
+        f"usage error; rc={rc}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    )
+    assert "test_sibling.py" in output, (
+        f"the refusal must name the file that reaches across, or a reader "
+        f"cannot tell which of the two modules is wrong; got:\n{output}"
+    )
+    assert "passed" not in output, (
+        f"the refusal must come *before* any test runs — that earliness is the "
+        f"whole point of #1758, and a run that executed the declaring module's "
+        f"test first would report a pass alongside the refusal; got:\n{output}"
+    )
+
+
+def test_the_declaring_module_still_reaches_its_own_inline_fixture() -> None:
+    """The control for the refusal above.
+
+    Without it, a tree where ``per_module`` never registered at all would
+    produce the same refusal for entirely the wrong reason.
+    """
+    # Act
+    stdout, stderr, rc = helpers.run_oxitest(
+        _INLINE_CROSS / "slice5_inline_cross" / "test_inline.py"
+    )
+
+    # Assert
+    assert rc == 0, (
+        f"the declaring module alone holds no illegal access, so it must run "
+        f"and pass; rc={rc}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    )
+    assert "1 passed" in stdout, (
+        f"the inline fixture must resolve for its own module, which is what "
+        f"makes the sibling's refusal a boundary result rather than an absent "
+        f"fixture; got:\n{stdout}"
     )
 
 

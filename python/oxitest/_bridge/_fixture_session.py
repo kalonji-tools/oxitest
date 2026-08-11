@@ -278,6 +278,26 @@ async def _task_group_factory() -> AsyncGenerator[_TrackedTaskGroup, None]:
                 t.cancel()
 
 
+def shortcut_miss_message(name: str) -> str:
+    """The one message a failed ``fx.<name>`` shortcut carries.
+
+    Factored out because two gates raise it now: the access-time route in
+    :meth:`FixtureSession.get_fixture_shortcut`, and the collection-time route
+    in :meth:`FixtureSession.validate_fx_boundaries` (#1758). Two copies of a
+    hint this specific would drift, and the drift would be invisible — each
+    gate's own tests would keep passing against its own copy.
+    """
+    return (
+        f"cannot resolve fixture '{name}'.\n"
+        f"  Hint: '{name}' is neither a package segment reachable from "
+        f"this test nor a fixture visible to it. A shortcut "
+        f"(fx.{name}) needs a fixture of that name declared in this "
+        f"test's own package or an ancestor of it; a fixture declared "
+        f"inline in another test module is never visible here. Check "
+        f"the spelling, or use the qualified form fx.<package>.{name}."
+    )
+
+
 def _collect_requested_names(
     hints: dict[str, Any], skip_names: frozenset[str]
 ) -> set[str]:
@@ -995,6 +1015,84 @@ class FixtureSession:
             name, namespace, anchor, module_path, leaf_exists=defn is not None
         )
 
+    def validate_fx_boundaries(
+        self, modules: list[dict[str, Any]]
+    ) -> list[tuple[str, int, str]]:
+        """Resolve every static ``fx.`` access before any test runs (#1758).
+
+        *modules* is what prescan extracted, one entry per test module::
+
+            {"module_path": str,
+             "usages": [{"namespace": str | None, "name": str, "lineno": int}]}
+
+        Returns ``(module_path, lineno, message)`` for each access that cannot
+        resolve. An empty list means every statically visible access is legal.
+
+        **This does not reimplement B1.** It walks the same three branches the
+        proxy walks at access time, in the same order, and asks the registry the
+        same questions — so the two gates cannot disagree about a reachable
+        access, because there is only one implementation of the decision. What
+        the static gate adds is *reach*: an access inside a skipped test, an
+        ``xfail``, or a branch that never executes is invisible to the proxy and
+        visible here. ADR-0009 Rule 3 states both gates.
+
+        The third branch is the one worth reading twice. A segment that is not a
+        namespace is not automatically wrong: ``fx.<fixture>.<attr>`` is an
+        ordinary attribute access on a fixture's *value*, and the proxy handles
+        it by resolving the segment as a shortcut and letting Python take the
+        attribute. Checking the leaf there would report a violation for every
+        test that reads a field off a fixture it legally owns.
+        """
+        errors: list[tuple[str, int, str]] = []
+        for module in modules:
+            module_path: str = module["module_path"]
+            for usage in module["usages"]:
+                namespace: str | None = usage["namespace"]
+                name: str = usage["name"]
+                failure = self._resolve_static_usage(namespace, name, module_path)
+                if failure is not None:
+                    errors.append((module_path, usage["lineno"], failure))
+        return errors
+
+    def _resolve_static_usage(
+        self, namespace: str | None, name: str, module_path: str
+    ) -> str | None:
+        """The message for a static access that cannot resolve, or ``None``.
+
+        Mirrors ``FixturesProxy.__getattr__`` and its two leaf routes. Kept
+        beside :meth:`fixture_lookup_error` because it is the same decision
+        asked at a different time.
+        """
+        if namespace is None:
+            return self._shortcut_failure(name, module_path)
+        if namespace == "oxi":
+            # Ambient built-ins are exempt from B1 and carry no anchor. Spelled
+            # as a literal to match `FixturesProxy.__getattr__`, the branch this
+            # mirrors; `plugin_loader._RESERVED_NAMESPACE` is a third copy of the
+            # same string and unifying the three is not this change's business.
+            return None
+        if not self._registry.has_namespace(namespace):
+            # Not a namespace: the segment is a shortcut, and `name` is an
+            # attribute of the value it resolves to. Only the segment is ours.
+            return self._shortcut_failure(namespace, module_path)
+        if (
+            self._registry.get_visible_in_namespace(name, namespace, module_path)
+            is None
+        ):
+            return str(self.fixture_lookup_error(name, namespace, module_path))
+        return None
+
+    def _shortcut_failure(self, name: str, module_path: str) -> str | None:
+        """The message for a bare name that resolves to nothing, or ``None``.
+
+        Peer of ``get_fixture_shortcut``'s miss branch, reading the same
+        B1-filtered catalog: a shortcut can never reach a fixture the qualified
+        path could not.
+        """
+        if self._registry.get_visible(name, module_path) is None:
+            return shortcut_miss_message(name)
+        return None
+
     # ── Resolution ────────────────────────────────────────────────────────────
 
     def _fold_function_stats(self, scope: _Scope) -> None:
@@ -1195,16 +1293,7 @@ class FixtureSession:
         """
         defn = self._registry.get_visible(name, module_path)
         if defn is None:
-            msg = (
-                f"cannot resolve fixture '{name}'.\n"
-                f"  Hint: '{name}' is neither a package segment reachable from "
-                f"this test nor a fixture visible to it. A shortcut "
-                f"(fx.{name}) needs a fixture of that name declared in this "
-                f"test's own package or an ancestor of it; a fixture declared "
-                f"inline in another test module is never visible here. Check "
-                f"the spelling, or use the qualified form fx.<package>.{name}."
-            )
-            raise FixtureNotFoundError(name, message=msg)
+            raise FixtureNotFoundError(name, message=shortcut_miss_message(name))
         ctx = _ResolutionContext(
             module_path, fn_teardowns, frozenset(), self._scope_for, module_path
         )

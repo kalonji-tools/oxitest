@@ -124,17 +124,21 @@ def test_cross_boundary_access_is_a_boundary_error(case: RunMode) -> None:
     # Assert
     assert rc == _EXIT_USAGE, (
         f"three cross-boundary accesses must fail the run under {case.label} "
-        f"as ERRORed tests that each still report, and the run must then exit "
-        f"4 because the suite is wired wrong (#1761). Exit 3 (CollectError) "
-        f"would mean the boundary aborted collection instead of producing "
-        f"per-test verdicts; exit 1 would mean CI cannot tell this from an "
-        f"assertion failure\n"
+        f"and exit 4 because the suite is wired wrong. Since #1758 these are "
+        f"statically visible, so the refusal comes at collection rather than "
+        f"as per-test ERRORs — the code stays 4 either way, because "
+        f"exit-codes.md defines it by the class of the error and not by when "
+        f"oxitest detects it. Exit 3 would mean the refusal took the "
+        f"CollectError path instead; exit 1 would mean CI cannot tell this "
+        f"from an assertion failure\n"
         f"stdout:\n{stdout}\nstderr:\n{stderr}"
     )
     assert output.count("fixture-boundary") >= 3, (
         f"each of the three violations must carry the stable code — the code is "
         f"what lets docs link this failure and CI grep for it without matching "
-        f"on prose; got:\n{output}"
+        f"on prose. All three must appear in one run: a gate that stopped at "
+        f"the first would refuse just as loudly and report a third of the "
+        f"truth; got:\n{output}"
     )
     assert output.count("will not make this access legal") == 1, (
         f"exactly one of the three is a typo. More than one means a fixture "
@@ -142,11 +146,29 @@ def test_cross_boundary_access_is_a_boundary_error(case: RunMode) -> None:
         f"absence rather than about the boundary; none means the leaf fact is "
         f"not being appended at all; got:\n{output}"
     )
-    assert "1 passed" in output, (
-        f"the positive control in api/test_api.py must still resolve its own "
-        f"package's fixture — without it a tree where api_conn never registered "
-        f"would produce the same errors for entirely the wrong reason; "
-        f"got:\n{output}"
+
+
+def test_the_legal_access_in_the_same_project_still_passes() -> None:
+    """The positive control for the refusal above (#1758).
+
+    It used to be the ``1 passed`` in that test's own output. A collection-time
+    refusal runs no tests, so the control moved to its own invocation: the
+    ``api`` package alone holds no illegal access, and must still resolve its
+    own fixture. Without it a tree where ``api_conn`` never registered would
+    produce the same three refusals for entirely the wrong reason.
+    """
+    # Act
+    stdout, stderr, rc = helpers.run_oxitest(
+        _CROSS / "slice6_cross_boundary" / "api" / "test_api.py"
+    )
+
+    # Assert
+    assert rc == 0, (
+        f"the anchor package holds no cross-boundary access, so it must run "
+        f"and pass; rc={rc}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    )
+    assert "1 passed" in stdout, (
+        f"api/test_api.py must resolve its own package's fixture; got:\n{stdout}"
     )
 
 
@@ -154,13 +176,19 @@ def test_the_prefix_sibling_is_not_treated_as_a_descendant() -> None:
     """`apiv2` starts with `api` as a string and is a sibling as a path."""
     # Act
     stdout, stderr, _rc = helpers.run_oxitest(_CROSS)
-    output = stdout + stderr
+    # Windows renders the refusal's path with backslashes, under a `\\?\D:\`
+    # extended-length prefix. Normalising the separator keeps one assertion for
+    # both platforms; matching the native spelling would need two, and the arm
+    # that never runs locally is the one that ships broken.
+    output = (stdout + stderr).replace("\\", "/")
 
     # Assert
-    assert "test_prefix_sibling_is_not_a_descendant" in output, (
+    assert "apiv2/test_apiv2.py" in output, (
         "a startswith-based predicate declares apiv2 visible from an anchor at "
         "api and this test would silently pass — the failure has to be "
-        f"attributed by name, or a green run means nothing here; got:\n{output}"
+        "attributed to apiv2 specifically, or a green run means nothing here. "
+        "Since #1758 the refusal happens before any test runs, so attribution "
+        f"is by file and line rather than by test name; got:\n{output}"
     )
 
 

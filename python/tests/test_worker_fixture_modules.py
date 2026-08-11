@@ -158,12 +158,19 @@ def test_cross_package_access_is_rejected_identically_in_serial_and_parallel(
     that only checked "both succeed" would never have caught that regression
     once cross-package access itself became illegal.
 
+    Since #1758 the reach is *statically* visible, so the refusal happens at
+    collection and no worker is ever spawned. That does not weaken the
+    invariant — it establishes it structurally: a verdict reached before any
+    process forks cannot depend on which process would have run the test. The
+    fan-out assertion is therefore inverted below rather than dropped, because
+    "no worker ran" is now the fact worth pinning, and an empty PID log is
+    exactly as falsifiable as a full one.
+
     Deliberately not asserting on the error type or the ``fixture-boundary``
-    diagnostic code: nothing raises ``BoundaryError`` yet (that lands in Task
-    7), so today this is rejected as ``FixtureNotFoundError`` in both paths.
-    Keeping the assertion at the process-exit-code level means this test stays
-    green across that change. The diagnostic code itself is pinned in Task 9's
-    dedicated slice-6 trees, which already cover serial and ``-n 2``.
+    diagnostic code. Keeping the assertion at the process-exit-code level means
+    this test stays green across changes to which gate catches the access. The
+    diagnostic code itself is pinned in the dedicated slice-6 trees, which
+    already cover serial and ``-n 2``.
     """
     root = Path(tmp) / "proj"
     root.mkdir()
@@ -180,8 +187,9 @@ def test_cross_package_access_is_rejected_identically_in_serial_and_parallel(
 
     helpers.clear_event_log(log)
     assert not helpers.read_event_log(log), (
-        "the serial run's PIDs survived the clear, so _assert_fanned_out below "
-        "would count them and pass on a parallel run that never fanned out"
+        "the serial run's PIDs survived the clear, so the empty-log assertion "
+        "below would count them and report a late gate on a parallel run that "
+        "correctly refused before spawning anything"
     )
 
     out, err, rc = helpers.run_oxitest(None, "-n", "4", cwd=str(root))
@@ -195,7 +203,15 @@ def test_cross_package_access_is_rejected_identically_in_serial_and_parallel(
         f"rc={rc} — the boundary verdict must not depend on worker "
         f"assignment\nstdout:\n{out}\nstderr:\n{err}"
     )
-    _assert_fanned_out(log, out)
+    pids = set(helpers.read_event_log(log))
+    assert not pids, (
+        f"the run reached {len(pids)} worker process(es) ({pids}) before "
+        f"refusing. Since #1758 a statically visible cross-boundary access is "
+        f"refused at collection, so no fixture in this project should ever be "
+        f"built — a PID here means the gate ran late, and the determinism this "
+        f"test guards would be back to depending on worker assignment\n"
+        f"stdout:\n{out}\nstderr:\n{err}"
+    )
 
 
 def test_fixtures_resolve_on_a_warm_cache(tmp: TempDir) -> None:

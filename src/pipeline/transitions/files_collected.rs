@@ -86,12 +86,27 @@ impl Pipeline {
         let mut prescan_data = Vec::with_capacity(file_results.len());
         let mut module_markers = std::collections::HashMap::new();
         let mut ast_weight_sum = crate::types::DurationMs::ZERO;
+        let mut fx_usages: std::collections::HashMap<
+            camino::Utf8PathBuf,
+            Vec<crate::prescan::FxUsage>,
+        > = std::collections::HashMap::new();
 
         for (file, result) in file_results {
             match result {
                 crate::prescan::PrescanResult::HasTests(p) => {
                     for i in &p.items {
                         ast_weight_sum += i.body_weight;
+                    }
+                    // One entry per module: B1 asks whether code *at this path*
+                    // may reach a fixture, so the module — not the test — is the
+                    // unit the check ranges over.
+                    let module_usages: Vec<crate::prescan::FxUsage> = p
+                        .items
+                        .iter()
+                        .flat_map(|i| i.fx_usages.iter().cloned())
+                        .collect();
+                    if !module_usages.is_empty() {
+                        fx_usages.insert(file.clone(), module_usages);
                     }
                     if !p.module_markers.is_empty() {
                         module_markers.insert(file.clone(), p.module_markers);
@@ -134,6 +149,7 @@ impl Pipeline {
         } else {
             None
         };
+        shared.fx_usages = fx_usages;
 
         Ok(Self {
             shared,
