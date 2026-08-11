@@ -2,10 +2,11 @@
 
 Anchored at ``api/``: everything declared here is visible from this directory
 and every directory below it, and from nowhere else (ADR-0009 Rule 3). The
-namespace ``api`` is the directory's own basename, which is why the tree lives
-under ``fixture_anchors/`` rather than beside the legacy examples in
-``how-to/fixtures/`` — ``fixtures`` is listed in ``norecursedirs``, so nothing
-below that directory is collected by the doc-example run.
+namespace ``api`` is the directory's own basename.
+
+Neither this tree nor its sibling ``use_fixtures/`` may be named ``fixtures``:
+``norecursedirs`` lists that name and matches on base name, so a directory
+called ``fixtures`` anywhere under ``python/tests/`` is never collected (#1721).
 
 Pages sourcing anchors from this file:
 
