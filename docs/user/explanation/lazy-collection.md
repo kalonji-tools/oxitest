@@ -49,11 +49,12 @@ These are detected during prescan and fall back to eager import:
 
 Fallback is **per-file** — other files stay on the lazy path.
 
-## Conftest Loading
+## Declaration Loading
 
-With lazy collection, only conftest files in the **ancestor chain** of matched
-test modules are loaded. If you run `tests/unit/test_auth.py`, conftests in
-`tests/integration/` and `tests/e2e/` are skipped entirely.
+With lazy collection, only declaration files in the **ancestor chain** of
+matched test modules are loaded. If you run `tests/unit/test_auth.py`, the
+`__fixtures__.py` and `__init__.py` files in `tests/integration/` and
+`tests/e2e/` are skipped entirely.
 
 ## Plugin Loading
 

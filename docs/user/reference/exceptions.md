@@ -37,12 +37,12 @@ visible declaration and notifies you so the override is never silent.
 
 ```
 tests/
-  conftest.py                  # defines fixture 'db'
+  __fixtures__.py              # defines fixture 'db'
   api/
     __fixtures__.py            # also defines 'db' → notice naming tests/api
     test_queries.py            #   resolves the api declaration
   admin/
-    test_reports.py            #   still resolves the conftest declaration
+    test_reports.py            #   still resolves the tests/ declaration
 ```
 
 No notice is emitted for declarations that no single test can reach together —
@@ -80,7 +80,7 @@ so the fix is discoverable from the traceback alone:
 
 1. A **BuiltinFixture** matching the requested type (see [Built-in fixtures](python-api/builtins.md))
 2. A **plugin-provided `FixtureProvider`** whose `fixture_type` matches (see [Write plugins](../how-to/write-plugins.md))
-3. A **conftest fixture** with the requested type as its return annotation
+3. An **`@oxi.fixture` declaration** with the requested type as its return annotation
 
 Typically fires when a test parameter is annotated `Fixture[T]` for a type
 `T` that no source provides — check the fixture registration site and the
@@ -91,6 +91,6 @@ type spelling.
 ```
 no fixture registered for type 'DatabaseHandle' — must be a
 BuiltinFixture, a plugin-provided FixtureProvider with matching
-fixture_type, or a conftest fixture with 'DatabaseHandle' as its
+fixture_type, or an @oxi.fixture declaration with 'DatabaseHandle' as its
 return annotation.
 ```
