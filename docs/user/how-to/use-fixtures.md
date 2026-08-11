@@ -213,6 +213,11 @@ are four tiers:
 | `"package"` | Once per anchor package | After the subtree's last test | **Exactly once per run** — the subtree is collapsed onto a single worker |
 | `"process"` | Once per worker *process* | At process teardown | **Once per worker**, so as many instances as `-n` — not once per run |
 
+Values declared above `function` lifetime are wrapped in a
+[`FrozenProxy`](../reference/exceptions.md#sharedfixturemutationerror). It
+forwards attribute access, so the value behaves as itself — but it is not the
+underlying object, so `isinstance(value, UnderlyingClass)` is `False`.
+
 `module` lifetime with a `yield` is the common shape for an expensive resource
 shared by one test file:
 

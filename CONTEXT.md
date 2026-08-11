@@ -141,11 +141,11 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 ## Auto-Arrangement
 
-**Auto-Arrangement** — Automatic grouping of tests onto the same worker based on wide-tier fixture dependencies. Tests that transitively depend on the same `lifetime="module"` fixture are co-located on a single worker so the fixture is created once, not per-worker. The input was `shared=True` until #1720 retired that tier.
+**Auto-Arrangement** — Automatic grouping of tests onto the same worker based on wide-tier fixture dependencies. Tests that transitively depend on the same `lifetime="module"` fixture are co-located on a single worker. The input was `shared=True` until #1720 retired that tier.
 
 **Connected Component** — A set of fixture names linked by transitive dependency. If fixture A depends on an arrangement-input fixture B, and fixture C also depends on B, then {A, B, C} form one connected component. All tests depending on any member land on the same worker.
 
-**Arrangement Threshold** — The percentage of parallel-eligible tests beyond which the largest connected component triggers a fallback to serial execution. Controlled via `--auto-arrange[=THRESHOLD]`.
+**Arrangement Threshold** — The percentage of parallel-eligible tests beyond which the largest connected component triggers a fallback to serial execution. Controlled via the `auto_arrange` key in `[tool.oxitest]`; there is no CLI flag.
 
 ## CLI Structure
 
