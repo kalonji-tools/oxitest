@@ -31,3 +31,9 @@ class Sess:
     """Value of the ``session``-lifetime async fixture."""
 
     label = "sess"
+
+
+class Ref:
+    """Value of the module-lifetime async fixture reached by ``FixtureRef``."""
+
+    label = "ref"

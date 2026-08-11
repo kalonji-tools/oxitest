@@ -239,18 +239,26 @@ def _load_and_resolve(
             )
             namespace = session.get_namespace_for_func(fixture_name, fixture_fn)
             if namespace:
-                param_kwargs[field_name] = session.get_fixture_in_namespace(
+                # The parameter route, not the proxy route. A FixtureRef is
+                # written as `Case(c=conn)` and delivered as a parameter — the
+                # user never touches `fx.` — so it owes the answer `Fixture[T]`
+                # injection gives, and ADR-0006 Amendment 2 makes that answer
+                # legal above `function` lifetime.
+                #
+                # This used to call get_fixture_in_namespace, which carries the
+                # proxy guard, so one cell had two answers depending on how the
+                # fixture was named: the parameter route resolved it and this
+                # one raised AsyncFixtureAccessError, citing an `fx.` spelling
+                # the user never wrote (#1876).
+                #
+                # `function` lifetime is unchanged. Its value is an un-advanced
+                # coroutine, it lands in param_kwargs, and
+                # AsyncDepGuardMiddleware refuses it there.
+                param_kwargs[field_name] = session.get_namespaced_fixture_value(
                     fixture_name,
                     namespace,
                     meta.module_path,
                     fn_teardowns,
-                    # A FixtureRef lands in param_kwargs, which
-                    # AsyncDepGuardMiddleware inspects for coroutines — and a
-                    # wider-than-function async fixture is not one. Omitting
-                    # this used to inherit the permissive default and hand a
-                    # sync test an AsyncFixtureHandle it could only fail on
-                    # (#1876).
-                    test_is_async=inspect.iscoroutinefunction(fn),
                 )
             else:
                 param_kwargs[field_name] = session.get_fixture_by_name(

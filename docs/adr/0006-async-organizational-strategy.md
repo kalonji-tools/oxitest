@@ -32,7 +32,7 @@ One `@arrange` decorator, one `Fixtures` class. `FixtureDef.is_async` is inferre
 | Fixture kind | Scope | Dispatch |
 |---|---|---|
 | sync | any | current sync path (generator unpack or plain value) |
-| async | `shared` / `session` | `SharedAsyncManager.resolve()` on the shared async session |
+| async | `session` | `SharedAsyncManager.resolve()` on the shared async session |
 | async | `each` (function scope) | per-test-lifetime loop, `run_until_complete` for setup and teardown |
 
 The per-test-lifetime loop is owned by the fixture instantiator, created lazily on first each-scope async fixture, shared with the test body if the test is `async def`, and closed after cleanup. `AsyncBackend.run` is *not* used in this path.
@@ -42,8 +42,12 @@ The per-test-lifetime loop is owned by the fixture instantiator, created lazily 
 Sync test + function-scope async fixture is **rejected at arrange time**, always, regardless of `strict` config. Diagnostic names three legal exits:
 
 1. Make the test `async def`.
-2. Convert the fixture to `shared` (or `session`) scope.
+2. Raise the fixture's lifetime above `function` — `lifetime="module"`, `"package"` or `"process"`.
 3. Convert the fixture to a `def` (sync) fixture.
+
+> **Amended — Amendment 2 ([#1876](https://github.com/kalonji-tools/oxitest/issues/1876)).** Exit 2 read *"Convert the fixture to `shared` (or `session`) scope."* Those are **Scope** spellings, and this list is read by a user, who writes a **Lifetime**. `shared` has not existed since #1720. The dispatch table above keeps Scope, correctly — it dispatches on `defn.scope`.
+>
+> Amendment 2 also states which **routes** this cell covers, which this rule never did.
 
 Rejection is not gated by `strict` because `strict` toggles style (bare asserts, dict parametrize); the async cell rejection is correctness. Pytest #12930 (gated) → #14015 (always-on) is direct empirical evidence that gating was insufficient.
 
@@ -143,3 +147,28 @@ This belongs to the same class of defect as ADR-0009's five amendments and the [
 - Downstream spec: [#1535 — Spec: apply chosen async pattern to @arrange (including silent-failure bug fix)](https://github.com/kalonji-tools/oxitest/issues/1535)
 - Root-cause reference: `python/oxitest/_bridge/_fixture_instantiator.py:138-151` — `_unpack_sync` silent-discard of coroutines and async generators.
 - Follow-up (tracked outside this map): `AsyncBackend.run` seam refactor — loop-lifecycle-aware replacement for the current `run(coro) -> _T` shape.
+
+### Amendment 2 — the illegal cell is proxy-only, and the routes are now named (2026-08-11)
+
+Tracked by [#1876](https://github.com/kalonji-tools/oxitest/issues/1876). Amends "The one illegal cell" and the dispatch table. The decision to keep async surface at `oxitest/` is untouched.
+
+**This ADR never said which access route its cell governs, because when it was written there was one.** The `fx.` proxy arrived later, with ADR-0009 slices 6 and 7. The proxy enforces something **stricter** than the cell described here, and no normative document recorded that — which is why the difference read as a hole in the parameter route rather than as a boundary.
+
+**The rule, by route.** Measured on `main` `48e87a92`, Linux 6.18.41 x86_64, CPython 3.12.13, one project per cell:
+
+| Consumer | Route | `function` | wider than `function` |
+|---|---|---|---|
+| sync test | `Fixture[T]` parameter | refused | **legal** — `FrozenProxy('module-value')`, `FrozenProxy('package-value')` |
+| sync test | `FixtureRef` in `@oxi.parametrize` | refused | **legal** |
+| sync test | `await fx.<name>` proxy | refused | **refused, at every tier** |
+| sync fixture | a `Fixture[T]` dependency | refused | **legal** — `FrozenProxy('consumed:async-wide')` |
+
+**The asymmetry is the delivery mechanism, not an oversight.** The proxy returns a handle only `await` can unwrap, so a sync test cannot consume it at any lifetime. The parameter routes return a value already awaited on the shared session loop, so above `function` there is nothing left to await. Widening the refusal to the parameter routes would move a cell this ADR routes deliberately from legal to illegal, and break suites that run today.
+
+**The consumer set is stated because it was measured.** A *fixture* consuming a fixture is the same cell one level down, and the question there is whether the consumer can await rather than whether the test is async. It behaves identically: a sync fixture depending on a `module`-lifetime async fixture receives the value, and one depending on a `function`-lifetime async fixture is refused with its own message — `sync fixture 'X' cannot depend on async fixture 'Y'`. So `function`-only holds for both consumer kinds.
+
+**`FixtureRef` was on the wrong side and is corrected.** It resolved through the proxy machinery, so a sync test naming a wider-tier async fixture in a `@oxi.parametrize` case was refused where the identical fixture reached by a `Fixture[T]` parameter resolved. One cell had two answers decided by how the fixture was named, and the error cited an `fx.<namespace>.<name>` spelling the user never wrote. It now resolves as the parameter route does. `function` lifetime is unchanged — the value is an un-advanced coroutine and `AsyncDepGuardMiddleware` refuses it.
+
+**`AsyncFixtureAccessError` no longer offers an exit that cannot work.** It listed *"Raise the fixture's lifetime so it is built outside the test"* at every tier, on the one route where raising the lifetime never helps — measured refusing at `function`, `module` and `package`. Above `function` it now offers the parameter route instead, which is the cell this amendment declares legal. It also printed `Lifetime: each`; `each` is a Scope, and no `@oxi.fixture` call accepts it.
+
+**What pins this.** `python/tests/data/async_guard_matrix/legal` holds nine cells, run serially and under `-n 2`. `illegal/` holds the four that stay illegal — the `function`-tier `FixtureRef` pair, and the sync-proxy cells at `module` and `package`. The proxy pair is the load-bearing half: it is the only assertion that the proxy stays stricter than this ADR's cell, and without it a change relaxing the proxy would leave every gate green.
