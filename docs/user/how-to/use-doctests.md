@@ -105,7 +105,14 @@ This lets a strict project catch drift in its `scope` / `skip` config without a 
 
 ### Files that fail to parse
 
-A file in the coverage scan set that fails to parse (syntax error or I/O error) produces its own diagnostic under the `doctest.coverage.parse-error` context, naming the file — its definitions are invisible to coverage until the file is fixed. A `Symbol` or `Member` entry (in `scope` or `skip`) naming a symbol inside such a file reports the parse failure too, instead of a staleness verdict:
+A file in the coverage scan set that oxitest cannot read produces its own diagnostic under the `doctest.coverage.parse-error` context — its definitions are invisible to coverage until the file is fixed. The diagnostic names the cause it hit rather than offering both: a syntax error is reported with the file, the line and the parser's own message, and a file that could not be read is reported with the reason the read failed.
+
+```
+`mypkg/broken.py:12` invalid syntax. Got unexpected token ':' — its definitions are invisible to doctest coverage
+`mypkg/broken.py` could not be read: stream did not contain valid UTF-8 — its definitions are invisible to doctest coverage
+```
+
+A `Symbol` or `Member` entry (in `scope` or `skip`) naming a symbol inside such a file reports the parse failure too, instead of a staleness verdict:
 
 ```
 <kind> entry '<entry>' names a file that could not be parsed (fix the file so coverage can judge this entry)
