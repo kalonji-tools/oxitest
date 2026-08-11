@@ -97,3 +97,19 @@ Sections requiring phase-2 data show a loading indicator until the background Py
 - The extension node mechanism requires a new `Extension` variant in the graph node types and a generic detail renderer.
 - Source view requires syntax highlighting in-TUI (e.g., `syntect` crate) and process suspension/resumption for $EDITOR integration.
 - Phase 2 remains Python-dependent — fixture type resolution (`get_type_hints`), decorator parameter extraction, and plugin introspection all require Python runtime. The two-phase progressive loading architecture is the right design for this constraint.
+
+## Amendments
+
+### Amendment 1 — the fixture model this ADR describes was replaced (2026-08-11)
+
+**Issue:** [#1722](https://github.com/kalonji-tools/oxitest/issues/1722). Amends the Overview Sections list and records where the autouse view landed. The Decision itself stands: two modes, the trail, the preview pane, and the progressive-loading split are all unchanged.
+
+Three statements above describe a fixture model that [#1720](https://github.com/kalonji-tools/oxitest/issues/1720) and [#1788](https://github.com/kalonji-tools/oxitest/issues/1788) retired. They are left as written, per this repository's convention that an ADR keeps its original words and is corrected by amendment.
+
+1. **Overview section 3 is "Declarations", not "Conftests".** `conftest.py` is no longer a fixture home; a declaration is a `__fixtures__.py`, an `__init__.py`, or an inline declaration in a test module (ADR-0009 Rule 5). The node kind is `Declaration` and its sigil is `D`.
+2. **"unused helpers" is not a signal.** The helper concept was retired entirely by #1788; there are no helpers to be unused.
+3. **The section is fed by a call the surface has to make.** `FixtureSession::new` builds an empty session, so `inspect` saw only builtins until #1722 had `spawn_phase2` call `register_declaration_homes_for_files`. Any future surface that builds its own session inherits this obligation.
+
+**The autouse view is a section, not a screen.** ADR-0009 Rule 7 cites `oxitest inspect` as its answer to the invisibility objection against autouse. That view shipped as an `Autouse (applies here)` section inside the Test node's `NodeFocus` detail, rather than as a sixth screen kind. `Screen` therefore keeps its four variants and the keybinding table above is unchanged — the alternative would have spent a new screen, a new key and a breadcrumb entry on what is one list.
+
+**The keybinding table is accurate and `CONTEXT.md` was the document that had drifted**, missing `s` and `e`; #1722 repaired it there.

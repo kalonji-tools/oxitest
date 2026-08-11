@@ -267,7 +267,9 @@ Autouse fixtures remain accessible by explicit request (`Fixture[T]` or `fx.<nam
 
 **One combination is refused:** `autouse=True` with `lifetime="function"` on an `async` factory, rejected at registration with a `UsageError` naming the file, the fixture and two ways forward. It would fire for the sync tests in its boundary too, manufacturing the ADR-0006 illegal cell for tests that never asked for it. The wider tiers stay legal — the ten-framework survey on [#1739](https://github.com/kalonji-tools/oxitest/issues/1739) found no framework restricting autouse for being async, and a per-module transaction is the canonical use.
 
-The invisibility concern historically raised against autouse is solved by tooling, not by removing the feature: `oxitest inspect` shows autouse-firing per test as a first-class view. That view is **not yet built** — slice 15, [#1722](https://github.com/kalonji-tools/oxitest/issues/1722) — so until it ships the registration notice above is the only signal a user gets, which is why slice 9 made it name the consequence rather than merely the fact of shadowing.
+The invisibility concern historically raised against autouse is solved by tooling, not by removing the feature: `oxitest inspect` shows per test which autouse fixtures apply. That view **shipped** with slice 15, [#1722](https://github.com/kalonji-tools/oxitest/issues/1722), as an `Autouse (applies here)` section on the Test node, listing each fixture with its lifetime in firing order.
+
+It reports which fixtures **apply**, not which test builds one — the counts above are a rate, so the build lands in whichever test reaches the boundary first, and `inspect` runs no tests. It reads the effective set through `get_autouse`, so the opt-out below is reflected rather than the declared flag. The registration notice remains the signal at run time, and naming the consequence rather than the fact of shadowing still matters there.
 
 
 ### Rule 8 — Retirements

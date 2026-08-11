@@ -2,7 +2,7 @@
 
 !!! abstract "How-to"
     Explore your test suite interactively — browse tests, fixtures, marks,
-    conftests, and plugins in a terminal UI without running any tests.
+    fixture declarations, and plugins in a terminal UI without running any tests.
 
 `oxitest inspect` opens a ratatui-based TUI over your project's five built-in
 **Inspect Node** kinds:
@@ -10,9 +10,9 @@
 | Kind | Sigil | What it represents |
 |------|-------|--------------------|
 | Test | `T` | Collected test functions |
-| Fixture | `F` | Registered fixtures from conftests and plugins |
+| Fixture | `F` | Registered fixtures from declarations, plugins and builtins |
 | Mark | `M` | Marks used across test files |
-| Conftest | `C` | Conftest files and their fixture ownership |
+| Declaration | `D` | Fixture declaration files and what they declare |
 | Plugin | `P` | Registered plugins and the protocols they implement |
 
 The TUI starts instantly because phase-1 data (tests, marks) is
@@ -64,7 +64,7 @@ $ oxitest inspect -E 'mark(slow)'
 ```
 
 Only tests matching the query DSL expression are loaded into the graph.
-Fixture and conftest data is still fully loaded — only the test set is
+Fixture and declaration data is still fully loaded — only the test set is
 narrowed.
 
 ### Show only previously-failed tests
@@ -122,7 +122,7 @@ It shows four fixed **Sections** in this order:
    fixtures the test suite leans on most. *(phase 2)*
 2. **Marks** — every registered mark with the number of tests that carry it.
    *(phase 1)*
-3. **Conftests** — every `conftest.py` with its fixture count. *(phase 2)*
+3. **Declarations** — every declaration file with its fixture count. *(phase 2)*
 4. **Signals** — graph-derived diagnostics: unused fixtures,
    broken edges, high-fan-in fixtures, deep dependency chains, and scope
    mismatches. *(phase 2)*
@@ -150,6 +150,42 @@ on an edge to focus the target node, building a trail. Press `Backspace` (or
 `h`/`Left`) to pop the trail and return to the previous focus. There are no
 mandatory intermediate list screens — you move directly from one node to
 another along its edges.
+
+### See which autouse fixtures apply to a test
+
+An autouse fixture runs without any test naming it, so nothing in the test's
+own source says it is there. A Test node lists them:
+
+```text
+T tests/api/test_orders.py::test_create
+
+  async: no
+
+  Fixture Dependencies
+    F db_session
+
+  Autouse (applies here)
+    F seed_admin              package
+    F db_txn                  module
+```
+
+Rows are ordered the way the fixtures run — widest lifetime first — and the
+tier shown is the `lifetime` the declaration wrote.
+
+The heading says **applies**, not *fires*, and the difference is real. An
+autouse fixture is built once per boundary, inside whichever test reaches that
+boundary first; which test that is depends on execution order, on how work is
+split across workers, and on what you deselected. `inspect` runs no tests, so
+it can tell you what applies to this test and what it will cost per boundary,
+but not which test pays.
+
+The section is always present. When a module has no autouse fixtures it says
+`none`, and when the fixture data could not be loaded it says so — an empty
+list and an unanswered question look different on purpose.
+
+To opt a subtree out, declare a fixture of the same name **without** `autouse`
+at a deeper anchor; the section stops listing it there and keeps listing it
+elsewhere.
 
 ### Source view
 
