@@ -5,6 +5,6 @@ expression: "format_detail(&e, ResourceKind::Fixtures, false)"
 ─── db_session ───
 
   source:       __fixtures__.py
-  shared:       true
+  lifetime:     module
   autouse:      true
   async:        false

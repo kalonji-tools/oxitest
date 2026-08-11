@@ -199,8 +199,8 @@ mod tests {
 
     #[test]
     fn validate_invalid_predicate() {
-        // "shared" is valid for Fixtures but not for Tests
-        let expr = lex_and_parse("shared()").unwrap();
+        // "autouse" is valid for Fixtures but not for Tests
+        let expr = lex_and_parse("autouse()").unwrap();
         assert!(matches!(
             validate_predicates(&expr, &ResourceKind::Tests),
             Err(DslError::InvalidPredicate { .. })
@@ -208,8 +208,8 @@ mod tests {
     }
 
     #[test]
-    fn validate_shared_valid_for_fixtures() {
-        let expr = lex_and_parse("shared()").unwrap();
+    fn validate_autouse_valid_for_fixtures() {
+        let expr = lex_and_parse("autouse()").unwrap();
         assert!(validate_predicates(&expr, &ResourceKind::Fixtures).is_ok());
     }
 

@@ -187,7 +187,7 @@ oxitest query fixtures [OPTIONS] [PATHS...]
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--tree` | — | flag | `false` | Show fixture dependency tree instead of a flat list. Visualises which fixtures depend on which. Detects circular dependencies. |
-| `-E` | — | `EXPR` | — | DSL filter (see [Query DSL](#query-dsl)). Predicates: `name()`, `shared()`, `autouse()`, `async()`. |
+| `-E` | — | `EXPR` | — | DSL filter (see [Query DSL](#query-dsl)). Predicates: `name()`, `autouse()`, `async()`. |
 | `--verbose` | `-v` | `LEVEL` | `normal` | Verbosity level. With `--tree`: `-v` adds tags (`shared`, `async`, `autouse`); `-vv` also adds origin (`conftest.py` path). |
 | `--quiet` | `-q` | flag | `false` | Quiet output (minimal detail). |
 | `--jsonl` | — | flag | `false` | Output as JSON Lines. |
@@ -276,7 +276,6 @@ vary by resource but the syntax is consistent:
 | `source(pat)` | tests, fixtures | file path or node ID contains `pat` |
 | `mark(name)` | tests | test has the given mark |
 | `async()` | tests, fixtures | test or fixture is an async function |
-| `shared()` | fixtures | fixture is declared `lifetime="module"` |
 | `autouse()` | fixtures | fixture is declared `autouse=True` |
 | `uses(name)` | tests, fixtures | test uses fixture `name`, or fixture depends on fixture `name` |
 | `used_in(id)` | marks | mark is applied to a test matching `id` |
