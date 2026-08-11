@@ -879,15 +879,37 @@ class FixtureSession:
         return self._registry.modules_with_visible_module_lifetime(module_paths)
 
     def arranged_fixture_groups(
-        self, arranged: Collection[str]
-    ) -> tuple[tuple[str, ...], ...]:
-        """Return connected components of the fixtures named by ``@oxi.arrange``.
+        self, arranged: Collection[tuple[str, str]]
+    ) -> tuple[tuple[tuple[str, ...], ...], dict[str, str]]:
+        """Return the components, and how to spell each fixture back to the user.
 
-        Rust passes a ``list[str]``; the registry wants a set. This boundary is
-        the single conversion point, so the registry's signature stays honest
-        rather than being widened to accommodate the wire type.
+        Rust passes ``(kind, value)`` pairs, where *kind* is ``"Type"`` or
+        ``"Name"`` — the two variants of ``ArrangedEntry``. Both used to be
+        flattened to one string before crossing, which is #2045: a type's
+        ``__name__`` is not a registry key, so the component never formed and
+        the decorator was a silent no-op in its type spelling.
+
+        A ``Type`` entry is resolved here rather than in Rust because the
+        registry is the only thing that knows a public type maps to a private
+        impl class. The second return value maps each resolved name back to the
+        spelling the user wrote, so a diagnostic can say ``TempDir`` and never
+        ``_TempDirFixture``, which is private vocabulary nobody should be
+        invited to type.
+
+        A ``Type`` entry that resolves to nothing raises, and the raise is the
+        point: an accepted spelling that quietly does nothing is the defect this
+        change removes, and leaving one behind would reproduce it a level out.
         """
-        return self._registry.arranged_fixture_groups(frozenset(arranged))
+        names: set[str] = set()
+        display: dict[str, str] = {}
+        for kind, value in arranged:
+            if kind == "Type":
+                resolved = self._registry.resolve_arranged_type(value)
+                names.add(resolved)
+                display[resolved] = value
+            else:
+                names.add(value)
+        return self._registry.arranged_fixture_groups(frozenset(names)), display
 
     def process_lifetime_fixture_names(self) -> tuple[str, ...]:
         """Return sorted names of fixtures declared ``lifetime="process"``."""

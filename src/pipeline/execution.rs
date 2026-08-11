@@ -357,6 +357,7 @@ fn emit_scheduling_diagnostics(
     estimated: Option<std::time::Duration>,
     cpu_count: usize,
     arranged_fixture_groups: &[Vec<String>],
+    arranged_display: &std::collections::HashMap<String, String>,
 ) {
     let total_tests: usize = plan
         .inprocess_groups
@@ -428,9 +429,15 @@ fn emit_scheduling_diagnostics(
 
             // Auto-arrange diagnostics.
             if !plan.arranged_groups.is_empty() {
+                // Named back in the spelling the user wrote. A component is
+                // keyed by the registry name, and for a builtin that is the
+                // private impl class — `_TempDirFixture` for `@oxi.arrange(TempDir)`.
+                // Printing it would show vocabulary nobody should be invited to
+                // type, for a fixture the user named perfectly well (#2045).
                 let fixture_names: Vec<String> = arranged_fixture_groups
                     .iter()
-                    .flat_map(|g| g.iter().cloned())
+                    .flat_map(|g| g.iter())
+                    .map(|name| arranged_display.get(name).unwrap_or(name).clone())
                     .collect();
                 let list = fixture_names.join(", ");
                 let arranged_count: usize = plan
@@ -571,22 +578,49 @@ fn execute_phases(
     // come from the collected items rather than from any property of the
     // fixture: #1848 retired the lifetime-derived inference, so a component
     // exists only where a test asked for one with `@oxi.arrange`.
-    let arranged_names: Vec<String> = {
-        let mut names: Vec<String> = clean_items
+    let arranged_entries: Vec<(String, String)> = {
+        let mut entries: Vec<(String, String)> = clean_items
             .iter()
             .flat_map(|item| item.arranged.iter())
             .map(|entry| match entry {
-                types::ArrangedEntry::Type(name) | types::ArrangedEntry::Name(name) => name.clone(),
+                // The tag crosses to Python instead of being discarded here.
+                // Both variants used to flatten to the same string, which is
+                // #2045: a type's `__name__` is not a registry key — a builtin
+                // registers under its impl class name — so the component never
+                // formed and the type spelling was accepted and then ignored.
+                types::ArrangedEntry::Type(name) => ("Type".to_owned(), name.clone()),
+                types::ArrangedEntry::Name(name) => ("Name".to_owned(), name.clone()),
             })
             .collect();
-        names.sort_unstable();
-        names.dedup();
-        names
+        entries.sort_unstable();
+        entries.dedup();
+        entries
     };
-    let arranged_fixture_groups = if arranged_names.is_empty() {
-        vec![]
+    let (arranged_fixture_groups, arranged_display) = if arranged_entries.is_empty() {
+        (vec![], std::collections::HashMap::new())
     } else {
-        ctx.session.arranged_fixture_groups(py, arranged_names)
+        match ctx.session.arranged_fixture_groups(py, arranged_entries) {
+            Ok(pair) => pair,
+            Err(e) => {
+                // Unreachable in a run that reaches here: the collection
+                // validator already refuses an arranged entry that resolves to
+                // no fixture, which is what emits "fixture 'X' not found".
+                // Reported rather than swallowed all the same — an empty
+                // component set is precisely the silent no-op #2045 removes,
+                // and `unwrap_or_default` would restore it.
+                rep.record_diagnostics(vec![crate::reporter::stats::DiagnosticEntry {
+                    severity: crate::reporter::stats::DiagnosticSeverity::Warning,
+                    context: std::sync::Arc::from("arrangement"),
+                    message: format!(
+                        "could not resolve the fixtures named by @oxi.arrange, so no \
+                         tests were co-located: {e}"
+                    ),
+                    file: None,
+                    lineno: None,
+                }]);
+                (vec![], std::collections::HashMap::new())
+            }
+        }
     };
 
     // Modules that can resolve a `lifetime="module"` fixture must not span two
@@ -622,6 +656,7 @@ fn execute_phases(
         ctx.cfg.exec.min_parallel_tests,
         &arranged_fixture_groups,
         &declaring_modules,
+        &arranged_display,
         estimated,
         cpu_count,
     );
@@ -633,7 +668,14 @@ fn execute_phases(
     // ── Verbose scheduling diagnostics ─────────────────────────────────
 
     if ctx.cfg.output.verbosity >= config::Verbosity::Detailed {
-        emit_scheduling_diagnostics(ctx, &plan, estimated, cpu_count, &arranged_fixture_groups);
+        emit_scheduling_diagnostics(
+            ctx,
+            &plan,
+            estimated,
+            cpu_count,
+            &arranged_fixture_groups,
+            &arranged_display,
+        );
     }
 
     // ── Dispatch based on plan ─────────────────────────────────────────

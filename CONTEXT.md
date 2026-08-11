@@ -143,7 +143,11 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 **Arrangement** — Grouping tests onto the main process because they asked to be grouped. A test names one or more fixtures in `@oxi.arrange`, and every test in the Connected Component of a named fixture is co-located. Nothing is derived from a fixture's lifetime: #1848 retired an inference that read `lifetime="module"` (and `shared=True` before #1720), because at that tier co-location cannot reduce a build — the tier rebuilds per module and a module is the scheduling unit.
 
-**Arrangement Input** — A fixture named in an `@oxi.arrange` on a collected test. Membership is a declaration, not a property of the fixture, so a fixture at any lifetime can be one.
+**Arrangement Input** — A fixture designated by an `@oxi.arrange` on a collected test. Membership is a declaration, not a property of the fixture, so a fixture at any lifetime can be one.
+
+**Arrangement Spelling** — How an Arrangement Input is written: its **name**, as a string, or its **type**, as an `@injectable` class. Both denote the same fixture and schedule the same way. The distinction is only in what the framework must resolve — a type reaches its fixture through the binding type, because a builtin is registered under its private implementation class and never under the public type name.
+
+**Declaring Module** — A test module that can resolve a `lifetime="module"` fixture. It is never split across two dispatch phases, because each phase owns its own fixture session and a split would build the fixture once in each. The test is visibility rather than use: a module qualifies if the fixture is visible to it, whether or not any test in it reaches the fixture.
 
 **Connected Component** — A set of fixture names linked by transitive dependency. If fixture A depends on an Arrangement Input B, and fixture C also depends on B, then {A, B, C} form one connected component. All tests depending on any member land on the same process.
 

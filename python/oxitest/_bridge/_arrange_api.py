@@ -44,14 +44,27 @@ def arrange(*args: type | str) -> Callable[[_F], _F]:
         process. Since #1848 it is the only thing that does so: nothing is
         inferred from a fixture's lifetime any more.
 
-        At ``lifetime="process"`` that reduces the build count, because the
-        tier builds once per process and the component is one process. At
-        narrower tiers it changes only where the tests run.
+        **Both spellings schedule.** A name entry and a type entry denote the
+        same fixture and are treated the same way. Until #2045 a type entry was
+        accepted and then ignored, because a builtin registers under its
+        private impl class name and the public type name is never a registry
+        key.
 
-        A **name** entry schedules. A **type** entry does not yet — it is
-        accepted and then ignored by the scheduler, because the type's name and
-        the fixture's name are different keys. See
-        `#2045 <https://github.com/kalonji-tools/oxitest/issues/2045>`_.
+        Co-location is what the decorator promises. Whether it also reduces the
+        *build count* depends on the fixture's tier, and the two questions are
+        separate:
+
+        - ``lifetime="process"`` builds once per process and a component is one
+          process, so arranging reduces the count. Measured: four builds become
+          one.
+        - ``lifetime="module"`` rebuilds per module and a module is the
+          scheduling unit, so arranging changes only where the tests run.
+          Measured: four builds in every consumption form.
+        - ``lifetime="package"`` already collapses its subtree onto one worker,
+          and a declaring subtree is excluded from arrangement outright.
+
+        A declaring module is kept whole inside its component rather than being
+        split across a component and the parallel remainder (#1750).
 
     Examples:
         Applying ``@arrange`` attaches fixture metadata to the function.

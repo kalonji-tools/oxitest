@@ -1489,3 +1489,61 @@ def test_an_unanchored_module_tier_def_reports_nothing() -> None:
         "produces one, and the safe direction for undocumented plugin surface is "
         "today's partitioning"
     )
+
+
+# ── Type-entry resolution for @oxi.arrange (#2045) ───────────────────────────
+
+
+def test_a_plugin_type_entry_resolves_however_the_author_named_the_fixture() -> None:
+    """#2045: the plugin arm must not depend on a naming coincidence.
+
+    A plugin registers under ``provider.name``, which the author chooses freely,
+    while the type entry carries the class's ``__name__``. Before this fix the
+    two met only when an author happened to name the fixture after its type, so
+    ``@oxi.arrange(SomeType)`` worked for some plugins and silently did nothing
+    for others.
+    """
+
+    class DbSession:
+        """The @injectable type a plugin exports."""
+
+    registry = helpers.make_registry(
+        FixtureDef(
+            name="db",
+            fixture_type=DbSession,
+            scope=FixtureScope.EACH,
+            source=PluginSource(provider=object(), plugin_module="fake_plugin"),
+        )
+    )
+
+    assert registry.resolve_arranged_type("DbSession") == "db", (
+        "the type entry must reach the fixture through the binding type, not through "
+        "a name match; a plugin whose fixture name differs from its type name is the "
+        "case the fix exists for, and it is the common case"
+    )
+
+
+def test_a_builtin_type_entry_resolves_to_its_private_impl_name() -> None:
+    """#2045: for a builtin the two names can never agree by chance.
+
+    ``registered_types()`` maps the public type to a private implementation
+    class, so the registry key is always ``_XFixture``. This is why the builtin
+    arm was not merely unlucky — it was unreachable.
+    """
+    session = helpers.make_session()
+
+    resolved = session.registry.resolve_arranged_type("TempDir")
+
+    assert resolved == "_TempDirFixture", (
+        "a builtin registers under its impl class name, so resolving the public type "
+        "name is the only route to its component; matching on the public name would "
+        "never hit"
+    )
+
+
+def test_an_unregistered_type_name_is_refused() -> None:
+    """#2045: an unresolvable entry raises rather than forming no component."""
+    registry = helpers.make_registry()
+
+    with raises(FixtureNotFoundError):
+        registry.resolve_arranged_type("NoSuchType")

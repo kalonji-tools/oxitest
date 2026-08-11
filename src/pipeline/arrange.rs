@@ -83,6 +83,7 @@ pub(super) fn partition_by_fixture_groups(
     groups: Vec<ModuleGroup>,
     fixture_groups: &[Vec<String>],
     declaring_modules: &[String],
+    arranged_display: &std::collections::HashMap<String, String>,
 ) -> FixturePartition {
     if fixture_groups.is_empty() {
         return FixturePartition {
@@ -92,11 +93,26 @@ pub(super) fn partition_by_fixture_groups(
     }
 
     // Build fixture→group_index map: O(total fixtures across all groups)
-    let fixture_to_group: std::collections::HashMap<&str, usize> = fixture_groups
+    let mut fixture_to_group: std::collections::HashMap<&str, usize> = fixture_groups
         .iter()
         .enumerate()
         .flat_map(|(gi, fg)| fg.iter().map(move |f| (f.as_str(), gi)))
         .collect();
+
+    // A component is keyed by the *registry* name, while the qualifier a type
+    // entry leaves in `fixture_deps` is the *type* name the user wrote —
+    // `TempDir` against a component keyed `_TempDirFixture`. Alias the spelling
+    // onto the same group so the qualifier match finds it (#2045).
+    //
+    // Aliased here rather than by rewriting the qualifier at collection: that
+    // qualifier is what `validate_fixture_names` reads, and it is already the
+    // gate that refuses an `@injectable` type no fixture provides. Rewriting it
+    // would move that refusal without replacing it.
+    for (resolved, spelling) in arranged_display {
+        if let Some(&gi) = fixture_to_group.get(resolved.as_str()) {
+            fixture_to_group.insert(spelling.as_str(), gi);
+        }
+    }
 
     let mut arranged: Vec<Vec<ModuleGroup>> = vec![vec![]; fixture_groups.len()];
     let mut remaining = Vec::new();
@@ -202,6 +218,7 @@ pub(super) fn plan_execution(
     min_parallel_tests: usize,
     arranged_fixture_groups: &[Vec<String>],
     declaring_modules: &[String],
+    arranged_display: &std::collections::HashMap<String, String>,
     estimated: Option<std::time::Duration>,
     cpu_count: usize,
 ) -> ExecutionPlan {
@@ -255,6 +272,7 @@ pub(super) fn plan_execution(
             parallel_groups,
             arranged_fixture_groups,
             declaring_modules,
+            arranged_display,
         );
 
         return ExecutionPlan {
@@ -358,7 +376,12 @@ mod tests {
         let FixturePartition {
             arranged,
             remaining,
-        } = partition_by_fixture_groups(groups, &components, &declaring);
+        } = partition_by_fixture_groups(
+            groups,
+            &components,
+            &declaring,
+            &std::collections::HashMap::new(),
+        );
 
         assert_eq!(
             arranged[0].len(),
@@ -441,7 +464,12 @@ mod tests {
         let FixturePartition {
             arranged,
             remaining,
-        } = partition_by_fixture_groups(groups, &fixture_groups, &[]);
+        } = partition_by_fixture_groups(
+            groups,
+            &fixture_groups,
+            &[],
+            &std::collections::HashMap::new(),
+        );
         assert!(arranged.is_empty());
         assert_eq!(remaining.len(), 1);
     }
@@ -461,7 +489,12 @@ mod tests {
         let FixturePartition {
             arranged,
             remaining,
-        } = partition_by_fixture_groups(groups, &fixture_groups, &[]);
+        } = partition_by_fixture_groups(
+            groups,
+            &fixture_groups,
+            &[],
+            &std::collections::HashMap::new(),
+        );
         assert_eq!(arranged.len(), 1, "one fixture group");
         assert_eq!(arranged[0].len(), 1, "one module in fixture group");
         assert_eq!(arranged[0][0].items.len(), 1, "one test in fixture group");
@@ -494,7 +527,12 @@ mod tests {
         let FixturePartition {
             arranged,
             remaining,
-        } = partition_by_fixture_groups(groups, &fixture_groups, &[]);
+        } = partition_by_fixture_groups(
+            groups,
+            &fixture_groups,
+            &[],
+            &std::collections::HashMap::new(),
+        );
         assert_eq!(arranged.len(), 1);
         assert_eq!(arranged[0].len(), 1, "one module in fixture group 0");
         assert_eq!(arranged[0][0].items.len(), 2, "two tests in that module");
@@ -547,6 +585,7 @@ mod tests {
             1,
             arranged_fixture_groups,
             &[],
+            &std::collections::HashMap::new(),
             None,
             8,
         )

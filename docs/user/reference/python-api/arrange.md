@@ -23,12 +23,22 @@ fixture's lifetime.
 | `module` | consumers land together; still rebuilt per module |
 | `process` | consumers land in one process, so the fixture is built **once** rather than once per worker |
 
-!!! warning "A type entry does not schedule yet"
-    `@oxi.arrange("db")` co-locates. `@oxi.arrange(TempDir)` is accepted and
-    then ignored by the scheduler, because the type's name and the fixture's
-    name are different keys. Tracked in
-    [#2045](https://github.com/kalonji-tools/oxitest/issues/2045). Use the
-    string form when placement matters.
+Both spellings schedule. `@oxi.arrange("db")` and `@oxi.arrange(TempDir)`
+denote the same kind of thing and are treated the same way. Until
+[#2045](https://github.com/kalonji-tools/oxitest/issues/2045) a type entry was
+accepted and then ignored, because a builtin is registered under its private
+implementation class name and the public type name is never a registry key.
+
+A type entry that resolves to no fixture is refused at collection. Marking your
+own class `@oxi.injectable` satisfies the decorator, which runs before any
+registry exists, so the check that matters happens when the run collects.
+
+!!! note "A module that declares a `lifetime="module"` fixture stays whole"
+    Such a module is never split across two dispatch phases, because each phase
+    owns its own fixture session and a split would build the fixture twice. If
+    some of its tests arrange and others do not, the whole module travels with
+    the component. See
+    [#1750](https://github.com/kalonji-tools/oxitest/issues/1750).
 
 See [Run in parallel](../../how-to/run-in-parallel.md) for how this interacts
 with worker distribution,
