@@ -219,22 +219,22 @@ def test_the_owner_lookup_is_memoized_per_sys_path(
     proj = _tree(tmp / "case")
     target = proj / "proj1680" / "test_mod.py"
     patch.setattr(sys, "path", [*sys.path, str(proj)])
-    patch.setattr(_module_identity, "_OWNER_CACHE", {})
+    _module_identity._owner_for.cache_clear()  # noqa: SLF001 — a memo has no public surface; its hit and miss counts are the behaviour under test
 
     # Act
     dotted_name_for(str(target), str(proj))
-    after_first = len(_module_identity._OWNER_CACHE)  # noqa: SLF001 — a memo has no public surface; its size is the behaviour under test
+    after_first = _module_identity._owner_for.cache_info()  # noqa: SLF001 — see above
     dotted_name_for(str(target), str(proj))
-    after_second = len(_module_identity._OWNER_CACHE)  # noqa: SLF001 — see above
+    after_second = _module_identity._owner_for.cache_info()  # noqa: SLF001 — see above
 
     # Assert
-    assert after_first == 1, (
+    assert after_first.misses == 1, (
         "the first lookup must record its answer, or every collected module "
         "pays the full sys.path scan"
     )
-    assert after_second == 1, (
-        "a repeat lookup on an unchanged sys.path must reuse the entry rather "
-        "than adding a second one"
+    assert (after_second.misses, after_second.hits) == (1, 1), (
+        "a repeat lookup on an unchanged sys.path must reuse the recorded "
+        "answer rather than scanning again"
     )
 
 
@@ -246,7 +246,7 @@ def test_the_memo_does_not_outlive_a_sys_path_change(
     # grows mid-process and a name-only memo would answer with a stale one
     proj = _tree(tmp / "case")
     target = proj / "proj1680" / "test_mod.py"
-    patch.setattr(_module_identity, "_OWNER_CACHE", {})
+    _module_identity._owner_for.cache_clear()  # noqa: SLF001 — a memo has no public surface
 
     # Act
     before = dotted_name_for(str(target), str(proj))

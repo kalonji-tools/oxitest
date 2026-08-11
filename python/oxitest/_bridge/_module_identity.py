@@ -32,46 +32,35 @@ from __future__ import annotations
 import keyword
 import os
 import sys
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, cast
 
 __all__ = ["dotted_name_for"]
 
 
-# A distinct miss sentinel: ``None`` is a legitimate cached answer — "nothing
-# owns this name" — so ``key in cache`` and ``cache.get(key)`` disagree here.
-_MISS: Any = object()
-
-# Keyed on the whole ``sys.path``, not on the name alone. A worker calls
-# ``ensure_rootdir_importable`` once per task, so ``sys.path`` grows mid-process
-# and a name-only memo would answer every later module from a pre-append
-# ``sys.path``. Bounded by (distinct sys.path states x distinct top-level
-# names) within one worker, which is a handful.
-_OWNER_CACHE: dict[tuple[tuple[str, ...], str], Path | None] = {}
-
-
-def _top_level_owner(top: str) -> Path | None:
-    """Return the ``sys.path`` entry that wins for *top*, or ``None``.
+@lru_cache(maxsize=4096)
+def _owner_for(path_entries: tuple[str, ...], top: str) -> Path | None:
+    """Return the entry of *path_entries* that wins for *top*, or ``None``.
 
     First match wins, which is import resolution order. ``''`` means the
     current directory, as it does for the import system.
+
+    Memoized on the whole search path rather than on *top* alone: a session
+    calls ``ensure_rootdir_importable`` (``_session_factory``), so ``sys.path``
+    grows mid-process and a name-only memo would answer every later module
+    from a pre-append ``sys.path``. "Nothing owns this name" is a real answer
+    and is cached like any other — ``lru_cache`` records a ``None`` return as
+    readily as a ``Path``.
 
     The scan costs about 176 us per module unmemoized, measured on Linux
     x86_64 over a ~20-entry ``sys.path``, which is 0.335 s across this
     repository's own test files.
     """
-    key = (tuple(sys.path), top)
-    cached = _OWNER_CACHE.get(key, _MISS)
-    if cached is not _MISS:
-        return cast("Path | None", cached)
-    owner: Path | None = None
-    for entry in sys.path:
+    for entry in path_entries:
         base = Path(entry) if entry else Path.cwd()
         if (base / top).is_dir() or (base / f"{top}.py").is_file():
-            owner = base
-            break
-    _OWNER_CACHE[key] = owner
-    return owner
+            return base
+    return None
 
 
 def _candidate_parts(path: Path, rootdir: str) -> tuple[str, ...] | None:
@@ -110,7 +99,7 @@ def dotted_name_for(module_path: str, rootdir: str | None) -> str | None:
     parts = _candidate_parts(path, rootdir)
     if parts is None:
         return None
-    owner = _top_level_owner(parts[0])
+    owner = _owner_for(tuple(sys.path), parts[0])
     if owner is None:
         return None
     resolved = owner.joinpath(*parts).with_suffix(".py")
