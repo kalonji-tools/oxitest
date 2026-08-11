@@ -41,7 +41,6 @@ Classes whose purpose is stateful accumulation earn mutability. They are listed 
 
 | Class | Justification |
 |-------|---------------|
-| `Fixtures` | Accumulates fixture definitions via `@fixtures.fixture` decorator during conftest loading |
 | `_MiddlewarePipeline` | Accumulates middleware into three zones (`_pre_guard`, `_post_guard`, `_pre_session`) during executor pipeline configuration; private, single-caller (executor only) |
 
 **Test-lifetime mutable** — mutable during a test, torn down after:
