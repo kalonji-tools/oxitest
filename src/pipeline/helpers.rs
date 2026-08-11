@@ -95,7 +95,7 @@ fn register_plugin_fixture_homes(
     }
 }
 
-/// Initialize a `FixtureSession`: load conftest fixtures, plugins, and async backend.
+/// Initialize a `FixtureSession`: create the session, load plugins, and wire the async backend.
 pub(super) fn init_session(
     py: Python<'_>,
     cfg: &crate::config::Config,
@@ -111,7 +111,7 @@ pub(super) fn init_session(
         Ok(pair) => pair,
         Err(e) => {
             let err = crate::types::CollectError::PyError(format!(
-                "Failed to load conftest fixtures: {e}"
+                "Failed to initialize the fixture session: {e}"
             ));
             return Err(early_exit_with_error(&[err], &make_reporter));
         }

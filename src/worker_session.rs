@@ -228,7 +228,7 @@ pub struct WorkerParams {
     pub sched: std::sync::Arc<scheduler::Scheduler>,
     /// Flag set when the run is cancelled (e.g. maxfail reached).
     pub cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    /// Pre-serialized conftest JSON sent to the worker on each task.
+    /// Pre-serialized declaration JSON sent to the worker on each task.
     /// `[{"module": ..., "anchor": ...}]` — every `__fixtures__.py` collection
     /// registered serially, so worker sessions match the coordinator (#1732).
     pub fixture_modules_json: std::sync::Arc<serde_json::value::RawValue>,

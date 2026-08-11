@@ -650,8 +650,9 @@ mod tests {
 
     #[test]
     fn test_pathless_collect_error_has_empty_classname() {
-        let xml =
-            finish_with_collect_errors(&[CollectError::PyError("conftest exploded".to_string())]);
+        let xml = finish_with_collect_errors(&[CollectError::PyError(
+            "declaration file exploded".to_string(),
+        )]);
 
         assert!(
             xml.contains(r#"classname="""#),
@@ -786,7 +787,7 @@ mod tests {
         rep.record_strict_violation(None, "bad marker".to_string());
         rep.finish(
             &[
-                CollectError::PyError("conftest exploded".to_string()),
+                CollectError::PyError("declaration file exploded".to_string()),
                 CollectError::ImportError {
                     path: camino::Utf8PathBuf::from("tests/test_bad.py"),
                     message: "boom".to_string(),

@@ -1,10 +1,10 @@
 ---
 source: src/query/detail.rs
-expression: "format_detail(&e, ResourceKind::Fixtures)"
+expression: "format_detail(&e, ResourceKind::Fixtures, false)"
 ---
 ─── db_session ───
 
-  source:       conftest.py
+  source:       __fixtures__.py
   shared:       true
   autouse:      true
   async:        false

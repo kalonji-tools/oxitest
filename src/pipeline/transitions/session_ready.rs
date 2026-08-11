@@ -192,7 +192,7 @@ impl Pipeline {
 
         // A query answers from the session without collecting items, and item
         // collection is where declaration homes are registered. Without this
-        // the session holds conftest fixtures and builtins only, so
+        // the session holds builtins only, so
         // `query fixtures --tree` drew a tree of builtins for a project whose
         // every fixture came from a `__fixtures__.py` (#1720).
         //

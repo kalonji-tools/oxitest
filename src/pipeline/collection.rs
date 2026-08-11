@@ -653,8 +653,8 @@ pub(super) fn register_plugin_home(
 ///
 /// Extracted from the collection loop so the `query` and `inspect` surfaces can
 /// build the same registry the pipeline does (#1720). Those surfaces used to
-/// see conftest fixtures only, because `FixtureSession::new` is fed conftest
-/// paths and the prescan walk lived here — so `oxitest query fixtures` listed
+/// see builtins only, because `FixtureSession::new` creates an empty session
+/// and the prescan walk lived here — so `oxitest query fixtures` listed
 /// nothing a `@oxi.fixture` declared.
 ///
 /// `registered_dirs` is the caller's, not this function's: collection
@@ -718,9 +718,9 @@ fn register_homes_in_chain(
 
 /// Register every declaration home the given test files can reach.
 ///
-/// The query and inspect surfaces build a session from conftest paths alone
-/// (`FixtureSession::new`), so without this they see conftest fixtures and
-/// builtins and nothing a `@oxi.fixture` declares. Collection reaches the same
+/// The query and inspect surfaces build an empty session (`FixtureSession::new`),
+/// so without this they see builtins and nothing a `@oxi.fixture` declares —
+/// which is exactly what `inspect` did until #1722. Collection reaches the same
 /// homes through its per-file loop; this is the same walk over a file set that
 /// is already known, for the surfaces that do not run a collection (#1720).
 ///
