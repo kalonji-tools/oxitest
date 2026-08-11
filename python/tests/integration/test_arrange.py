@@ -1,9 +1,13 @@
-"""Integration tests: auto-arrangement by wide-tier fixture dependencies.
+"""Integration tests: arrangement declared with ``@oxi.arrange``.
 
-The tier was ``shared=True`` until #1720 retired it. Arrangement survives
-(Q24 reversed Q22) because it is the only thing that gives the coordinator a
-second phase, which #1777's acceptance project needs — so its input moves to
-the surviving wide tier rather than going away.
+The input was ``shared=True`` until #1720 re-pointed it at ``lifetime="module"``,
+and #1848 retired the tier-derived inference entirely: a component is now the
+set of fixtures a collected test named in ``@oxi.arrange``. Arrangement itself
+survives, because it is the only thing that gives the coordinator a second
+phase, which #1777's acceptance project needs.
+
+The scheduling behaviour lives in ``test_arrange_scheduling.py``; these cover
+the surface at the CLI level.
 """
 
 from oxitest import TempDir

@@ -1,4 +1,4 @@
-//! Test execution: serial/parallel dispatch, harnesses, and auto-arrangement.
+//! Test execution: serial/parallel dispatch, harnesses, and arrangement.
 
 use std::sync::Arc;
 

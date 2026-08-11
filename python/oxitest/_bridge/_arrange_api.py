@@ -38,6 +38,21 @@ def arrange(*args: type | str) -> Callable[[_F], _F]:
         This is intentional — arrange represents test-run setup, not overhead
         that should fire unconditionally.
 
+    Note:
+        This decorator also decides **scheduling**. Every test that arranges a
+        fixture in the same Connected Component is co-located onto the main
+        process. Since #1848 it is the only thing that does so: nothing is
+        inferred from a fixture's lifetime any more.
+
+        At ``lifetime="process"`` that reduces the build count, because the
+        tier builds once per process and the component is one process. At
+        narrower tiers it changes only where the tests run.
+
+        A **name** entry schedules. A **type** entry does not yet — it is
+        accepted and then ignored by the scheduler, because the type's name and
+        the fixture's name are different keys. See
+        `#2045 <https://github.com/kalonji-tools/oxitest/issues/2045>`_.
+
     Examples:
         Applying ``@arrange`` attaches fixture metadata to the function.
         Passing no arguments is an error:

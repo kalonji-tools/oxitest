@@ -16,6 +16,36 @@ If you are moving from pytest rather than from an older oxitest, read
 | `oxitest.Fixtures(name="db")` for a namespace | The anchor directory's name — `tests/db/__fixtures__.py` gives `fx.db` |
 | `# oxitest: allow[registrar-in-test-module]` | Nothing. The check it suppressed is gone |
 | `AutouseRegistrationError` | Nothing to catch. The same combination is still refused, and reported as a collection violation |
+| Tests co-located automatically because they shared a wide-lifetime fixture | [`@oxi.arrange("name")`](../reference/python-api/arrange.md) on the tests that must run together |
+| `auto_arrange` in `[tool.oxitest]` | Nothing. The key is removed, and a project that still sets it fails to load |
+
+## Ask for co-location instead of inheriting it
+
+A fixture's lifetime used to decide scheduling as well as caching. Tests that
+shared a `shared=True` fixture — later a `lifetime="module"` one — were
+co-located onto the main process without anything saying so.
+
+That inference is gone. Declare it:
+
+```python
+@oxi.arrange("db")
+def test_writes(fx: Fixtures) -> None:
+    ...
+```
+
+Two things are worth knowing before you add it everywhere.
+
+**At `lifetime="module"` this changes where the tests run, not how often the
+fixture is built.** The tier rebuilds per module and a module is the scheduling
+unit, so co-locating four modules still builds four instances. The old
+behaviour did not save a build either.
+
+**At `lifetime="process"` it does reduce the build count**, from one per worker
+to one. That combination was unreachable before, because the inference only
+ever looked at `module`.
+
+If you do nothing, tests that used to be co-located are distributed across
+workers instead. Nothing else changes.
 
 ## Declare a fixture
 

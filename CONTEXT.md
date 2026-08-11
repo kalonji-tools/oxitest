@@ -139,13 +139,13 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 **Debugger Backend** — A plugin-provided implementation of the debugger interface. Receives `trace()` and `post_mortem()` calls from the execution pipeline. The default backend wraps `pdb`.
 
-## Auto-Arrangement
+## Arrangement
 
-**Auto-Arrangement** — Automatic grouping of tests onto the same worker based on wide-tier fixture dependencies. Tests that transitively depend on the same `lifetime="module"` fixture are co-located on a single worker. The input was `shared=True` until #1720 retired that tier.
+**Arrangement** — Grouping tests onto the main process because they asked to be grouped. A test names one or more fixtures in `@oxi.arrange`, and every test in the Connected Component of a named fixture is co-located. Nothing is derived from a fixture's lifetime: #1848 retired an inference that read `lifetime="module"` (and `shared=True` before #1720), because at that tier co-location cannot reduce a build — the tier rebuilds per module and a module is the scheduling unit.
 
-**Connected Component** — A set of fixture names linked by transitive dependency. If fixture A depends on an arrangement-input fixture B, and fixture C also depends on B, then {A, B, C} form one connected component. All tests depending on any member land on the same worker.
+**Arrangement Input** — A fixture named in an `@oxi.arrange` on a collected test. Membership is a declaration, not a property of the fixture, so a fixture at any lifetime can be one.
 
-**Arrangement Threshold** — The percentage of parallel-eligible tests beyond which the largest connected component triggers a fallback to serial execution. Controlled via the `auto_arrange` key in `[tool.oxitest]`; there is no CLI flag.
+**Connected Component** — A set of fixture names linked by transitive dependency. If fixture A depends on an Arrangement Input B, and fixture C also depends on B, then {A, B, C} form one connected component. All tests depending on any member land on the same process.
 
 ## CLI Structure
 

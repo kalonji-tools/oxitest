@@ -1,4 +1,4 @@
-//! Pure partition functions for auto-arrangement of test groups.
+//! Pure partition functions for arrangement of test groups.
 //!
 //! These functions have zero PyO3 dependencies — they operate only on
 //! in-memory `TestItem` collections and are fully testable in isolation.

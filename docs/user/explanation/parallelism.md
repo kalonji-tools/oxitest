@@ -62,16 +62,25 @@ dispatching to workers:
    and run on the main process. These tests need access to resources (e.g. a
    debugger, global state) that do not survive serialization to a worker.
 
-2. **Auto-arranged tests** — tests that inject `lifetime="module"` fixtures are grouped
-   by fixture affinity. oxitest computes connected components of the fixture
-   dependency graph and assigns each component to the main process.
+2. **Arranged tests** — tests that name a fixture in
+   [`@oxi.arrange`](../reference/python-api/arrange.md) are grouped by that
+   declaration. oxitest computes connected components of the fixture dependency
+   graph over the arranged names and assigns each component to the main
+   process.
 
-   Auto-arrangement applies when the total test count is below the
-   `min_parallel_tests` threshold (default: 100). The `auto_arrange_threshold`
-   key (default: 70%) guards against degenerate cases: if the largest group
-   exceeds this percentage of total tests, oxitest falls back to serial
-   execution instead. Set `auto_arrange = false` in `pyproject.toml` to
-   disable auto-arrangement entirely.
+   Arrangement is something a test asks for. Nothing is inferred from a
+   fixture's lifetime: a `lifetime="module"` fixture whose tests do not arrange
+   it is distributed like any other test.
+
+   What arrangement changes is *where* the tests run, and at one tier that also
+   changes how often a fixture is built:
+
+   | Fixture lifetime | Arranged | Effect |
+   |---|---|---|
+   | `function` | yes | consumers land on the main process; still rebuilt per test |
+   | `module` | yes | consumers land on the main process; still rebuilt per module |
+   | `process` | yes | consumers land on one process, so the fixture is built **once** instead of once per worker |
+   | any | no | distributed across workers by the scheduler |
 
 3. **Remaining tests** — everything else is distributed across worker processes
    by the scheduler.
@@ -108,5 +117,5 @@ it.
 
 - [Run in parallel](../how-to/run-in-parallel.md) — practical guide to parallel configuration
 - [Worker protocol](https://kalonji-tools.github.io/oxitest/internals/worker-protocol.html) — the JSON wire format (internals book)
-- [Configuration](../reference/configuration.md) — `auto_arrange`, `spawn_overhead_ms`, `min_parallel_tests`
+- [Configuration](../reference/configuration.md) — `spawn_overhead_ms`, `min_parallel_tests`
 - [Performance](performance.md) — where speedups come from

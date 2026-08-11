@@ -91,7 +91,6 @@ struct Overrides {
     keep_tmp: Option<KeepTmpMode>,
     show_locals: Option<bool>,
     show_internals: Option<bool>,
-    auto_arrange_threshold: Option<u8>,
 }
 ```
 
@@ -221,7 +220,6 @@ fn test_my_threshold_cli_overrides_pyproject() {
 | | `min_parallel_tests` | `usize` | `100` | -- | `min_parallel_tests` |
 | | `retries` | `usize` | `0` | `--retries N` | `retries` |
 | | `retries_delay_secs` | `u64` | `0` | -- | `retries_delay` |
-| | `auto_arrange_threshold` | `u8` | `70` | -- | `auto_arrange` |
 | **`output`** | `tb` | `TbStyle` | `Detail` | `--tb` | `tb` |
 | | `show_locals` | `bool` | `false` | `--show-locals` | `show_locals` |
 | | `show_internals` | `bool` | `false` | `--show-internals` | `show_internals` |
