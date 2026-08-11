@@ -291,8 +291,12 @@ A descendant reaching up its ancestor chain is the ordinary case:
 --8<-- "python/tests/docs/how-to/fixture_anchors/api/v1/test_v1.py:descendant-access"
 ```
 
-A sibling reaching across is refused at access time with a `BoundaryError`. The
-example below is illustrative — it cannot be a passing test:
+A sibling reaching across is refused with a `BoundaryError`. When the access is
+written literally — `fx.api.api_conn` — it is refused **at collection, before
+any test runs**, so the whole run stops. An access oxitest cannot see until it
+executes, such as `getattr(fx, name)`, is refused at access time instead and
+reports as an errored test. The example below is illustrative — it cannot be a
+passing test:
 
 ```python
 # tests/admin/test_admin.py
