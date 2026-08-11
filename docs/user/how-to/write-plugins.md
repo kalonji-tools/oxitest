@@ -119,19 +119,19 @@ at startup -- two plugins cannot share the same prefix.
 
 ## When to use plugins
 
-### Plugin vs. conftest.py
+### Plugin vs. declaration file
 
-Both plugins and `conftest.py` extend oxitest, but they serve different
+Both plugins and declaration files extend oxitest, but they serve different
 purposes:
 
-| | `conftest.py` | Plugin |
+| | `__fixtures__.py` | Plugin |
 |---|---|---|
 | **Scope** | One project | Any project that installs it |
 | **Distribution** | Not distributed | Published to PyPI or a private index |
 | **Packaging** | None required | Standard Python package |
 | **Best for** | Project-specific fixtures | Reusable infrastructure across many projects |
 
-Use `conftest.py` when the extension is specific to your test suite.
+Use a declaration file when the extension is specific to your test suite.
 Use a plugin when you want to share the behaviour across multiple projects or
 distribute it to other teams.
 
@@ -237,7 +237,7 @@ any Python keyword or builtin, and a namespace already claimed by another
 activated plugin.
 
 If a user declares a fixture of the same name in their own tree, **theirs
-wins** — the same way a local declaration outranks a `conftest.py` one. The run
+wins** — the same way a nearer declaration outranks a more distant one. The run
 stays green and a notice names both.
 
 ### Lifetimes

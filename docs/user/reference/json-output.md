@@ -84,7 +84,7 @@ oxitest sorts tests in the output file alphabetically by `name`.
 
 ## Aborted runs
 
-A run can end before any test executes — a test file that fails to import, a `conftest.py` that
+A run can end before any test executes — a test file that fails to import, a declaration file that
 raises, a plugin that fails to load, or a `--strict=abort` violation. oxitest still writes the CTRF
 file, and each such error appears as its own `failed` entry:
 

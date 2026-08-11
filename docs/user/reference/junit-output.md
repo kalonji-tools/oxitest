@@ -119,7 +119,7 @@ the self-closing `<failure message="..."/>` form.
 
 ## Aborted runs
 
-A run can end before any test executes — an import error, a conftest failure, a plugin that fails
+A run can end before any test executes — an import error, a declaration-file failure, a plugin that fails
 to load, an async backend that fails to initialise, a doctest coverage error, a fixture-name
 validation failure, a malformed `-E` expression, or a `strict = "abort"` violation. oxitest still
 writes the XML file in every one of those cases, and it does **not** write an empty
