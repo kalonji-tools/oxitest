@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use pyo3::types::PyAnyMethods as _;
-use rustpython_parser::{Parse as _, ast};
+use rustpython_parser::ast;
 
 use crate::python_ast;
 
@@ -160,10 +160,12 @@ pub enum PrescanFixtureResult {
     /// for later-slice optimisations; the variant itself gates the bridge call.
     #[allow(dead_code)] // inner payload read in later pipeline slice
     HasFixtures(PrescanFixturePayload),
-    /// File has no recognized @oxi.fixture declarations. The payload carries
-    /// DX hints (e.g. unrecognized import alias) for MED-3 diagnostics.
+    /// File has no recognized @oxi.fixture declarations. The payload says
+    /// whether to import the file and ask the runtime (#1859).
     NoFixtures(NoFixturesPayload),
-    Unavailable,
+    /// The file could not be read or parsed. The payload names which, and
+    /// where, so the caller can say so (#1727).
+    Unavailable(python_ast::ParseFailure),
 }
 
 // ── Marker helpers ──────────────────────────────────────────────────────
@@ -972,20 +974,25 @@ fn has_fixture_shaped_decorator(stmts: &[ast::Stmt]) -> bool {
 
 /// Read `path` from disk and prescan it as a fixture module.
 ///
-/// Returns `Unavailable` if the file can't be read or parsed.
+/// Returns `Unavailable` if the file can't be read or parsed, carrying which
+/// of the two it was.
 pub fn prescan_fixture_module(path: &Utf8Path) -> PrescanFixtureResult {
     let source = match std::fs::read_to_string(path.as_std_path()) {
         Ok(s) => s,
-        Err(_) => return PrescanFixtureResult::Unavailable,
+        Err(e) => {
+            return PrescanFixtureResult::Unavailable(python_ast::ParseFailure::Io {
+                cause: e.to_string(),
+            });
+        }
     };
     prescan_fixture_module_from_source(path, &source)
 }
 
 /// Test-friendly variant that takes source directly (skips fs read).
 pub fn prescan_fixture_module_from_source(path: &Utf8Path, source: &str) -> PrescanFixtureResult {
-    let stmts = match ast::Suite::parse(source, path.as_str()) {
+    let stmts = match python_ast::parse_source(path, source) {
         Ok(s) => s,
-        Err(_) => return PrescanFixtureResult::Unavailable,
+        Err(failure) => return PrescanFixtureResult::Unavailable(failure),
     };
 
     let line_index = python_ast::build_line_index(source);
@@ -1710,7 +1717,7 @@ def conn():
 "#;
             let result = prescan(src);
             assert!(
-                !matches!(result, PrescanFixtureResult::Unavailable),
+                !matches!(result, PrescanFixtureResult::Unavailable(_)),
                 "dynamic-decoration is not a parse error, must not return Unavailable"
             );
             // Both HasFixtures(empty) and NoFixtures are acceptable outcomes;
@@ -1733,19 +1740,82 @@ def not_a_fixture():
         #[test]
         fn parse_error_returns_unavailable() {
             let src = "def broken(\n"; // syntactically invalid
+            let result = prescan(src);
+            let PrescanFixtureResult::Unavailable(python_ast::ParseFailure::Parse { line, cause }) =
+                result
+            else {
+                panic!(
+                    "a syntax error must return Unavailable via the Parse arm — the caller \
+                     refuses the file and names the cause, it does not fall back to Python \
+                     (that is the test-file path, not this one): got {result:?}"
+                );
+            };
+            assert_eq!(
+                line, 1,
+                "the reported line must locate the error for the user; line 1 is where this \
+                 source breaks"
+            );
             assert!(
-                matches!(prescan(src), PrescanFixtureResult::Unavailable),
-                "a syntax error must return Unavailable so the caller falls back to Python"
+                !cause.is_empty(),
+                "an empty cause reproduces the defect this arm exists to fix — the user was \
+                 told 'syntax error or I/O error' and nothing else"
+            );
+        }
+
+        /// The 1-based line a syntax error in `src` is reported on.
+        ///
+        /// Panics rather than returning an `Option`, so a result that is not
+        /// the `Parse` arm fails the caller loudly instead of being absorbed
+        /// into a comparison that never runs.
+        fn parse_error_line(src: &str) -> u32 {
+            match prescan(src) {
+                PrescanFixtureResult::Unavailable(python_ast::ParseFailure::Parse {
+                    line, ..
+                }) => line,
+                other => panic!("a syntax error must return the Parse arm, got {other:?}"),
+            }
+        }
+
+        #[test]
+        fn parse_error_reports_the_line_it_is_on() {
+            // Line 1 cannot separate a 1-based line number from a raw byte
+            // offset — both are small and both look right. The error here sits
+            // on line 7, where a 0-based or offset-valued answer is visibly
+            // wrong.
+            let src = "a = 1\nb = 2\nc = 3\nd = 4\ne = 5\nf = 6\ndef broken(\n";
+            assert_eq!(
+                parse_error_line(src),
+                7,
+                "the line must be 1-based and derived from the byte offset via the line index; \
+                 a raw offset here would read as line 42"
+            );
+        }
+
+        #[test]
+        fn parse_error_line_is_correct_with_crlf_line_endings() {
+            // `build_line_index` counts `\n` bytes while the parser reports a
+            // byte offset into a source that also contains `\r`. Nothing else
+            // in the suite varies the line-ending convention (#1727).
+            let src = "a = 1\r\nb = 2\r\ndef broken(\r\n";
+            assert_eq!(
+                parse_error_line(src),
+                3,
+                "a CRLF file must report the same line an LF file would; counting `\\r` as a \
+                 line separator would shift every line after the first"
             );
         }
 
         /// Every decorator shape the slice-1 recognizer must reject.
         ///
-        /// Each case is a decorator the user might plausibly write that
-        /// slice 1 does not accept. All must fall through to `NoFixtures` with
-        /// `has_unrecognized_decorated_functions` set, which is what drives
-        /// the MED-3 "check your import alias" diagnostic — a silent
-        /// acceptance here would register a fixture the runtime cannot honour.
+        /// Each case is a decorator the user might plausibly write that the
+        /// recognizer does not accept. All must fall through to `NoFixtures`
+        /// with `has_decorated_functions` set, which is what sends the file to
+        /// the runtime to be imported and asked (#1859).
+        ///
+        /// Rejecting here is not the same as refusing the fixture. Prescan's
+        /// `declarations` feed the lifetime cap and package co-location, so a
+        /// silent acceptance would attribute a declaration prescan cannot
+        /// verify; the runtime is the authority on what a decorator produced.
         #[test]
         fn rejects_unsupported_decorator_shapes() {
             let cases: &[(&str, &str)] = &[

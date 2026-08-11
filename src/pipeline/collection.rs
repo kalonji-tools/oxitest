@@ -796,21 +796,49 @@ fn register_declaration_home(
                 fixture_modules,
             );
         }
-        crate::prescan::PrescanFixtureResult::Unavailable => {
-            // The file exists but could not be parsed (syntax error, I/O error).
-            // Surface it naming the file, rather than a silent
-            // fixture-not-found at test time.
+        crate::prescan::PrescanFixtureResult::Unavailable(reason) => {
+            // The file exists but could not be read or parsed. Surface it
+            // naming the file, rather than a silent fixture-not-found at test
+            // time.
+            //
+            // The two arms get different words on purpose: a parse failure is
+            // a typo the user can fix from the message, a read failure is not.
+            // One sentence covering both told the user neither (#1727). The
+            // inline declaration home already reports at this quality, because
+            // an unparsable `test_*.py` falls through to Python import — this
+            // is the other two homes agreeing with it.
             //
             // Fatal for a reserved declaration file, collateral for an ordinary
             // package-init file the ancestor walk merely passed through — see
             // `HomeFile`. A warning cannot fail the run, because
             // `compute_exit_code` never reads diagnostics, which is exactly the
             // asymmetry wanted here (#1765).
-            tracing::warn!(path = path.as_str(), "prescan: file could not be parsed");
-            let message = format!(
-                "{path} could not be parsed (syntax error or I/O error); \
-                 fixtures in this file will not be registered",
-            );
+            let (message, lineno) = match reason {
+                crate::python_ast::ParseFailure::Parse { line, cause } => {
+                    tracing::warn!(
+                        path = path.as_str(),
+                        line,
+                        "prescan: file could not be parsed"
+                    );
+                    (
+                        format!(
+                            "{path}:{line}: {cause}; \
+                             fixtures in this file will not be registered",
+                        ),
+                        Some(crate::types::LineNo::from_u32(line)),
+                    )
+                }
+                crate::python_ast::ParseFailure::Io { cause } => {
+                    tracing::warn!(path = path.as_str(), "prescan: file could not be read");
+                    (
+                        format!(
+                            "{path} could not be read: {cause}; \
+                             fixtures in this file will not be registered",
+                        ),
+                        None,
+                    )
+                }
+            };
             match home.file {
                 HomeFile::Fixtures => errors.push(types::CollectError::PyError(message)),
                 HomeFile::Init => {
@@ -819,7 +847,7 @@ fn register_declaration_home(
                         context: std::sync::Arc::from("fixture registration"),
                         message,
                         file: Some(path.to_owned()),
-                        lineno: None,
+                        lineno,
                     });
                 }
             }

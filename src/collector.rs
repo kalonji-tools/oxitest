@@ -620,8 +620,45 @@ def conn():
         let missing_path = camino::Utf8PathBuf::from_path_buf(pkg.join("__fixtures__.py")).unwrap();
         let result = crate::prescan::prescan_fixture_module(&missing_path);
         assert!(
-            matches!(result, crate::prescan::PrescanFixtureResult::Unavailable),
-            "a missing __fixtures__.py must prescan as Unavailable (I/O error path)"
+            matches!(
+                result,
+                crate::prescan::PrescanFixtureResult::Unavailable(
+                    crate::python_ast::ParseFailure::Io { .. }
+                )
+            ),
+            "a missing __fixtures__.py must prescan as Unavailable via the Io arm — routing it \
+             through Parse would report a read failure as a syntax error the user cannot find"
+        );
+    }
+
+    #[test]
+    fn prescan_fixture_module_rejects_invalid_utf8() {
+        // A file that is not valid UTF-8 never reaches the parser:
+        // `read_to_string` refuses it, so it arrives as `Io` and is reported
+        // in `std::io::Error`'s own words. Pinned so the routing stays a
+        // decision — the two arms are named for parse and read, and this is a
+        // third cause that has to land in one of them (#1727).
+        let tmp = TempDir::new().unwrap();
+        let pkg = tmp.path().join("utf8_pkg");
+        fs::create_dir(&pkg).unwrap();
+
+        let path = camino::Utf8PathBuf::from_path_buf(pkg.join("__fixtures__.py")).unwrap();
+        fs::write(&path, b"import oxitest\n# \xff\xfe not utf-8\n").unwrap();
+
+        let result = crate::prescan::prescan_fixture_module(&path);
+        let crate::prescan::PrescanFixtureResult::Unavailable(
+            crate::python_ast::ParseFailure::Io { cause },
+        ) = result
+        else {
+            panic!(
+                "invalid UTF-8 must arrive via the Io arm — the file never parses, so a Parse \
+                 verdict would carry a line number no parser produced: got {result:?}"
+            );
+        };
+        assert!(
+            !cause.is_empty(),
+            "the cause carries the whole explanation for this case, because there is no line \
+             number to report alongside it"
         );
     }
 }
