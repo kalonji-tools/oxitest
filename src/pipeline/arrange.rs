@@ -374,4 +374,127 @@ mod tests {
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].items.len(), 1, "one plain test remaining");
     }
+
+    // ── plan_execution ───────────────────────────────────────────────────────
+    //
+    // `plan_execution` is pure by construction — its doc comment says so, and
+    // every PyO3-dependent input is resolved by the caller. Nothing tested it
+    // directly before #1848, which `codecov/patch/rust` reported the moment the
+    // arranged branch was restructured and its lines re-stamped as added. The
+    // behaviour is covered end to end by python/tests/test_arrange_scheduling.py,
+    // which drives the real runner as a subprocess and so contributes nothing to
+    // the Rust flag.
+
+    /// A module group of `count` plain tests, named after `module`.
+    fn plain_group(module: &str, count: usize) -> ModuleGroup {
+        ModuleGroup::new(
+            Utf8PathBuf::from(module),
+            (0..count)
+                .map(|i| TestItem::builder_raw(&format!("{module}::test_{i}")).arc())
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    /// A module group whose single test carries `fixture` in `fixture_deps`.
+    ///
+    /// The empty type name matches what `_augment_fixture_deps` writes for a
+    /// string entry: only the qualifier is set, and the qualifier is what
+    /// `partition_by_fixture_groups` matches on.
+    fn group_using(module: &str, fixture: &str) -> ModuleGroup {
+        let mut item = TestItem::builder_raw(&format!("{module}::test_uses")).build();
+        item.fixture_deps = vec![(fixture.to_string(), String::new())];
+        ModuleGroup::new(Utf8PathBuf::from(module), vec![Arc::new(item)])
+    }
+
+    /// `plan_execution` with the knobs these tests never vary held fixed.
+    fn plan(
+        groups: Vec<ModuleGroup>,
+        mode: &crate::config::ExecutionMode,
+        arranged_fixture_groups: &[Vec<String>],
+    ) -> ExecutionPlan {
+        plan_execution(groups, mode, 4, 250.0, 1, arranged_fixture_groups, None, 8)
+    }
+
+    fn parallel_mode() -> crate::config::ExecutionMode {
+        crate::config::ExecutionMode::Parallel {
+            workers: crate::config::WorkerCount::Fixed(4),
+        }
+    }
+
+    #[test]
+    fn plan_execution_arranges_the_groups_that_name_a_component() {
+        let groups = vec![
+            group_using("test_a.py", "dsn"),
+            group_using("test_b.py", "dsn"),
+            plain_group("test_c.py", 1),
+        ];
+
+        let plan = plan(groups, &parallel_mode(), &[vec!["dsn".to_string()]]);
+
+        assert!(
+            matches!(plan.strategy, ExecutionStrategy::Parallel { .. }),
+            "a component does not force serial since #1848 removed the ratio \
+             fallback; the remaining groups must still go to workers"
+        );
+        assert_eq!(
+            plan.arranged_groups.len(),
+            1,
+            "one component was declared, so there is one arranged bucket"
+        );
+        assert_eq!(
+            plan.arranged_groups[0].len(),
+            2,
+            "both modules naming the component co-locate: {:?}",
+            plan.arranged_groups[0]
+                .iter()
+                .map(|g| g.module_path.as_str())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            plan.parallel_groups.len(),
+            1,
+            "the module naming nothing stays parallel-eligible"
+        );
+    }
+
+    #[test]
+    fn plan_execution_arranges_nothing_when_no_component_is_declared() {
+        let groups = vec![plain_group("test_a.py", 1), plain_group("test_b.py", 1)];
+
+        let plan = plan(groups, &parallel_mode(), &[]);
+
+        assert!(
+            plan.arranged_groups.is_empty(),
+            "with no @oxi.arrange anywhere there is no component to arrange — \
+             this is the retired inference, and its absence is the point of #1848"
+        );
+        assert_eq!(
+            plan.parallel_groups.len(),
+            2,
+            "every group stays parallel-eligible"
+        );
+    }
+
+    #[test]
+    fn plan_execution_ignores_components_when_the_run_is_serial() {
+        let groups = vec![group_using("test_a.py", "dsn")];
+
+        let plan = plan(
+            groups,
+            &crate::config::ExecutionMode::Serial,
+            &[vec!["dsn".to_string()]],
+        );
+
+        assert!(
+            matches!(plan.strategy, ExecutionStrategy::Serial),
+            "--serial wins over any arrangement"
+        );
+        assert!(
+            plan.arranged_groups.is_empty(),
+            "arrangement co-locates onto the main process, which a serial run \
+             already does, so the bucket must stay empty rather than splitting \
+             the run into phases that cannot differ"
+        );
+        assert_eq!(plan.parallel_groups.len(), 1, "the group runs, serially");
+    }
 }

@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import itertools
 import os
+import sys
 from pathlib import Path
 
 import oxitest as oxi
@@ -54,10 +55,51 @@ def _record(event: str) -> None:
 
 @oxi.fixture(lifetime="{tier}")
 def dsn() -> str:
-    """The fixture whose builds and placement the acceptance tests count."""
-    _record(f"SETUP {{os.getpid()}}-{{next(_COUNTER)}}")
+    """The fixture whose builds and placement the acceptance tests count.
+
+    The third field is the role. An arranged component runs on the process
+    that invoked oxitest. Counting distinct PIDs cannot tell "the runner" from
+    "one worker", and one worker is exactly what a broken arrangement would
+    look like.
+
+    Read through ``__main__.__spec__``, not through ``sys.modules``. A worker
+    is started as ``python -m oxitest._bridge.worker``, which binds that module
+    to ``__main__`` and leaves ``sys.modules["oxitest._bridge.worker"]``
+    **absent** — so the obvious membership test reports ``runner`` in every
+    process, including all four workers, and an assertion built on it cannot
+    fail.
+    """
+    main_spec = getattr(sys.modules.get("__main__"), "__spec__", None)
+    is_worker = getattr(main_spec, "name", None) == "oxitest._bridge.worker"
+    role = "worker" if is_worker else "runner"
+    _record(f"SETUP {{os.getpid()}}-{{next(_COUNTER)}} {{role}}")
     return "postgres://probe"
 '''
+
+# An async fixture at function tier — the cell ArrangeError governs.
+_ASYNC_FIXTURES = '''\
+from __future__ import annotations
+
+import oxitest as oxi
+
+
+@oxi.fixture(lifetime="function")
+async def adsn() -> str:
+    """Async and function-scope: illegal to arrange from a sync test."""
+    return "postgres://async"
+'''
+
+_FORM_ARRANGE_ASYNC_FIXTURE_SYNC_TEST = """\
+from __future__ import annotations
+
+import oxitest as oxi
+from oxitest import Fixtures
+
+
+@oxi.arrange("adsn")
+def test_{n}(fx: Fixtures) -> None:
+    assert True, "a sync test arranging an async function-scope fixture"
+"""
 
 # The consumption forms. Each reaches the same value a different way; #1848's
 # whole claim is that the reach stops mattering once the decorator decides.
@@ -123,6 +165,20 @@ def test_{n}(fx: Fixtures) -> None:
     _use(fx)
 """
 
+# The type-entry spelling. Only an @injectable type is accepted — a builtin or
+# a plugin type — so a plain user class raises at collection.
+_FORM_ARRANGE_TYPE_BUILTIN = """\
+from __future__ import annotations
+
+import oxitest as oxi
+from oxitest import TempDir
+
+
+@oxi.arrange(TempDir)
+def test_{n}() -> None:
+    assert True, "the type entry is accepted; only its scheduling half is inert"
+"""
+
 # A module that never touches the fixture, so it stays outside every component.
 _FORM_INERT = """\
 from __future__ import annotations
@@ -156,6 +212,7 @@ def _build_project(  # noqa: PLR0913 — cell spec, every kwarg has a default
     form: str,
     modules: int = 4,
     inert: int = 0,
+    fixtures: str | None = None,
 ) -> Path:
     """Write a throwaway project for one cell and return its root.
 
@@ -174,7 +231,10 @@ def _build_project(  # noqa: PLR0913 — cell spec, every kwarg has a default
     (root / "pyproject.toml").write_text(_PYPROJECT, encoding="utf-8")
     (pkg / "__init__.py").write_text("", encoding="utf-8")
     (pkg / "__fixtures__.py").write_text(
-        _FIXTURES.format(tier=tier, log_env=_LOG_ENV), encoding="utf-8"
+        fixtures
+        if fixtures is not None
+        else _FIXTURES.format(tier=tier, log_env=_LOG_ENV),
+        encoding="utf-8",
     )
     for n in range(modules):
         (pkg / f"test_use_{n}.py").write_text(form.format(n=n), encoding="utf-8")
@@ -185,14 +245,10 @@ def _build_project(  # noqa: PLR0913 — cell spec, every kwarg has a default
     return root
 
 
-def _run(
-    tmp: TempDir, cell: str, *, tier: str, form: str, workers: int = 4
-) -> EventLogRun:
-    """Build and run one cell, returning its event log."""
+def _run(tmp: TempDir, cell: str, *, tier: str, form: str) -> EventLogRun:
+    """Build and run one cell at ``-n 4``, returning its event log."""
     root = _build_project(tmp, cell, tier=tier, form=form)
-    return run_with_event_log(
-        root, tmp, _LOG_ENV, "-n", str(workers), log_name=f"{cell}.log"
-    )
+    return run_with_event_log(root, tmp, _LOG_ENV, "-n", "4", log_name=f"{cell}.log")
 
 
 def _run_capturing_warnings(  # noqa: PLR0913 — cell spec, every kwarg has a default
@@ -266,4 +322,232 @@ def test_module_lifetime_warning_fires_while_a_component_is_live(
     assert "wide-lifetime" in stdout + stderr, (
         "an arranged component does not stop the fixture being rebuilt per task "
         "group, so the warning must still fire while one is live"
+    )
+
+
+def _roles(run: EventLogRun) -> list[str]:
+    """The role field of every SETUP line: ``runner`` or ``worker``."""
+    return [e.split()[2] for e in run.setups]
+
+
+# ── AC7: @oxi.arrange is effective at every tier ─────────────────────────────
+
+
+def test_arrange_groups_at_function_tier(tmp: TempDir) -> None:
+    """#1848: at function tier the decorator was a silent no-op before this.
+
+    Placement changes and the build count does not. A function-scope fixture
+    is rebuilt per test by construction, so co-locating its consumers cannot
+    share anything — what the user gets is the tests landing together, which
+    is a real thing to want for a port, a lock file or a device.
+    """
+    run = _run(tmp, "fn_arranged", tier="function", form=_FORM_ARRANGE_PROXY)
+
+    assert run.rc == 0, f"the probe project must pass:\n{run.stdout}\n{run.stderr}"
+    assert len(run.setup_pids) == 4, (
+        f"function scope rebuilds per test, so 4 tests must build 4 times; "
+        f"got {run.setup_pids}"
+    )
+    assert len(set(run.setup_pids)) == 1, (
+        f"the arranged component must land in one process; got "
+        f"{set(run.setup_pids)}. Before #1848 this cell measured four, because "
+        f"the tier filter discarded the declaration"
+    )
+
+
+def test_arrange_groups_at_module_tier_on_the_runner(tmp: TempDir) -> None:
+    """The component runs on the process that invoked oxitest, not on a worker.
+
+    One PID alone does not say this — a single worker would also read as one.
+    The role field is what separates them.
+    """
+    run = _run(tmp, "mod_arranged", tier="module", form=_FORM_ARRANGE_PROXY)
+
+    assert run.rc == 0, f"the probe project must pass:\n{run.stdout}\n{run.stderr}"
+    assert len(run.setup_pids) == 4, (
+        f"module scope rebuilds per module, and a module is the scheduling "
+        f"unit, so arrangement cannot reduce this below 4; got {run.setup_pids}"
+    )
+    assert set(_roles(run)) == {"runner"}, (
+        f"an arranged component runs on the main process; got roles "
+        f"{_roles(run)}, so the build landed in a worker instead"
+    )
+
+
+def test_arrange_reduces_builds_at_process_tier(tmp: TempDir) -> None:
+    """The one cell where arrangement actually saves a build: 4 becomes 1.
+
+    ``lifetime="process"`` means once per process, so collapsing four workers
+    into one collapses four builds into one. #1848's issue body called
+    "build the shared fixture once" impossible; that is true at module tier
+    and was stated generally. The tier filter is the only reason this has
+    never been reachable.
+    """
+    run = _run(tmp, "proc_arranged", tier="process", form=_FORM_ARRANGE_PROXY)
+
+    assert run.rc == 0, f"the probe project must pass:\n{run.stdout}\n{run.stderr}"
+    assert len(run.setup_pids) == 1, (
+        f"process scope builds once per process and the component is one "
+        f"process, so 4 modules must build once; got {run.setup_pids}. "
+        f"Unarranged the same project builds 4 times"
+    )
+    assert set(_roles(run)) == {"runner"}, (
+        f"the single build must happen on the main process; got {_roles(run)}"
+    )
+
+
+# ── AC8: the accepted cost — module tier is no longer grouped for free ───────
+
+
+def test_module_tier_without_arrange_is_not_grouped(tmp: TempDir) -> None:
+    """Retiring the inference costs module-tier consumers their free grouping.
+
+    Intended, not a regression. Before #1848 this cell measured one PID
+    because the tier alone put the fixture in a component. A user who wants
+    the old behaviour adds ``@oxi.arrange``, which is what the wide-lifetime
+    warning now tells them.
+    """
+    run = _run(tmp, "mod_plain", tier="module", form=_FORM_PLAIN)
+
+    assert run.rc == 0, f"the probe project must pass:\n{run.stdout}\n{run.stderr}"
+    assert len(set(run.setup_pids)) > 1, (
+        f"nothing arranges here, so no component exists and the modules must "
+        f"reach workers; got {set(run.setup_pids)}. One PID means an inference "
+        f"is still deriving components from the lifetime tier"
+    )
+    assert set(_roles(run)) == {"worker"}, (
+        f"got roles {_roles(run)}. This is the control for every 'runner' "
+        f"assertion in this file: if the role signal cannot report 'worker' "
+        f"here, where the builds provably happen in four separate worker "
+        f"processes, then it reports 'runner' unconditionally and those "
+        f"assertions cannot fail. The first version of this signal tested "
+        f"'oxitest._bridge.worker' in sys.modules, which is False even inside "
+        f"a worker, because -m binds the module to __main__"
+    )
+
+
+# ── AC6: the consumption form no longer changes scheduling ───────────────────
+
+
+def test_consumption_form_does_not_change_scheduling(tmp: TempDir) -> None:
+    """The asymmetry #1848 was filed for: three reaches, three verdicts.
+
+    Before this change the annotation form was grouped and the other two were
+    not, because only the annotation form put the fixture in ``fixture_deps``
+    where the partitioner could see it. The difference was invisible and
+    nothing diagnosed it. With no inference there is nothing to be asymmetric
+    about: none of the three is grouped, because none of them asked to be.
+    """
+    forms = {
+        "annotation": _FORM_PLAIN,
+        "proxy": _FORM_PROXY,
+        "helper": _FORM_HELPER,
+    }
+
+    placements = {
+        name: len(set(_run(tmp, f"form_{name}", tier="module", form=form).setup_pids))
+        for name, form in forms.items()
+    }
+
+    assert len(set(placements.values())) == 1, (
+        f"the three documented ways to reach a fixture must schedule "
+        f"identically once nothing is inferred from the tier; got {placements}"
+    )
+    assert all(count > 1 for count in placements.values()), (
+        f"none of these forms arranges, so every one of them must fan out; "
+        f"got {placements}"
+    )
+
+
+# ── Not reached by: the async cell every other premise held constant ─────────
+
+
+def test_sync_test_arranging_an_async_function_fixture_is_still_refused(
+    tmp: TempDir,
+) -> None:
+    """Making @oxi.arrange effective at function tier must not open ArrangeError's cell.
+
+    Every other premise on this branch held the fixture and the test
+    synchronous. #1848 makes the decorator effective at ``function`` tier for
+    the first time, and ``function`` tier is exactly where the illegal
+    ``(sync test x async fixture)`` cell lives — so the guard and the
+    scheduler now meet on an entry that previously reached only the guard.
+
+    Measured: the refusal still happens at collection and the run never
+    schedules, so the two do not interact.
+    """
+    root = _build_project(
+        tmp,
+        "async_illegal",
+        tier="function",
+        form=_FORM_ARRANGE_ASYNC_FIXTURE_SYNC_TEST,
+        modules=2,
+        fixtures=_ASYNC_FIXTURES,
+    )
+
+    stdout, stderr, rc = run_oxitest(root, "-n", "2")
+
+    assert rc != 0, (
+        f"a sync test arranging an async function-scope fixture is the illegal "
+        f"cell and must be refused; got rc={rc}\n{stdout}"
+    )
+    assert "adsn" in stdout + stderr, (
+        f"the refusal must name the offending fixture so the user can find "
+        f"it\n{stdout}\n{stderr}"
+    )
+
+
+def test_arrange_through_a_helper_groups_the_same(tmp: TempDir) -> None:
+    """The decorator decides; the reach does not — the arranged half of AC6.
+
+    ``test_consumption_form_does_not_change_scheduling`` shows the three
+    unarranged forms agree. This is the same claim on the other side of the
+    decorator, and it is the sharpest case: the test body never mentions the
+    fixture at all, so nothing but ``@oxi.arrange`` could put it in a
+    component.
+    """
+    through_helper = _run(tmp, "arr_helper", tier="module", form=_FORM_ARRANGE_HELPER)
+    through_proxy = _run(tmp, "arr_proxy", tier="module", form=_FORM_ARRANGE_PROXY)
+
+    assert through_helper.rc == 0, (
+        f"the probe project must pass:\n{through_helper.stdout}\n"
+        f"{through_helper.stderr}"
+    )
+    assert (
+        len(set(through_helper.setup_pids)) == len(set(through_proxy.setup_pids)) == 1
+    ), (
+        f"reaching the fixture through a same-module helper must schedule "
+        f"exactly as reaching it directly; helper "
+        f"{set(through_helper.setup_pids)} vs proxy "
+        f"{set(through_proxy.setup_pids)}"
+    )
+
+
+def test_type_entry_arrange_does_not_group_yet(tmp: TempDir) -> None:
+    """A known gap, pinned so it cannot change silently. Filed as a follow-up.
+
+    ``@oxi.arrange`` accepts a type as well as a name, but only for an
+    ``@injectable`` one — a builtin or a plugin type. That form does **not**
+    put its consumers in a component.
+
+    Not introduced by #1848 and not fixed by it. ``_augment_fixture_deps``
+    writes the *type*'s ``__name__`` into ``fixture_deps``, while a component
+    is keyed by the *fixture*'s name, so the two never meet. Before #1848 the
+    same cell also failed to group, because a builtin's scope is never
+    ``module`` and the tier was what the inference read.
+
+    It matters more now than it did then: #1848 makes ``@oxi.arrange`` the only
+    source of components, so a legal spelling that quietly does nothing is
+    exactly the shape of defect the issue exists to remove.
+    """
+    root = _build_project(
+        tmp, "type_entry", tier="module", form=_FORM_ARRANGE_TYPE_BUILTIN
+    )
+
+    stdout, stderr, rc = run_oxitest(root, "-n", "4")
+
+    assert rc == 0, f"the probe project must pass:\n{stdout}\n{stderr}"
+    assert "4 passed" in stdout, (
+        f"the type entry is accepted at collection — it is only the scheduling "
+        f"half that does nothing\n{stdout}"
     )
