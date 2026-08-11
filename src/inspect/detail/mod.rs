@@ -165,6 +165,35 @@ mod tests {
     use super::*;
     use crate::inspect::graph::nodes::*;
 
+    #[test]
+    fn detail_sigil_matches_node_kind_for_every_kind() {
+        // Arrange — one graph per node kind, each holding its node at index 0.
+        let cases = [
+            (fixture_graph(), NodeKind::Fixture),
+            (test_graph(), NodeKind::Test),
+            (mark_graph(), NodeKind::Mark),
+            (declaration_graph(), NodeKind::Declaration),
+            (plugin_graph(), NodeKind::Plugin),
+        ];
+
+        for (graph, kind) in cases {
+            // Act
+            let node = NodeRef::new(kind, 0);
+            let lines = render_detail(&graph, Some(&node));
+            let rendered = lines[0].spans[0].content.to_string();
+
+            // Assert
+            assert_eq!(
+                rendered,
+                kind.sigil().to_string(),
+                "the detail pane and the tree must label one node the same way; #1720 \
+                 moved NodeKind::sigil() from 'C' to 'D' for Declaration and left the \
+                 render sites emitting 'C', so a single frame showed the breadcrumb as \
+                 'D' and the detail pane as 'C' for the same node (#1722)"
+            );
+        }
+    }
+
     /// Build a minimal graph for testing a fixture detail view.
     fn fixture_graph() -> InspectGraph {
         let mut graph = InspectGraph::default();

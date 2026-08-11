@@ -422,7 +422,12 @@ fn build_overview_content(
             Style::default().fg(Color::Yellow),
         )));
         for entry in &sections.declarations {
-            let text = format!("  C  {} ({} fixtures)", entry.path, entry.fixture_count);
+            let text = format!(
+                "  {}  {} ({} fixtures)",
+                graph::NodeKind::Declaration.sigil(),
+                entry.path,
+                entry.fixture_count
+            );
             if cursor == selected {
                 cursor_line_idx = Some(lines.len());
             }
@@ -1210,8 +1215,58 @@ mod snapshot_tests {
 
     // ── Navigation screen snapshots ─────────────────────────────────────
 
-    use crate::inspect::graph::nodes::{MarkNode, TestNode};
+    use crate::inspect::graph::nodes::{DeclarationNode, FixtureNode, MarkNode, TestNode};
     use crate::inspect::graph::{InspectGraph, NodeKind};
+
+    /// Build a graph that populates the overview's Fixture Gravity and
+    /// Declarations sections.
+    ///
+    /// [`snapshot_graph`] holds only tests and marks, so neither section had
+    /// ever been rendered by a snapshot — which is how the Declarations sigil
+    /// stayed `C` after #1720 moved `NodeKind::sigil()` to `D` (#1722).
+    fn overview_sections_graph() -> InspectGraph {
+        let mut graph = InspectGraph::default();
+        graph.tests.push(TestNode {
+            node_id: "tests/test_db.py::test_connect".to_string(),
+            is_async: false,
+            param_id: None,
+            param_count: 0,
+            variants: vec![],
+            fixture_deps: vec![0],
+            marks: vec![],
+        });
+        graph.fixtures.push(FixtureNode {
+            name: "db".to_string(),
+            binding_type: "fixture".to_string(),
+            scope: "each".to_string(),
+            autouse: false,
+            source: "tests/__fixtures__.py".to_string(),
+            is_async: false,
+            description: String::new(),
+            consumers: vec![crate::inspect::graph::NodeRef {
+                kind: NodeKind::Test,
+                index: 0,
+            }],
+            declaration_idx: Some(0),
+            plugin_idx: None,
+        });
+        graph.declarations.push(DeclarationNode {
+            path: "tests/__fixtures__.py".to_string(),
+            fixtures: vec![0],
+        });
+        graph
+    }
+
+    #[test]
+    fn snap_overview_declarations_section() {
+        let graph = overview_sections_graph();
+        let mut app = InspectApp::new(Some(graph), None);
+        app.terminal_width = 80;
+        assert_snapshot!(
+            "overview_declarations_section",
+            render_to_string(&app, 80, 16)
+        );
+    }
 
     /// Build a graph with 3 tests and 1 mark for snapshot tests.
     fn snapshot_graph() -> InspectGraph {
