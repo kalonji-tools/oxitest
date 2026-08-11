@@ -95,13 +95,13 @@ def _reject_async_in_sync(dep_name: str, dep_val: Any, fixture_name: str) -> Non
 
 
 def _reject_nonshared_async(dep_name: str, dep_val: Any, fixture_name: str) -> None:
-    """Shared fixtures cannot depend on non-shared async fixtures."""
+    """A fixture cannot depend on an async fixture of a narrower lifetime."""
     _check_async_dep(
         dep_name,
         dep_val,
         fixture_name,
-        f"shared fixture '{fixture_name}' cannot depend on "
-        f"non-shared async fixture '{dep_name}' — "
+        f"fixture '{fixture_name}' cannot depend on "
+        f"async fixture '{dep_name}' — "
         f"lifetime mismatch",
     )
 

@@ -200,13 +200,9 @@ cannot arrange async fixture(s) on a sync test — 1 illegal entry.
     - 'each_txn' (function scope) — defined at __fixtures__.py:6
   Three ways forward:
     1. Make the test async — `async def test_...`
-    2. Change fixture scope to 'shared' or 'session'
+    2. Widen the fixture lifetime to 'module', 'package' or 'process'
     3. Convert fixture to sync — remove `async` from def
 ```
-
-Way forward 2 still speaks in the legacy `shared` / `session` scope vocabulary.
-On a `@oxi.fixture` declaration the equivalent is raising `lifetime` to
-`"module"` or wider.
 
 Multiple illegal entries in the same `@arrange` are reported in one diagnostic
 — the scan is all-or-nothing.

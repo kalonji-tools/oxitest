@@ -106,7 +106,7 @@ is emitted only when auto-arrange is **disabled** (`auto_arrange = false`). With
 the default `fmt` log layer and `RUST_LOG=warn`:
 
 ```console
-WARN _oxitest::pipeline::execution: shared fixture will be rebuilt once per task group, not once per run; a task group is a single module unless a `package` declaration merges a subtree, so a run can build more instances than it has workers — use --serial to run them once, or narrow the lifetime of fixtures that can be function-scoped fixtures=my_db fixture_count=1 workers=2
+WARN _oxitest::pipeline::execution: wide-lifetime fixture will be rebuilt once per task group, not once per run; a task group is a single module unless a `package` declaration merges a subtree, so a run can build more instances than it has workers — use --serial to run them once, or narrow the lifetime of fixtures that can be function-scoped fixtures=my_db fixture_count=1 workers=2
 ```
 
 To resolve it, choose one of these options:

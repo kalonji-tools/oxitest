@@ -139,13 +139,13 @@ class _YieldsAlias:
 
         Usage on a yield fixture::
 
-            @fixtures.fixture
+            @oxi.fixture(lifetime="function")
             def store() -> Yields[KVault]:
                 s = KVault()
                 yield s        # value injected into tests
                 s.close()      # teardown runs after each test
 
-            @fixtures.fixture
+            @oxi.fixture(lifetime="function")
             def tx_cleanup(store: Fixture[KVault]) -> Yields[None]:
                 yield          # setup is a no-op; teardown does the work
                 store.rollback_if_open()

@@ -571,7 +571,7 @@ class ArrangeError(OxitestError):
             f"  Illegal:\n{illegal_lines}\n"
             f"  Three ways forward:\n"
             f"    1. Make the test async — `async def test_...`\n"
-            f"    2. Change fixture scope to 'shared' or 'session'\n"
+            f"    2. Widen the fixture lifetime to 'module', 'package' or 'process'\n"
             f"    3. Convert fixture to sync — remove `async` from def\n"
         )
         super().__init__(message)
