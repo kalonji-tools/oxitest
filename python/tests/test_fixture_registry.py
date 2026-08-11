@@ -1372,3 +1372,22 @@ def test_plugin_module_source_renders_in_query_output() -> None:
         f"fixture they cannot open in their own tree — got "
         f"{entries[0]['description']!r}"
     )
+
+
+# ── #1848: arrangement inputs are declared, not derived from a tier ──────────
+
+
+def test_module_lifetime_names_lists_only_the_module_tier() -> None:
+    """The warning's reader must not read FixtureDef.arranges, which #1848 deletes."""
+    registry = helpers.make_registry(
+        helpers.make_fixture_def("per_test", scope=FixtureScope.EACH),
+        helpers.make_fixture_def("per_module", scope=FixtureScope.MODULE),
+        helpers.make_fixture_def("per_process", scope=FixtureScope.PROCESS),
+    )
+
+    names = registry.module_lifetime_names()
+
+    assert names == ("per_module",), (
+        "the wide-lifetime warning names module-tier fixtures only; a process-tier "
+        "fixture is built once per worker and is not what the warning is about"
+    )

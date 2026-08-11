@@ -482,7 +482,7 @@ fn report_violations(
     }
 }
 
-fn emit_shared_fixture_warning(
+fn emit_module_lifetime_warning(
     py: Python<'_>,
     session: &bridge::FixtureSession,
     cfg: &config::Config,
@@ -491,19 +491,19 @@ fn emit_shared_fixture_warning(
     if cfg.exec.auto_arrange_threshold > 0 {
         return;
     }
-    let shared_names = session.shared_fixture_names(py);
-    if shared_names.is_empty() {
+    let module_names = session.module_lifetime_fixture_names(py);
+    if module_names.is_empty() {
         return;
     }
-    let list = shared_names.join(", ");
-    let noun = if shared_names.len() == 1 {
+    let list = module_names.join(", ");
+    let noun = if module_names.len() == 1 {
         "fixture"
     } else {
         "fixtures"
     };
     tracing::warn!(
         fixtures = %list,
-        fixture_count = shared_names.len(),
+        fixture_count = module_names.len(),
         workers = worker_count,
         "wide-lifetime {noun} will be rebuilt once per task group, not once per run; \
          a task group is a single module unless a `package` declaration merges a \
@@ -695,8 +695,8 @@ fn execute_phases(
                 }
             }
 
-            // Emit shared-fixture warning when auto-arrange is disabled.
-            emit_shared_fixture_warning(py, ctx.session, ctx.cfg, worker_count);
+            // Emit the wide-lifetime warning when auto-arrange is disabled.
+            emit_module_lifetime_warning(py, ctx.session, ctx.cfg, worker_count);
 
             if plan.parallel_groups.is_empty() || result.interrupted {
                 return result;

@@ -863,14 +863,9 @@ class FixtureSession:
         """Read-only access to the fixture registry."""
         return self._registry
 
-    def shared_fixture_names(self) -> tuple[str, ...]:
-        """Return sorted names of the fixtures Auto-Arrangement treats as inputs.
-
-        That is the ``lifetime="module"`` tier since #1720. See
-        :meth:`FixtureRegistry.shared_names` for why the name still says
-        ``shared``.
-        """
-        return self._registry.shared_names()
+    def module_lifetime_fixture_names(self) -> tuple[str, ...]:
+        """Return sorted names of fixtures declared ``lifetime="module"``."""
+        return self._registry.module_lifetime_names()
 
     def shared_fixture_groups(self) -> tuple[tuple[str, ...], ...]:
         """Return connected components of arranging-fixture dependencies."""
