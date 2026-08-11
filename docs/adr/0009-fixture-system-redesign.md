@@ -59,7 +59,7 @@ A fixture accidentally placed in `helpers.py` or `utils.py` is invisible to the 
 | Lifetime | Boundary | Disposal trigger | Under parallel execution |
 |----------|----------|------------------|--------------------------|
 | `function` | The individual test | After the test completes | No effect |
-| `module` | The Python module (test file) | After all tests in the module complete | No effect |
+| `module` | The Python module (test file) | After all tests in the module complete | **Exactly once per module** — the module is kept inside one dispatch phase (Amendment 14) |
 | `package` | The directory subtree containing the declaration | After all tests in the subtree complete | **Exactly once per run** — collapses the subtree onto one worker |
 | `process` | The process — a worker, or the coordinator | At process exit | **At most once per process**: `≤ 1 + N` for N workers, the `1` being the coordinator when an inprocess or arranged test resolves it |
 
@@ -558,6 +558,29 @@ Amendments 1, 2 and 3 each corrected claims about oxitest that had never been ch
 This one is not. No claim about helpers was falsified by measurement; the concept was reasoned out of existence. A reader counting five amendments should be able to tell the two kinds apart, because the remedies differ: drift is cured by checking claims against `main`, which Amendment 4 has now institutionalised in the `**Status:**` lines and inline markers. A peer concept that never earned its place is not caught by any amount of checking — it needed [#1700](https://github.com/kalonji-tools/oxitest/issues/1700)'s question, *"what is this for?"*, asked of the design rather than of the code.
 
 The one structural lesson worth carrying: the helper column entered this ADR by symmetry with fixtures — same file convention, same proxy shape, same plugin protocol — and symmetry is not a justification. Nothing in the Decision ever argued that helpers *needed* framework support; the rules simply gave them the treatment fixtures got.
+
+### Amendment 14 — a declaring module is kept inside one dispatch phase (2026-08-11)
+
+Tracked by [#1750](https://github.com/kalonji-tools/oxitest/issues/1750). Amends Rule 2's parallel-execution column for `module`. Everything else stands.
+
+**The `module` row said "No effect" under parallel execution, and that was false.** A dispatch phase owns its own fixture session, so a module whose items land in two phases builds its module-tier fixture once in each. Measured on `main` `16019542`, Linux x86_64, CPython 3.12, `-n 4`, cold cache: one module with two tests, one of them `@oxi.mark.inprocess`, built the fixture **twice**; the control without the mark built it **once**. The tier's own promise did not hold in the case the column claimed was unaffected.
+
+**Two independent routes split one module, and the issue recorded only the first.**
+
+1. `partition_inprocess_groups` sends the marked items to the in-process phase and the rest to the parallel one.
+2. `partition_by_fixture_groups` buckets the items that named a fixture in `@oxi.arrange` into a component and leaves their siblings in the parallel remainder. **No mark is involved**: `@oxi.arrange` on one of two tests reproduced the same two builds.
+
+**The rule.** A module that can *resolve* a `lifetime="module"` fixture never spans two dispatch phases. Under the mark, the whole module follows the mark — `inprocess` is a semantic the user asked for explicitly and is not silently dropped, and the cost is one `ModuleGroup` moving to the coordinator rather than parallelism lost across the suite. Under arrangement, the whole module travels inside its component; the first matching component wins if its items would fall into two.
+
+**The test is visibility, not usage, and that is load-bearing.** `fixture_deps` is built from annotated parameters, so a usage test cannot see `fx.<ns>.<name>` access — which reaches the same fixture and double-builds identically (measured: two builds). The predicate is *anchored **and** visible*: an unanchored def is ambient and would report every module, which is a blanket rule that would move roughly a hundred tests in this repo onto the coordinator to protect fixtures they never resolve. No documented declaration path produces an unanchored module-tier fixture — `@oxi.fixture(lifetime="module")` always yields a `ModuleSource`, and a plugin provider's `scope` is documented as `"each"` or `"session"` only.
+
+**The cost is bounded and stated.** A mixed module with no visible module-tier fixture keeps its split and its parallelism. Across this repo's own suite the rule newly keeps exactly one module whole — `python/tests/docs/reference/test_marks.py`, three tests.
+
+**The asymmetry with `package` is deliberate.** One tier up, `unarrange_declaring_subtrees` *excludes* a declaring subtree from arrangement rather than keeping it inside a component. A subtree spans modules and cannot be forced into one bucket; a module already **is** the scheduling unit. Excluding a module instead would send it to a worker and silently drop the co-location `@oxi.arrange` promises — which is what `test_arrange_groups_at_module_tier_on_the_runner` refuses.
+
+**`package` is unchanged and out of scope.** Keeping a package subtree inside one phase needs a cross-module dispatch unit the planner does not have, so `reject_inprocess_inside_package` stays. #1750 carries the description.
+
+**Arrangement still cannot reduce a build at this tier**, and the wide-lifetime warning no longer advises it as though it could. A module is the task group, so the fixture is rebuilt per module whichever process the module runs on.
 
 ## Consequences
 

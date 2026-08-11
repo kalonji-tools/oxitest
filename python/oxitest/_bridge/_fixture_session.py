@@ -867,6 +867,17 @@ class FixtureSession:
         """Return sorted names of fixtures declared ``lifetime="module"``."""
         return self._registry.module_lifetime_names()
 
+    def modules_with_visible_module_lifetime(
+        self, module_paths: Collection[str]
+    ) -> tuple[str, ...]:
+        """Return the modules that must stay inside one dispatch phase (#1750).
+
+        Rust passes a ``list[str]`` of every collected module path and keeps
+        each returned module whole, so a split cannot put that module's
+        module-tier fixture into two fixture sessions.
+        """
+        return self._registry.modules_with_visible_module_lifetime(module_paths)
+
     def arranged_fixture_groups(
         self, arranged: Collection[str]
     ) -> tuple[tuple[str, ...], ...]:

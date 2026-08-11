@@ -13,7 +13,7 @@ __all__ = [
     "PluginSource",
     "_fixture_inner_type",
 ]
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Collection, Iterator, Sequence
 from dataclasses import dataclass
 from enum import StrEnum, auto
 from types import MappingProxyType
@@ -760,6 +760,50 @@ class FixtureRegistry:
                 for name, defs in self._by_name.items()
                 if defs and defs[-1].scope is FixtureScope.MODULE
             )
+        )
+
+    def modules_with_visible_module_lifetime(
+        self, module_paths: Collection[str]
+    ) -> tuple[str, ...]:
+        """Return the subset of *module_paths* that can resolve a module-tier fixture.
+
+        The scheduler keeps each of these modules inside a single dispatch
+        phase. A phase owns its own fixture session, so a module whose items
+        land in two phases builds its module-tier fixture twice and the tier's
+        once-per-module promise does not hold (#1750).
+
+        The test is **visibility, not usage**. ``fixture_deps`` is built from
+        annotated parameters, so a usage test cannot see ``fx.<ns>.<name>``
+        access, and that access reaches the same fixture and double-builds the
+        same way. ``is_visible_from`` is the one predicate covering both
+        resolution routes.
+
+        ``anchor is not None`` guards the visibility call, the same way
+        ``namespace_has_visible_anchor`` does: an unanchored def is ambient, so
+        it is visible from everywhere and would report *every* module. That is
+        the blanket rule this deliberately is not — it would move a module onto
+        the coordinator to protect a fixture the module never resolves.
+
+        No documented declaration path produces an unanchored module-tier
+        fixture: ``@oxi.fixture(lifetime="module")`` always yields a
+        ``ModuleSource``, the builtins are ``each`` or ``session``, and a
+        plugin provider's ``scope`` is documented as ``"each"`` or ``"session"``
+        only. An unanchored one would therefore have to come from undocumented
+        duck-typed plugin surface, and it keeps today's partitioning rather than
+        silently serialising a whole suite.
+        """
+        anchored = [
+            defn
+            for defs in self._by_name.values()
+            for defn in defs
+            if defn.scope is FixtureScope.MODULE and defn.anchor is not None
+        ]
+        if not anchored:
+            return ()
+        return tuple(
+            path
+            for path in module_paths
+            if any(defn.is_visible_from(path) for defn in anchored)
         )
 
     def process_lifetime_names(self) -> tuple[str, ...]:
