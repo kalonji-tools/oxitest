@@ -33,6 +33,7 @@ pub fn make_pipeline(phase: crate::pipeline::PipelinePhase) -> crate::pipeline::
             cache,
             python_bin: "python3".to_string(),
             ast_weight: None,
+            fx_usages: std::collections::HashMap::new(),
             test_files: vec![],
             fixture_modules: vec![],
             pending_diagnostics: vec![],

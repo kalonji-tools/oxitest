@@ -163,6 +163,177 @@ fn chain<'a>(a: &'a [ast::Stmt], b: &'a [ast::Stmt]) -> Vec<&'a ast::Stmt> {
     a.iter().chain(b.iter()).collect()
 }
 
+/// Expressions held directly by *stmt*, not descending into child statements.
+///
+/// The expression counterpart of [`compound_children`]: that one walks the
+/// statement tree, this one gets from a statement into the expression tree
+/// hanging off it. Together they reach every expression in a function body.
+///
+/// Decorators and annotations are deliberately included — a `Stmt::FunctionDef`
+/// nested inside a test can carry either, and #1758's usage extraction models
+/// `ast.walk`, which does not prune nested definitions.
+pub fn stmt_exprs(stmt: &ast::Stmt) -> Vec<&ast::Expr> {
+    let mut out: Vec<&ast::Expr> = Vec::new();
+    match stmt {
+        ast::Stmt::Expr(n) => out.push(&n.value),
+        ast::Stmt::Return(n) => out.extend(n.value.as_deref()),
+        ast::Stmt::Delete(n) => out.extend(&n.targets),
+        ast::Stmt::Assign(n) => {
+            out.extend(&n.targets);
+            out.push(&n.value);
+        }
+        ast::Stmt::AugAssign(n) => {
+            out.push(&n.target);
+            out.push(&n.value);
+        }
+        ast::Stmt::AnnAssign(n) => {
+            out.push(&n.target);
+            out.push(&n.annotation);
+            out.extend(n.value.as_deref());
+        }
+        ast::Stmt::If(n) => out.push(&n.test),
+        ast::Stmt::While(n) => out.push(&n.test),
+        ast::Stmt::For(n) => {
+            out.push(&n.target);
+            out.push(&n.iter);
+        }
+        ast::Stmt::AsyncFor(n) => {
+            out.push(&n.target);
+            out.push(&n.iter);
+        }
+        ast::Stmt::With(n) => out.extend(with_item_exprs(&n.items)),
+        ast::Stmt::AsyncWith(n) => out.extend(with_item_exprs(&n.items)),
+        ast::Stmt::Raise(n) => {
+            out.extend(n.exc.as_deref());
+            out.extend(n.cause.as_deref());
+        }
+        ast::Stmt::Assert(n) => {
+            out.push(&n.test);
+            out.extend(n.msg.as_deref());
+        }
+        ast::Stmt::Match(n) => out.push(&n.subject),
+        ast::Stmt::Try(n) => out.extend(handler_exprs(&n.handlers)),
+        ast::Stmt::TryStar(n) => out.extend(handler_exprs(&n.handlers)),
+        ast::Stmt::FunctionDef(n) => out.extend(&n.decorator_list),
+        ast::Stmt::AsyncFunctionDef(n) => out.extend(&n.decorator_list),
+        ast::Stmt::ClassDef(n) => {
+            out.extend(&n.decorator_list);
+            out.extend(&n.bases);
+        }
+        _ => {}
+    }
+    out
+}
+
+fn with_item_exprs(items: &[ast::WithItem]) -> Vec<&ast::Expr> {
+    let mut out: Vec<&ast::Expr> = Vec::new();
+    for item in items {
+        out.push(&item.context_expr);
+        out.extend(item.optional_vars.as_deref());
+    }
+    out
+}
+
+fn handler_exprs(handlers: &[ast::ExceptHandler]) -> Vec<&ast::Expr> {
+    let mut out: Vec<&ast::Expr> = Vec::new();
+    for handler in handlers {
+        let ast::ExceptHandler::ExceptHandler(h) = handler;
+        out.extend(h.type_.as_deref());
+    }
+    out
+}
+
+/// Direct sub-expressions of *expr*.
+///
+/// Every variant is listed rather than falling through a wildcard: a wildcard
+/// makes a new variant silently unreachable, and this walker's whole job is to
+/// miss nothing.
+pub fn expr_children(expr: &ast::Expr) -> Vec<&ast::Expr> {
+    let mut out: Vec<&ast::Expr> = Vec::new();
+    match expr {
+        ast::Expr::BoolOp(n) => out.extend(&n.values),
+        ast::Expr::NamedExpr(n) => {
+            out.push(&n.target);
+            out.push(&n.value);
+        }
+        ast::Expr::BinOp(n) => {
+            out.push(&n.left);
+            out.push(&n.right);
+        }
+        ast::Expr::UnaryOp(n) => out.push(&n.operand),
+        ast::Expr::Lambda(n) => out.push(&n.body),
+        ast::Expr::IfExp(n) => {
+            out.push(&n.test);
+            out.push(&n.body);
+            out.push(&n.orelse);
+        }
+        ast::Expr::Dict(n) => {
+            out.extend(n.keys.iter().flatten());
+            out.extend(&n.values);
+        }
+        ast::Expr::Set(n) => out.extend(&n.elts),
+        ast::Expr::ListComp(n) => {
+            out.push(&n.elt);
+            out.extend(comprehension_exprs(&n.generators));
+        }
+        ast::Expr::SetComp(n) => {
+            out.push(&n.elt);
+            out.extend(comprehension_exprs(&n.generators));
+        }
+        ast::Expr::DictComp(n) => {
+            out.push(&n.key);
+            out.push(&n.value);
+            out.extend(comprehension_exprs(&n.generators));
+        }
+        ast::Expr::GeneratorExp(n) => {
+            out.push(&n.elt);
+            out.extend(comprehension_exprs(&n.generators));
+        }
+        ast::Expr::Await(n) => out.push(&n.value),
+        ast::Expr::Yield(n) => out.extend(n.value.as_deref()),
+        ast::Expr::YieldFrom(n) => out.push(&n.value),
+        ast::Expr::Compare(n) => {
+            out.push(&n.left);
+            out.extend(&n.comparators);
+        }
+        ast::Expr::Call(n) => {
+            out.push(&n.func);
+            out.extend(&n.args);
+            out.extend(n.keywords.iter().map(|k| &k.value));
+        }
+        ast::Expr::FormattedValue(n) => {
+            out.push(&n.value);
+            out.extend(n.format_spec.as_deref());
+        }
+        ast::Expr::JoinedStr(n) => out.extend(&n.values),
+        ast::Expr::Attribute(n) => out.push(&n.value),
+        ast::Expr::Subscript(n) => {
+            out.push(&n.value);
+            out.push(&n.slice);
+        }
+        ast::Expr::Starred(n) => out.push(&n.value),
+        ast::Expr::List(n) => out.extend(&n.elts),
+        ast::Expr::Tuple(n) => out.extend(&n.elts),
+        ast::Expr::Slice(n) => {
+            out.extend(n.lower.as_deref());
+            out.extend(n.upper.as_deref());
+            out.extend(n.step.as_deref());
+        }
+        ast::Expr::Constant(_) | ast::Expr::Name(_) => {}
+    }
+    out
+}
+
+fn comprehension_exprs(generators: &[ast::Comprehension]) -> Vec<&ast::Expr> {
+    let mut out: Vec<&ast::Expr> = Vec::new();
+    for comprehension in generators {
+        out.push(&comprehension.target);
+        out.push(&comprehension.iter);
+        out.extend(&comprehension.ifs);
+    }
+    out
+}
+
 fn try_children<'a>(
     body: &'a [ast::Stmt],
     handlers: &'a [ast::ExceptHandler],

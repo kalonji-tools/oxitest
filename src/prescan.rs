@@ -30,10 +30,25 @@ pub struct PrescanItem {
     pub(crate) markers: Vec<PrescanMarker>,
     pub(crate) param_ids: Vec<String>,
     pub(crate) fixture_params: Vec<String>,
+    /// Static `fx.` accesses read out of this test's body (#1758).
+    pub(crate) fx_usages: Vec<FxUsage>,
     pub(crate) is_class_method: bool,
     pub(crate) class_name: Option<String>,
     /// Estimated execution time in milliseconds, derived from AST analysis.
     pub(crate) body_weight: crate::types::DurationMs,
+}
+
+/// One statically-visible `fx.` access read out of a test body (#1758).
+///
+/// `namespace` is `Some` for the qualified form `fx.<ns>.<name>` and `None` for
+/// the documented shortcut `fx.<name>`. The distinction is carried rather than
+/// resolved here: only the registry knows which declaration a bare name reaches,
+/// and this type is produced by an AST pass that has no registry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FxUsage {
+    pub(crate) namespace: Option<String>,
+    pub(crate) name: String,
+    pub(crate) lineno: crate::types::LineNo,
 }
 
 /// Per-module prescan result used in the pipeline state.
@@ -246,6 +261,120 @@ fn extract_fixture_param_names(args: &ast::Arguments) -> Vec<String> {
         }
     }
     names
+}
+
+/// Extract the static `fx.` attribute chains a test body reads (#1758).
+///
+/// Two literal grammar forms, both documented, and only these two:
+///
+/// - `fx.<namespace>.<name>` — the qualified form
+/// - `fx.<name>` — the shortcut, `use-fixtures.md` "Drop the namespace"
+///
+/// The root name is whichever parameter carries a bare `Fixtures` annotation,
+/// not the literal `fx`.
+///
+/// A qualified chain `fx.api.conn` *contains* a shortcut-shaped sub-expression
+/// `fx.api`, so the two forms cannot be matched independently over a flattened
+/// node list without reporting one access as two. The walk below matches the
+/// qualified form first and then stops descending, which is what keeps the
+/// inner node from being seen at all — the subtree it skips is only `fx.<ns>`
+/// and the `fx` name itself, so nothing else is lost with it.
+///
+/// Nested definitions are **not** pruned: an access written inside a closure in
+/// a test body is still the test's, which is what Python's `ast.walk` does and
+/// what the validated #1758 prototype relied on.
+fn extract_fx_usages(
+    body: &[ast::Stmt],
+    proxy_params: &[String],
+    line_index: &[u32],
+) -> Vec<FxUsage> {
+    if proxy_params.is_empty() {
+        return Vec::new();
+    }
+    let mut usages = Vec::new();
+    let mut stmts: Vec<&ast::Stmt> = body.iter().collect();
+    while let Some(stmt) = stmts.pop() {
+        for expr in python_ast::stmt_exprs(stmt) {
+            collect_fx_usages(expr, proxy_params, line_index, &mut usages);
+        }
+        stmts.extend(python_ast::compound_children(stmt));
+    }
+    usages
+}
+
+/// Record any `fx.` access rooted at *expr*, then recurse into its children.
+fn collect_fx_usages(
+    expr: &ast::Expr,
+    proxy_params: &[String],
+    line_index: &[u32],
+    usages: &mut Vec<FxUsage>,
+) {
+    let is_proxy_root = |candidate: &ast::Expr| matches!(candidate, ast::Expr::Name(name) if proxy_params.iter().any(|param| param == name.id.as_str()));
+    if let ast::Expr::Attribute(outer) = expr {
+        // Qualified: Attribute(Attribute(Name(param), ns), name)
+        if let ast::Expr::Attribute(inner) = &*outer.value
+            && is_proxy_root(&inner.value)
+        {
+            usages.push(FxUsage {
+                namespace: Some(inner.attr.to_string()),
+                name: outer.attr.to_string(),
+                lineno: line_at(line_index, outer.range.start().to_u32()),
+            });
+            return;
+        }
+        // Shortcut: Attribute(Name(param), name)
+        if is_proxy_root(&outer.value) {
+            usages.push(FxUsage {
+                namespace: None,
+                name: outer.attr.to_string(),
+                lineno: line_at(line_index, outer.range.start().to_u32()),
+            });
+            return;
+        }
+    }
+    for child in python_ast::expr_children(expr) {
+        collect_fx_usages(child, proxy_params, line_index, usages);
+    }
+}
+
+fn line_at(line_index: &[u32], offset: u32) -> crate::types::LineNo {
+    crate::types::LineNo::from_u32(python_ast::offset_to_line(line_index, offset))
+}
+
+/// Extract parameter names annotated with a bare `Fixtures` — the proxy.
+///
+/// Deliberately separate from [`extract_fixture_param_names`]: that one keeps
+/// `Fixture[T]`, which is *subscripted*, and the two annotations name different
+/// injection protocols. `Fixture[T]` injects one fixture by name; a bare
+/// `Fixtures` injects the namespace accessor whose attribute chains #1758
+/// reads. Sharing a predicate would make either one match the other's spelling.
+fn extract_proxy_param_names(args: &ast::Arguments) -> Vec<String> {
+    let mut names = Vec::new();
+    for arg_with_default in args.args.iter().chain(args.kwonlyargs.iter()) {
+        if let Some(ref annotation) = arg_with_default.def.annotation
+            && is_fixtures_proxy_annotation(annotation)
+        {
+            names.push(arg_with_default.def.arg.to_string());
+        }
+    }
+    names
+}
+
+/// Check whether an annotation expression is `Fixtures` or `oxitest.Fixtures`.
+///
+/// A subscripted expression is rejected outright, which is what keeps
+/// `Fixture[T]` — and a hypothetical `Fixtures[T]` — out of the proxy set.
+fn is_fixtures_proxy_annotation(expr: &ast::Expr) -> bool {
+    match expr {
+        // Fixtures
+        ast::Expr::Name(n) => n.id.as_str() == "Fixtures",
+        // oxitest.Fixtures
+        ast::Expr::Attribute(attr) => {
+            attr.attr.as_str() == "Fixtures"
+                && matches!(&*attr.value, ast::Expr::Name(n) if python_ast::is_oxitest_namespace(n.id.as_str()))
+        }
+        _ => false,
+    }
 }
 
 /// Check whether an annotation expression is `Fixture[T]` or `oxitest.Fixture[T]`.
@@ -625,6 +754,8 @@ macro_rules! build_prescan_item {
             .collect();
         let param_ids = extract_parametrize_kwarg_names($def.decorator_list());
         let fixture_params = extract_fixture_param_names($def.args());
+        let proxy_params = extract_proxy_param_names($def.args());
+        let fx_usages = extract_fx_usages($def.body(), &proxy_params, $line_index);
         let lineno = crate::types::LineNo::from_u32(python_ast::offset_to_line(
             $line_index,
             $def.range().start().to_u32(),
@@ -642,6 +773,7 @@ macro_rules! build_prescan_item {
             markers,
             param_ids,
             fixture_params,
+            fx_usages,
             is_class_method: $is_class_method,
             class_name: $class_name,
             body_weight,
@@ -1759,6 +1891,306 @@ async def conn():
                     );
                 }
                 other => panic!("expected NoFixtures for an unrecognized alias, got {other:?}"),
+            }
+        }
+    }
+
+    // ── #1758: static fx. usage extraction ──────────────────────────────────
+
+    mod fx_usage_extraction {
+        use super::*;
+
+        /// The first prescanned item's usages, as `(namespace, name)` pairs.
+        fn usages_of(source: &str) -> Vec<(Option<String>, String)> {
+            let file = write_temp_py(source);
+            match prescan_with_ast(&temp_path(&file), false) {
+                PrescanResult::HasTests(payload) => payload.items[0]
+                    .fx_usages
+                    .iter()
+                    .map(|usage| (usage.namespace.clone(), usage.name.clone()))
+                    .collect(),
+                other => panic!("expected HasTests, got {other:?}"),
+            }
+        }
+
+        #[test]
+        fn reads_the_qualified_form() {
+            let found = usages_of(
+                "from oxitest import Fixtures\n\ndef test_it(fx: Fixtures):\n    _ = fx.api.conn\n",
+            );
+            assert_eq!(
+                found,
+                vec![(Some("api".to_string()), "conn".to_string())],
+                "fx.<ns>.<name> is the form 90 of 101 real accesses use; missing \
+                 it leaves the collection-time gate with nothing to check"
+            );
+        }
+
+        #[test]
+        fn reads_the_documented_shortcut_form() {
+            let found = usages_of(
+                "from oxitest import Fixtures\n\ndef test_it(fx: Fixtures):\n    _ = fx.conn\n",
+            );
+            assert_eq!(
+                found,
+                vec![(None, "conn".to_string())],
+                "fx.<name> is a documented API (use-fixtures.md, 'Drop the \
+                 namespace') and 11 of 101 real accesses use it; an extractor \
+                 handling only the two-hop form misses them silently"
+            );
+        }
+
+        #[test]
+        fn a_qualified_chain_is_not_also_counted_as_a_shortcut() {
+            let found = usages_of(
+                "from oxitest import Fixtures\n\ndef test_it(fx: Fixtures):\n    _ = fx.api.conn\n",
+            );
+            assert_eq!(
+                found.len(),
+                1,
+                "fx.api.conn contains the shortcut-shaped sub-expression fx.api, \
+                 so a single-pass extractor reports one access as two and the \
+                 gate then refuses a legal namespace under a name nobody \
+                 wrote; got {found:?}"
+            );
+        }
+
+        #[test]
+        fn follows_the_annotated_parameter_not_the_name_fx() {
+            let found = usages_of(
+                "from oxitest import Fixtures\n\ndef test_it(other: Fixtures):\n    _ = other.api.conn\n",
+            );
+            assert_eq!(
+                found,
+                vec![(Some("api".to_string()), "conn".to_string())],
+                "the proxy is whichever parameter carries the annotation; keying \
+                 on the literal name `fx` would miss every test naming it otherwise"
+            );
+        }
+
+        #[test]
+        fn a_fixture_annotated_parameter_is_not_a_proxy() {
+            let found = usages_of(
+                "from oxitest import Fixture\n\ndef test_it(conn: Fixture[str]):\n    _ = conn.attr\n",
+            );
+            assert!(
+                found.is_empty(),
+                "Fixture[T] injects one fixture by name; Fixtures injects the \
+                 namespace accessor. Treating the first as a proxy would read \
+                 every attribute of every injected value as a fixture access; \
+                 got {found:?}"
+            );
+        }
+
+        #[test]
+        fn an_unannotated_parameter_named_fx_is_not_a_proxy() {
+            let found = usages_of("def test_it(fx):\n    _ = fx.api.conn\n");
+            assert!(
+                found.is_empty(),
+                "injection is driven by the annotation, so an unannotated `fx` is \
+                 an ordinary parameter and its attributes are not fixture \
+                 accesses; got {found:?}"
+            );
+        }
+
+        #[test]
+        fn reaches_inside_a_branch_that_never_executes() {
+            let found = usages_of(
+                "from oxitest import Fixtures\n\ndef test_it(fx: Fixtures):\n    if False:\n        _ = fx.api.conn\n",
+            );
+            assert_eq!(
+                found,
+                vec![(Some("api".to_string()), "conn".to_string())],
+                "reaching code the access-time gate can never see is the whole \
+                 point of #1758 — this is a row that shipped silently before it"
+            );
+        }
+
+        #[test]
+        fn reaches_inside_a_nested_function() {
+            let found = usages_of(
+                "from oxitest import Fixtures\n\ndef test_it(fx: Fixtures):\n    def inner():\n        return fx.api.conn\n    inner()\n",
+            );
+            assert_eq!(
+                found,
+                vec![(Some("api".to_string()), "conn".to_string())],
+                "a closure in a test body is still the test's own code; the \
+                 validated prototype modelled ast.walk, which does not prune \
+                 nested definitions"
+            );
+        }
+
+        #[test]
+        fn reaches_through_a_call_argument() {
+            let found = usages_of(
+                "from oxitest import Fixtures\n\ndef test_it(fx: Fixtures):\n    assert helper(fx.api.conn) == 1\n",
+            );
+            assert_eq!(
+                found,
+                vec![(Some("api".to_string()), "conn".to_string())],
+                "an access is an expression and can sit anywhere one can; a \
+                 walker reading only assignment statements would miss most real \
+                 accesses"
+            );
+        }
+
+        #[test]
+        fn a_dynamic_access_is_not_extracted() {
+            let found = usages_of(
+                "from oxitest import Fixtures\n\ndef test_it(fx: Fixtures):\n    _ = getattr(fx, name).conn\n",
+            );
+            assert!(
+                found.is_empty(),
+                "getattr defeats static analysis by construction, which is why \
+                 the access-time gate is mandatory and permanent (ADR-0009 Rule \
+                 3, Amendment 14). Extracting it would report a violation on a \
+                 name this pass cannot know; got {found:?}"
+            );
+        }
+
+        #[test]
+        fn a_test_with_no_proxy_parameter_extracts_nothing() {
+            let found = usages_of("def test_it():\n    pass\n");
+            assert!(
+                found.is_empty(),
+                "most tests take no proxy at all, so this is the common path and \
+                 the one a regression would be quietest in; got {found:?}"
+            );
+        }
+
+        /// Every syntactic position an access can occupy, one per walker arm.
+        ///
+        /// `stmt_exprs` and `expr_children` are hand-written walkers over ~40
+        /// AST variants between them, and a missed arm does not fail loudly —
+        /// it silently drops the access, which is a violation shipping
+        /// unnoticed. That is the exact failure #1758 exists to remove, so
+        /// "the walker reaches everywhere" is the property under test rather
+        /// than an incidental coverage number.
+        ///
+        /// Each case embeds the same `fx.api.conn` and must yield exactly one
+        /// usage.
+        #[test]
+        fn every_syntactic_position_is_reached() {
+            const HEAD: &str = "from oxitest import Fixtures\n\ndef test_it(fx: Fixtures):\n";
+            const ASYNC_HEAD: &str =
+                "from oxitest import Fixtures\n\nasync def test_it(fx: Fixtures):\n";
+
+            // (label, body, uses async head)
+            let cases: &[(&str, &str, bool)] = &[
+                // ── statements ──
+                ("Return", "    return fx.api.conn\n", false),
+                ("Delete", "    del fx.api.conn\n", false),
+                ("AugAssign", "    x = 0\n    x += fx.api.conn\n", false),
+                ("AnnAssign", "    x: int = fx.api.conn\n", false),
+                ("While", "    while fx.api.conn:\n        break\n", false),
+                (
+                    "For iter",
+                    "    for _ in fx.api.conn:\n        pass\n",
+                    false,
+                ),
+                ("With", "    with fx.api.conn:\n        pass\n", false),
+                ("Raise", "    raise fx.api.conn\n", false),
+                ("Assert msg", "    assert True, fx.api.conn\n", false),
+                (
+                    "Match subject",
+                    "    match fx.api.conn:\n        case _:\n            pass\n",
+                    false,
+                ),
+                (
+                    "Try handler type",
+                    "    try:\n        pass\n    except fx.api.conn:\n        pass\n",
+                    false,
+                ),
+                (
+                    "ClassDef base",
+                    "    class Inner(fx.api.conn):\n        pass\n",
+                    false,
+                ),
+                (
+                    "FunctionDef decorator",
+                    "    @fx.api.conn\n    def inner():\n        pass\n",
+                    false,
+                ),
+                (
+                    "AsyncFor iter",
+                    "    async for _ in fx.api.conn:\n        pass\n",
+                    true,
+                ),
+                (
+                    "AsyncWith",
+                    "    async with fx.api.conn:\n        pass\n",
+                    true,
+                ),
+                // ── expressions ──
+                ("BoolOp", "    _ = fx.api.conn and True\n", false),
+                (
+                    "NamedExpr",
+                    "    if (y := fx.api.conn):\n        pass\n",
+                    false,
+                ),
+                ("BinOp", "    _ = fx.api.conn + 1\n", false),
+                ("UnaryOp", "    _ = -fx.api.conn\n", false),
+                ("Lambda body", "    _ = lambda: fx.api.conn\n", false),
+                ("IfExp", "    _ = fx.api.conn if True else None\n", false),
+                ("Dict value", "    _ = {\"k\": fx.api.conn}\n", false),
+                ("Dict key", "    _ = {fx.api.conn: 1}\n", false),
+                ("Set", "    _ = {fx.api.conn}\n", false),
+                (
+                    "ListComp elt",
+                    "    _ = [fx.api.conn for _ in range(1)]\n",
+                    false,
+                ),
+                (
+                    "SetComp elt",
+                    "    _ = {fx.api.conn for _ in range(1)}\n",
+                    false,
+                ),
+                (
+                    "DictComp key",
+                    "    _ = {fx.api.conn: 1 for _ in range(1)}\n",
+                    false,
+                ),
+                (
+                    "GeneratorExp elt",
+                    "    _ = (fx.api.conn for _ in range(1))\n",
+                    false,
+                ),
+                (
+                    "Comprehension iter",
+                    "    _ = [x for x in fx.api.conn]\n",
+                    false,
+                ),
+                (
+                    "Comprehension if",
+                    "    _ = [x for x in range(1) if fx.api.conn]\n",
+                    false,
+                ),
+                ("Compare", "    _ = fx.api.conn == 1\n", false),
+                ("Call func", "    fx.api.conn()\n", false),
+                ("Call keyword", "    helper(k=fx.api.conn)\n", false),
+                ("JoinedStr", "    _ = f\"{fx.api.conn}\"\n", false),
+                ("Subscript value", "    _ = fx.api.conn[0]\n", false),
+                ("Subscript index", "    _ = d[fx.api.conn]\n", false),
+                ("Starred", "    helper(*fx.api.conn)\n", false),
+                ("List", "    _ = [fx.api.conn]\n", false),
+                ("Tuple", "    _ = (fx.api.conn,)\n", false),
+                ("Slice bound", "    _ = d[fx.api.conn:1]\n", false),
+                ("Await", "    _ = await fx.api.conn\n", true),
+                ("Yield", "    yield fx.api.conn\n", false),
+                ("YieldFrom", "    yield from fx.api.conn\n", false),
+            ];
+
+            let expected = vec![(Some("api".to_string()), "conn".to_string())];
+            for (label, body, is_async) in cases {
+                let head = if *is_async { ASYNC_HEAD } else { HEAD };
+                let found = usages_of(&format!("{head}{body}"));
+                assert_eq!(
+                    found, expected,
+                    "an access in {label} position was not extracted. A walker arm \
+                     that drops an access does not fail loudly — the violation \
+                     simply ships, which is the masking this gate exists to \
+                     remove; got {found:?}"
+                );
             }
         }
     }

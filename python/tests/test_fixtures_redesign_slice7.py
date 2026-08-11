@@ -105,16 +105,36 @@ def test_the_shortcut_does_not_cross_a_b1_boundary(case: RunMode) -> None:
         f"it passed, the shortcut would be a B1 bypass rather than a spelling "
         f"convenience\nstdout:\n{stdout}\nstderr:\n{stderr}"
     )
-    assert "1 passed" in stdout, (
-        f"the anchor package's own shortcut must still succeed under "
-        f"{case.label}; without that, the sibling's failure could just as "
-        f"easily mean the fixture never registered\nstdout:\n{stdout}"
-    )
     assert "fixture-boundary" not in stdout, (
         "a bare-name lookup has no segment to attribute the boundary to, so "
         "it must report as not-found rather than as BoundaryError — #1713 "
-        "made that split deliberately and the shortcut inherits it\n"
-        f"stdout:\n{stdout}"
+        "made that split deliberately, the shortcut inherits it, and #1758's "
+        "collection-time gate resolves through the same code so it inherits "
+        f"it too\nstdout:\n{stdout}"
+    )
+
+
+def test_the_anchor_packages_own_shortcut_still_succeeds() -> None:
+    """The positive control for the refusal above (#1758).
+
+    It used to be the ``1 passed`` in that test's own output. The shortcut
+    violation is statically visible, so the run is now refused before any test
+    executes and no result is produced. The control moved to its own
+    invocation: without it, the sibling's failure could just as easily mean the
+    fixture never registered.
+    """
+    # Act
+    stdout, stderr, rc = helpers.run_oxitest(
+        _CROSS / "slice7_shortcut_cross" / "api" / "test_api.py", cwd=str(_CROSS)
+    )
+
+    # Assert
+    assert rc == 0, (
+        f"the anchor package holds no cross-boundary shortcut, so it must run "
+        f"and pass; rc={rc}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    )
+    assert "1 passed" in stdout, (
+        f"the anchor package's own shortcut must resolve; got:\n{stdout}"
     )
 
 

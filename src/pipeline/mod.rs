@@ -118,6 +118,14 @@ pub struct PipelineShared {
     pub(crate) python_bin: String,
     /// Sum of AST-derived body weights across all prescan items; `None` if prescan produced no items.
     pub(crate) ast_weight: Option<types::DurationMs>,
+    /// Static `fx.` accesses per test module, extracted during prescan (#1758).
+    ///
+    /// Carried here rather than on a phase for the same reason as `ast_weight`:
+    /// prescan derives it, `validate` consumes it, and the phases in between do
+    /// not need it. The only route into `SessionReady` that skips prescan is
+    /// `query_command`, which never calls `validate` either — so an empty map
+    /// on that path cannot silently pass a violation.
+    pub(crate) fx_usages: std::collections::HashMap<Utf8PathBuf, Vec<crate::prescan::FxUsage>>,
     pub(crate) test_files: Vec<Utf8PathBuf>,
     /// `__fixtures__.py` files registered during collection, sent to every
     /// worker so parallel sessions see what the serial session sees (#1732).
@@ -530,6 +538,7 @@ fn build_shared(
         python_bin,
         base,
         ast_weight: None,
+        fx_usages: std::collections::HashMap::new(),
         test_files: vec![],
         fixture_modules: vec![],
         pending_diagnostics: vec![],
