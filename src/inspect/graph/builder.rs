@@ -23,7 +23,7 @@ pub struct GraphBuilder {
     fixture_by_name: HashMap<String, usize>,
     test_by_node_id: HashMap<String, usize>,
     mark_by_name: HashMap<String, usize>,
-    conftest_by_path: HashMap<String, usize>,
+    declaration_by_path: HashMap<String, usize>,
     plugin_by_name: HashMap<String, usize>,
     // Side channel: mark names per test index (populated during add_test_entries,
     // consumed during resolve_edges).
@@ -37,7 +37,7 @@ impl GraphBuilder {
             fixture_by_name: HashMap::new(),
             test_by_node_id: HashMap::new(),
             mark_by_name: HashMap::new(),
-            conftest_by_path: HashMap::new(),
+            declaration_by_path: HashMap::new(),
             plugin_by_name: HashMap::new(),
             test_mark_names: HashMap::new(),
         }
@@ -67,7 +67,7 @@ impl GraphBuilder {
             .enumerate()
             .map(|(i, m)| (m.name.clone(), i))
             .collect();
-        let conftest_by_path = graph
+        let declaration_by_path = graph
             .declarations
             .iter()
             .enumerate()
@@ -85,7 +85,7 @@ impl GraphBuilder {
             fixture_by_name,
             test_by_node_id,
             mark_by_name,
-            conftest_by_path,
+            declaration_by_path,
             plugin_by_name,
             test_mark_names: HashMap::new(),
         }
@@ -176,7 +176,7 @@ impl GraphBuilder {
                 is_async,
                 description,
                 consumers: vec![],
-                conftest_idx: None,
+                declaration_idx: None,
                 plugin_idx: None,
             });
             self.fixture_by_name.insert(name, idx);
@@ -291,14 +291,14 @@ impl GraphBuilder {
     /// This must be called after all `add_*_entries` methods.  It resolves:
     ///
     /// 1. **Test -> Mark** edges from test entry `mark` fields
-    /// 2. **Fixture -> Conftest** membership edges (by source path)
+    /// 2. **Fixture -> Declaration** membership edges (by source path)
     /// 3. **Fixture -> Plugin** edges (by `<plugin:name>` source prefix)
     /// 4. **Parametrize grouping** (strip `[param_id]` from `node_id`)
     /// 5. **Broken edges** for unresolved fixture references
-    /// 6. **Inverse edges** (`consumers`, `used_by`, `conftest.fixtures`)
+    /// 6. **Inverse edges** (`consumers`, `used_by`, `declaration.fixtures`)
     pub(crate) fn resolve_edges(&mut self) {
         self.resolve_test_to_mark_edges();
-        self.resolve_fixture_to_conftest_edges();
+        self.resolve_fixture_to_declaration_edges();
         self.resolve_fixture_to_plugin_edges();
         self.resolve_parametrize_grouping();
     }
@@ -310,9 +310,9 @@ impl GraphBuilder {
 
     // ── Private helpers ──────────────────────────────────────────────────
 
-    /// Ensure a conftest node exists for the given path, returning its index.
-    fn ensure_conftest(&mut self, path: &str) -> usize {
-        if let Some(&idx) = self.conftest_by_path.get(path) {
+    /// Ensure a declaration node exists for the given path, returning its index.
+    fn ensure_declaration(&mut self, path: &str) -> usize {
+        if let Some(&idx) = self.declaration_by_path.get(path) {
             return idx;
         }
         let idx = self.graph.declarations.len();
@@ -320,7 +320,7 @@ impl GraphBuilder {
             path: path.to_string(),
             fixtures: vec![],
         });
-        self.conftest_by_path.insert(path.to_string(), idx);
+        self.declaration_by_path.insert(path.to_string(), idx);
         idx
     }
 
@@ -379,12 +379,12 @@ impl GraphBuilder {
         }
     }
 
-    fn resolve_fixture_to_conftest_edges(&mut self) {
+    fn resolve_fixture_to_declaration_edges(&mut self) {
         // Pre-seed seen-set from existing edges (progressive loading support).
-        let mut seen_conftest_fixtures: AHashMap<usize, AHashSet<usize>> = AHashMap::new();
+        let mut seen_declaration_fixtures: AHashMap<usize, AHashSet<usize>> = AHashMap::new();
         for (ct_idx, ct) in self.graph.declarations.iter().enumerate() {
             if !ct.fixtures.is_empty() {
-                seen_conftest_fixtures.insert(ct_idx, ct.fixtures.iter().copied().collect());
+                seen_declaration_fixtures.insert(ct_idx, ct.fixtures.iter().copied().collect());
             }
         }
 
@@ -393,15 +393,17 @@ impl GraphBuilder {
             if source.is_empty() || source.starts_with("<plugin:") {
                 continue;
             }
-            let conftest_idx = self.ensure_conftest(&source);
-            self.graph.fixtures[fix_idx].conftest_idx = Some(conftest_idx);
-            // Inverse: conftest -> fixture
-            if seen_conftest_fixtures
-                .entry(conftest_idx)
+            let declaration_idx = self.ensure_declaration(&source);
+            self.graph.fixtures[fix_idx].declaration_idx = Some(declaration_idx);
+            // Inverse: declaration -> fixture
+            if seen_declaration_fixtures
+                .entry(declaration_idx)
                 .or_default()
                 .insert(fix_idx)
             {
-                self.graph.declarations[conftest_idx].fixtures.push(fix_idx);
+                self.graph.declarations[declaration_idx]
+                    .fixtures
+                    .push(fix_idx);
             }
         }
     }
@@ -531,7 +533,7 @@ mod tests {
         let mut builder = GraphBuilder::new();
         builder.add_fixture_entries(&[entry(&[
             ("name", "db"),
-            ("source", "tests/conftest.py"),
+            ("source", "tests/__fixtures__.py"),
             ("type", "fixture"),
             ("scope", "session"),
             ("autouse", "false"),
@@ -612,11 +614,11 @@ mod tests {
     // ── Edge resolution ──────────────────────────────────────────────────
 
     #[test]
-    fn resolve_edges_wires_fixture_to_conftest() {
+    fn resolve_edges_wires_fixture_to_declaration() {
         let mut builder = GraphBuilder::new();
         builder.add_fixture_entries(&[entry(&[
             ("name", "db"),
-            ("source", "tests/conftest.py"),
+            ("source", "tests/__fixtures__.py"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),
@@ -627,17 +629,17 @@ mod tests {
         let graph = builder.build();
 
         assert!(
-            graph.fixtures[0].conftest_idx.is_some(),
-            "fixture from conftest should have conftest_idx set"
+            graph.fixtures[0].declaration_idx.is_some(),
+            "fixture from declaration should have declaration_idx set"
         );
-        let conftest_idx = graph.fixtures[0].conftest_idx.unwrap();
+        let declaration_idx = graph.fixtures[0].declaration_idx.unwrap();
         assert_eq!(
-            graph.declarations[conftest_idx].path, "tests/conftest.py",
-            "conftest node should have matching path"
+            graph.declarations[declaration_idx].path, "tests/__fixtures__.py",
+            "declaration node should have matching path"
         );
         assert!(
-            graph.declarations[conftest_idx].fixtures.contains(&0),
-            "conftest should reference the fixture in its fixtures list"
+            graph.declarations[declaration_idx].fixtures.contains(&0),
+            "declaration should reference the fixture in its fixtures list"
         );
     }
 
@@ -812,7 +814,7 @@ mod tests {
         let mut builder = GraphBuilder::new();
         let fx_entry = entry(&[
             ("name", "db"),
-            ("source", "tests/conftest.py"),
+            ("source", "tests/__fixtures__.py"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),
@@ -872,15 +874,15 @@ mod tests {
         );
     }
 
-    // ── Conftest auto-creation ───────────────────────────────────────────
+    // ── Declaration auto-creation ───────────────────────────────────────────
 
     #[test]
-    fn fixtures_from_same_conftest_share_conftest_node() {
+    fn fixtures_from_same_declaration_share_declaration_node() {
         let mut builder = GraphBuilder::new();
         builder.add_fixture_entries(&[
             entry(&[
                 ("name", "fixture_a"),
-                ("source", "tests/conftest.py"),
+                ("source", "tests/__fixtures__.py"),
                 ("type", "fixture"),
                 ("scope", "function"),
                 ("autouse", "false"),
@@ -889,7 +891,7 @@ mod tests {
             ]),
             entry(&[
                 ("name", "fixture_b"),
-                ("source", "tests/conftest.py"),
+                ("source", "tests/__fixtures__.py"),
                 ("type", "fixture"),
                 ("scope", "function"),
                 ("autouse", "false"),
@@ -902,20 +904,20 @@ mod tests {
         assert_eq!(
             graph.declarations.len(),
             1,
-            "two fixtures from the same conftest path must resolve to one conftest \
+            "two fixtures from the same declaration path must resolve to one declaration \
              node — a duplicated node would split one file's fixtures across two \
              graph nodes and break navigation between them"
         );
         assert_eq!(
             graph.declarations[0].fixtures.len(),
             2,
-            "the shared conftest node should list both fixtures, not just whichever \
+            "the shared declaration node should list both fixtures, not just whichever \
              one happened to create the node first"
         );
     }
 
     #[test]
-    fn fixture_plugin_source_does_not_create_conftest() {
+    fn fixture_plugin_source_does_not_create_declaration() {
         let mut builder = GraphBuilder::new();
         builder.add_fixture_entries(&[entry(&[
             ("name", "std_capture"),
@@ -929,8 +931,8 @@ mod tests {
         builder.resolve_edges();
         let graph = builder.build();
         assert!(
-            graph.fixtures[0].conftest_idx.is_none(),
-            "plugin-sourced fixture should not have conftest_idx"
+            graph.fixtures[0].declaration_idx.is_none(),
+            "plugin-sourced fixture should not have declaration_idx"
         );
     }
 
@@ -953,7 +955,7 @@ mod tests {
         let mut builder2 = GraphBuilder::from_graph(graph);
         builder2.add_fixture_entries(&[entry(&[
             ("name", "db"),
-            ("source", "tests/conftest.py"),
+            ("source", "tests/__fixtures__.py"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),
@@ -1010,11 +1012,11 @@ mod tests {
     }
 
     #[test]
-    fn from_graph_resolves_fixture_to_conftest_edges() {
+    fn from_graph_resolves_fixture_to_declaration_edges() {
         let mut builder = GraphBuilder::new();
         builder.add_fixture_entries(&[entry(&[
             ("name", "existing"),
-            ("source", "tests/conftest.py"),
+            ("source", "tests/__fixtures__.py"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),
@@ -1024,11 +1026,11 @@ mod tests {
         builder.resolve_edges();
         let graph = builder.build();
 
-        // Phase 2: add another fixture from the same conftest.
+        // Phase 2: add another fixture from the same declaration.
         let mut builder2 = GraphBuilder::from_graph(graph);
         builder2.add_fixture_entries(&[entry(&[
             ("name", "thing"),
-            ("source", "tests/conftest.py"),
+            ("source", "tests/__fixtures__.py"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),
@@ -1041,19 +1043,19 @@ mod tests {
         assert_eq!(
             merged.declarations.len(),
             1,
-            "fixture from same conftest should reuse existing conftest node"
+            "fixture from same declaration should reuse existing declaration node"
         );
         assert!(
-            merged.fixtures[0].conftest_idx.is_some(),
-            "fixture should be linked to the conftest node"
+            merged.fixtures[0].declaration_idx.is_some(),
+            "fixture should be linked to the declaration node"
         );
         assert!(
             merged.declarations[0].fixtures.contains(&0),
-            "conftest should reference the phase-1 fixture"
+            "declaration should reference the phase-1 fixture"
         );
         assert!(
             merged.declarations[0].fixtures.contains(&1),
-            "conftest should also reference the phase-2 fixture added via from_graph"
+            "declaration should also reference the phase-2 fixture added via from_graph"
         );
     }
 
@@ -1141,7 +1143,7 @@ mod tests {
         ])]);
         builder.add_fixture_entries(&[entry(&[
             ("name", "db"),
-            ("source", "conftest.py"),
+            ("source", "__fixtures__.py"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),
@@ -1189,7 +1191,7 @@ mod tests {
         builder.add_fixture_entries(&[
             entry(&[
                 ("name", "db"),
-                ("source", "conftest.py"),
+                ("source", "__fixtures__.py"),
                 ("type", "fixture"),
                 ("scope", "function"),
                 ("autouse", "false"),
@@ -1198,7 +1200,7 @@ mod tests {
             ]),
             entry(&[
                 ("name", "cache"),
-                ("source", "conftest.py"),
+                ("source", "__fixtures__.py"),
                 ("type", "fixture"),
                 ("scope", "function"),
                 ("autouse", "false"),
@@ -1233,7 +1235,7 @@ mod tests {
         let mut builder = GraphBuilder::new();
         builder.add_fixture_entries(&[entry(&[
             ("name", "db"),
-            ("source", "conftest.py"),
+            ("source", "__fixtures__.py"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),
@@ -1296,7 +1298,7 @@ mod tests {
         ])]);
         builder.add_fixture_entries(&[entry(&[
             ("name", "db"),
-            ("source", "conftest.py"),
+            ("source", "__fixtures__.py"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),
@@ -1345,7 +1347,7 @@ mod tests {
         builder.add_fixture_entries(&[
             entry(&[
                 ("name", "db"),
-                ("source", "conftest.py"),
+                ("source", "__fixtures__.py"),
                 ("type", "fixture"),
                 ("scope", "function"),
                 ("autouse", "false"),
@@ -1354,7 +1356,7 @@ mod tests {
             ]),
             entry(&[
                 ("name", "cache"),
-                ("source", "conftest.py"),
+                ("source", "__fixtures__.py"),
                 ("type", "fixture"),
                 ("scope", "function"),
                 ("autouse", "false"),
@@ -1424,7 +1426,7 @@ mod tests {
         let mut builder2 = GraphBuilder::from_graph(graph);
         builder2.add_fixture_entries(&[entry(&[
             ("name", "db"),
-            ("source", "conftest.py"),
+            ("source", "__fixtures__.py"),
             ("type", "fixture"),
             ("scope", "function"),
             ("autouse", "false"),

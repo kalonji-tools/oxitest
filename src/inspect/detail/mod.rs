@@ -173,14 +173,14 @@ mod tests {
             binding_type: "fixture".to_string(),
             scope: "session".to_string(),
             autouse: false,
-            source: "tests/conftest.py".to_string(),
+            source: "tests/__fixtures__.py".to_string(),
             is_async: false,
             description: "Database session fixture".to_string(),
             consumers: vec![NodeRef {
                 kind: NodeKind::Test,
                 index: 0,
             }],
-            conftest_idx: Some(0),
+            declaration_idx: Some(0),
             plugin_idx: None,
         });
         graph.tests.push(TestNode {
@@ -193,7 +193,7 @@ mod tests {
             marks: vec![],
         });
         graph.declarations.push(DeclarationNode {
-            path: "tests/conftest.py".to_string(),
+            path: "tests/__fixtures__.py".to_string(),
             fixtures: vec![0],
         });
         graph
@@ -209,11 +209,11 @@ mod tests {
             binding_type: "fixture".to_string(),
             scope: "session".to_string(),
             autouse: false,
-            source: "tests/conftest.py".to_string(),
+            source: "tests/__fixtures__.py".to_string(),
             is_async: true,
             description: "".to_string(),
             consumers: vec![],
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: None,
         });
         graph.broken_edges.push(BrokenEdge {
@@ -239,7 +239,7 @@ mod tests {
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: None,
         });
         graph.marks.push(MarkNode {
@@ -310,19 +310,19 @@ mod tests {
         graph
     }
 
-    /// Build a graph for testing a conftest detail view.
-    fn conftest_graph() -> InspectGraph {
+    /// Build a graph for testing a declaration detail view.
+    fn declaration_graph() -> InspectGraph {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
             name: "db".to_string(),
             binding_type: "fixture".to_string(),
             scope: "session".to_string(),
             autouse: false,
-            source: "tests/conftest.py".to_string(),
+            source: "tests/__fixtures__.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: Some(0),
+            declaration_idx: Some(0),
             plugin_idx: None,
         });
         graph.fixtures.push(FixtureNode {
@@ -330,15 +330,15 @@ mod tests {
             binding_type: "fixture".to_string(),
             scope: "function".to_string(),
             autouse: false,
-            source: "tests/conftest.py".to_string(),
+            source: "tests/__fixtures__.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: Some(0),
+            declaration_idx: Some(0),
             plugin_idx: None,
         });
         graph.declarations.push(DeclarationNode {
-            path: "tests/conftest.py".to_string(),
+            path: "tests/__fixtures__.py".to_string(),
             fixtures: vec![0, 1],
         });
         graph
@@ -356,7 +356,7 @@ mod tests {
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: Some(0),
         });
         graph.plugins.push(PluginNode {
@@ -410,7 +410,7 @@ mod tests {
         );
         assert!(
             text.contains("Defined In"),
-            "fixture with conftest_idx should show the Defined In section"
+            "fixture with declaration_idx should show the Defined In section"
         );
     }
 
@@ -504,7 +504,7 @@ mod tests {
 
     #[test]
     fn render_detail_declaration_shows_fixtures() {
-        let graph = conftest_graph();
+        let graph = declaration_graph();
         let node_ref = NodeRef {
             kind: NodeKind::Declaration,
             index: 0,
@@ -512,12 +512,12 @@ mod tests {
         let lines = render_detail(&graph, Some(&node_ref));
         let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
         assert!(
-            text.contains("tests/conftest.py"),
-            "conftest detail should show the path"
+            text.contains("tests/__fixtures__.py"),
+            "declaration detail should show the path"
         );
         assert!(
             text.contains("Fixtures"),
-            "conftest with fixtures should show the Fixtures section"
+            "declaration with fixtures should show the Fixtures section"
         );
     }
 
@@ -630,7 +630,7 @@ mod tests {
             "fixture preview should show the scope"
         );
         assert!(
-            text.contains("tests/conftest.py"),
+            text.contains("tests/__fixtures__.py"),
             "fixture preview should show the source"
         );
         assert!(
@@ -682,7 +682,7 @@ mod tests {
             binding_type: "fixture".to_string(),
             scope: "function".to_string(),
             autouse: false,
-            source: "conftest.py".to_string(),
+            source: "__fixtures__.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers: (0..5)
@@ -691,7 +691,7 @@ mod tests {
                     index: i,
                 })
                 .collect(),
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: None,
         });
         let node_ref = NodeRef {
@@ -770,7 +770,7 @@ mod tests {
 
     #[test]
     fn preview_declaration_shows_fixtures() {
-        let graph = conftest_graph();
+        let graph = declaration_graph();
         let node_ref = NodeRef {
             kind: NodeKind::Declaration,
             index: 0,
@@ -778,12 +778,12 @@ mod tests {
         let lines = render_preview(&graph, &node_ref);
         let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
         assert!(
-            text.contains("tests/conftest.py"),
-            "conftest preview should show the path"
+            text.contains("tests/__fixtures__.py"),
+            "declaration preview should show the path"
         );
         assert!(
             text.contains("Fixtures"),
-            "conftest preview should show Fixtures section"
+            "declaration preview should show Fixtures section"
         );
     }
 
@@ -813,17 +813,17 @@ mod tests {
     // ── Edge navigation helper tests ────────────────────────────────────
 
     #[test]
-    fn fixture_edges_include_consumers_and_conftest() {
+    fn fixture_edges_include_consumers_and_declaration() {
         let graph = fixture_graph();
         let node_ref = NodeRef {
             kind: NodeKind::Fixture,
             index: 0,
         };
-        // fixture_graph has 1 consumer (Test index 0) and conftest_idx = Some(0)
+        // fixture_graph has 1 consumer (Test index 0) and declaration_idx = Some(0)
         assert_eq!(
             selectable_edge_count(&graph, &node_ref),
             2,
-            "fixture with one consumer and one conftest should have 2 selectable edges"
+            "fixture with one consumer and one declaration should have 2 selectable edges"
         );
         assert_eq!(
             edge_node_at(&graph, &node_ref, 0),
@@ -839,7 +839,7 @@ mod tests {
                 kind: NodeKind::Declaration,
                 index: 0
             }),
-            "second edge should be the conftest owner"
+            "second edge should be the declaration owner"
         );
     }
 
@@ -850,7 +850,7 @@ mod tests {
             kind: NodeKind::Fixture,
             index: 0,
         };
-        // plugin_graph fixture has no consumers, no conftest, plugin_idx = Some(0)
+        // plugin_graph fixture has no consumers, no declaration, plugin_idx = Some(0)
         assert_eq!(
             selectable_edge_count(&graph, &node_ref),
             1,
@@ -929,17 +929,17 @@ mod tests {
     }
 
     #[test]
-    fn conftest_edges_include_fixtures() {
-        let graph = conftest_graph();
+    fn declaration_edges_include_fixtures() {
+        let graph = declaration_graph();
         let node_ref = NodeRef {
             kind: NodeKind::Declaration,
             index: 0,
         };
-        // conftest_graph conftest has fixtures=[0, 1]
+        // declaration_graph declaration has fixtures=[0, 1]
         assert_eq!(
             selectable_edge_count(&graph, &node_ref),
             2,
-            "conftest with two fixtures should have 2 selectable edges"
+            "declaration with two fixtures should have 2 selectable edges"
         );
         assert_eq!(
             edge_node_at(&graph, &node_ref, 0),
@@ -1008,7 +1008,7 @@ mod tests {
             kind: NodeKind::Fixture,
             index: 0,
         };
-        // This fixture has no consumers, no conftest_idx, no plugin_idx
+        // This fixture has no consumers, no declaration_idx, no plugin_idx
         assert_eq!(
             selectable_edge_count(&graph, &node_ref),
             0,
@@ -1048,14 +1048,14 @@ mod snapshot_tests {
             binding_type: "fixture".to_string(),
             scope: "session".to_string(),
             autouse: false,
-            source: "tests/conftest.py".to_string(),
+            source: "tests/__fixtures__.py".to_string(),
             is_async: false,
             description: "Database session fixture".to_string(),
             consumers: vec![NodeRef {
                 kind: NodeKind::Test,
                 index: 0,
             }],
-            conftest_idx: Some(0),
+            declaration_idx: Some(0),
             plugin_idx: None,
         });
         graph.tests.push(TestNode {
@@ -1068,7 +1068,7 @@ mod snapshot_tests {
             marks: vec![],
         });
         graph.declarations.push(DeclarationNode {
-            path: "tests/conftest.py".to_string(),
+            path: "tests/__fixtures__.py".to_string(),
             fixtures: vec![0],
         });
         let mut app = InspectApp::new(Some(graph), None);
@@ -1095,7 +1095,7 @@ mod snapshot_tests {
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: None,
         });
         graph.marks.push(MarkNode {
@@ -1201,15 +1201,15 @@ mod snapshot_tests {
             binding_type: "fixture".to_string(),
             scope: "session".to_string(),
             autouse: false,
-            source: "tests/conftest.py".to_string(),
+            source: "tests/__fixtures__.py".to_string(),
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: Some(0),
+            declaration_idx: Some(0),
             plugin_idx: None,
         });
         graph.declarations.push(DeclarationNode {
-            path: "tests/conftest.py".to_string(),
+            path: "tests/__fixtures__.py".to_string(),
             fixtures: vec![0],
         });
         let mut app = InspectApp::new(Some(graph), None);
@@ -1236,7 +1236,7 @@ mod snapshot_tests {
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: Some(0),
         });
         graph.plugins.push(PluginNode {
@@ -1267,11 +1267,11 @@ mod snapshot_tests {
             binding_type: "fixture".to_string(),
             scope: "session".to_string(),
             autouse: false,
-            source: "tests/conftest.py".to_string(),
+            source: "tests/__fixtures__.py".to_string(),
             is_async: true,
             description: "".to_string(),
             consumers: vec![],
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: None,
         });
         graph.broken_edges.push(BrokenEdge {

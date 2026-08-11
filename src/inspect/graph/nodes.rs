@@ -6,7 +6,7 @@
 
 // ── FixtureNode ──────────────────────────────────────────────────────────────
 
-/// A fixture definition (conftest or plugin-provided).
+/// A fixture definition (declaration or plugin-provided).
 #[derive(Debug, Clone)]
 pub struct FixtureNode {
     pub name: String,
@@ -19,8 +19,8 @@ pub struct FixtureNode {
     // Edges
     /// Node references for tests and fixtures that consume this fixture.
     pub consumers: Vec<super::NodeRef>,
-    /// Index into `InspectGraph::declarations` if this fixture lives in a conftest.
-    pub conftest_idx: Option<usize>,
+    /// Index into `InspectGraph::declarations` if this fixture lives in a declaration.
+    pub declaration_idx: Option<usize>,
     /// Index into `InspectGraph::plugins` if this fixture is plugin-provided.
     pub plugin_idx: Option<usize>,
 }
@@ -56,11 +56,11 @@ pub struct MarkNode {
 
 // ── DeclarationNode ─────────────────────────────────────────────────────────────
 
-/// A `conftest.py` file.
+/// A `__fixtures__.py` file.
 #[derive(Debug, Clone)]
 pub struct DeclarationNode {
     pub path: String,
-    /// Indices into `InspectGraph::fixtures` — fixtures defined in this conftest.
+    /// Indices into `InspectGraph::fixtures` — fixtures defined in this declaration.
     pub fixtures: Vec<usize>,
 }
 

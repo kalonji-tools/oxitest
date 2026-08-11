@@ -1,4 +1,4 @@
-//! Conftest node detail and preview rendering.
+//! Declaration node detail and preview rendering.
 
 use ratatui::text::{Line, Span};
 
@@ -7,21 +7,21 @@ use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef};
 use super::styles::{connection_line, field_line, preview_edges, section_header, sigil_style};
 
 pub fn render_declaration<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
-    let conftest = &graph.declarations[node_ref.index];
+    let declaration = &graph.declarations[node_ref.index];
     let mut lines = vec![
         Line::from(vec![
             Span::styled("C", sigil_style()),
-            Span::raw(format!(" {}", conftest.path)),
+            Span::raw(format!(" {}", declaration.path)),
         ]),
         Line::from(""),
-        field_line("fixtures_count", &conftest.fixtures.len().to_string()),
+        field_line("fixtures_count", &declaration.fixtures.len().to_string()),
     ];
 
     // Fixtures defined here
-    if !conftest.fixtures.is_empty() {
+    if !declaration.fixtures.is_empty() {
         lines.push(Line::from(""));
         lines.push(section_header("Fixtures"));
-        for &fix_idx in &conftest.fixtures {
+        for &fix_idx in &declaration.fixtures {
             lines.push(connection_line('F', &graph.fixtures[fix_idx].name));
         }
     }
@@ -30,17 +30,17 @@ pub fn render_declaration<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<L
 }
 
 pub fn preview_declaration<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<'a>> {
-    let conftest = &graph.declarations[node_ref.index];
+    let declaration = &graph.declarations[node_ref.index];
     let mut lines = vec![
         Line::from(vec![
             Span::styled("C", sigil_style()),
-            Span::raw(format!(" {}", conftest.path)),
+            Span::raw(format!(" {}", declaration.path)),
         ]),
         Line::from(""),
     ];
 
-    if !conftest.fixtures.is_empty() {
-        let edge_refs: Vec<NodeRef> = conftest
+    if !declaration.fixtures.is_empty() {
+        let edge_refs: Vec<NodeRef> = declaration
             .fixtures
             .iter()
             .map(|&idx| NodeRef {

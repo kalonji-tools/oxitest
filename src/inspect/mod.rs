@@ -32,7 +32,7 @@ use graph::InspectGraph;
 /// Python session.
 ///
 /// Accepts pre-collected file lists so that the caller can spawn Phase 2 with
-/// the conftest paths before this function begins AST extraction.
+/// the declaration paths before this function begins AST extraction.
 ///
 /// Startup filters are applied in order:
 /// 1. `--affected` — narrow test files before AST extraction
@@ -125,8 +125,8 @@ pub struct Phase2Args {
 /// collected. `test_files` comes from `collect_files`, not `Config`, so it is
 /// supplied separately rather than cloned off `cfg`.
 ///
-/// No conftest list: the session no longer loads them (#1720). The inspect
-/// graph still receives one for its Conftest node, which #1722 retires.
+/// No declaration list: the session no longer loads them (#1720). The inspect
+/// graph still receives one for its Declaration node, which #1722 retires.
 pub fn phase2_args(cfg: &config::Config, test_files: Vec<Utf8PathBuf>) -> Phase2Args {
     Phase2Args {
         test_files,
@@ -215,7 +215,7 @@ pub fn spawn_phase2(args: Phase2Args, tx: mpsc::Sender<Phase2Data>) {
 /// collect fixture and plugin data from the Python session, which is
 /// merged into the graph when ready.
 pub fn run(args: &InspectArgs, cfg: &config::Config) -> Result<(), Box<dyn std::error::Error>> {
-    // Collect files first so conftest paths are available before AST work begins.
+    // Collect files first so declaration paths are available before AST work begins.
     let (test_files, conftest_files) = crate::collector::collect_files(cfg)?;
 
     // Clone test files for phase 2 before phase 1 consumes the original.

@@ -9,7 +9,7 @@ use super::graph::{InspectGraph, NodeKind, NodeRef};
 
 /// Extract the source file path and starting line for a node.
 ///
-/// Returns `None` for node kinds without source code (Mark, Plugin, Conftest).
+/// Returns `None` for node kinds without source code (Mark, Plugin, Declaration).
 pub fn node_source_location(graph: &InspectGraph, node: &NodeRef) -> Option<(String, usize)> {
     match node.kind {
         NodeKind::Fixture => {
@@ -93,7 +93,7 @@ mod tests {
             is_async: false,
             description: String::new(),
             consumers: vec![],
-            conftest_idx: None,
+            declaration_idx: None,
             plugin_idx: None,
         }
     }
@@ -120,13 +120,13 @@ mod tests {
     #[test]
     fn fixture_source_location() {
         let mut graph = InspectGraph::default();
-        graph.fixtures.push(make_fixture("tests/conftest.py"));
+        graph.fixtures.push(make_fixture("tests/__fixtures__.py"));
         let node = NodeRef::new(NodeKind::Fixture, 0);
         let result = node_source_location(&graph, &node);
         assert_eq!(
             result,
-            Some(("tests/conftest.py".to_string(), 1)),
-            "conftest fixture should return Some with the source path and line 1"
+            Some(("tests/__fixtures__.py".to_string(), 1)),
+            "declaration fixture should return Some with the source path and line 1"
         );
     }
 
@@ -222,18 +222,18 @@ mod tests {
     }
 
     #[test]
-    fn conftest_kind_returns_none() {
+    fn declaration_kind_returns_none() {
         use crate::inspect::graph::nodes::DeclarationNode;
         let mut graph = InspectGraph::default();
         graph.declarations.push(DeclarationNode {
-            path: "tests/conftest.py".to_string(),
+            path: "tests/__fixtures__.py".to_string(),
             fixtures: vec![],
         });
         let node = NodeRef::new(NodeKind::Declaration, 0);
         let result = node_source_location(&graph, &node);
         assert!(
             result.is_none(),
-            "Conftest kind should return None (conftest path is not a source location)"
+            "Declaration kind should return None (a declaration path is not a source location)"
         );
     }
 
