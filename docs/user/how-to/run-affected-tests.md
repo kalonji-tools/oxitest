@@ -67,7 +67,8 @@ oxitest applies a four-step pipeline after collecting all test files:
 
 2. **Classify** — splits the changed files into categories:
    - `pyproject.toml` changed → skip filtering, run all tests.
-   - `conftest.py` files — tracked separately.
+   - Declaration files — `__fixtures__.py` and `__init__.py` — tracked
+     separately.
    - All other `.py` files — treated as source/test files.
    - Non-`.py` files (`.md`, `.toml`, etc.) — ignored.
 
@@ -81,9 +82,12 @@ oxitest applies a four-step pipeline after collecting all test files:
    appears as an imported module. Test files that import a changed module (or
    any of its parent packages) are included.
 
-Conftest files are handled as a special case: when a `conftest.py` changes,
-every test file in the same directory subtree is included, because conftest
-fixtures affect all tests below them.
+Declaration files are handled as a special case: when a `__fixtures__.py` or an
+`__init__.py` changes, every test file in the same directory subtree is
+included, because a fixture declared there is visible to all tests below it.
+
+A declaration file at the rootdir therefore selects every test — through the
+subtree rule, not through the run-all path that `pyproject.toml` takes.
 
 ## What counts as affected
 
@@ -91,7 +95,7 @@ fixtures affect all tests below them.
 |---|---|
 | A test file itself | That test file |
 | A source file | Test files that import it (directly or via a parent package) |
-| A `conftest.py` | All test files in the same directory and its subdirectories |
+| A `__fixtures__.py` or `__init__.py` | All test files in the same directory and its subdirectories |
 | `pyproject.toml` | All test files (full run) |
 | Non-Python file | None (ignored) |
 

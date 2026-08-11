@@ -329,16 +329,6 @@ anchored at `tests/api/v1/`, even when the test that asks for it lives in
 An inline declaration is anchored to its own test module, so it is invisible to
 every other file — including siblings in the same directory.
 
-!!! note "Two visibility regimes are live"
-    `@oxi.fixture` declarations are strictly bounded as described above.
-    `conftest.py` fixtures are **not**: they are registered run-wide and are
-    exempt from the boundary, so a `conftest.py` fixture resolves from
-    directories a `@oxi.fixture` one would not. Both regimes run side by side
-    until `conftest.py` support is retired in
-    [#1720](https://github.com/kalonji-tools/oxitest/issues/1720); the gap is
-    tracked as
-    [#1760](https://github.com/kalonji-tools/oxitest/issues/1760).
-
 ## Request a fixture from a fixture
 
 A fixture declares its own dependencies with the same `Fixture[T]` annotation a
@@ -375,7 +365,7 @@ The test asks only for the outer fixture; the chain resolves behind it:
     cleanup callbacks. Finalizers run in reverse registration order after the test.
 
     ```python
-    --8<-- "python/tests/docs/how-to/fixtures/__fixtures__.py:imperative-teardown"
+    --8<-- "python/tests/docs/how-to/use_fixtures/__fixtures__.py:imperative-teardown"
     ```
 
 ## Narrow a fixture to a block
@@ -415,7 +405,7 @@ The reserved `oxi` namespace exposes all [built-in fixtures](use-builtin-fixture
 under short names. Mix custom and built-in fixtures through the same `fx` parameter:
 
 ```python
---8<-- "python/tests/docs/how-to/fixtures/test_fixtures.py:fx-oxi-test"
+--8<-- "python/tests/docs/how-to/use_fixtures/db/test_fixtures.py:fx-oxi-test"
 ```
 
 | Attribute | Type |
@@ -444,7 +434,7 @@ Use `@oxitest.arrange("name")` when a fixture should run for its side
 effects but its return value is not needed in the test body:
 
 ```python
---8<-- "python/tests/docs/how-to/fixtures/test_fixtures.py:arrange"
+--8<-- "python/tests/docs/how-to/use_fixtures/db/test_fixtures.py:arrange"
 ```
 
 The fixture runs (including any teardown) exactly as it would if requested via a
@@ -462,7 +452,7 @@ when only the side effect matters and no parameter is wanted.
 Multiple fixture names can be passed in a single decorator:
 
 ```python
---8<-- "python/tests/docs/how-to/fixtures/test_fixtures.py:arrange-multiple"
+--8<-- "python/tests/docs/how-to/use_fixtures/db/test_fixtures.py:arrange-multiple"
 ```
 
 ## Run fixtures automatically with autouse
