@@ -28,7 +28,7 @@ use std::io::IsTerminal;
 pub enum PipelinePhase {
     /// Initial pipeline state before any work has been done.
     Empty,
-    /// Files discovered on disk; test file and conftest paths live in `PipelineShared`.
+    /// Files discovered on disk; test file paths live in `PipelineShared`.
     FilesCollected,
     /// AST prescan complete; holds per-file `PrescanItem` metadata and module-level markers.
     Prescanned {
@@ -37,7 +37,7 @@ pub enum PipelinePhase {
     },
     /// Prescan metadata filtered; holds only modules that matched filters plus dynamic fallbacks.
     MetadataFiltered { modules_to_import: Vec<Utf8PathBuf> },
-    /// Fixture session initialized; conftest files loaded and `FixtureSession` ready.
+    /// Fixture session initialized; `FixtureSession` created and ready.
     SessionReady {
         session: bridge::FixtureSession,
         session_violations: Vec<bridge::RawViolation>,

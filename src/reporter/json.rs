@@ -370,8 +370,9 @@ mod tests {
 
     #[test]
     fn test_pathless_collect_error_uses_placeholder_name() {
-        let doc =
-            finish_with_collect_errors(&[CollectError::PyError("conftest exploded".to_string())]);
+        let doc = finish_with_collect_errors(&[CollectError::PyError(
+            "declaration file exploded".to_string(),
+        )]);
 
         assert_eq!(
             doc["results"]["tests"][0]["name"], "<collection>",

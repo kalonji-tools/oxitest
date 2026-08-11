@@ -53,10 +53,13 @@ impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for crate::types::FieldDiff {
 pub struct FixtureSession(Py<PyAny>);
 
 impl FixtureSession {
-    /// Create a session by loading fixtures from all conftest paths.
+    /// Create an empty session. It holds builtins only until a caller registers
+    /// declaration homes into it — `register_declaration_homes_for_files` for the
+    /// `query` and `inspect` surfaces, or the collection loop for a run (#1722).
     ///
-    /// Returns the session and any strict-mode violations detected during
-    /// fixture registration (e.g. missing return type annotations).
+    /// Returns the session and a violation list that is always empty: an empty
+    /// session has registered nothing, so it has nothing to report. The `Vec`
+    /// stays in the signature because callers destructure it (#1720).
     ///
     /// `rootdir` is appended to `sys.path` so test modules can import sibling
     /// utility modules (#1780).
@@ -756,7 +759,7 @@ pub fn run_test_with_session_obj(
 }
 
 /// Call `FixtureSession.find_unused_fixtures()` to detect fixtures defined
-/// in conftest but never referenced by any collected test.
+/// in a declaration file but never referenced by any collected test.
 pub fn find_unused_fixtures(
     py: Python<'_>,
     session: &FixtureSession,
@@ -777,8 +780,8 @@ pub fn find_unused_fixtures(
         .extract()?;
     Ok(result
         .into_iter()
-        .map(|(conftest_path, fixture_name)| RawViolation {
-            node_id: conftest_path,
+        .map(|(declaration_path, fixture_name)| RawViolation {
+            node_id: declaration_path,
             kind: ViolationKind::UnusedFixture,
             detail: fixture_name,
         })

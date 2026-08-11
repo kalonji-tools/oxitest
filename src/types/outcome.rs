@@ -556,9 +556,10 @@ mod outcome_tests {
 
     #[test]
     fn test_collect_error_pyerror_display_shows_message_directly() {
-        let err = CollectError::PyError("Failed to load conftest: SyntaxError".to_string());
+        let err =
+            CollectError::PyError("Failed to load a declaration file: SyntaxError".to_string());
         let s = format!("{err}");
-        assert_eq!(s, "Failed to load conftest: SyntaxError");
+        assert_eq!(s, "Failed to load a declaration file: SyntaxError");
         assert!(!s.starts_with("PyError:"), "PyError prefix must be gone");
     }
 

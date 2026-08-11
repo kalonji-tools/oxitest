@@ -231,7 +231,7 @@ mod tests {
     fn detail_fixture_entry() {
         let e = entry(&[
             ("name", "db_session"),
-            ("source", "conftest.py"),
+            ("source", "__fixtures__.py"),
             ("shared", "true"),
             ("autouse", "true"),
             ("async", "false"),
@@ -275,7 +275,7 @@ mod tests {
     fn snap_detail_fixture_entry() {
         let e = entry(&[
             ("name", "db_session"),
-            ("source", "conftest.py"),
+            ("source", "__fixtures__.py"),
             ("shared", "true"),
             ("autouse", "true"),
             ("async", "false"),
@@ -301,7 +301,7 @@ mod tests {
     fn snap_detail_fixture_entry_colored() {
         let e = entry(&[
             ("name", "db_session"),
-            ("source", "conftest.py"),
+            ("source", "__fixtures__.py"),
             ("shared", "true"),
             ("autouse", "true"),
             ("async", "false"),

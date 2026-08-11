@@ -132,8 +132,8 @@ mod tests {
             },
             stats::DiagnosticEntry {
                 severity: stats::DiagnosticSeverity::Notice,
-                context: Arc::from("conftest loading"),
-                message: "empty conftest".to_string(),
+                context: Arc::from("declaration registration"),
+                message: "empty declaration file".to_string(),
                 file: None,
                 lineno: None,
             },
@@ -151,7 +151,7 @@ mod tests {
         );
         assert_eq!(
             &*session.stats().diagnostics.entries[1].context,
-            "conftest loading"
+            "declaration registration"
         );
     }
 
