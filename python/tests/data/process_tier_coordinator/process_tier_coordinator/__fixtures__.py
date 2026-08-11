@@ -41,9 +41,11 @@ def engine() -> Iterator[str]:
 def pinned() -> Iterator[str]:
     """Pins its modules to the coordinator, giving it a second phase.
 
-    Was ``shared=True`` in a ``conftest.py``. Auto-Arrangement co-locates the
-    Connected Component of an arrangement-input fixture, and #1720 re-points
-    that input from the retired shared tier to ``module``.
+    Every test module here names this fixture in ``@oxi.arrange``, which is
+    what puts them in one Connected Component and runs that component on the
+    coordinator. The declaration is explicit because #1848 retired the
+    inference: the tier alone pins nothing, so an unarranged module-lifetime
+    fixture would leave this project with a single phase.
 
     The pin is what the acceptance test rests on: two coordinator phases are
     what a per-phase process drain would rebuild ``engine`` between. With one

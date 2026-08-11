@@ -9,7 +9,7 @@ __all__ = [
 import asyncio
 import inspect
 from collections import Counter, defaultdict
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable, Collection
 from dataclasses import dataclass, field
 from pathlib import PurePath
 from typing import TYPE_CHECKING, Any, Protocol, Self
@@ -867,9 +867,16 @@ class FixtureSession:
         """Return sorted names of fixtures declared ``lifetime="module"``."""
         return self._registry.module_lifetime_names()
 
-    def shared_fixture_groups(self) -> tuple[tuple[str, ...], ...]:
-        """Return connected components of arranging-fixture dependencies."""
-        return self._registry.shared_fixture_groups()
+    def arranged_fixture_groups(
+        self, arranged: Collection[str]
+    ) -> tuple[tuple[str, ...], ...]:
+        """Return connected components of the fixtures named by ``@oxi.arrange``.
+
+        Rust passes a ``list[str]``; the registry wants a set. This boundary is
+        the single conversion point, so the registry's signature stays honest
+        rather than being widened to accommodate the wire type.
+        """
+        return self._registry.arranged_fixture_groups(frozenset(arranged))
 
     def process_lifetime_fixture_names(self) -> tuple[str, ...]:
         """Return sorted names of fixtures declared ``lifetime="process"``."""

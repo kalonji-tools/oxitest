@@ -241,13 +241,19 @@ impl FixtureSession {
             .map_err(py_collect_err)
     }
 
-    /// Returns connected components of shared fixture dependencies.
+    /// Returns connected components of the fixtures named by `@oxi.arrange`.
     /// Each inner Vec is a sorted group of fixture names that must co-locate.
+    /// `arranged` is every name a collected test arranges; membership is a
+    /// declaration rather than a property of the fixture (#1848).
     /// Returns an empty Vec on any Python error (advisory-only).
-    pub fn shared_fixture_groups(&self, py: Python<'_>) -> Vec<Vec<String>> {
+    pub fn arranged_fixture_groups(
+        &self,
+        py: Python<'_>,
+        arranged: Vec<String>,
+    ) -> Vec<Vec<String>> {
         self.0
             .bind(py)
-            .call_method0("shared_fixture_groups")
+            .call_method1("arranged_fixture_groups", (arranged,))
             .and_then(|v| v.extract::<Vec<Vec<String>>>())
             .unwrap_or_default()
     }

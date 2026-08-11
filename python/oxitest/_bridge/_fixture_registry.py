@@ -299,13 +299,17 @@ def _build_dependency_graph(registry: FixtureRegistry) -> dict[str, set[str]]:
     return graph
 
 
-def _compute_shared_ancestors(
+def _compute_arranged_ancestors(
     start: str,
     graph: dict[str, set[str]],
     by_name: dict[str, list[FixtureDef[Any]]],
+    arranged: frozenset[str],
     computed: dict[str, frozenset[str]],
 ) -> frozenset[str]:
-    """Collect transitively reachable shared fixtures via iterative DFS from *start*.
+    """Collect transitively reachable arranged fixtures via iterative DFS from *start*.
+
+    Membership is a declaration rather than a property of the fixture: *arranged*
+    holds the names a collected test passed to ``@oxi.arrange`` (#1848).
 
     Results are memoised in *computed* to avoid redundant traversals.
     """
@@ -320,7 +324,7 @@ def _compute_shared_ancestors(
             continue
         visited.add(name)
         defs = by_name.get(name)
-        if defs and defs[-1].arranges:
+        if defs and name in arranged:
             result.add(name)
         for dep in graph.get(name, ()):
             if dep in visited:
@@ -334,22 +338,25 @@ def _compute_shared_ancestors(
     return frozen
 
 
-def _transitive_shared(
+def _transitive_arranged(
     graph: dict[str, set[str]],
     by_name: dict[str, list[FixtureDef[Any]]],
+    arranged: frozenset[str],
 ) -> dict[str, frozenset[str]]:
-    """For each fixture, find all transitively reachable shared fixtures.
+    """For each fixture, find all transitively reachable arranged fixtures.
 
     Uses iterative DFS with a results cache. Returns only entries with
-    non-empty shared ancestor sets.
+    non-empty arranged ancestor sets.
     """
     computed: dict[str, frozenset[str]] = {}
-    shared_ancestors: dict[str, frozenset[str]] = {}
+    arranged_ancestors: dict[str, frozenset[str]] = {}
     for name in by_name:
-        ancestors = _compute_shared_ancestors(name, graph, by_name, computed)
+        ancestors = _compute_arranged_ancestors(
+            name, graph, by_name, arranged, computed
+        )
         if ancestors:
-            shared_ancestors[name] = ancestors
-    return shared_ancestors
+            arranged_ancestors[name] = ancestors
+    return arranged_ancestors
 
 
 def _merge_components(
@@ -740,19 +747,28 @@ class FixtureRegistry:
         }
         return tuple(sorted(anchors, key=anchor_depth, reverse=True))
 
-    def shared_fixture_groups(self) -> tuple[tuple[str, ...], ...]:
-        """Compute connected components of shared fixture dependencies.
+    def arranged_fixture_groups(
+        self, arranged: frozenset[str]
+    ) -> tuple[tuple[str, ...], ...]:
+        """Compute connected components of the fixtures named by ``@oxi.arrange``.
+
+        *arranged* holds every fixture name that a collected test arranges.
+        Membership is a declaration, not a property of the fixture: before #1848
+        it was derived from ``lifetime="module"``, which could not reduce a
+        build at that tier and made the decorator a silent no-op at every other
+        tier.
 
         Uses the depends_on field of each FixtureDef to build a dependency
         graph, then computes transitive closure to find groups of fixtures
-        linked by shared fixture dependencies. Returns sorted tuple of sorted
-        groups.
+        linked by arranged dependencies. Returns sorted tuple of sorted groups.
         """
-        graph = _build_dependency_graph(self)
-        shared_ancestors = _transitive_shared(graph, self._by_name)
-        if not shared_ancestors:
+        if not arranged:
             return ()
-        return _merge_components(shared_ancestors)
+        graph = _build_dependency_graph(self)
+        arranged_ancestors = _transitive_arranged(graph, self._by_name, arranged)
+        if not arranged_ancestors:
+            return ()
+        return _merge_components(arranged_ancestors)
 
     def module_lifetime_names(self) -> tuple[str, ...]:
         """Return sorted names of the fixtures declared ``lifetime="module"``.
