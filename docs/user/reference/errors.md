@@ -52,25 +52,31 @@ Python 2 syntax in a Python 3 file.
 ---
 
 ```text
-"<name>" is a Python keyword and cannot be used as a namespace name.
+namespace '<name>' cannot be written as fx.<name>.<fixture> because it is
+not a Python identifier.
 ```
 
-**Cause:** An anchor directory name
-used as a namespace matches a Python reserved keyword
-(e.g. `class`, `for`, `match`).
+**Cause:** A namespace derived from a directory basename or a plugin module
+path cannot be spelled as an attribute. Either it is not an identifier
+(`integration-tests`, `2fast`, or a dotted plugin path like `pkg.sub`), or it
+is a reserved keyword (`class`, `for`), in which case the reason reads
+`a Python keyword` instead.
 
-**Fix:** Rename the anchor directory.
+`integration-tests` is the case worth knowing: `fx.integration-tests.conn` is
+valid Python meaning `fx.integration - tests.conn`, so the access never
+reaches oxitest and you see a missing fixture named `integration`.
 
----
+**Severity:** a **warning**, not an error — the fixtures are still reachable
+by shortcut access (`fx.<name>`), so the run continues. A namespace you wrote
+by hand under `[tool.oxitest.plugin_settings.<module>]` is refused instead,
+because you can retype it.
 
-```text
-"<name>" is a Python builtin and cannot be used as a namespace name.
-```
+**Fix:** Rename the directory to a valid Python identifier, or keep using
+shortcut access.
 
-**Cause:** An anchor directory name
-matches a Python builtin name (e.g. `int`, `list`, `print`).
-
-**Fix:** Rename the anchor directory.
+Builtins and soft keywords (`int`, `list`, `match`, `type`) are **not**
+refused — `fx.int.conn` parses and resolves. A validator rejecting them was
+removed in ADR-0009 Amendment 16.
 
 ---
 

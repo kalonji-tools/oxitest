@@ -163,10 +163,15 @@ def test_reserved_oxi_namespace_is_refused(tmp: TempDir) -> None:
 
 
 def test_keyword_namespace_is_refused(tmp: TempDir) -> None:
-    """A namespace that is a Python keyword cannot be an attribute segment."""
+    """A namespace that is a Python keyword cannot be an attribute segment.
+
+    `UsageError`, not the `ValueError` this raised until #1782 — every other
+    namespace refusal in this function already used `UsageError`, so the odd
+    one out gave the same class of mistake two exit paths.
+    """
     module = _package_module(tmp, "my_plugin")
 
-    with raises(ValueError) as exc:
+    with raises(UsageError) as exc:
         plugin_fixture_homes(
             activated_modules=("my_plugin",),
             plugin_settings={"my_plugin": {"namespace": "class"}},

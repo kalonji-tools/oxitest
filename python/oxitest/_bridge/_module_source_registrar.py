@@ -39,6 +39,7 @@ from oxitest._bridge._fixture_registry import (
     _fixture_inner_type,
 )
 from oxitest._bridge._lifetime import Lifetime
+from oxitest._bridge._namespace_validation import namespace_defect
 from oxitest._bridge._visibility import anchors_overlap
 from oxitest._bridge.result import DiagnosticSeverity
 
@@ -79,6 +80,12 @@ def register_module_source_fixtures(
     # of them (#1859).
     is_inline = anchor.suffix == ".py"
     violations: list[str] = []
+
+    # Read before the loop, so it answers "is this namespace new to the run"
+    # rather than "did we just create it". That is what makes the diagnostic
+    # below fire once per namespace instead of once per declaration, without a
+    # second mutable set to keep in step with the registry.
+    namespace_is_new = not registry.has_namespace(namespace)
 
     for attr_name, obj in vars(fixture_module).items():
         # isinstance, not a truthiness or None check. `getattr` is a probe, and
@@ -154,6 +161,43 @@ def register_module_source_fixtures(
 
     if violations:
         raise UsageError("\n\n".join(violations))
+
+    # `has_namespace` flipping false to true *is* "this module registered at
+    # least one def into the namespace" — `register` records every non-empty
+    # namespace — so no separate counter is needed to tell an empty
+    # __fixtures__.py from one that declared something.
+    if namespace_is_new and registry.has_namespace(namespace):
+        _warn_if_unreachable(namespace, anchor_package_path, is_inline=is_inline)
+
+
+def _warn_if_unreachable(
+    namespace: str, anchor_package_path: str, *, is_inline: bool
+) -> None:
+    """Report a namespace that cannot be written as ``fx.<namespace>`` (#1782).
+
+    A warning rather than a refusal, because the name is *derived* — from a
+    directory the user named for other reasons — and shortcut access
+    (``fx.<name>``) still resolves the fixture. Refusing would fail a project
+    that runs today.
+
+    The message names the derivation. Without it the user has nothing to go on:
+    ``fx.integration-tests.conn`` is valid Python that means
+    ``fx.integration - tests.conn``, so the access never reaches oxitest and
+    the run reports a missing fixture named ``integration``.
+    """
+    defect = namespace_defect(namespace)
+    if defect is None:
+        return
+    origin = "test module" if is_inline else "directory"
+    emit_diagnostic(
+        DiagnosticSeverity.WARNING,
+        "fixture namespace",
+        f"namespace '{namespace}' cannot be written as "
+        f"fx.{namespace}.<name> because it is {defect}.\n"
+        f"  Derived from the {origin} name: {anchor_package_path}\n"
+        f"Shortcut access (fx.<name>) still works. To use qualified access, "
+        f"rename the {origin} to a valid Python identifier.",
+    )
 
 
 def register_plugin_source_fixtures(  # noqa: PLR0913 — five are the declaration's identity, the sixth is the caller's role
