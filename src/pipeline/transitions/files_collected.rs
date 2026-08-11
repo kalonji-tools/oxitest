@@ -39,7 +39,7 @@ impl Pipeline {
                     // -v: summary line
                     if self.cfg.output.verbosity >= config::Verbosity::Detailed {
                         eprintln!(
-                            "affected: {} of {} test files selected (direct: {}, conftest: {}, import: {}) [base: {}]",
+                            "affected: {} of {} test files selected (direct: {}, declaration: {}, import: {}) [base: {}]",
                             diag.affected_count,
                             diag.total_tests,
                             diag.direct_matches.len(),
@@ -224,9 +224,9 @@ fn render_full_diagnostics(diag: &affected::AffectedDiagnostics) {
     }
     eprintln!();
 
-    eprintln!("Stage 4: Conftest Impact");
+    eprintln!("Stage 4: Declaration Impact");
     if diag.declaration_matches.is_empty() {
-        eprintln!("  (no conftest files changed)");
+        eprintln!("  (no declaration files changed)");
     } else {
         for m in &diag.declaration_matches {
             eprintln!("  \u{2713} {m}");
@@ -259,7 +259,7 @@ fn render_full_diagnostics(diag: &affected::AffectedDiagnostics) {
         diag.affected_count, diag.total_tests,
     );
     eprintln!(
-        "  Direct: {}, Conftest: {}, Import: {}",
+        "  Direct: {}, Declaration: {}, Import: {}",
         diag.direct_matches.len(),
         diag.declaration_matches.len(),
         diag.import_analysis.iter().filter(|a| a.affected).count(),
