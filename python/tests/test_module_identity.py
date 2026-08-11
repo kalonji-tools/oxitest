@@ -446,6 +446,48 @@ def test_a_session_without_a_rootdir_reports_none() -> None:
     )
 
 
+def test_a_keyword_directory_keeps_its_relative_imports(
+    tmp: TempDir, patch: Patcher
+) -> None:
+    """A package directory named for a keyword still gets a truthful name.
+
+    A test file cannot itself be named for a keyword — ``python_files`` is
+    ``test_*.py`` — but a directory above it can be, and a project holding a
+    ``lambda/`` package is ordinary. Declining the whole path for that reason
+    costs the module its relative-import anchor, which is what this measures.
+    """
+    # Arrange
+    proj = tmp / "case" / "proj"
+    pkg = proj / "lambda"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "sibling.py").write_text("VALUE = 7\n", encoding="utf-8")
+    target = pkg / "test_mod.py"
+    target.write_text(
+        "from .sibling import VALUE\n\n\ndef test_ok() -> None:\n"
+        "    assert VALUE == 7, 'the sibling import must resolve'\n",
+        encoding="utf-8",
+    )
+    patch.setattr(sys, "path", [*sys.path, str(proj)])
+    session = create_session(rootdir=str(proj))
+
+    # Act
+    collect_module(str(target), session)
+    module = session.module_cache.get(str(target), kind="test")
+
+    # Assert
+    assert module is not None, "collect_module caches the module it loaded"
+    assert module.__name__ == "lambda.test_mod", (
+        "a keyword cannot appear in an import statement, but it is a legal "
+        "directory name and a legal sys.modules key, so declining the name "
+        "buys nothing"
+    )
+    assert module.VALUE == 7, (
+        "the module body ran 'from .sibling import VALUE', which needs a real "
+        "__package__ — under the synthetic name it raises ImportError"
+    )
+
+
 def _collectable(proj: Path) -> Path:
     """Turn the fixture module into one holding a test, and return it."""
     target = proj / "proj1680" / "test_mod.py"
