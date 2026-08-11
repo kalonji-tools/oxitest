@@ -125,6 +125,14 @@ class _SessionProtocol(Protocol):
         test_is_async: bool,
     ) -> Any: ...
 
+    def get_namespaced_fixture_value(
+        self,
+        name: str,
+        namespace: str,
+        module_path: str,
+        fn_teardowns: list[Callable[[], None]],
+    ) -> Any: ...
+
     def get_fixture_shortcut(
         self,
         name: str,
@@ -1288,6 +1296,40 @@ class FixtureSession:
             if not test_is_async:
                 raise AsyncFixtureAccessError(name, namespace, defn.scope.value)
             return self._instantiator.resolve_async_in_namespace(defn, ctx)
+        return self._instantiator.resolve_fixture_in_namespace(defn, name, ctx)
+
+    def get_namespaced_fixture_value(
+        self,
+        name: str,
+        namespace: str,
+        module_path: str,
+        fn_teardowns: list[Callable[[], None]],
+    ) -> Any:
+        """Namespaced lookup with ``Fixture[T]`` delivery, not proxy delivery.
+
+        The sibling above is the **proxy** route: it hands back a handle that
+        only ``await`` can unwrap, so it refuses a sync test at every lifetime.
+        This route is the one ``FixtureRef`` needs. A ``FixtureRef`` names a
+        fixture in a ``@oxi.parametrize`` case and delivers it as a parameter,
+        so it owes the answer parameter injection gives — the value, already
+        awaited on the shared session loop where the lifetime is wider than
+        ``function`` (ADR-0006 Amendment 2).
+
+        No async branch and no ``test_is_async``, deliberately. At a lifetime
+        wider than ``function`` there is nothing left to await. At ``function``
+        the value is an un-advanced coroutine, it lands in ``param_kwargs``, and
+        ``AsyncDepGuardMiddleware`` refuses it there — the same guard, and the
+        same message, that the ``Fixture[T]`` route already gets.
+
+        The namespace is still consulted for the *lookup*, so two namespaces
+        sharing a leaf name stay distinguishable (#1876).
+        """
+        defn = self._registry.get_visible_in_namespace(name, namespace, module_path)
+        if defn is None:
+            raise self.fixture_lookup_error(name, namespace, module_path)
+        ctx = _ResolutionContext(
+            module_path, fn_teardowns, frozenset(), self._scope_for, module_path
+        )
         return self._instantiator.resolve_fixture_in_namespace(defn, name, ctx)
 
     def get_fixture_shortcut(

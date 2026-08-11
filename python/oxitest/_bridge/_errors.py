@@ -34,6 +34,7 @@ __all__ = [
     "is_usage_error",
 ]
 
+
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -479,11 +480,21 @@ class AsyncFixtureAccessError(OxitestError):
         ``fx.`` line rather than into the fixture body.
 
     How to fix:
-        Three options, same as the ``@arrange`` path:
+        The options depend on the lifetime, because this route refuses at
+        every tier while the ``Fixture[T]`` route refuses only at ``function``
+        (ADR-0006 Amendment 2).
+
+        At ``function`` lifetime, two options:
 
         - Make the test async — ``async def test_...``, then ``await`` it.
-        - Raise the fixture's lifetime so it is built outside the test.
         - Convert the fixture to sync (remove ``async`` from its ``def``).
+
+        Above ``function``, a third: take the fixture as a ``Fixture[T]``
+        parameter. It is built outside the test and already awaited, so a sync
+        test receives the value.
+
+        *Raising the lifetime* is not offered. It is what makes the parameter
+        route work, and it never helps here.
 
     See Also:
         - ``ArrangeError`` — the same cell reached via ``@oxi.arrange``.
@@ -498,17 +509,38 @@ class AsyncFixtureAccessError(OxitestError):
 
     def __init__(self, name: str, namespace: str, lifetime: str) -> None:
         qualified = f"fx.{namespace}.{name}" if namespace else f"fx.{name}"
+        # The caller holds a FixtureScope and this message is read by a user,
+        # who writes a Lifetime. The two agree on every tier except the
+        # narrowest: the scope is `each`, the lifetime is `function`. Printing
+        # `Lifetime: each` named a value no @oxi.fixture call accepts (#1876).
+        tier = "function" if lifetime == "each" else lifetime
+        # Raising the lifetime is only a way forward on the *parameter* route,
+        # and only above `function`. This route refuses at every tier — measured
+        # at `function`, `module` and `package` — so offering it here sent the
+        # reader to a change that cannot help them. Above `function` the real
+        # exit is to stop using the proxy: `Fixture[T]` injection delivers the
+        # value, already awaited, and ADR-0006 Amendment 2 makes that legal.
+        exits = [
+            f"Make the test async — `async def test_...`, then `await {qualified}`"
+        ]
+        wider_than_function = tier != "function"
+        if wider_than_function:
+            exits.append(
+                f"Take it as a parameter instead — `{name}: Fixture[...]` is "
+                f"built outside the test, so a sync test receives the value"
+            )
+        exits.append("Convert fixture to sync — remove `async` from def")
+        count = "Three" if wider_than_function else "Two"
+        numbered = "".join(
+            f"    {index}. {exit_}\n" for index, exit_ in enumerate(exits, start=1)
+        )
         message = (
             f"async fixture {name!r} cannot be used by a sync test.\n"
             f"  Accessed as: {qualified}\n"
             f"  Test kind:   sync (`def test_...`)\n"
-            f"  Lifetime:    {lifetime}\n"
-            f"  Three ways forward:\n"
-            f"    1. Make the test async — `async def test_...`, "
-            f"then `await {qualified}`\n"
-            f"    2. Raise the fixture's lifetime so it is built "
-            f"outside the test\n"
-            f"    3. Convert fixture to sync — remove `async` from def\n"
+            f"  Lifetime:    {tier}\n"
+            f"  {count} ways forward:\n"
+            f"{numbered}"
         )
         super().__init__(message)
 
