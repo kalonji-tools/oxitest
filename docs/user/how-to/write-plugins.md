@@ -331,8 +331,10 @@ type — tests request the fixture via `Fixture[T]` where `T` matches
 --8<-- "python/tests/docs/how-to/test_write_plugins.py:fixture-provider-protocol"
 ```
 
-`scope` controls fixture lifetime: `"each"` (per-test, default), `"shared"`
-(per-session, FrozenProxy-wrapped), or `"session"` (per-process). `autouse`
+`scope` controls fixture lifetime: `"each"` (per test, the default) or
+`"session"` (once per **task group** — a single module, unless a
+`lifetime="package"` declaration merges a subtree). Neither value is once per
+run, and neither is once per worker process. `autouse`
 makes the fixture run for every test without explicit `Fixture[T]` annotation.
 Both are optional — existing plugins without these properties work unchanged.
 

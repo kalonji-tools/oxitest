@@ -178,7 +178,7 @@ FixtureSource = (
 class FixtureDef(Generic[T]):
     name: str
     fixture_type: type  # binding type for type-based resolve
-    scope: FixtureScope  # each, shared, or session
+    scope: FixtureScope
     source: FixtureSource  # where this fixture comes from
     autouse: bool = False
     namespace: str = ""  # Fixtures() instance name; empty = no namespace

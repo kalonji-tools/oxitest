@@ -64,8 +64,7 @@ dispatching to workers:
 
 2. **Auto-arranged tests** — tests that inject `lifetime="module"` fixtures are grouped
    by fixture affinity. oxitest computes connected components of the fixture
-   dependency graph and assigns each component to the main process. This prevents
-   shared fixture values from being serialized across process boundaries.
+   dependency graph and assigns each component to the main process.
 
    Auto-arrangement applies when the total test count is below the
    `min_parallel_tests` threshold (default: 100). The `auto_arrange_threshold`
