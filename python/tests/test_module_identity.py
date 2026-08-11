@@ -470,22 +470,32 @@ def test_a_keyword_directory_keeps_its_relative_imports(
     )
     patch.setattr(sys, "path", [*sys.path, str(proj)])
     session = create_session(rootdir=str(proj))
+    # The load registers the synthesized name, the dotted name, and — through
+    # the relative import — the package and its sibling. The digest in the
+    # synthesized name is derived from a temp path, so the set difference is
+    # what removes them; recomputing it here would copy production naming
+    # logic into a test.
+    known = set(sys.modules)
 
     # Act
-    collect_module(str(target), session)
-    module = session.module_cache.get(str(target), kind="test")
+    try:
+        collect_module(str(target), session)
+        module = session.module_cache.get(str(target), kind="test")
 
-    # Assert
-    assert module is not None, "collect_module caches the module it loaded"
-    assert module.__name__ == "lambda.test_mod", (
-        "a keyword cannot appear in an import statement, but it is a legal "
-        "directory name and a legal sys.modules key, so declining the name "
-        "buys nothing"
-    )
-    assert module.VALUE == 7, (
-        "the module body ran 'from .sibling import VALUE', which needs a real "
-        "__package__ — under the synthetic name it raises ImportError"
-    )
+        # Assert
+        assert module is not None, "collect_module caches the module it loaded"
+        assert module.__name__ == "lambda.test_mod", (
+            "a keyword cannot appear in an import statement, but it is a legal "
+            "directory name and a legal sys.modules key, so declining the name "
+            "buys nothing"
+        )
+        assert module.VALUE == 7, (
+            "the module body ran 'from .sibling import VALUE', which needs a "
+            "real __package__ — under the synthetic name it raises ImportError"
+        )
+    finally:
+        for name in set(sys.modules) - known:
+            sys.modules.pop(name, None)
 
 
 def _collectable(proj: Path) -> Path:
