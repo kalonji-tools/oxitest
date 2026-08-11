@@ -10,7 +10,7 @@ pub fn render_declaration<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<L
     let declaration = &graph.declarations[node_ref.index];
     let mut lines = vec![
         Line::from(vec![
-            Span::styled("C", sigil_style()),
+            Span::styled(NodeKind::Declaration.sigil().to_string(), sigil_style()),
             Span::raw(format!(" {}", declaration.path)),
         ]),
         Line::from(""),
@@ -33,7 +33,7 @@ pub fn preview_declaration<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<
     let declaration = &graph.declarations[node_ref.index];
     let mut lines = vec![
         Line::from(vec![
-            Span::styled("C", sigil_style()),
+            Span::styled(NodeKind::Declaration.sigil().to_string(), sigil_style()),
             Span::raw(format!(" {}", declaration.path)),
         ]),
         Line::from(""),

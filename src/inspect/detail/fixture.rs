@@ -2,7 +2,7 @@
 
 use ratatui::text::{Line, Span};
 
-use crate::inspect::graph::{InspectGraph, NodeRef};
+use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef};
 
 use super::styles::{
     bool_field, broken_edge_line, broken_edges_for, connection_line, field_line, preview_edges,
@@ -53,7 +53,7 @@ pub fn render_fixture<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<
         lines.push(Line::from(""));
         lines.push(section_header("Defined In"));
         lines.push(connection_line(
-            'C',
+            NodeKind::Declaration.sigil(),
             &graph.declarations[declaration_idx].path,
         ));
     }
