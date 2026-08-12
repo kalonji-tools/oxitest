@@ -66,6 +66,11 @@ pub fn parse_file(path: &Utf8Path) -> Option<(String, Vec<ast::Stmt>)> {
 }
 
 /// Check whether a name follows the `test_*` convention.
+///
+/// `_module_source_registrar.py` restates this prefix, to refuse a definition
+/// that is both `test_`-named and `@oxi.fixture`-decorated (#2066). The prefix
+/// is not configurable, so the two copies cannot drift by configuration — only
+/// by an edit to one of them. Change this and change that.
 pub fn is_test_fn(name: &str) -> bool {
     name.starts_with("test_")
 }

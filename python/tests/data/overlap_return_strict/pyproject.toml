@@ -1,0 +1,8 @@
+[project]
+name = "overlap_return_strict"
+version = "0.1.0"
+
+[tool.oxitest]
+testpaths = ["pkg"]
+python_files = ["test_*.py"]
+strict = "abort"

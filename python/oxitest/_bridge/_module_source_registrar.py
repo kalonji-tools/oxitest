@@ -127,6 +127,21 @@ def register_module_source_fixtures(
         if not isinstance(marker, _FixtureMarker):
             continue
 
+        # `test_` rather than a shared predicate because the other half of this
+        # pair is `python_ast::is_test_fn` (`python_ast.rs:69`), which hardcodes
+        # the same prefix and is not configurable. The two cannot drift by
+        # configuration, only by an edit — so each names the other (#2066).
+        #
+        # `is_inline` gates it: a __fixtures__.py is not matched by the default
+        # `python_files`, so a test_-named declaration there is read once rather
+        # than twice, and refusing it would be a false refusal.
+        #
+        # Before the cap below, so a test_-named declaration over the cap is
+        # reported as the overlap it is rather than as a lifetime problem.
+        if is_inline and attr_name.startswith("test_"):
+            violations.append(_test_name_overlap_message(attr_name, module_path))
+            continue
+
         # PACKAGE and PROCESS are the complete set above the cap: `Lifetime` has
         # exactly four members since #1777 renamed SESSION to PROCESS.
         if is_inline and marker.lifetime in (Lifetime.PACKAGE, Lifetime.PROCESS):
@@ -353,6 +368,22 @@ def _inline_cap_message(fn_name: str, module_path: str, lifetime: Lifetime) -> s
         f"than the module would outlive the only scope that can see it.\n"
         f'Hint: drop to lifetime="module", or move the declaration to {home} '
         f'to keep lifetime="{lifetime}".'
+    )
+
+
+def _test_name_overlap_message(fn_name: str, module_path: str) -> str:
+    """Why one definition cannot be both a test and a fixture.
+
+    Mirrors :func:`_inline_cap_message`. Both remedies are named because either
+    is correct and the framework cannot know which was intended.
+    """
+    return (
+        f"{fn_name} in {module_path} is a test by name and a fixture by "
+        f"decorator.\n"
+        f"Two walks read it two ways, so its body runs once as a test and once "
+        f"for every fixture consumer, and nothing reports that.\n"
+        f"Hint: rename it so it does not start with 'test_', or remove the "
+        f"@oxi.fixture decorator."
     )
 
 
