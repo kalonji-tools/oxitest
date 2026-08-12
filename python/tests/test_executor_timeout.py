@@ -856,6 +856,46 @@ def test_a_taken_deadline_downgrades_a_pass_to_warned() -> None:
     )
 
 
+def test_an_async_taken_deadline_downgrades_a_pass_to_warned() -> None:
+    """The async path reports a voided deadline, exactly as the sync path does.
+
+    ADR-0016 decision 4 rewrites a pass into ``warned`` when other code wrote
+    the process timer. The sync path is covered by
+    ``test_a_taken_deadline_downgrades_a_pass_to_warned``; the async path
+    reached that same code only because the wrapper armed the context for both
+    kinds. #2082 moves the async context inside the coroutine, and this test is
+    what refuses to let the rewrite be left behind.
+    """
+    if not hasattr(signal, "alarm"):
+        return
+
+    # Arrange
+    async def body_that_cancels_the_timer() -> None:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+
+    plan = ExecutionPlan(
+        fn=body_that_cancels_the_timer,
+        fn_name="test_x",
+        kwargs=MappingProxyType({}),
+        marks=(),
+        no_message_lines=(),
+        is_async=True,
+    )
+    wrapper = make_timeout_wrapper(5, is_async=True, context_cls=_UnixTimeoutContext)
+
+    # Act
+    result = wrapper(lambda: asyncio.run(_async_test_core(plan, 5)))
+
+    # Assert
+    helpers.assert_result(
+        result,
+        WarnedResult,
+        why="an async test that clears the process timer did not run under the"
+        " deadline it declared, and reporting it as a plain pass claims a"
+        " guarantee oxitest did not deliver",
+    )
+
+
 def test_a_taken_deadline_does_not_rewrite_a_failure() -> None:
     """A test that failed on its own keeps its failure -- the deadline is moot."""
     if not hasattr(signal, "alarm"):
