@@ -80,6 +80,70 @@ removed in ADR-0009 Amendment 16.
 
 ---
 
+```text
+collection error: <fn_name> in <path> line <N> contains yield, so calling it returns a generator instead of running.
+None of the test body executes, and the test is reported as passed. A test function returns None.
+Hint: remove the yield, or move the generator into a fixture, where yield is how teardown is expressed.
+```
+
+**Cause:** A test function contains `yield`, which makes it a generator
+function. Calling it returns a generator object and runs **no part of the
+body**, so before this refusal the test was reported as passed having verified
+nothing. Applies to `async def` and to methods of a `Test*` class. A
+`@mark.skip` does not suppress it — a skip is a decision about a test that
+could have run.
+
+**Fix:** Remove the `yield`, or move the generator into a fixture, where
+`yield` is how teardown is expressed:
+
+```python
+# Before — the body never runs
+def test_connection():
+    conn = connect()
+    yield
+    conn.close()
+
+# After — the fixture owns setup and teardown
+@oxi.fixture(lifetime="function")
+def conn() -> Yields[Connection]:
+    connection = connect()
+    yield connection
+    connection.close()
+
+
+def test_connection(conn: oxi.Fixture[Connection]) -> None:
+    assert conn.is_open, "the fixture must hand the test a live connection"
+```
+
+See [ADR-0017](../../adr/0017-a-test-function-returns-none.md).
+
+---
+
+```text
+TestReturnedValueError: <fn_name> returned a generator instead of None, so none of its body ran and the test proved nothing.
+Only the returned value shows this shape, so collection could not refuse it. A test function returns None.
+Hint: remove the yield, or return nothing. To express setup and teardown, move the generator into a fixture, where yield is how teardown is written.
+```
+
+**Cause:** The same defect as above, reached by a route collection cannot see.
+Two routes exist, and the message names neither, because it cannot tell them
+apart from the value alone:
+
+- **A decorator.** A wrapper built with `functools.wraps` leaves
+  `inspect.isgeneratorfunction` answering `False`, so the shape is invisible
+  until the wrapper is called.
+- **An `async def` that returns a generator.** `async def test_x(): return (i
+  for i in items)` is an ordinary coroutine — no wrapper is involved — and the
+  generator only appears once the coroutine is awaited.
+
+Reported as a **per-test error with exit code 4**, not a collection refusal.
+The run is not stopped — every other test still executes and reports.
+
+**Fix:** Remove the `yield`, or return nothing. With a decorator, the change
+goes on the function *inside* it.
+
+---
+
 ## Configuration errors
 
 Configuration errors surface when `pyproject.toml` cannot be parsed into a
@@ -778,6 +842,32 @@ deletes anything, or do not change it.
 Strict mode violations are reported when running with `--strict=abort` and
 produce **exit code 3**. They indicate patterns that violate oxitest's explicit
 design principles.
+
+---
+
+```text
+<node_id>                                                     test-returns-value   line <N>
+```
+
+**Cause:** A test function contains `return <value>`. oxitest discards whatever
+a test returns, so an assertion written as `return a == b` is evaluated and
+thrown away — the test passes whether or not the comparison holds.
+
+Unlike a generator test, the body **did** run, so this is reported only under
+`strict`. `return` and `return None` are both the rule being kept and neither
+is flagged.
+
+**Fix:** Write the comparison as an assertion with a message:
+
+```python
+# Before — the comparison is discarded
+def test_addition():
+    return add(2, 2) == 4
+
+# After
+def test_addition():
+    assert add(2, 2) == 4, "addition is the whole subject of this test"
+```
 
 ---
 

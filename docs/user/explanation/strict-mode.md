@@ -18,7 +18,7 @@ excluded.
 Strict mode makes oxitest enforce conventions that experienced teams apply manually,
 automatically, and at the point where violations are cheapest to fix: before the test suite runs.
 
-## The nine checks
+## The ten checks
 
 ### Bare assert
 
@@ -210,6 +210,36 @@ here. That overlap is a separate question and belongs in its own diagnostic.
 Flagged when a fixture parameter uses a broad type like `object` or `Any`. These
 types defeat type checking and obscure what the fixture provides. Use the specific
 concrete type instead.
+
+Detected during test collection.
+
+### Test returns a value
+
+=== "Triggers"
+
+    ```python
+    def test_addition():
+        return add(2, 2) == 4  # the assertion never runs
+    ```
+
+=== "Clean"
+
+    ```python
+    def test_addition():
+        assert add(2, 2) == 4, "addition is the whole subject of this test"
+    ```
+
+A test function returns `None`. oxitest discards whatever a test returns, so an
+assertion written as `return a == b` is evaluated and thrown away — the test
+passes whether or not the comparison holds.
+
+This check is the static third of the rule, and it is deliberately the mildest.
+The body **did** run, so nothing is silently unverified in the way a generator
+test is: a test whose body contains `yield` is refused outright at collection,
+and a wrapped one is refused while it runs. Both of those are errors regardless
+of `strict`. Only `return <value>` waits for you to opt in.
+
+`return` and `return None` are both the rule being kept, and neither is flagged.
 
 Detected during test collection.
 

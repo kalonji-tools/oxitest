@@ -10,6 +10,8 @@
 
 **Test Item** — A single runnable test. Identified by a node ID. May be a standalone function or a parametrized variant of one.
 
+**Test Function** — The callable a Test Item runs. **A test function returns `None`.** Its return value is not part of its outcome, so a value returned is a value discarded — an assertion written as `return a == b` is evaluated and thrown away. A function containing `yield` is worse than that: calling it returns a generator and runs no part of the body, so the test reports passed having verified nothing. Refused wherever the shape becomes knowable, which is at collection for a shape a static answer can see and at execution for one only the returned value shows (ADR-0017).
+
 **Node ID** — Unique identifier for a test item. Format: `module_path::fn_name` or `module_path::ClassName::method_name` for class methods. Parametrized variants append `[param_id]` (e.g., `module_path::fn_name[case1]`, `module_path::ClassName::method_name[case1]`).
 
 **Target** — A path, a directory, or a node ID given as a command-line argument. A Target that names something absent is a usage error: the run is refused and nothing executes. A **glob** node-ID Target is exempt, because a glob asks to match what is present rather than asserting that it exists. A **relative** Target is resolved against the directory `oxitest` was invoked from — never against the Rootdir, which is derived from the Target and so cannot be its own reference point (ADR-0014, amended by #2026). Not to be confused with the worker's current directory, which is process-global and may be moved by `patch.chdir`.
