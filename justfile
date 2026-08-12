@@ -66,14 +66,19 @@ check-locks: (_log _blue "Checking lock files...")
     cargo metadata --locked --format-version 1 --quiet > /dev/null
 
 # Deliberately NOT part of `preflight`, which runs earlier in the merge sequence
-# than findings are meant to be resolved. Both checks accept `--pr`, so `args`
-# reaches each unchanged.
+# than findings are meant to be resolved. All three checks accept `--pr`, so
+# `args` reaches each unchanged.
+#
+# Order is load-bearing: the disposition check runs last because its question —
+# does every closing issue say where its undelivered scope went — is only
+# meaningful once the closure set is known to agree with the title (#2057).
 #
 # Only the line directly above a recipe becomes its `just --list` description.
-# Refuse the merge on unresolved threads or unnamed closures (stage 9, step 4)
+# Refuse the merge on unresolved threads, unnamed closures, or a missing disposition (stage 9, step 4)
 merge-ready *args: (_log _blue "Checking merge readiness...")
     python scripts/check_review_threads.py {{ args }}
     python scripts/check_closing_issues.py {{ args }}
+    python scripts/check_disposition.py {{ args }}
 
 # Validates the whole spec against the diff before writing anything.
 #
