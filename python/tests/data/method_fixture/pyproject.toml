@@ -1,0 +1,7 @@
+[project]
+name = "method_fixture"
+version = "0.1.0"
+
+[tool.oxitest]
+testpaths = ["pkg"]
+python_files = ["test_*.py"]

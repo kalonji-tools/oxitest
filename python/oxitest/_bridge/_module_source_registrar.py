@@ -88,6 +88,31 @@ def register_module_source_fixtures(
     namespace_is_new = not registry.has_namespace(namespace)
 
     for attr_name, obj in vars(fixture_module).items():
+        # A class never carries the marker itself, so without this branch it
+        # falls through the isinstance guard below and is skipped in silence.
+        # This loop is the only place a method fixture is visible at all:
+        # `collect_declarations` (`prescan.rs:876`) sends `ClassDef` to its
+        # `_ => continue` arm, and `walk_test_defs` (`python_ast.rs:154`)
+        # enters a `Test*` class but visits only `is_test_fn` methods, so it
+        # collects the sibling test and never the fixture (#2068).
+        #
+        # Not gated on `is_inline`: a method fixture registers nothing in any
+        # home, so the defect is home-independent.
+        # Only a class *defined here*. `vars()` also holds every imported name,
+        # so `from helpers import Base` would otherwise put Base's declaration
+        # in this module's violation list, naming this file for a definition in
+        # another — the misattribution shape this issue exists to remove.
+        #
+        # If a loader ever synthesized `__name__` wrongly the class would be
+        # skipped and go unrefused, which is today's behaviour rather than a
+        # worse one. Misattributing is the failure worth avoiding.
+        if isinstance(obj, type):
+            if getattr(obj, "__module__", None) == fixture_module.__name__:
+                violations.extend(
+                    _method_fixture_violations(obj, attr_name, module_path)
+                )
+            continue
+
         # isinstance, not a truthiness or None check. `getattr` is a probe, and
         # any object defining __getattr__ answers every name: `_Mark`
         # (`_mark_api.py`) returns a fresh `_Mark` for `__oxitest_fixture__`, so a
@@ -329,6 +354,63 @@ def _inline_cap_message(fn_name: str, module_path: str, lifetime: Lifetime) -> s
         f'Hint: drop to lifetime="module", or move the declaration to {home} '
         f'to keep lifetime="{lifetime}".'
     )
+
+
+def _method_fixture_message(fn_name: str, class_name: str, module_path: str) -> str:
+    """Why a method cannot declare a fixture, and where the declaration goes.
+
+    Mirrors :func:`_inline_cap_message`: what is wrong, why, then the remedy.
+    Naming the destination is load-bearing for the same reason it is there — a
+    hint that only says "move it elsewhere" leaves the user to derive where
+    (#1711's review).
+    """
+    home = Path(module_path).parent / "__fixtures__.py"
+    return (
+        f"{fn_name} in {module_path} is decorated @oxi.fixture on a method of "
+        f"class {class_name}.\n"
+        f"A method is not a declaration home, so nothing registers it, and "
+        f'every consumer reports "fixture {fn_name!r} not found" instead.\n'
+        f"Hint: move the declaration to module level, or to {home}."
+    )
+
+
+def _method_fixture_violations(
+    cls: type, class_name: str, module_path: str, seen: set[int] | None = None
+) -> list[str]:
+    """Every @oxi.fixture reachable inside *cls*, including nested classes.
+
+    ``__func__`` is unwrapped before the marker read: a ``staticmethod`` or
+    ``classmethod`` object does not carry the attribute its wrapped function
+    carries, so a plain ``vars(cls)`` scan misses exactly the spelling someone
+    writes for a fixture that takes no ``self``.
+
+    The descent stops at classes. A ``@oxi.fixture`` on a function defined
+    inside a *function* body is unreachable rather than mis-homed, and two
+    definitions in this repo's own suite take that shape.
+
+    *seen* holds the classes already walked. A class can hold a reference to
+    itself or to an ancestor, and without this the descent recurses until
+    ``RecursionError`` — which reaches the user as a crash rather than as the
+    diagnostic this function exists to produce.
+    """
+    seen = set() if seen is None else seen
+    if id(cls) in seen:
+        return []
+    seen.add(id(cls))
+
+    found: list[str] = []
+    for attr_name, raw in vars(cls).items():
+        if isinstance(raw, type):
+            found.extend(
+                _method_fixture_violations(
+                    raw, f"{class_name}.{attr_name}", module_path, seen
+                )
+            )
+            continue
+        target = getattr(raw, "__func__", raw)
+        if isinstance(getattr(target, MARKER_ATTR, None), _FixtureMarker):
+            found.append(_method_fixture_message(attr_name, class_name, module_path))
+    return found
 
 
 def _async_autouse_message(fn_name: str, module_path: str) -> str:
