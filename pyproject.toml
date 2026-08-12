@@ -89,7 +89,6 @@ ignore = [
 # store path would break on every rebuild. Every argument is repo-controlled,
 # never user input. Listed per file rather than as `scripts/*` so a future
 # script that shells out has to justify itself here (#2007).
-"scripts/check_review_threads.py" = ["S603", "S607"]
 "scripts/post_review_findings.py" = ["S603", "S607"]
 "scripts/dispose_finding.py" = ["S603", "S607"]
 "scripts/check_closing_issues.py" = ["S603", "S607"]
@@ -216,7 +215,7 @@ test = [
 lint = [
     "ruff>=0.4",
     "codespell>=2",
-    # scripts/check_rollup_agreement.py, run by the `rollup-agreement` prek hook.
+    # scripts/check_platform_sets.py, run by the `platform-sets` prek hook.
     # It must be in `lint` specifically: quality.yml passes exactly
     # `--only-group lint --only-group typecheck --only-group test` to the
     # setup-python composite, so that is the environment prek runs in. PyYAML was

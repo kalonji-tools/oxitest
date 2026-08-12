@@ -16,7 +16,8 @@ The branch name is parsed as a cross-check and reported, never enforced. It is
 a free-text slug, so a digit inside one can look like an issue number, and a
 false refusal would be worse than the silence.
 
-Run by `just merge-ready` at merge-sequence step 4 (#2005).
+Run by `just merge-ready` at merge-sequence step 4 (#2005). Nothing else runs
+it: a CI context carrying this check was built and removed on #2072.
 """
 
 from __future__ import annotations

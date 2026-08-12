@@ -258,20 +258,41 @@ jobs:
 
       - name: Check results
         shell: bash
+        env:
+          NEEDS: ${{ toJSON(needs) }}
         run: |
           # Allowlist, not a failure-blocklist — see docs.yml's `required` job (#1925).
-          # Every job in `needs:` above must be checked by *some* step of this
-          # job: one that is waited on but never checked is a silent hole
-          # (#1944). `changes` is checked by the step above and must NOT be
-          # added here — that would give it a `skipped` allowance and restore
-          # the defect #1961 fixed.
-          for result in "${{ needs.rust-tests.result }}" "${{ needs.python-tests.result }}" \
-                        "${{ needs.linux-arm.result }}" "${{ needs.macos-arm.result }}" \
-                        "${{ needs.macos-intel.result }}" "${{ needs.tmpdir-symlink.result }}" \
-                        "${{ needs.windows.result }}"; do
-            case "$result" in
-              success|skipped) ;;
-              *) echo "A test job ended in '$result'; only success or skipped may pass"; exit 1 ;;
-            esac
-          done
+          #
+          # The results are read out of `needs` rather than named one by one
+          # (#2072). A rollup used to hold one invariant in two literals — the
+          # `needs:` list above and the results a step named — and a job added
+          # to the first but not the second was waited on and never checked
+          # (#1944). `scripts/check_rollup_agreement.py` existed to compare
+          # them. Reading the set from `toJSON(needs)` leaves one literal, so
+          # there is no second copy to drift from.
+          #
+          # `changes` is deleted here, not allowed through: it is checked by the
+          # step above on the stricter path, where `skipped` does not pass. That
+          # is the defect #1961 fixed and it must not be given a `skipped`
+          # allowance here.
+          #
+          # `length > 0` is the vacuity guard. `all` is true over an empty set,
+          # so without it a rollup that waits on nothing reports success while
+          # guarding nothing.
+          #
+          # The observed set is printed before it is judged, on every run. That
+          # is the only record of what `toJSON(needs)` actually serialises —
+          # whether a skipped job appears here at all decides whether the
+          # vacuity guard can fire spuriously, and no local test can answer it.
+          # Read this list against the `needs:` above when changing either.
+          echo "Jobs this rollup waited on:"
+          echo "$NEEDS" | jq -r 'del(.changes) | to_entries[] | "  \(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e '
+            del(.changes)
+            | (length > 0)
+              and all(.[]; .result == "success" or .result == "skipped")
+          ' > /dev/null || {
+            echo "A test job did not pass; only success or skipped may pass"
+            exit 1
+          }
           echo "All jobs passed or were skipped"

@@ -51,6 +51,12 @@ just preflight
 # justfile is authoritative for which.
 just mutate <path> <old-anchor-file> <new-anchor-file> [test-cmd...]
 
+# Run Rust mutants under cargo-mutants (#2072). Prefer this for Rust: mutants
+# come from the AST, so "the anchor never matched" — which reads exactly like
+# SURVIVED — is not a possible state, and the scratch-tree copy means a dirty
+# worktree is never destroyed. Always scope it; unfiltered is 3607 candidates.
+just mutate-rust --file 'src/worker_result/*.rs'
+
 # Clean build artifacts
 just clean
 
@@ -222,10 +228,14 @@ This is an obligation at close time rather than a detector afterwards because ev
 1. rebase onto latest `main`;
 2. re-run `just preflight` **after** rebasing onto `main` — even if CI was green before it;
 3. push; wait for CI green;
-4. `just merge-ready` — refuse while any review thread is unresolved;
+4. `just merge-ready` — refuse on an unnamed closure or a missing disposition table;
 5. `gh pr merge --rebase`.
 
-Step 4 sits here rather than first so it reads the state that will actually be merged: run before the rebase, it can be true when it runs and false at merge, because a thread opened while CI is running would never be re-read. It is also **not** folded into `preflight` at step 2, which happens before findings are meant to be resolved — gating preflight on unresolved threads would block every branch mid-pipeline.
+Step 4 sits here rather than first so it reads the state that will actually be merged: run before the rebase, it can be true when it runs and false at merge. It is also **not** folded into `preflight` at step 2, which happens before a closing set or a disposition table is settled — gating preflight on either would block every branch mid-pipeline.
+
+**Step 4 is the only thing checking either invariant, and nothing forces you to run it.** A CI context carrying these two checks was built and removed on #2072 rather than shipped. The reason is worth keeping: the disposition convention was one day old at the time, and promoting a convention with no operational history into a repo-wide merge blocker commits to it before it has earned that. Revisit once the convention has a record. Until then this step is discipline, and it is honest about being discipline.
+
+**Never pass `--admin`** (#2072). `main` required one approving review that a solo author cannot obtain, so every merge used to bypass branch protection — and admin bypass is not selective. It discarded `required_conversation_resolution` and all three required contexts along with the review. `required_approving_review_count` is now `0`, so `gh pr merge --rebase` succeeds on its own, and the four protections that were collateral damage now bind. An unresolved review thread blocks the merge because GitHub blocks it, not because a script ran.
 
 **"CI green" means the required contexts, not every check.** The required set is defined by branch protection — query it (`gh api repos/{owner}/{repo}/branches/main/protection`) rather than trusting a remembered list, because a copy here would drift. A red **non-required** check is not a merge blocker — and is not thereby uninteresting. Say so in the debrief, and say what it was pointing at: across five recorded instances it was pointing at something real four times. Do not make a coverage check green by measuring less — widening an `ignore:` list over untested code is the recorded anti-pattern, not a fix. An issue whose acceptance criterion promotes a job into a required rollup states the observed pass rate it is promoting on, and names any known flake in that job's path — the number gets stated, not a bar set.
 
@@ -342,7 +352,7 @@ Illustrative only, **not exhaustive**. Note that syntax-valid is not verified:
 | `src/**.rs` — fmt, clippy, `test-rust`, `cargo doc` | `bacon.toml`, `prek.toml`, `cliff.toml`, `codecov.yml` — `check-toml`/`check-yaml` parse them; nothing validates them |
 | `python/**.py` — ruff, ty, `test-python`, plus `scripts/check_subprocess_encoding.py` for text-mode `subprocess` calls with no `encoding=` (#1986) | `devenv.nix`, `flake.nix`, `nix/` — no gate at all |
 | `docs/**.md` in the mkdocs nav — `mkdocs --strict` | `.github/actions/*/action.yml` — `check-yaml` parses them; actionlint cannot read a composite |
-| `.github/workflows/*` — actionlint for referenced-but-undeclared `needs:`, `scripts/check_rollup_agreement.py` for the reverse (#1974), and `scripts/check_platform_sets.py` for agreement between the required rollup, the wheel targets and `classifiers` (#1950) | `justfile` — `scripts/check_justfile_quoting.py` refuses a quoted interpolation (#2015); nothing else reads it |
+| `.github/workflows/*` — actionlint for referenced-but-undeclared `needs:`, and `scripts/check_platform_sets.py` for agreement between the required rollup, the wheel targets and `classifiers` (#1950). The reverse direction needed a checker until #2072 made each rollup read its results from `toJSON(needs)`; one literal cannot disagree with itself | `justfile` — `scripts/check_justfile_quoting.py` refuses a quoted interpolation (#2015); nothing else reads it |
 | `docs/internals/**` — mdbook | `.envrc`, `.config/wt.toml` — no gate |
 | `Cargo.lock`, `uv.lock` — lock checks | `*.md` outside the mkdocs nav — codespell only, no link check |
 

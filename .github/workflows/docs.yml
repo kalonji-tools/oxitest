@@ -166,16 +166,26 @@ jobs:
 
       - name: Check build result
         shell: bash
+        env:
+          NEEDS: ${{ toJSON(needs) }}
         run: |
           # Allowlist, not a failure-blocklist: a job that ends in anything
           # other than success or skipped — cancelled, timed_out — used to pass
           # this gate, because it only ever tested for "failure" (#1925).
-          for result in "${{ needs.build.result }}" "${{ needs.doc-tests.result }}"; do
-            case "$result" in
-              success|skipped) ;;
-              *) echo "A docs job ended in '$result'; only success or skipped may pass"; exit 1 ;;
-            esac
-          done
+          #
+          # Reads results from toJSON(needs), and prints the observed set before
+          # judging it — see test.yml's `required` job for the full reasoning
+          # (#2072).
+          echo "Jobs this rollup waited on:"
+          echo "$NEEDS" | jq -r 'del(.changes) | to_entries[] | "  \(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e '
+            del(.changes)
+            | (length > 0)
+              and all(.[]; .result == "success" or .result == "skipped")
+          ' > /dev/null || {
+            echo "A docs job did not pass; only success or skipped may pass"
+            exit 1
+          }
           echo "All docs jobs passed or were skipped"
 
   deploy:
