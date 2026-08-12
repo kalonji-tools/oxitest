@@ -667,9 +667,13 @@ lint = [
 test = [
     { name = "coverage" },
     { name = "maturin" },
+    { name = "pyyaml" },
 ]
 typecheck = [
     { name = "ty" },
+]
+workflow = [
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -704,8 +708,10 @@ lint = [
 test = [
     { name = "coverage", specifier = ">=7" },
     { name = "maturin", specifier = ">=1.7,<2" },
+    { name = "pyyaml", specifier = ">=6" },
 ]
 typecheck = [{ name = "ty" }]
+workflow = [{ name = "pyyaml", specifier = ">=6" }]
 
 [[package]]
 name = "packaging"
