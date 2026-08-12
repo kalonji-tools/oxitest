@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import signal
+import sys
 import threading
 import time
 from collections.abc import AsyncGenerator
 from types import MappingProxyType
 from typing import Any
 
-from oxitest import TempDir
+import oxitest as oxi
+from oxitest import Fixture, TempDir
 from oxitest._bridge._errors import OxitestTimeoutError
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._middleware import ExecutionPlan, _effective_timeout_secs
@@ -24,6 +26,7 @@ from oxitest._bridge._timeout import (
     make_timeout_wrapper,
 )
 from oxitest._bridge.result import (
+    Diagnostic,
     FailedResult,
     PassedResult,
     TestResult,
@@ -151,6 +154,62 @@ def test_async_test_timeout_passes_fast_test(tmp: TempDir) -> None:
         PassedResult,
         why="the async path measures the deadline against a separate clock, so the"
         " same mark must not mean two things depending on how a test is written",
+    )
+
+
+_IS_LINUX = sys.platform == "linux"
+_TIMERS_ONLY_SETTLE_ON_LINUX = (
+    "which of the two timers governs is decided by the platform. On Windows the OS"
+    " arm is skipped for async tests entirely (#1998). On macOS the two race: this"
+    " assertion was measured failing on both arm64 and x86_64, with asyncio.wait_for"
+    " winning outright, and that race is what makes #2070 macOS-only. Only Linux"
+    " settles it deterministically, so only Linux can assert it"
+)
+
+
+@oxi.mark.skip(when=not _IS_LINUX, reason=_TIMERS_ONLY_SETTLE_ON_LINUX)
+def test_wait_for_never_governs_a_deadline_on_linux(
+    tmp: TempDir, diag_collector: Fixture[list[Diagnostic]]
+) -> None:
+    """On Linux the OS timer always governs, so `asyncio.wait_for` never fires.
+
+    Both timers are armed at the same value and the OS timer is armed first, so
+    its deadline is the earlier one. On Linux that ordering holds every time --
+    measured 10 of 10 -- which is why the two never contend there and why #2070
+    does not reproduce on Linux at all. It is NOT a Unix-wide invariant: on
+    macOS `wait_for` has been measured winning outright, on both architectures.
+
+    Pinning the Linux half still earns its place, because a change that
+    re-orders the two -- offsetting the OS arm past the loop's deadline, say --
+    would otherwise silently swap which timer enforces the Deadline, and
+    thereby which span it bounds (#2082).
+
+    The leaked-task diagnostic is what tells them apart: SIGALRM raises out of
+    `run_until_complete` and leaves `wait_for`'s inner task pending, while
+    `wait_for` cancels and awaits its own task before raising (#2070).
+    """
+    # Arrange / Act
+    result = helpers.exec_inline(
+        tmp,
+        "import asyncio\nasync def test_slow():\n    await asyncio.sleep(10)\n",
+        "test_slow",
+        default_timeout=1,
+    )
+
+    # Assert
+    helpers.assert_result(
+        result,
+        TimeoutResult,
+        why="the deadline must fire whichever timer governs -- without this the"
+        " assertion below could pass on a test that never timed out at all",
+    )
+    assert any("leaked" in diag.message for diag in diag_collector), (
+        f"the OS timer must govern on Linux: it raises out of run_until_complete"
+        f" and leaves wait_for's inner task pending, so a 'leaked' diagnostic is"
+        f" emitted. Its absence means asyncio.wait_for fired instead, which"
+        f" re-scopes the Deadline to the test body alone (#2082) and puts Linux"
+        f" into the racing state ADR-0016's fourth known limit records for macOS."
+        f" Got {[diag.message for diag in diag_collector]!r}"
     )
 
 
@@ -319,6 +378,11 @@ def test_sync_test_always_arms_even_when_blocking_calls_are_unbounded() -> None:
 # still arms for async tests there, so it passes whether or not the default
 # ever reaches asyncio.wait_for. These assert the routing itself, which is the
 # only enforcement left on a platform whose arm is skipped for async.
+#
+# That same test and `test_async_marked_timeout_fires` are the two that can go
+# red on macOS arm64 for a reason that is not a regression: ADR-0016's fourth
+# known limit (#2070). Read it before debugging your own branch — it names the
+# `leaked N task(s)` marker that says which timer governed the run.
 
 
 def _plan_with(marks: tuple[MarkInfo, ...]) -> ExecutionPlan:
