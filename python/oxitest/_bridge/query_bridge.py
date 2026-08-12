@@ -18,7 +18,6 @@ from oxitest._bridge._fixture_registry import (
     FrameworkSource,
     ModuleSource,
     PluginModuleSource,
-    PluginSource,
 )
 from oxitest._bridge._plugin_entry import ActivatedPluginEntry
 from oxitest._bridge.importer import collect_module
@@ -75,21 +74,16 @@ def fixture_entries(registry: Any) -> list[dict[str, str]]:
     """Return all fixture defs as dicts for the Rust query engine."""
     entries = []
     for defn in registry.all():
-        match defn.source:
-            case FrameworkSource(origin=p):
-                source = p
-            # A declaration reports the file it was written in, the same way a
-            # conftest fixture does. Without this arm it fell to `case _` and
-            # reported "<unknown>" — the source column's whole job is to say
-            # where to go and edit it (#1720).
-            case ModuleSource(defining_module_path=p):
-                source = p
-            case PluginSource(plugin_module=m) | PluginModuleSource(plugin_module=m):
-                source = f"<plugin:{m}>"
-            case BuiltinSource():
-                source = "<builtin>"
-            case _:
-                source = "<unknown>"
+        # `declaration_path` is the same five-arm match, and this was a second
+        # copy of it that could drift (#1851). A declaration reports the file it
+        # was written in, the same way a conftest fixture does — the source
+        # column's whole job is to say where to go and edit it (#1720).
+        #
+        # Canonical and absolute, deliberately. `detail.rs` passes this string
+        # to `python_ast::parse_file` to extract the source snippet, and that
+        # call ends with `?`, so a base-relative path that does not resolve
+        # returns no snippet and reports nothing.
+        source = defn.declaration_path
 
         doc = ""
         if isinstance(defn.source, (FrameworkSource, ModuleSource, PluginModuleSource)):
