@@ -122,6 +122,47 @@ def marker(slug: str, finding_id: int) -> str:
     return f"{slug} #{finding_id}"
 
 
+def readable_markers(spec: dict) -> tuple[list[str], list[dict]]:
+    """Return marker problems, and the findings whose markers can be read back.
+
+    A marker this module writes but cannot read back is worse than a refused
+    spec. ``dispose_finding.py`` can never match it, and ``_MARKER`` cannot see
+    it either — so the duplicate guard, which refuses a second post by matching
+    that pattern, goes blind at the same moment (#2088).
+
+    Both fields are checked, because both are interpolated. The ``id`` is the
+    half that was found first, not the whole defect: ``_MARKER`` reads
+    ``[^*]+`` for the slug, so a slug holding an asterisk fails identically.
+
+    ``bool`` is excluded explicitly. ``isinstance(True, int)`` is ``True`` and
+    ``#True`` is exactly the shape being refused.
+
+    A finding whose id is unusable is returned to neither caller nor loop: its
+    problem is already recorded here, and every later check would have to
+    render it into a message it cannot appear in.
+    """
+    problems: list[str] = []
+    slug = spec["slug"]
+    if not isinstance(slug, str) or "*" in slug:
+        problems.append(
+            f"slug {slug!r}: a marker is read back by a pattern that cannot "
+            f"match an asterisk, so this slug would post threads that no "
+            f"disposition can reach"
+        )
+    findings: list[dict] = []
+    for finding in spec["findings"]:
+        finding_id = finding["id"]
+        if isinstance(finding_id, bool) or not isinstance(finding_id, int):
+            problems.append(
+                f"id {finding_id!r}: a finding id must be an integer — "
+                f"`review-dispose` takes one, and a marker built from anything "
+                f"else can never be matched or refused as a duplicate"
+            )
+            continue
+        findings.append(finding)
+    return problems, findings
+
+
 def validate(spec: dict, diff: DiffIndex, existing_markers: set[str]) -> list[str]:
     """Return every reason the spec cannot be posted; empty means go.
 
@@ -129,9 +170,9 @@ def validate(spec: dict, diff: DiffIndex, existing_markers: set[str]) -> list[st
     names everything wrong instead of sending the author round a fix-and-retry
     loop.
     """
-    problems: list[str] = []
+    problems, findings = readable_markers(spec)
     slug = spec["slug"]
-    for finding in spec["findings"]:
+    for finding in findings:
         tag = marker(slug, finding["id"])
         if tag in existing_markers:
             problems.append(
