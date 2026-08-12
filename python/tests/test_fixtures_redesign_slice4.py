@@ -223,12 +223,36 @@ def test_session_below_the_rootdir_package_is_rejected(tmp: TempDir) -> None:
     # The rootdir package is derived from the collected tree, so the user cannot
     # read it off their config — "move it to a rootdir package" is unactionable
     # unless the message says which directory that is.
-    assert "slice4_session_below_root\n" not in output, (
-        f"guard against the hint naming a bare directory with no path; got:\n{output}"
+    # Scoped to the hint line, not to the whole output. Two ways this pair
+    # failed to pin what it claims, both found by a mutant that made the hint
+    # name a bare directory (#1851):
+    #
+    #   1. The negative guard read `"<name>\n" not in output`, so it saw a bare
+    #      name only at the end of a line. The hint names it mid-sentence, so
+    #      the guard never covered the case it was written for. It did start
+    #      matching the new `rootdir: <absolute path>` header, whose path ends
+    #      with this project's own directory name.
+    #   2. The positive check read the whole output, and the anchor path
+    #      (`<project>/slice4_session_below_root/nested`) contains the expected
+    #      string as a prefix — so it passed without the hint naming anything.
+    #   3. Scoping to the hint *line* was still not enough. The same line ends
+    #      with the anchor, `<project>/slice4_session_below_root/nested`, which
+    #      contains the expected string as a prefix — so a substring check over
+    #      the line passed on the anchor while the recommendation named nothing.
+    #      The mutant survived twice, once for each of these.
+    #
+    # So the assertion reads the recommendation itself: the span between "move
+    # the declaration to" and the next clause, which is the only text that
+    # answers "where do I move it".
+    hint = next(line for line in output.splitlines() if "Hint:" in line)
+    recommended = (
+        hint.split("move the declaration to", 1)[1].split(", or drop", 1)[0].strip()
     )
-    assert str(_REJECT_PROJECT / "slice4_session_below_root") in output, (
-        f"the hint must name the directory that IS the rootdir package, not just "
-        f"say one is required; got:\n{output}"
+    assert recommended.startswith(str(_REJECT_PROJECT / "slice4_session_below_root")), (
+        f"the rootdir package is derived from the collected tree, so the user "
+        f"cannot read it off their config — 'move it to a rootdir package' is "
+        f"unactionable unless the recommendation names that directory by full "
+        f"path; got {recommended!r}"
     )
 
 
