@@ -183,7 +183,9 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 ## Doctest Coverage
 
-**Coverage Subject** — A definition (module, function, class, or method) eligible for doctest auditing. Under `public`, private names are not subjects.
+**Coverage Subject** — A definition (module, function, class, or method) eligible for doctest auditing. Three rules decide the set, and they do not agree. A **leading-underscore leaf name** is never a subject, under either scope form, because it is dropped when subjects are enumerated. A **private module path** (`_internal/`) is not a subject under the scalar `public`, but is under any list-form entry, which switches that filter off for the files it covers. An **`__all__` declaration is authoritative** where present: each entry is a subject, overriding both rules above.
+
+**Doctest Root** — A source tree whose public API the coverage audit covers, declared rather than derived. Selects *files*; a Doctest Scope and Doctest Skip select subjects within them. Empty means the audit covers the Declared Test Tree, which is what `testpaths` names — a different question, and conflating the two is what the term exists to stop. _Avoid_: Rootdir, Rootdir package (both taken, and neither is this).
 
 **Scope Entry** — One element of the doctest scope/skip grammar. Four forms: `Prefix` (`dir/`), `File` (`f.py`), `Symbol` (`f.py::name`), `Member` (`f.py::Cls::name`).
 

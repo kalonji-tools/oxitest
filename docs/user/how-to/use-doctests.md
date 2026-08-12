@@ -63,7 +63,33 @@ Members are opt-in per method: `"Cls"` alone does not walk the class body, and t
 
 **Skip is subtractive, not additive.** `skip = ["file.py::Cls::method"]` only removes a subject that some `scope` entry already put into scope. A skip Member entry combined with a whole-file scope (`scope = ["file.py"]`) is a no-op — whole-file scope only enumerates top-level subjects, so there is no method subject to subtract; the skip entry becomes stale. Use `scope = ["file.py::Cls::method"]` first if you need the method in scope to then skip it (rare — usually just omit the entry entirely).
 
-**Explicit list entries bypass the leading-underscore filter.** `scope = ["src/mypkg/mod.py::_helper"]` will cover `_helper`, because naming it explicitly is opt-in. The scalar `scope = "public"` still filters underscored names — the private-bypass only applies to list-form entries. Built-in filters (`norecursedirs`, the `python_files` glob, `conftest.py`) always win, so a symbol inside `test_*.py` or `conftest.py` stays out even if you list it. The same filter applies to whole modules: under the scalar `scope = "public"`, a file whose dotted module path contains any `_`-prefixed component (`src/mypkg/_internal/helpers.py`, `src/mypkg/_compat.py`) is never scanned at all. Only a list-form `scope` entry naming the file opts it back in — `skip` entries get no such bypass, so a `skip` entry pointing into a private module silently has no effect, and is not reported stale either, because the guard only speaks to files the scan actually attempted to read. (A file the scan attempted but could not parse *is* reported — see [Files that fail to parse](#files-that-fail-to-parse).)
+**A leading underscore is never in scope, whatever you write.** A `_`-prefixed function or class is dropped when subjects are enumerated, so no `scope` entry brings it back — `scope = ["src/mypkg/mod.py::_helper"]` matches nothing and is reported as a stale entry. Built-in filters (`norecursedirs`, the `python_files` glob, `conftest.py`) always win, so a symbol inside `test_*.py` or `conftest.py` stays out even if you list it. The same filter applies to whole modules: under the scalar `scope = "public"`, a file whose dotted module path contains any `_`-prefixed component (`src/mypkg/_internal/helpers.py`, `src/mypkg/_compat.py`) is never scanned at all. Only a list-form `scope` entry naming the file opts it back in, and doing so switches this filter off for every file the entry covers — which is why narrowing the audit to a subtree belongs in [`roots`](#choosing-which-tree-is-audited) rather than in `scope`. `skip` entries get no such bypass, so a `skip` entry pointing into a private module silently has no effect, and is not reported stale either, because the guard only speaks to files the scan actually attempted to read. (A file the scan attempted but could not parse *is* reported — see [Files that fail to parse](#files-that-fail-to-parse).)
+
+### Choosing which tree is audited
+
+`testpaths` names where tests are found. The coverage audit needs a different
+answer — where public API lives — and `roots` is where you give it:
+
+```toml
+[tool.oxitest.doctest]
+scope = "public"
+roots = ["src/mypkg"]
+```
+
+Without `roots` the audit covers everything the project declares as its test
+surface. That is the right default for a project whose `testpaths` holds only
+tests, and the wrong one as soon as it holds a library root too: every helper
+module in the test tree becomes a public subject.
+
+`roots` selects **files**. `scope` and `skip` still select **subjects within**
+them, so `scope = "public"` keeps filtering private names — which is what
+separates `roots` from narrowing the audit with a list-form `scope`. A
+`scope = ["src/mypkg/"]` entry reaches the same files and switches the
+private-module filter off on the way, so every `_internal` module under it
+becomes a subject too.
+
+An entry naming a path that is not on disk is refused. It would not narrow the
+audit, it would empty it, and a run that audits nothing otherwise exits green.
 
 ### Skipping subjects
 
@@ -192,11 +218,13 @@ Discovery uses Rust AST analysis — files without `>>>` examples are
 skipped without importing them into Python.
 
 **Test infrastructure is auto-excluded from public-subject coverage.**
-Files named `conftest.py` (at any nesting level) and files matching
-`python_files` (default `test_*.py`) are skipped from the coverage
-rule's subject enumeration — their top-level definitions are fixture
-registrations and test helpers by pytest/oxitest convention, not
-public API. Their docstrings can still contain `>>>` blocks that get
+Files matching `python_files` (default `test_*.py`) are skipped from the
+coverage rule's subject enumeration, and so are files named `conftest.py`
+at any nesting level. The `conftest.py` rule is a migration cushion rather
+than a statement about the file: oxitest does not load `conftest.py` at all,
+so it registers nothing, and a project arriving from pytest still has one
+full of undocumented fixture functions. Set [`roots`](#choosing-which-tree-is-audited)
+and the question stops arising — the audit never reaches the test tree. Their docstrings can still contain `>>>` blocks that get
 collected and run as regular doctests; only the coverage rule ignores
 them.
 

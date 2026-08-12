@@ -1,6 +1,6 @@
 # ADR-0010: Doctest staleness is a static property, not a run outcome
 
-**Status:** Accepted (amended 2026-08-06 — see [Amendments](#amendments))
+**Status:** Accepted (amended 2026-08-06, 2026-08-12 — see [Amendments](#amendments))
 **Date:** 2026-08-01
 
 The doctest coverage guard reports a scope or skip entry as *stale* when it looks like a typo, so a mistyped path (`src/mod.py` vs `src/mods.py`) cannot silently bypass coverage enforcement. Three successive predicates shipped for this guard and all three were wrong (#1796, attempts 1–3), each fixing the previous hole and opening a new one.
@@ -112,3 +112,54 @@ report `scope = ["tests/test_one.py"]` while staying silent on
 `scope = ["tests/"]`. An asymmetry users would read as a bug, with no
 principled defence. If it is ever built it needs its own grilling, not a fourth
 predicate written from this paragraph.
+
+### Amendment 2 — the declared root set becomes declarable (2026-08-12)
+
+[#1790](https://github.com/kalonji-tools/oxitest/issues/1790) adds
+`[tool.oxitest.doctest] roots`. Amendment 1 defined reachability against the
+declared test tree, `D`. This amendment changes what `D` can be, and nothing
+else.
+
+**The invariant holds.** `roots` is read from configuration and resolved against
+the filesystem. It is not `FilterConfig`, and it cannot say whether *this* run
+was narrowed, so the load-bearing invariant above is untouched — `--affected`,
+`--lf`, `--ff`, `-E` and explicit CLI paths still need no special case.
+
+**Why `D` needed to become declarable.** `testpaths` answers *"where are the
+tests?"*. The coverage audit was reading it as *"where does public API live?"*.
+Those are different questions, and a project that declares both a test root and
+a library root under `testpaths` — as oxitest itself does — cannot distinguish
+them. Measured on `2247a508`, oxitest's own tree with the audit at
+`scope = "public"` and no `skip`: **49** collection errors, every one a test
+helper.
+
+The audit could not be narrowed any other way. A list-form `scope` reaches the
+right files and switches the module-path privacy filter off with them
+(`src/doctest/subjects.rs`), so the same intent expressed as
+`scope = ["python/oxitest/"]` produces **221** collection errors instead of
+none. Scoping and privacy were mutually exclusive, and the `skip` entries this
+project carried were not a workaround for one filter — they were the only way it
+could state its intent at all.
+
+**Why not derive `D` from packaging metadata.** A generator reading
+`[tool.maturin] python-source`, setuptools `packages` or `[project]` would be
+zero-config and correct by construction where it works. It was rejected because
+it does not work here: this project's own `python-source = "python"` is the
+**parent** of both `python/oxitest` and `python/tests`, so deriving from it
+reproduces exactly the ambiguity being removed. A mechanism that silently does
+nothing for the project that motivated it is worse than one line of config.
+
+**Why `roots` is opt-in.** `docs/user/reference/stability.md` places every
+`[tool.oxitest]` key documented in the reference under semver protection, and
+`v4.0.0` shipped on 2026-08-09. Changing what `scope = "public"` covers is a
+major-version change. So an unconfigured project keeps today's behaviour, and
+the `conftest.py` exclusion in the subject enumeration **stays** as a migration
+cushion for it — a project arriving from pytest still has a `conftest.py` full of
+undocumented fixture functions, even though oxitest stopped loading the file in
+[#1720](https://github.com/kalonji-tools/oxitest/issues/1720). That exclusion's
+expiry condition is this key's default flipping, which waits for a major version.
+
+**One call, still.** `roots` is resolved inside `collector::coverage_roots`,
+which both the coverage walk and the staleness guard call. Resolving it at either
+caller instead would let the two compute `D` separately — the "correct entry
+reported stale" shape that reopened #1796 three times.
