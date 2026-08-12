@@ -51,8 +51,25 @@ def _attach(mod: types.ModuleType, name: str, obj: object) -> None:
     — or not refused at all.
     """
     if isinstance(obj, type):
-        obj.__module__ = mod.__name__
+        _adopt(obj, mod.__name__)
     setattr(mod, name, obj)
+
+
+def _adopt(cls: type, home: str, seen: set[int] | None = None) -> None:
+    """Give *cls* and every class nested in it *home* as their ``__module__``.
+
+    Nested too, because a class defined inside another in a real module reports
+    that module, not the outer class. Adopting only the outer one models a shape
+    Python never produces, and the registrar would then skip the inner class.
+    """
+    seen = set() if seen is None else seen
+    if id(cls) in seen:
+        return
+    seen.add(id(cls))
+    cls.__module__ = home
+    for nested in vars(cls).values():
+        if isinstance(nested, type):
+            _adopt(nested, home, seen)
 
 
 # --------------------------------------------------------------------------

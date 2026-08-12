@@ -37,7 +37,7 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 **Signal** — Changes the test's *outcome* rather than returning a value, and is meaningless with no runner to react. `oxi.skip()` raises `unittest.SkipTest`, which the runner maps to a skipped result; the test never catches it. Annotated `NoReturn`, because it does not come back. `oxi.importorskip()` is a **hybrid** — Library on the success path, where it returns the module, and Signal on the failure path.
 
-**Declaration** — Read at import time, before any test runs, to attach metadata. `mark.skip`, `mark.xfail`, `@oxi.parametrize`, and the `@oxi.fixture` decorator itself. Distinct from Signal by *when*: `mark.skip` decides before setup, `oxi.skip()` decides after setup has already begun.
+**Declaration** — Read at import time, before any test runs. `mark.skip`, `mark.xfail`, and `@oxi.parametrize` **attach metadata to a test that already exists**; the `@oxi.fixture` decorator **declares a new entity**, which must be named, anchored, scoped and resolved. The two operations share a syntax and nothing else — which is why the first three reach a method of a `Test*` class and `@oxi.fixture` does not (#2068). Distinct from Signal by *when*: `mark.skip` decides before setup, `oxi.skip()` decides after setup has already begun.
 
 ## Parametrize
 

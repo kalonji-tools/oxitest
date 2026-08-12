@@ -107,10 +107,11 @@ def register_module_source_fixtures(
         # skipped and go unrefused, which is today's behaviour rather than a
         # worse one. Misattributing is the failure worth avoiding.
         if isinstance(obj, type):
-            if getattr(obj, "__module__", None) == fixture_module.__name__:
-                violations.extend(
-                    _method_fixture_violations(obj, attr_name, module_path)
+            violations.extend(
+                _method_fixture_violations(
+                    obj, attr_name, module_path, home=fixture_module.__name__
                 )
+            )
             continue
 
         # isinstance, not a truthiness or None check. `getattr` is a probe, and
@@ -406,7 +407,12 @@ def _method_fixture_message(fn_name: str, class_name: str, module_path: str) -> 
 
 
 def _method_fixture_violations(
-    cls: type, class_name: str, module_path: str, seen: set[int] | None = None
+    cls: type,
+    class_name: str,
+    module_path: str,
+    *,
+    home: str,
+    seen: set[int] | None = None,
 ) -> list[str]:
     """Every @oxi.fixture reachable inside *cls*, including nested classes.
 
@@ -419,11 +425,18 @@ def _method_fixture_violations(
     inside a *function* body is unreachable rather than mis-homed, and two
     definitions in this repo's own suite take that shape.
 
+    *home* is the ``__name__`` of the module being registered. ``vars()`` also
+    holds every imported name, so without this a ``from helpers import Base``
+    would put Base's declaration in this module's list, naming this file for a
+    definition in another — the misattribution this refusal exists to remove.
+
     *seen* holds the classes already walked. A class can hold a reference to
     itself or to an ancestor, and without this the descent recurses until
     ``RecursionError`` — which reaches the user as a crash rather than as the
     diagnostic this function exists to produce.
     """
+    if getattr(cls, "__module__", None) != home:
+        return []
     seen = set() if seen is None else seen
     if id(cls) in seen:
         return []
@@ -434,7 +447,7 @@ def _method_fixture_violations(
         if isinstance(raw, type):
             found.extend(
                 _method_fixture_violations(
-                    raw, f"{class_name}.{attr_name}", module_path, seen
+                    raw, f"{class_name}.{attr_name}", module_path, home=home, seen=seen
                 )
             )
             continue
