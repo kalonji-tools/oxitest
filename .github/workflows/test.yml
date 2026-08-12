@@ -281,10 +281,27 @@ jobs:
           # guarding nothing.
           #
           # The observed set is printed before it is judged, on every run. That
-          # is the only record of what `toJSON(needs)` actually serialises —
-          # whether a skipped job appears here at all decides whether the
-          # vacuity guard can fire spuriously, and no local test can answer it.
+          # is the only record of what `toJSON(needs)` actually serialises.
+          #
+          # Whether a skipped job appears here at all decides whether the
+          # vacuity guard can fire spuriously. It does appear, carrying
+          # `result: "skipped"` — measured 2026-08-12 on run 31608777438, where
+          # `Docs (required)` printed `build: skipped` / `doc-tests: skipped`
+          # and passed. So `length` counts skipped jobs, `length == 0` is
+          # unreachable by jobs skipping, and the guard is reached only by
+          # editing the `needs:` list above (#2076).
           # Read this list against the `needs:` above when changing either.
+          #
+          # This block is deliberately NOT extracted into a composite action,
+          # and the three copies are deliberate (#2075). actionlint cannot read
+          # a composite — it parses one as a workflow and reports spurious
+          # syntax errors (#1974) — so moving these lines out would cost them
+          # their shellcheck coverage, to save two edits. The drift that three
+          # copies risk is held by `python/tests/test_rollup_results_check.py`,
+          # which reads this program out of every rollup and asserts they agree.
+          #
+          # Do not start a comment line here with the word shellcheck: it is
+          # read as a `# shellcheck …` directive and fails the lint (SC1073).
           echo "Jobs this rollup waited on:"
           echo "$NEEDS" | jq -r 'del(.changes) | to_entries[] | "  \(.key): \(.value.result)"'
           echo "$NEEDS" | jq -e '
