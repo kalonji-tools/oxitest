@@ -30,7 +30,20 @@ use crate::types::{DurationMs, OutcomeKind};
 ///
 /// Bump this whenever a change makes collection refuse something it previously
 /// accepted.
-const CACHE_VERSION: u32 = 3;
+///
+/// Bumped 3 → 4 by #2068. A `@oxi.fixture` on a class method is now refused at
+/// registration, and registration happens at import. The item cache is gated on
+/// `has_fixture_shaped_decorator` (`prescan.rs:957`), which scans **top-level**
+/// statements only and sends `ClassDef` to its `_ => return false` arm — so a
+/// file whose only fixture decorator sits inside a class stays cache-eligible,
+/// and a warm entry written before this change serves its items without ever
+/// importing the file. The refusal would then not fire.
+///
+/// One bump is sufficient rather than widening the prescan predicate: mtime
+/// covers the steady state, because adding a method fixture edits the file, and
+/// a refused file writes no entry. Only the pre-upgrade entry is unreachable by
+/// mtime, and that is exactly what this discards.
+const CACHE_VERSION: u32 = 4;
 
 /// Timing and outcome record for a single test, stored by node ID.
 ///
