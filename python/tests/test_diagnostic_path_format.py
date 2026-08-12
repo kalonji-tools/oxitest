@@ -224,8 +224,27 @@ def test_the_run_announces_its_rootdir(tmp: oxitest.TempDir) -> None:
 
     stdout, _stderr, _code = helpers.run_oxitest(root)
 
-    assert f"rootdir: {root}" in stdout, (
+    # Compared by identity, not by spelling. Windows canonicalises to the
+    # extended-length form, so the run announces
+    # `\\?\C:\Users\...\test_x` where TempDir hands back `C:\Users\...\test_x`.
+    # That prefix is how oxitest spells every path on Windows — its own failure
+    # lines carry it too — so an exact-match assertion tested the spelling
+    # rather than the claim, and it failed on a header that was correct.
+    announced = next(
+        (
+            line.removeprefix("rootdir:").strip()
+            for line in stdout.splitlines()
+            if line.startswith("rootdir:")
+        ),
+        None,
+    )
+    assert announced is not None, (
         "a diagnostic prints paths relative to the rootdir, so a run that "
         "never names the rootdir gives the reader no way to resolve one; "
         f"got {stdout.splitlines()[:2]!r}"
+    )
+    assert Path(announced).samefile(root), (
+        "the announced rootdir must be the directory the diagnostics are "
+        f"relative to, or the reader resolves them against the wrong tree; "
+        f"announced {announced!r}, ran against {str(root)!r}"
     )
