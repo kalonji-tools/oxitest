@@ -7,6 +7,8 @@ activated through `plugins = [...]`, relying on rootdir being importable
 
 from __future__ import annotations
 
+import os
+
 from oxitest import TempDir
 from tests import helpers
 from tests.integration import helpers as integ
@@ -627,4 +629,38 @@ def test_plugin_anchor_seed_matches_in_a_worker(tmp: TempDir) -> None:
     assert _SHADOW not in out, (
         "the plugin home was registered twice on the parallel path: the "
         "worker's anchor spelling did not match the collected directory"
+    )
+
+
+def test_plugin_anchor_seed_matches_when_imported_off_sys_path(tmp: TempDir) -> None:
+    """The anchor is spelled the same when the plugin is not reached via rootdir.
+
+    `ensure_rootdir_importable` *appends* the rootdir to `sys.path`, and the
+    rootdir arrives canonicalised from Rust. A vendored plugin is therefore
+    normally imported through that entry and inherits its spelling, which is
+    why the two sides agree even on Windows — `ntpath.realpath` keeps an
+    extended-length prefix that the input already carries, and adds none that
+    it does not.
+
+    An editable install breaks that: `pip install -e .` puts its own entry on
+    `sys.path`, ahead of the appended rootdir and spelled however pip recorded
+    it. `collect_items` names this case (*"installed with `pip install -e .`
+    from inside the repo"*). `PYTHONPATH` reproduces it without an install —
+    the same directory, reached through an entry Rust never canonicalised.
+
+    If any spelling can break the dedup seed, it is this one (#1767).
+    """
+    # Arrange
+    _write_seed_project(tmp)
+    env = {**os.environ, "PYTHONPATH": str(tmp)}
+
+    # Act
+    out, _, rc = helpers.run_oxitest(tmp, "--warnings", cwd=".", env=env)
+
+    # Assert
+    integ.assert_passed(out, rc, count=1)
+    assert _SHADOW not in out, (
+        "the plugin home was registered twice: reached through a sys.path "
+        "entry the collector never canonicalised, its anchor's spelling did "
+        "not match the collected directory"
     )
