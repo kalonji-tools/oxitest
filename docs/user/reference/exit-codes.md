@@ -11,7 +11,7 @@
 | `0` | All tests passed, or a **valid** target collected no tests. A target that does not exist exits `4`, not `0` — see below. Also exits with 0 when `oxitest env` is used (no tests are run). Flaky tests (failed on first attempt, passed on retry) are not counted as failures and do not affect this code. |
 | `1` | One or more tests failed or errored |
 | `2` | Run interrupted (e.g. `-x` or `--maxfail` reached) |
-| `3` | Collection error (a test file could not be imported) or strict violations detected when using `--strict=abort` |
+| `3` | Collection error — a test file could not be imported, **or a declaration inside it was refused** (see [Malformed test declarations](#malformed-test-declarations)) — or strict violations detected under `strict = "abort"` |
 | `4` | `UsageError` — the request itself was invalid. Defined by the **class** of the error, not by when oxitest detects it. Sources: invalid CLI arguments; **a target that does not exist** (a path, a directory, or a literal node ID matching no test); `--json` output file cannot be written; `[tool.oxitest]` in `pyproject.toml` has unknown fields, wrong types, or values pointing at removed options; **a fixture wiring error found while a test runs** (see below). See [Error reference — Configuration errors](errors.md#configuration-errors), [ADR-0008](../../adr/0008-config-fail-closed-narrow-scope.md) and [ADR-0014](../../adr/0014-target-validation.md). |
 
 ## Targets
@@ -56,6 +56,23 @@ Three kinds count:
 A misspelt fixture name on a `Fixture[T]` parameter is different: it is refused at collection and exits `3`, because the collection validator checks names before anything runs.
 
 Exit `4` outranks both `1` and `3`. A run that holds a wiring error *and* a failed assertion exits `4`: a suite that is wired wrong makes its own assertion results untrustworthy.
+
+## Malformed test declarations
+
+Some declarations are refused **before any test runs**, and the run stops with exit `3`. These are collection errors, but nothing failed to import — the file parsed and imported cleanly, and what oxitest refused was the shape of a declaration inside it.
+
+Two exist today:
+
+- **A generator test function.** A test containing `yield` is a generator function: calling it returns a generator and runs none of the body, so the test would be reported as passed having executed nothing. Refused with a message naming the function and the line. Applies to `async def` and to methods of a `Test*` class, and a `@mark.skip` does not suppress it — a skip is a decision about a test that could have run.
+- **An inline fixture above its lifetime cap.** A fixture declared in a test file is capped at `lifetime="module"`; `"package"` and `"process"` are refused with a message naming the sibling `__fixtures__.py` to move it to.
+
+The generator case has a **runtime counterpart that exits `4`**, and the split is the same one the fixture-wiring section describes. Two routes reach it, and neither is visible to collection: a decorator built with `functools.wraps` leaves `inspect.isgeneratorfunction` answering `False` on the wrapper, and an `async def` that *returns* a generator only produces one when it is awaited. Both are caught while the test runs, as a per-test error, and the run is **not** stopped:
+
+```bash
+oxitest                      # exit 4 — "1 error · 1 passed"
+```
+
+A **`return <value>`** in a test body is different again, and milder: the body did run. It is reported only under `strict` as `test-returns-value`, and exits `3` in abort mode with the other strict violations. See [Strict Mode](../explanation/strict-mode.md) and [ADR-0017](../../adr/0017-a-test-function-returns-none.md).
 
 ## See also
 
