@@ -93,6 +93,7 @@ ignore = [
 "scripts/post_review_findings.py" = ["S603", "S607"]
 "scripts/dispose_finding.py" = ["S603", "S607"]
 "scripts/check_closing_issues.py" = ["S603", "S607"]
+"scripts/check_disposition.py" = ["S603", "S607"]
 
 # ── Test data projects ──────────────────────────────────────────────────
 "python/tests/data/**" = ["D100", "D103", "D104"]
