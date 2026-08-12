@@ -1,3 +1,4 @@
+rootdir: <TMPDIR>
 collected 0 items
 
 COLLECTION ERRORS
