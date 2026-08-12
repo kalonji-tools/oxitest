@@ -38,10 +38,19 @@ from oxitest._bridge._timeout import (
     Timeout,
     TimeoutOff,
     TimeoutSet,
+    _timeout_context_class,
+    _timeout_message,
+    _TimeoutContext,
     extract_timeout_seconds,
+    finish_against_deadline,
     make_timeout_wrapper,
 )
-from oxitest._bridge.result import DiagnosticSeverity, TestResult, _error_result
+from oxitest._bridge.result import (
+    DiagnosticSeverity,
+    TestResult,
+    TimeoutResult,
+    _error_result,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,13 +297,23 @@ async def _teardown_async_generators(
 
 
 async def _async_test_core(
-    plan: ExecutionPlan, timeout_secs: int | None = None
+    plan: ExecutionPlan,
+    timeout_secs: int | None = None,
+    *,
+    context_cls: type[_TimeoutContext] | None = None,
 ) -> TestResult:
     """Await coroutines, run the test body, teardown async fixtures.
 
     ``timeout_secs`` is resolved upstream by ``_effective_timeout_secs`` so all
     three session middleware variants share identical async test logic and the
     ambient default reaches ``wait_for``, not only a per-test mark (#1998).
+
+    The Deadline is armed here rather than in ``make_timeout_wrapper``, and it
+    encloses the body alone. Fixture setup above and fixture teardown below are
+    outside it, which is the span a sync Deadline already bounded (#2082).
+
+    ``context_cls`` exists for tests, for the reason ``make_timeout_wrapper``
+    gives: it makes both arms reachable from one platform.
     """
     unpacked = await _unpack_async_fixtures(plan.kwargs)
     if isinstance(unpacked, TestResult):
@@ -306,9 +325,34 @@ async def _async_test_core(
     # loop has closed.
     token = async_teardown_sink.set(async_teardowns)
     try:
-        return await _run_with_timeout(
-            plan.fn, resolved, plan.no_message_lines, timeout_secs
-        )
+        cls = context_cls if context_cls is not None else _timeout_context_class()
+        if timeout_secs is None or not cls.bounds_blocking_calls:
+            # This arm cannot bound a blocking call, so arming it would buy an
+            # outcome name and no bound — measured, a 1s Deadline reported a
+            # timeout 3.02s late. `asyncio.wait_for` is the only enforcement
+            # here, and it already encloses the body alone (#2082).
+            return await _run_with_timeout(
+                plan.fn, resolved, plan.no_message_lines, timeout_secs
+            )
+        # This arm bounds a blocking call, which `wait_for` cannot, so it bounds
+        # everything `wait_for` would and `wait_for` is not armed. One timer per
+        # test is what keeps ADR-0016's fourth known limit from having a second
+        # participant (#2082).
+        ctx = cls(timeout_secs)
+        try:
+            with ctx:
+                result = await _run_with_timeout(
+                    plan.fn, resolved, plan.no_message_lines, None
+                )
+        except OxitestTimeoutError:
+            # Built here rather than left to the wrapper: the wrapper's own
+            # context is never entered for an async test, so its
+            # `effective_seconds` would report the requested value and lose an
+            # enclosing deadline's cap (ADR-0016 decision 1).
+            return TimeoutResult(
+                message=_timeout_message(ctx.effective_seconds, timeout_secs)
+            )
+        return finish_against_deadline(ctx, timeout_secs, result)
     finally:
         async_teardown_sink.reset(token)
         await _teardown_async_generators(async_teardowns)
