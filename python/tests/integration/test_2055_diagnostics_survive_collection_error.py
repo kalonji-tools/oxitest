@@ -47,6 +47,14 @@ PYPROJECT = """\
     testpaths = ["pkg"]
 """
 
+PYPROJECT_FX = """\
+    [project]
+    name = "probe"
+    version = "0.1.0"
+    [tool.oxitest]
+    testpaths = ["proj"]
+"""
+
 
 def _write_pkg(tmp: TempDir, extra: dict[str, str] | None = None) -> None:
     """Scaffold a package whose ``__init__.py`` cannot be parsed."""
@@ -193,6 +201,69 @@ def test_doctest_coverage_warning_survives_a_collection_error(tmp: TempDir) -> N
         "the doctest coverage rule fills the same queue as fixture "
         "registration, so a fix that only rescued registration diagnostics "
         f"would leave this one dropped: {out!r}"
+    )
+
+
+def test_fx_boundary_refusal_carries_the_diagnostic(tmp: TempDir) -> None:
+    """The third exit: ``refuse_fx_boundaries`` at ``collected.rs:74``.
+
+    ⚠️ The broken ``__init__.py`` sits in the package that holds the violating
+    test, and that placement is load-bearing. A first attempt put it in a
+    package of its own with no test files in it and produced **no diagnostic at
+    all** — prescan walks up from test files, so it never visited that package.
+    The run looked exactly like a fix that had failed. Moving the broken file
+    into ``admin/`` is what makes the diagnostic exist to be dropped.
+
+    The exit code must stay 4. ``refuse_fx_boundaries`` discards the helper's
+    return value on purpose, and a fix that returned it instead would change
+    this to 3 and silently undo the decision recorded above that function.
+    """
+    integ.write_project(
+        tmp,
+        tests={},
+        pyproject=PYPROJECT_FX,
+        extra_files={
+            "proj/__init__.py": "",
+            "proj/api/__init__.py": "",
+            "proj/api/__fixtures__.py": (
+                "import oxitest as oxi\n"
+                "\n"
+                '@oxi.fixture(lifetime="function")\n'
+                "def api_only() -> str:\n"
+                '    return "api"\n'
+            ),
+            "proj/api/test_api.py": (
+                "from oxitest import Fixtures\n"
+                "\n"
+                "def test_inside(fx: Fixtures) -> None:\n"
+                '    assert fx.api.api_only == "api", "the anchor sees its own"\n'
+            ),
+            # Unparsable, and in the package that holds the violating test.
+            "proj/admin/__init__.py": BROKEN_DECLARATIONS,
+            "proj/admin/test_admin.py": (
+                "from oxitest import Fixtures\n"
+                "\n"
+                "def test_cross(fx: Fixtures) -> None:\n"
+                '    assert fx.api.api_only == "api", "a sibling must not cross B1"\n'
+            ),
+        },
+    )
+
+    out, _err, rc = helpers.run_oxitest(tmp, "--warnings")
+
+    assert rc == 4, (
+        "a fixture wiring error exits 4 by the decision recorded above "
+        "refuse_fx_boundaries; 3 would mean the drain started returning the "
+        f"helper's exit code instead of discarding it: got {rc}\n{out}"
+    )
+    assert "fixture-boundary" in out, (
+        "the arrange step is the B1 refusal itself — without it this test "
+        f"measures an ordinary run and the assertion below proves nothing: {out!r}"
+    )
+    assert STDOUT_DIAGNOSTIC in out, (
+        "the boundary refusal is a third exit above the only drain, so it "
+        "discarded the registration diagnostic exactly as the other two did "
+        f"(#2055): {out!r}"
     )
 
 
