@@ -59,6 +59,46 @@ pub(in crate::pipeline) fn early_exit_with_error(
         .code()
 }
 
+/// Same as [`early_exit_with_error`], but drains both diagnostic channels into
+/// the reporter first (#2055).
+///
+/// `ready.rs` holds the only other drain, and every exit above it used to
+/// discard whatever the run had accumulated — including the diagnostic that
+/// explains the error being reported. An unparsable `pkg/__init__.py` registers
+/// no fixtures, so a test that uses one reports `fixture 'conn' not found`, and
+/// the parse failure that caused it reached `tracing::warn!` on stderr only.
+///
+/// Use this at any exit that already builds a reporter and sits after
+/// collection. [`early_exit_with_error`] stays for the `init_session` callers
+/// below: they run before collection, so the queue is empty, and the first of
+/// them has no session to drain.
+///
+/// `pending` is by value rather than `&mut` because the callers do not agree on
+/// what they hold. `session_ready::collect` owns `shared` and passes
+/// `std::mem::take`; the two `collected.rs` sites reach the queue through
+/// `&self` and pass a clone. Every one of them terminates the run, so no second
+/// drain can observe the difference.
+pub(in crate::pipeline) fn early_exit_with_diagnostics(
+    py: Python<'_>,
+    session: &bridge::FixtureSession,
+    pending: Vec<reporter::stats::DiagnosticEntry>,
+    errors: &[types::CollectError],
+    make_rep: &dyn Fn() -> Box<dyn reporter::Reporter>,
+) -> ExitCode {
+    let mut rep = make_rep();
+
+    let collection_diags = bridge::drain_session_diagnostics(py, session);
+    if !collection_diags.is_empty() {
+        rep.record_diagnostics(collection_diags);
+    }
+    if !pending.is_empty() {
+        rep.record_diagnostics(pending);
+    }
+
+    rep.finish(errors, false, &reporter::ReporterSession::new(0))
+        .code()
+}
+
 /// Prescan and register each activated plugin's `__fixtures__.py` (#1717).
 ///
 /// Drives the same prescan machinery as the collection walk, entered from the

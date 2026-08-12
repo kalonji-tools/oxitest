@@ -34,7 +34,7 @@ impl Pipeline {
             bridge::validate_fx_boundaries(py, session, &self.shared.fx_usages, &collected)
                 .map_err(|_| ExitCode::CollectError)?;
         if !boundary.is_empty() {
-            return Err(self.refuse_fx_boundaries(&boundary));
+            return Err(self.refuse_fx_boundaries(py, session, &boundary));
         }
 
         let errors = bridge::validate_fixture_names(py, session, items)
@@ -47,9 +47,19 @@ impl Pipeline {
         let registered = bridge::registered_fixture_names(py, session).unwrap_or_default();
         let full_message = super::super::format_fixture_errors(&errors, &registered);
         let err = types::CollectError::PyError(full_message);
-        Err(helpers::early_exit_with_error(&[err], &|| {
-            self.make_error_reporter()
-        }))
+        // This is the exit that reports `fixture 'conn' not found`, so it is the
+        // one that most needs the diagnostic explaining *why* the fixture is
+        // absent — an unparsable declaration file registers nothing (#2055).
+        // Cloned rather than taken: the queue is reachable only through `&self`
+        // here, and the run ends on this line.
+        let pending = self.shared.pending_diagnostics.clone();
+        Err(helpers::early_exit_with_diagnostics(
+            py,
+            session,
+            pending,
+            &[err],
+            &|| self.make_error_reporter(),
+        ))
     }
 
     /// Refuse the run over statically-visible `fx.` accesses that cannot resolve.
@@ -65,13 +75,25 @@ impl Pipeline {
     /// Every violation is reported, not the first: a run refused over one line
     /// would need re-running to find the next, which is the loop #1797 removed
     /// for absent targets.
-    fn refuse_fx_boundaries(&self, violations: &[(String, usize, String)]) -> ExitCode {
+    fn refuse_fx_boundaries(
+        &self,
+        py: Python<'_>,
+        session: &crate::bridge::FixtureSession,
+        violations: &[(String, usize, String)],
+    ) -> ExitCode {
         let mut out = String::from("fixture boundary violations found during collection:\n");
         for (module_path, lineno, message) in violations {
             out.push_str(&format!("\n  {module_path}:{lineno}\n    {message}\n"));
         }
         let err = types::CollectError::PyError(out);
-        helpers::early_exit_with_error(&[err], &|| self.make_error_reporter());
+        // Drains both channels (#2055). The helper's return value is discarded
+        // here exactly as its predecessor's was: the exit code is decided by the
+        // class of the error, not by the transition, and the doc comment above
+        // is the record of that decision.
+        let pending = self.shared.pending_diagnostics.clone();
+        helpers::early_exit_with_diagnostics(py, session, pending, &[err], &|| {
+            self.make_error_reporter()
+        });
         ExitCode::UsageError
     }
 

@@ -128,9 +128,19 @@ impl Pipeline {
         }
 
         if !errors.is_empty() {
-            return Err(helpers::early_exit_with_error(&errors, &|| {
-                shared.make_error_reporter()
-            }));
+            // Both channels drain here, not only in `ready` (#2055). This exit
+            // is upstream of the only other drain, so anything the run has
+            // accumulated — a registration diagnostic from `:75`, a doctest
+            // coverage warning from `:125` — would otherwise be discarded along
+            // with the explanation it carries.
+            let pending = std::mem::take(&mut shared.pending_diagnostics);
+            return Err(helpers::early_exit_with_diagnostics(
+                py,
+                &session,
+                pending,
+                &errors,
+                &|| shared.make_error_reporter(),
+            ));
         }
 
         // Merge session-phase violations with collection violations.
