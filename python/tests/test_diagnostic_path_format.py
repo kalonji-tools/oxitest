@@ -248,3 +248,34 @@ def test_the_run_announces_its_rootdir(tmp: oxitest.TempDir) -> None:
         f"relative to, or the reader resolves them against the wrong tree; "
         f"announced {announced!r}, ran against {str(root)!r}"
     )
+
+
+def test_a_sentinel_survives_a_working_directory_inside_the_rootdir(
+    tmp: oxitest.TempDir, patcher: oxitest.Patcher
+) -> None:
+    """The sentinel rule, in the one case the '..' rule cannot mask.
+
+    ``os.path.relpath`` resolves a relative input against the working
+    directory, so ``<plugin:suite>`` becomes ``<cwd>/<plugin:suite>``. When the
+    working directory is *outside* the rootdir that lands on a ``..`` climb and
+    the last rule returns the input unchanged — which is the right answer for
+    the wrong reason, and it hides the sentinel rule completely. A mutant that
+    deleted that rule survived the two sentinel tests above for exactly this
+    reason.
+
+    Inside the rootdir there is no climb, so ``<plugin:suite>`` would render as
+    ``sub/<plugin:suite>``: a fixture origin turned into a path that names no
+    file.
+    """
+    root = Path(tmp)
+    inside = root / "sub"
+    inside.mkdir()
+    patcher.chdir(inside)
+
+    shown = format_path("<plugin:suite>", str(root))
+
+    assert shown == "<plugin:suite>", (
+        "a sentinel names where a fixture came from when there is no file to "
+        "name, and relativising it invents a path that does not exist; "
+        f"got {shown!r}"
+    )
