@@ -37,6 +37,7 @@ from oxitest._bridge._errors import OxitestTimeoutError
 from oxitest._bridge.result import (
     DiagnosticSeverity,
     StatusKind,
+    TestResult,
     TimeoutResult,
     WarnedResult,
 )
@@ -373,6 +374,29 @@ def _timeout_message(effective: float, requested: int) -> str:
     )
 
 
+def finish_against_deadline(
+    ctx: _TimeoutContext, seconds: int, result: TestResult
+) -> TestResult:
+    """Rewrite a pass into a warning when the deadline was taken away.
+
+    Only a pass is rewritten. oxitest did not observe a failure — it observed
+    that it could not observe — so the outcome states that rather than
+    manufacturing a failure from an absence. A result that already carries its
+    own message keeps it (#2001).
+
+    Shared, because the sync wrapper and the async core enter their contexts at
+    different places (#2082) and must report a voided deadline identically.
+    """
+    if ctx.deadline_taken and result.status is StatusKind.PASSED:
+        return WarnedResult(
+            message=(
+                f"the {seconds}s deadline was cleared during this test,"
+                " so the test did not run under a deadline"
+            )
+        )
+    return result
+
+
 def make_timeout_wrapper(
     seconds: int,
     *,
@@ -384,16 +408,18 @@ def make_timeout_wrapper(
     The returned wrapper has the ExecutionWrapper signature:
     `wrapper(next_fn: Callable[[], TestResult]) -> TestResult`.
 
-    An async test already has its deadline enforced by ``asyncio.wait_for``.
-    The OS-level arm is layered on top only when it bounds something the loop
-    cannot see — a blocking call. Where it cannot, arming it buys nothing and
-    costs the post-``__exit__`` injection race (#1998), so it is skipped.
+    An async test arms its own timer inside the coroutine, in
+    ``_async_test_core``, around the body alone — so a Deadline bounds the same
+    span for an async test that it already bounded for a sync one (#2082).
+    Arming here as well would leave two timers holding the same value and armed
+    microseconds apart, which is the precondition in ADR-0016's fourth known
+    limit; measured, that gap falls from 503 ms to 0.045 ms.
 
     ``context_cls`` exists for tests: it makes both arms reachable from one
     platform, which is the only way either branch gets covered by CI.
     """
     cls = context_cls if context_cls is not None else _timeout_context_class()
-    arm = not (is_async and not cls.bounds_blocking_calls)
+    arm = not is_async
 
     def wrapper(next_fn: Any) -> Any:
         # Bound before the `with` rather than as `with cls(seconds) as ctx`, so
@@ -402,12 +428,13 @@ def make_timeout_wrapper(
         ctx = cls(seconds)
         try:
             if not arm:
-                # No OS-level arm: the event loop owns the deadline. The
-                # `except` below is still required — `_run_with_timeout` raises
-                # OxitestTimeoutError out of `asyncio.wait_for`, and this is the
-                # only place that turns it into a TimeoutResult. Returning a
-                # bare passthrough here let that error escape uncaught, which is
-                # invisible on any platform whose arm keeps the full wrapper.
+                # An async test owns its own deadline, armed inside the
+                # coroutine. The `except` below is still required — the async
+                # core raises OxitestTimeoutError out of `asyncio.wait_for` on
+                # the arm that has no OS timer, and this is the only place that
+                # turns it into a TimeoutResult. Returning a bare passthrough
+                # here let that error escape uncaught, which is invisible on any
+                # platform whose arm keeps the full wrapper.
                 return next_fn()
             with ctx:
                 result = next_fn()
@@ -415,17 +442,6 @@ def make_timeout_wrapper(
             return TimeoutResult(
                 message=_timeout_message(ctx.effective_seconds, seconds)
             )
-        if ctx.deadline_taken and result.status is StatusKind.PASSED:
-            # Only a pass is rewritten. oxitest did not observe a failure — it
-            # observed that it could not observe — so the outcome states that
-            # rather than manufacturing a failure from an absence. A result that
-            # already carries its own message keeps it (#2001).
-            return WarnedResult(
-                message=(
-                    f"the {seconds}s deadline was cleared during this test,"
-                    " so the test did not run under a deadline"
-                )
-            )
-        return result
+        return finish_against_deadline(ctx, seconds, result)
 
     return wrapper

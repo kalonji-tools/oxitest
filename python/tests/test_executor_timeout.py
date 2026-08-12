@@ -323,13 +323,25 @@ def test_async_test_keeps_an_arm_that_can_bound_blocking_calls() -> None:
             # dispatch decision and never arms a real timer.
             del exc_type
 
-    wrapper = make_timeout_wrapper(60, is_async=True, context_cls=_Probe)
-    wrapper(PassedResult)
+    async def body() -> None:
+        pass
+
+    plan = ExecutionPlan(
+        fn=body,
+        fn_name="test_x",
+        kwargs=MappingProxyType({}),
+        marks=(),
+        no_message_lines=(),
+        is_async=True,
+    )
+    asyncio.run(_async_test_core(plan, 60, context_cls=_Probe))
 
     assert entered == ["armed"], (
-        "the Unix arm must still be entered for async tests — asyncio.wait_for"
-        " cannot bound a coroutine that blocks, so this is the only mechanism"
-        " that covers that case"
+        "the arm that bounds blocking calls must still be entered for an async"
+        " test — asyncio.wait_for cannot bound a coroutine that blocks, so this"
+        " is the only mechanism that covers that case. #2082 moved the arming"
+        " out of make_timeout_wrapper and into _async_test_core, so this asserts"
+        " the new site; the guarantee itself did not change"
     )
 
 
@@ -884,7 +896,9 @@ def test_an_async_taken_deadline_downgrades_a_pass_to_warned() -> None:
     wrapper = make_timeout_wrapper(5, is_async=True, context_cls=_UnixTimeoutContext)
 
     # Act
-    result = wrapper(lambda: asyncio.run(_async_test_core(plan, 5)))
+    result = wrapper(
+        lambda: asyncio.run(_async_test_core(plan, 5, context_cls=_UnixTimeoutContext))
+    )
 
     # Assert
     helpers.assert_result(
