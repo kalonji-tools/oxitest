@@ -120,7 +120,16 @@ impl Config {
         // A present [tool.oxitest.doctest] table opts in — the doctest_enabled()
         // accessor returns true whenever this field is `Some`. To disable the
         // rule, drop the whole table.
-        if let Some(dt) = tc.doctest {
+        if let Some(mut dt) = tc.doctest {
+            // Resolved here, in the same arm and by the same rule as
+            // `testpaths` above, so both arms of `collector::coverage_roots`
+            // yield the same kind of path. Resolving at the accessor instead
+            // would leave one arm rootdir-absolute and the other joined on
+            // read — equivalent only because `join` on an absolute path
+            // replaces, which is a coincidence to rely on rather than a rule.
+            if let Some(root) = rootdir {
+                dt.roots = dt.roots.iter().map(|entry| root.join(entry)).collect();
+            }
             self.doctest = Some(dt);
         }
 
@@ -1053,6 +1062,26 @@ timeout = 30
         assert_eq!(
             settings.get("level").and_then(|v| v.as_str()),
             Some("DEBUG")
+        );
+    }
+
+    #[test]
+    fn doctest_roots_are_resolved_against_rootdir() {
+        // `collector::coverage_roots` returns whichever arm applies without
+        // touching the paths, so if roots arrived unresolved one arm would be
+        // rootdir-absolute and the other relative.
+        let cfg = Config::default().merge_toml(
+            toml::from_str::<OxitestConfig>(
+                "[doctest]\nscope = \"public\"\nroots = [\"src/pkg\"]\n",
+            )
+            .expect("parse"),
+            Some(camino::Utf8Path::new("/proj")),
+        );
+        assert_eq!(
+            cfg.doctest.expect("doctest table").roots,
+            vec![camino::Utf8PathBuf::from("/proj/src/pkg")],
+            "roots must be resolved against rootdir at merge, like testpaths, \
+             or the two arms of coverage_roots yield different kinds of path",
         );
     }
 

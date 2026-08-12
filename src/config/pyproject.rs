@@ -189,6 +189,21 @@ pub(super) struct OxitestConfig {
 #[serde(deny_unknown_fields)]
 pub struct DoctestConfig {
     pub scope: Option<DoctestScope>,
+    /// Source roots whose public API the coverage audit covers.
+    ///
+    /// Empty — the default — means the audit covers the declared test tree,
+    /// which is what `testpaths` names. That default is the defect this key
+    /// exists to fix: `testpaths` means "where tests are found", and the audit
+    /// borrowed it to mean "where public API lives". A project declaring both a
+    /// test root and a library root under `testpaths` cannot tell the audit
+    /// which is which, and no combination of `scope` and `skip` can say it —
+    /// a list-form `scope` narrows the file set but switches the module-path
+    /// privacy filter off with it (#1790).
+    ///
+    /// Selects **files**. `scope` and `skip` select **subjects within** them,
+    /// and still apply.
+    #[serde(default)]
+    pub roots: Vec<Utf8PathBuf>,
     /// Entries to exclude from doctest coverage. Same grammar as `scope`
     /// (list form): prefix, file, or `file.py::symbol`. Files/subjects
     /// matched by any skip entry are excluded from both enumeration and
