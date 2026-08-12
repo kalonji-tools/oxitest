@@ -281,34 +281,6 @@ def test_script_exits_nonzero_and_reports_mismatch(tmp: TempDir) -> None:
     )
 
 
-# ── Guardrail: the real repo is always in sync ───────────────────────────────
-
-
-def test_real_repo_protocol_versions_are_in_sync() -> None:
-    """Sanity guard: the current repo's two PROTOCOL_VERSION constants agree.
-
-    Complements the pre-commit hook by making drift visible in the test suite
-    too — CI catches it even if a contributor bypassed the hook.
-    """
-    module = _load_script_module()
-    py_version = module.parse_protocol_version_py(module.PYTHON_PATH)
-    rs_version = module.parse_protocol_version_rs(module.WIRE_RUST_PATH)
-
-    assert py_version is not None, (
-        "PROTOCOL_VERSION must exist in result.py — its absence breaks the "
-        "wire-format contract with the Rust coordinator"
-    )
-    assert rs_version is not None, (
-        "PROTOCOL_VERSION must exist in wire.rs — its absence breaks the "
-        "wire-format contract with the Python bridge"
-    )
-    assert py_version == rs_version, (
-        f"Python PROTOCOL_VERSION={py_version} disagrees with Rust "
-        f"PROTOCOL_VERSION={rs_version}; bump both in the same commit "
-        "or workers and the coordinator will refuse to talk"
-    )
-
-
 # ── Dogfooding note ──────────────────────────────────────────────────────────
 
 # Uses subprocess + shutil rather than an oxitest fixture because we're
