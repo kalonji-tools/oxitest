@@ -390,18 +390,19 @@ def test_sync_test_always_arms_even_when_blocking_calls_are_unbounded() -> None:
     )
 
 
-# ── The two arms bound different spans (#2082 AC1) ───────────────────────────
+# ── Both arms bound the same span: the call (#2082) ──────────────────────────
 #
-# The armed arm wraps the whole of `next_fn()` (`_timeout.py:412`), so it bounds
-# async fixture setup *and* the body. Where the arm is skipped, `asyncio.wait_for`
-# is the only enforcement left, and it is armed inside `_async_test_core` **after**
-# `_unpack_async_fixtures` returns (`_middleware.py:299` → `:251`), so it bounds
-# the body alone. One Deadline, two spans, decided by the arm.
+# A Deadline encloses the call of the test function. Fixture setup above it and
+# fixture teardown below it are outside, on both arms, which is the span a sync
+# Deadline already bounded. Before #2082 the armed arm wrapped the whole of
+# `next_fn()`, so it also bounded async fixture setup and teardown while the
+# unarmed arm bounded the body alone — one Deadline, two spans, decided by the
+# arm. The arming moved into `_async_test_core`, around the body.
 #
-# Only the unarmed half is asserted here, and deliberately: arming the real Unix
-# context needs SIGALRM, absent on Windows. The armed half is already settled by
-# `test_wait_for_never_governs_a_deadline_on_linux`, so pairing them here would
-# buy a skip on two platforms and no new coverage.
+# Each test below drives one arm through `context_cls`, which is what makes both
+# reachable from one platform. The tests that need to *enter* the real Unix
+# context guard on `hasattr(signal, "alarm")`, because SIGALRM is absent on
+# Windows.
 
 #: Longer than the deadline below, so a bounded setup cannot reach its end.
 _SETUP_SECONDS = 2
@@ -414,8 +415,11 @@ def test_an_unarmed_arm_leaves_async_fixture_setup_outside_the_deadline() -> Non
     `asyncio.wait_for` starts after the fixtures are unpacked, so it cannot bound
     them. A fixture that sleeps longer than the whole Deadline still runs to its
     end, and the test then reports **passed** — later than the limit the user
-    asked for. On Windows that is every async test (#1998 AC2), which makes a
-    hanging async fixture unbounded there.
+    asked for. On Windows that is every async test (#1998 AC2).
+
+    Since #2082 the armed arm does the same, because the Deadline encloses the
+    call alone. `test_an_armed_arm_leaves_async_fixture_setup_outside_the_deadline`
+    is the mirror of this test, and the pair is what says the two arms agree.
 
     The assertion is on the setup reaching its end rather than on elapsed wall
     time: a bound would have cancelled the sleep mid-flight, so the marker is
@@ -466,6 +470,136 @@ def test_an_unarmed_arm_leaves_async_fixture_setup_outside_the_deadline() -> Non
         f" inside its own {_SPAN_DEADLINE_SECONDS}s window, and only the unbounded"
         f" setup pushed the run past the Deadline. A TimeoutResult here means the"
         f" arm bounded the setup after all"
+    )
+
+
+def test_an_armed_arm_leaves_async_fixture_setup_outside_the_deadline() -> None:
+    """The arm that bounds blocking calls leaves fixture setup outside too.
+
+    The mirror of the test above, and the half that changed in #2082. Before it,
+    this arm enclosed the whole call and cut a slow setup at the Deadline; the
+    interrupt landed inside the fixture body, where the setup handler caught it
+    first and reported `Error in fixture 'dep': ` with an empty cause. The user
+    read that their fixture raised, and never read what raised it.
+
+    A blocking sleep is used rather than an awaiting one, because the blocking
+    case is the one this arm could always reach.
+    """
+    if not hasattr(signal, "alarm"):
+        return
+
+    # Arrange
+    setup_reached_its_end: list[str] = []
+
+    async def slow_setup() -> str:
+        # A blocking setup is the case under test. The awaiting
+        # form reported `timeout` before #2082; only the blocking form produced
+        # the mis-attributed `Error in fixture 'dep': ` this test pins.
+        time.sleep(_SETUP_SECONDS)  # noqa: ASYNC251
+        setup_reached_its_end.append("finished")
+        return "ready"
+
+    async def body(slow: str) -> None:
+        if slow != "ready":
+            raise AssertionError(slow)
+
+    plan = ExecutionPlan(
+        fn=body,
+        fn_name="test_x",
+        kwargs=MappingProxyType({"slow": slow_setup()}),
+        marks=(),
+        no_message_lines=(),
+        is_async=True,
+    )
+    wrapper = make_timeout_wrapper(
+        _SPAN_DEADLINE_SECONDS, is_async=True, context_cls=_UnixTimeoutContext
+    )
+
+    # Act
+    result = wrapper(
+        lambda: asyncio.run(
+            _async_test_core(
+                plan, _SPAN_DEADLINE_SECONDS, context_cls=_UnixTimeoutContext
+            )
+        )
+    )
+
+    # Assert
+    assert setup_reached_its_end == ["finished"], (
+        f"a {_SETUP_SECONDS}s fixture setup must reach its end under a"
+        f" {_SPAN_DEADLINE_SECONDS}s Deadline on this arm too, because a Deadline"
+        f" bounds the call and not the setup. An empty marker means the arm"
+        f" bounded the setup again, which is the state that reported a Deadline"
+        f" as a failure of the user's fixture"
+    )
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="the body finished inside its own window and only the unbounded setup"
+        " ran long, so the outcome is a pass — an ErrorResult here means the"
+        " Deadline fired inside the fixture again",
+    )
+
+
+def test_a_slow_async_teardown_is_not_cut_by_the_deadline() -> None:
+    """Fixture teardown runs outside the Deadline, so cleanup always completes.
+
+    Before #2082 the Deadline enclosed teardown. A teardown that blocked past the
+    limit was stopped part way, the teardown error handler absorbed the
+    interrupt, and the test reported **passed** — measured stopping at 1.00s
+    against a 3s teardown. The fixture never released what it took, and nothing
+    in the report said so.
+    """
+    if not hasattr(signal, "alarm"):
+        return
+
+    # Arrange
+    teardown_reached_its_end: list[str] = []
+
+    async def gen() -> AsyncGenerator[str]:
+        yield "ready"
+        # A blocking teardown is the case under test. The
+        # awaiting form reported `timeout`; only the blocking form produced the
+        # silent `passed` with cleanup stopped part way that this test pins.
+        time.sleep(_SETUP_SECONDS)  # noqa: ASYNC251
+        teardown_reached_its_end.append("finished")
+
+    async def body(dep: str) -> None:
+        if dep != "ready":
+            raise AssertionError(dep)
+
+    plan = ExecutionPlan(
+        fn=body,
+        fn_name="test_x",
+        kwargs=MappingProxyType({"dep": gen()}),
+        marks=(),
+        no_message_lines=(),
+        is_async=True,
+    )
+    wrapper = make_timeout_wrapper(
+        _SPAN_DEADLINE_SECONDS, is_async=True, context_cls=_UnixTimeoutContext
+    )
+
+    # Act
+    result = wrapper(
+        lambda: asyncio.run(
+            _async_test_core(
+                plan, _SPAN_DEADLINE_SECONDS, context_cls=_UnixTimeoutContext
+            )
+        )
+    )
+
+    # Assert
+    assert teardown_reached_its_end == ["finished"], (
+        f"a {_SETUP_SECONDS}s teardown must reach its end under a"
+        f" {_SPAN_DEADLINE_SECONDS}s Deadline. A fixture stopped part way never"
+        f" releases what it took, and the test still reports passed, so this"
+        f" marker is what keeps cleanup outside the Deadline"
+    )
+    helpers.assert_result(
+        result,
+        PassedResult,
+        why="the body finished inside its own window, so the outcome is a pass",
     )
 
 
