@@ -1154,6 +1154,41 @@ pub(super) fn collect_coverage_diagnostics(
         Some(StrictMode::Abort) => DiagnosticSeverity::Error,
     };
 
+    // A `roots` entry naming a path that is not on disk does not narrow the
+    // audit, it empties it — the walk yields nothing and the run is green
+    // having audited zero subjects. That is #1798's failure mode exactly, so it
+    // gets its own context rather than folding into stale-scope: a stale scope
+    // entry means "this entry matches nothing" while the audit still covers
+    // everything else.
+    //
+    // Severity comes from the strict dial like every other diagnostic here, per
+    // the note above. The context is registered in `split_coverage_diagnostics`
+    // so it hard-fails under `abort` instead of degrading to a pending warning.
+    let root_errors: Vec<crate::reporter::stats::DiagnosticEntry> = dt
+        .roots
+        .iter()
+        .filter(|entry| !config.rootdir.join(entry).exists())
+        .map(|entry| crate::reporter::stats::DiagnosticEntry {
+            severity: severity.clone(),
+            context: std::sync::Arc::from("doctest.coverage.missing-root"),
+            // Quoted as the user wrote it. `roots` arrives rootdir-resolved
+            // from `merge_toml`, and echoing the absolute form buries the one
+            // segment they can act on under the whole worktree path — the
+            // defect #1851 already tracks for fixture diagnostics.
+            message: format!(
+                "doctest roots entry '{}' names a path that does not exist \
+                 (remove the entry or fix the path); the coverage audit would \
+                 cover nothing",
+                entry.strip_prefix(&config.rootdir).unwrap_or(entry)
+            ),
+            file: None,
+            lineno: None,
+        })
+        .collect();
+    if !root_errors.is_empty() {
+        return root_errors;
+    }
+
     let root = ModuleRoot {
         root: config.rootdir.clone(),
         use_gitignore: config.paths.use_gitignore,
@@ -1186,9 +1221,17 @@ pub(super) fn collect_coverage_diagnostics(
                 !rel.file_name().is_some_and(|name| g.is_match(name))
             })
         })
-        // `conftest.py` is test infrastructure by pytest/oxitest convention —
-        // its top-level definitions are fixture registrations and helper setup,
-        // never public API. Excluded alongside `python_files` matches. See #1616.
+        // `conftest.py` is a file oxitest does not load: #1720 retired it, so it
+        // registers no fixture and sets nothing up. It is held out of the audit
+        // because a project migrating from pytest still has one full of
+        // undocumented fixture functions, and `roots` is opt-in so that project
+        // has not narrowed the audit yet (#1790).
+        //
+        // Expiry: revisit when the audit's default can stop covering the test
+        // tree, which is a change to a semver-protected key and so waits for a
+        // major version. The original reason here — "its top-level definitions
+        // are fixture registrations and helper setup" — was true under #1616
+        // and both halves died with #1720.
         .filter(|rel| rel.file_name() != Some("conftest.py"))
         .collect();
 
@@ -1212,6 +1255,7 @@ pub(super) fn collect_coverage_diagnostics(
     };
     let inputs = StalenessInputs {
         rootdir: &config.rootdir,
+        roots_declared: !dt.roots.is_empty(),
         coverage_roots: crate::collector::coverage_roots(config),
         scanned: &scanned_files.parsed,
         parse_failed: &scanned_files.parse_failed,
@@ -1244,6 +1288,11 @@ pub(super) fn collect_coverage_diagnostics(
 /// predicates violated it and each one reopened #1796 in a new shape.
 struct StalenessInputs<'a> {
     rootdir: &'a Utf8Path,
+    /// Whether `coverage_roots` came from `[tool.oxitest.doctest] roots` rather
+    /// than from the declared test tree. The `Unreachable` remedy names a key
+    /// to edit, and naming the wrong one sends the user to change a setting
+    /// that cannot fix their entry (#1790).
+    roots_declared: bool,
     /// The project's declared auditable surface, from
     /// [`crate::collector::coverage_roots`] — the same call the coverage walk
     /// uses, so the walk and the verdict cannot disagree about what is in
@@ -1426,8 +1475,13 @@ fn stale_diagnostics(
                 // pending warning under `abort`.
                 Staleness::Unreachable => (
                     context,
-                    "is outside the declared test tree, so it can never match \
-                     (add it to testpaths, or remove the entry)",
+                    if inputs.roots_declared {
+                        "is outside the doctest roots, so it can never match \
+                         (add it to roots, or remove the entry)"
+                    } else {
+                        "is outside the declared test tree, so it can never \
+                         match (add it to testpaths, or remove the entry)"
+                    },
                 ),
                 Staleness::NoSubjects => (
                     context,
@@ -1486,6 +1540,7 @@ pub(super) fn split_coverage_diagnostics(
                 | "doctest.coverage.stale-scope"
                 | "doctest.coverage.stale-skip"
                 | "doctest.coverage.parse-error"
+                | "doctest.coverage.missing-root"
         );
         if d.severity == DiagnosticSeverity::Error && is_hard_fail_context {
             let mut msg = d.message.clone();
@@ -1978,6 +2033,7 @@ mod tests {
                 ..Default::default()
             },
             doctest: Some(DoctestConfig {
+                roots: vec![],
                 scope: Some(DoctestScope::Public),
                 ..Default::default()
             }),
@@ -2019,6 +2075,7 @@ mod tests {
                 ..Default::default()
             },
             doctest: Some(DoctestConfig {
+                roots: vec![],
                 scope: Some(DoctestScope::Public),
                 ..Default::default()
             }),
@@ -2046,6 +2103,7 @@ mod tests {
         let cfg = crate::config::Config {
             rootdir: root,
             doctest: Some(DoctestConfig {
+                roots: vec![],
                 scope: Some(DoctestScope::Public),
                 ..Default::default()
             }),
@@ -2095,6 +2153,7 @@ mod tests {
                 ..Default::default()
             },
             doctest: Some(DoctestConfig {
+                roots: vec![],
                 scope: Some(scope),
                 ..Default::default()
             }),
@@ -2422,6 +2481,7 @@ mod tests {
         cfg.markers.strict = Some(StrictMode::Enforce);
         cfg.rootdir = Utf8PathBuf::from(".");
         cfg.doctest = Some(DoctestConfig {
+            roots: vec![],
             scope: Some(DoctestScope::List(vec![ScopeEntry::File(
                 Utf8PathBuf::from("nonexistent/mod.py"),
             )])),
@@ -2450,6 +2510,7 @@ mod tests {
         cfg.markers.strict = Some(StrictMode::Enforce);
         cfg.rootdir = Utf8PathBuf::from(".");
         cfg.doctest = Some(DoctestConfig {
+            roots: vec![],
             scope: Some(DoctestScope::Public),
             skip: vec![ScopeEntry::File(Utf8PathBuf::from("nonexistent/mod.py"))],
         });
@@ -2488,6 +2549,7 @@ mod tests {
         cfg.markers.strict = Some(StrictMode::Abort);
         cfg.rootdir = rootdir.to_owned();
         cfg.doctest = Some(DoctestConfig {
+            roots: vec![],
             scope: if as_scope {
                 Some(DoctestScope::List(vec![entry.clone()]))
             } else {
@@ -2538,6 +2600,177 @@ mod tests {
     /// model "nothing scanned".
     fn stale_count(cfg: &crate::config::Config, doctest_files: &[Utf8PathBuf]) -> usize {
         stale_messages(cfg, doctest_files).len()
+    }
+
+    /// A config carrying `roots`, and nothing else that would narrow the audit.
+    fn cfg_with_roots(
+        rootdir: &Utf8Path,
+        roots: &[&str],
+        declared: &[&str],
+    ) -> crate::config::Config {
+        use crate::config::{DoctestConfig, DoctestScope, StrictMode};
+        let mut cfg = crate::config::Config::default();
+        cfg.markers.strict = Some(StrictMode::Abort);
+        cfg.rootdir = rootdir.to_owned();
+        cfg.paths.declared_testpaths = declared.iter().map(Utf8PathBuf::from).collect();
+        // Rootdir-joined, because `merge_toml` resolves `roots` before the
+        // accessor ever sees them — the same treatment `testpaths` gets. A
+        // helper that stored them relative would test a config shape that
+        // cannot reach `coverage_roots` in a real run.
+        cfg.doctest = Some(DoctestConfig {
+            roots: roots.iter().map(|r| rootdir.join(r)).collect(),
+            scope: Some(DoctestScope::Public),
+            skip: vec![],
+        });
+        cfg
+    }
+
+    #[test]
+    fn empty_roots_leaves_coverage_roots_on_the_declared_tree() {
+        // The no-op guarantee the opt-in rests on. Measured end to end as well:
+        // with `roots` absent this repo reports the same 49 subjects as the
+        // binary built without the key at all.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        let cfg = cfg_with_roots(rootdir, &[], &["python/tests", "python/lib"]);
+        assert_eq!(
+            crate::collector::coverage_roots(&cfg),
+            vec![
+                Utf8PathBuf::from("python/tests"),
+                Utf8PathBuf::from("python/lib")
+            ],
+            "an absent roots key must not move the audit, or every project that \
+             never sets it changes behaviour on upgrade",
+        );
+    }
+
+    #[test]
+    fn roots_wins_over_the_declared_tree_and_resolves_against_rootdir() {
+        // The whole point: `testpaths` names where tests are found, `roots`
+        // names where public API lives, and a project declaring both a test
+        // root and a library root cannot say so any other way (#1790).
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        let cfg = cfg_with_roots(rootdir, &["python/lib"], &["python/tests", "python/lib"]);
+        assert_eq!(
+            crate::collector::coverage_roots(&cfg),
+            vec![rootdir.join("python/lib")],
+            "roots must win over declared_testpaths and arrive rootdir-absolute, \
+             because the walk and the staleness guard both compare against \
+             absolute paths",
+        );
+    }
+
+    #[test]
+    fn roots_wins_in_a_project_that_declares_no_testpaths() {
+        // The dimension the plan's ledger flagged as never varied: every
+        // measurement ran against a project that declares testpaths, and
+        // `roots` short-circuits *before* the undeclared branch that answers
+        // with the rootdir.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        let cfg = cfg_with_roots(rootdir, &["lib"], &[]);
+        assert_eq!(
+            crate::collector::coverage_roots(&cfg),
+            vec![rootdir.join("lib")],
+            "a zero-config project that declares roots must get them, not the \
+             rootdir fallback, or the audit silently widens to the whole tree",
+        );
+    }
+
+    #[test]
+    fn the_unreachable_remedy_names_roots_when_roots_is_what_defines_reach() {
+        // The remedy tells the user which key to edit. With `roots` declared,
+        // "add it to testpaths" sends them to change a setting that cannot fix
+        // their entry — the audit is not reading testpaths any more.
+        use crate::config::{DoctestConfig, DoctestScope, ScopeEntry, StrictMode};
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        std::fs::create_dir_all(rootdir.join("lib")).expect("create lib");
+        std::fs::create_dir_all(rootdir.join("tests")).expect("create tests");
+        let mut cfg = crate::config::Config::default();
+        cfg.markers.strict = Some(StrictMode::Abort);
+        cfg.rootdir = rootdir.to_owned();
+        cfg.paths.declared_testpaths = vec![Utf8PathBuf::from("lib"), Utf8PathBuf::from("tests")];
+        cfg.doctest = Some(DoctestConfig {
+            roots: vec![rootdir.join("lib")],
+            scope: Some(DoctestScope::Public),
+            skip: vec![ScopeEntry::Prefix(Utf8PathBuf::from("tests/"))],
+        });
+        let messages = stale_messages(&cfg, &[]);
+        assert_eq!(
+            messages.len(),
+            1,
+            "an entry outside the declared roots must still be reported \
+             unreachable, or roots silently swallows a typo",
+        );
+        assert!(
+            messages[0].contains("add it to roots"),
+            "the remedy must name the key that actually defines reach; got: {:?}",
+            messages[0],
+        );
+        assert!(
+            !messages[0].contains("testpaths"),
+            "naming testpaths here sends the user to edit a setting the audit \
+             is no longer reading; got: {:?}",
+            messages[0],
+        );
+    }
+
+    #[test]
+    fn a_roots_entry_naming_a_missing_path_is_refused() {
+        // It does not narrow the audit, it empties it: the walk yields nothing
+        // and the run is green having audited zero subjects. That is #1798's
+        // failure mode, so it gets its own context rather than folding into
+        // stale-scope.
+        let root = assert_fs::TempDir::new().expect("tempdir");
+        let rootdir = Utf8Path::from_path(root.path()).expect("utf8 tempdir");
+        let cfg = cfg_with_roots(rootdir, &["does/not/exist"], &["tests"]);
+        let diags = collect_coverage_diagnostics(&[], &cfg);
+        assert_eq!(
+            diags.len(),
+            1,
+            "a roots entry naming a missing path must produce exactly one \
+             diagnostic, or the audit covers nothing and says nothing",
+        );
+        assert!(
+            diags[0].message.contains("'does/not/exist'"),
+            "the message must quote the entry as written, not the resolved \
+             absolute path, which buries the actionable segment (#1851); got: {:?}",
+            diags[0].message,
+        );
+        assert_eq!(
+            diags[0].context.as_ref(),
+            "doctest.coverage.missing-root",
+            "the context must be the one registered in \
+             split_coverage_diagnostics, or it degrades to a pending warning \
+             under abort instead of hard-failing",
+        );
+    }
+
+    #[test]
+    fn a_missing_root_hard_fails_rather_than_pending() {
+        // The trap the neighbouring comment warns about: a context absent from
+        // split_coverage_diagnostics' list is silently downgraded.
+        use crate::reporter::stats::{DiagnosticEntry, DiagnosticSeverity};
+        let entry = DiagnosticEntry {
+            severity: DiagnosticSeverity::Error,
+            context: std::sync::Arc::from("doctest.coverage.missing-root"),
+            message: "roots entry names a path that does not exist".into(),
+            file: None,
+            lineno: None,
+        };
+        let (errors, pending) = split_coverage_diagnostics(vec![entry]);
+        assert_eq!(
+            errors.len(),
+            1,
+            "missing-root must hard-fail under abort; a pending warning lets a \
+             run that audited nothing exit 0",
+        );
+        assert!(
+            pending.is_empty(),
+            "nothing should remain pending, or the same defect is reported twice",
+        );
     }
 
     #[test]
@@ -2748,6 +2981,7 @@ mod tests {
         cfg.markers.strict = Some(crate::config::StrictMode::Abort);
         cfg.rootdir = rootdir.to_owned();
         cfg.doctest = Some(crate::config::DoctestConfig {
+            roots: vec![],
             scope: Some(crate::config::DoctestScope::Public),
             skip: vec![crate::config::ScopeEntry::Symbol {
                 file: Utf8PathBuf::from("mod.py"),
@@ -2794,6 +3028,7 @@ mod tests {
         cfg.markers.strict = Some(crate::config::StrictMode::Abort);
         cfg.rootdir = rootdir.to_owned();
         cfg.doctest = Some(crate::config::DoctestConfig {
+            roots: vec![],
             scope: Some(crate::config::DoctestScope::Public),
             skip: vec![crate::config::ScopeEntry::Symbol {
                 file: Utf8PathBuf::from("mod.py"),
@@ -2832,6 +3067,7 @@ mod tests {
         cfg.markers.strict = Some(crate::config::StrictMode::Abort);
         cfg.rootdir = rootdir.to_owned();
         cfg.doctest = Some(crate::config::DoctestConfig {
+            roots: vec![],
             // Public scope on purpose: under `List`, an explicitly-named file
             // bypasses the privacy gate, so the bug cannot be expressed there.
             scope: Some(crate::config::DoctestScope::Public),
@@ -2878,6 +3114,7 @@ mod tests {
         cfg.markers.strict = Some(crate::config::StrictMode::Abort);
         cfg.rootdir = rootdir.to_owned();
         cfg.doctest = Some(crate::config::DoctestConfig {
+            roots: vec![],
             scope: Some(crate::config::DoctestScope::Public),
             // `typo_thing` is the typo under test -- `mod.py` defines
             // `real_thing`, so nothing can ever match this entry.
@@ -2928,6 +3165,7 @@ mod tests {
         cfg.markers.strict = Some(crate::config::StrictMode::Abort);
         cfg.rootdir = rootdir.to_owned();
         cfg.doctest = Some(crate::config::DoctestConfig {
+            roots: vec![],
             scope: Some(crate::config::DoctestScope::Public),
             // `typo_method` is the typo under test -- `Widget` defines
             // `real_method`, so nothing can ever match this entry.
@@ -2979,6 +3217,7 @@ mod tests {
         cfg.markers.strict = Some(crate::config::StrictMode::Abort);
         cfg.rootdir = rootdir.to_owned();
         cfg.doctest = Some(crate::config::DoctestConfig {
+            roots: vec![],
             scope: Some(crate::config::DoctestScope::Public),
             skip: vec![crate::config::ScopeEntry::Member {
                 file: Utf8PathBuf::from("mod.py"),
@@ -3023,6 +3262,7 @@ mod tests {
         cfg.markers.strict = Some(crate::config::StrictMode::Enforce);
         cfg.rootdir = rootdir.to_owned();
         cfg.doctest = Some(crate::config::DoctestConfig {
+            roots: vec![],
             scope: Some(crate::config::DoctestScope::Public),
             skip: vec![],
         });
@@ -3070,6 +3310,7 @@ mod tests {
         cfg.markers.strict = Some(crate::config::StrictMode::Abort);
         cfg.rootdir = rootdir.to_owned();
         cfg.doctest = Some(crate::config::DoctestConfig {
+            roots: vec![],
             scope: Some(crate::config::DoctestScope::Public),
             skip: vec![crate::config::ScopeEntry::Symbol {
                 file: Utf8PathBuf::from("broken.py"),
@@ -3120,6 +3361,7 @@ mod tests {
         cfg.markers.strict = Some(crate::config::StrictMode::Abort);
         cfg.rootdir = rootdir.to_owned();
         cfg.doctest = Some(crate::config::DoctestConfig {
+            roots: vec![],
             scope: Some(crate::config::DoctestScope::List(vec![
                 crate::config::ScopeEntry::Symbol {
                     file: Utf8PathBuf::from("broken.py"),
@@ -3161,6 +3403,7 @@ mod tests {
         cfg.rootdir = rootdir.to_owned();
         cfg.paths.norecursedirs = vec!["fixtures".to_string()];
         cfg.doctest = Some(crate::config::DoctestConfig {
+            roots: vec![],
             scope: Some(crate::config::DoctestScope::Public),
             skip: vec![],
         });
@@ -3192,6 +3435,7 @@ mod tests {
         cfg.markers.strict = Some(crate::config::StrictMode::Abort);
         cfg.rootdir = rootdir.to_owned();
         cfg.doctest = Some(crate::config::DoctestConfig {
+            roots: vec![],
             scope: Some(crate::config::DoctestScope::Public),
             skip: vec![],
         });

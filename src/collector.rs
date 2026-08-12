@@ -134,7 +134,15 @@ fn collect_doctest_files_in(
 /// scope/skip entries against them. If the two ever compute their roots
 /// separately they can disagree silently, and the disagreement surfaces as a
 /// correct entry reported stale — the shape that reopened #1796 three times.
+/// An explicit `[tool.oxitest.doctest] roots` wins over both branches below.
+/// It is resolved here rather than at either caller so the walk and the
+/// staleness guard cannot disagree — see the note above.
 pub fn coverage_roots(config: &Config) -> &[Utf8PathBuf] {
+    if let Some(dt) = config.doctest.as_ref()
+        && !dt.roots.is_empty()
+    {
+        return &dt.roots;
+    }
     if config.paths.declared_testpaths.is_empty() {
         std::slice::from_ref(&config.rootdir)
     } else {
