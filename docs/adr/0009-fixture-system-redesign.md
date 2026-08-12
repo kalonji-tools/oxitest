@@ -60,7 +60,7 @@ A fixture accidentally placed in `helpers.py` or `utils.py` is invisible to the 
 |----------|----------|------------------|--------------------------|
 | `function` | The individual test | After the test completes | No effect |
 | `module` | The Python module (test file) | After all tests in the module complete | **Exactly once per module** — the module is kept inside one dispatch phase (Amendment 15) |
-| `package` | The directory subtree containing the declaration | After all tests in the subtree complete | **Exactly once per run** — collapses the subtree onto one worker |
+| `package` | The directory subtree containing the declaration | After all tests in the subtree complete | **Exactly once per run** — collapses the subtree onto one worker, and the subtree is kept inside one dispatch phase (Amendment 18) |
 | `process` | The process — a worker, or the coordinator | At process exit | **At most once per process**: `≤ 1 + N` for N workers, the `1` being the coordinator when an inprocess or arranged test resolves it |
 
 **A package is any directory.** `__init__.py` is not required and its absence does not make a directory ineligible. What the framework needs from a package is a subtree to bound disposal, to filter the B1 catalog, and to derive a namespace segment — a directory supplies all three. PEP 420 namespace packages are the norm in modern Python, so requiring the marker file would make oxitest stricter than the language itself, and would contradict this ADR's own principle that visibility is Python's job. `__init__.py` remains a legal and recommended *declaration home* for package-lifetime fixtures (Rule 1); it is not what *defines* the boundary. The two roles were originally conflated.
@@ -1076,3 +1076,42 @@ Measured on Linux 6.18.41 x86\_64, `oxitest 4.0.0`, each run after `rm -rf .oxit
 **A consequence this ADR never stated: reserved declaration files are imported during collection, so their module-level side effects run.** Any decorated top-level function is enough, including `@dataclass` or `@lru_cache` on something unrelated to oxitest. Over this repository's own tree, `python/**`, 141 files are named `__fixtures__.py` or `__init__.py`: **80** carry a decorated top-level definition and are imported, 61 do not. Narrowing the trigger to files that mention oxitest under some binding would skip **0** of the 80, so the narrowing is indistinguishable in practice while reopening the spelling hole; it is rejected on that measurement. None of the 80 holds a non-trivial module-level statement, so the side effect is currently theoretical here — it is stated because it is a property of the design, not of this repository.
 
 **The loud rejection is unchanged, and its message is not.** A genuinely unparsable declaration file is still refused — fatal for `__fixtures__.py`, a warning for an `__init__.py` the ancestor walk passed through, per Amendment 10's neighbour in `collection.rs` and [#1765](https://github.com/kalonji-tools/oxitest/issues/1765). What #1727 changed is that the refusal now names the cause and the line, and distinguishes a read failure from a parse failure. The two are different remedies, and one sentence covering both told the user neither. The inline declaration home already reported at that quality, because an unparsable `test_*.py` falls through to Python import and CPython names the line; this is the other two homes agreeing with it.
+
+### Amendment 18 — a declaring package subtree is kept inside one dispatch phase (2026-08-12)
+
+Tracked by [#2058](https://github.com/kalonji-tools/oxitest/issues/2058). Amends Rule 2's parallel-execution column for `package`, and **retracts two paragraphs of Amendment 15**. Everything else stands.
+
+**Amendment 15 shipped this rule for `module` and stated that `package` could not have it.** Both of its `package` paragraphs are withdrawn:
+
+> **The asymmetry with `package` is deliberate.** One tier up, `unarrange_declaring_subtrees` *excludes* a declaring subtree from arrangement rather than keeping it inside a component. A subtree spans modules and cannot be forced into one bucket; a module already **is** the scheduling unit.
+
+and
+
+> **`package` is unchanged and out of scope.** Keeping a package subtree inside one phase needs a cross-module dispatch unit the planner does not have, so `reject_inprocess_inside_package` stays.
+
+**The cross-module dispatch unit already existed.** `TaskGroup` is *"one or more modules run in a single process"*, it carries the declaring anchor, and `group_by_package` (#1710) has built one from a declaring subtree since that ticket. What was missing was ordering: `group_by_package` ran once per phase slice, downstream of a partition made over `ModuleGroup`, so the planner never saw the subtree. A subtree split across two phases produced two `TaskGroup`s carrying the same anchor, in two sessions.
+
+**A subtree can be forced into one bucket**, and it is now, in the same file whose comment said otherwise.
+
+**The same two routes Amendment 15 named apply one tier up**, and each was measured on Linux 6.18.41 x86\_64, CPython 3.12.13, `-n 2`, against a two-module declaring package:
+
+| Route | Split by | Builds before | Builds after |
+|---|---|---|---|
+| `partition_inprocess_groups` | one `@oxi.mark.inprocess` test | 2, in 2 PIDs | 1 |
+| `partition_by_fixture_groups` | `@oxi.arrange` on one module, **no mark involved** | 2, in 2 PIDs | 1 |
+
+Fixing the first route alone leaves the second double-building. That was measured, not assumed: with the mark rule in place and `unarrange_declaring_subtrees` removed, the arranged project still built twice.
+
+**The rules.** A directory that declares a `lifetime="package"` fixture never has its subtree spread across two dispatch phases. Under the mark, the whole subtree follows the mark — the anchor, not the module, is what the fixture is keyed by, so an unmarked sibling travels too. Under arrangement, the whole subtree travels inside one component; the first component any of its modules resolves to wins, which is the rule a declaring module already follows.
+
+**Scoping is what bounds the cost, and it is the part no exactly-once assertion can check.** An anchor with no marked test and no arranged module beneath it is untouched and keeps its worker. Without that, every declaring package in a suite would serialise onto the coordinator — and a suite that did so would still pass every exactly-once test. `test_a_declaring_package_subtree_without_a_mark_keeps_its_parallelism` is the assertion that can fail.
+
+**The cost, where a rule does fire, is one worker.** A declaring package is co-located onto a single worker whatever happens, and `warn_about_package_collapse` already reports that collapse. These rules move that one worker's work onto the coordinator; they do not take parallelism the subtree still had.
+
+**`unarrange_declaring_subtrees` cost more than its doc comment claimed.** It said the exclusion "costs some scheduling efficiency and nothing else". It also discarded the co-location: the subtree was pushed to a worker, so a user's `@oxi.arrange` had no effect. Keeping the subtree inside its component instead is the same objection `test_arrange_groups_at_module_tier_on_the_runner` raises one tier down, now answerable at this tier.
+
+**Nesting is unchanged and was re-measured.** `group_by_package` gives the outermost declaration the subtree. Both rules match anchors by path prefix, so an inner anchor's subtree is a subset of its ancestor's and the outer anchor claims it: a mark in an inner package moved the outer package's modules too, and each fixture was built once.
+
+**`process` is untouched.** It *"guarantees at most one instance per process, and constrains the scheduler not at all"*, so a phase boundary inside one process is not a violation of its contract. A rule that moves a subtree onto the coordinator is already inside that tier's `≤ 1 + N`, the `1` being the coordinator when an inprocess or arranged test resolves it.
+
+**`reject_inprocess_inside_package` is deleted, along with the restriction it enforced.** `@oxi.mark.inprocess` now works inside a declaring package. The data project that proved the rejection proves the exactly-once run instead.

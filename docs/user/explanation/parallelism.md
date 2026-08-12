@@ -88,6 +88,31 @@ dispatching to workers:
 This partitioning happens transparently. Run with `-v` (verbose) to see which
 tests land in each group and why.
 
+### A declaring package travels as one unit
+
+Each phase owns its own fixture session. A
+[`lifetime="package"`](../reference/python-api/fixture-declaration.md) fixture is
+exactly once per run, so its package cannot be split across two of the phases
+above — one instance would be built in each, and the guarantee would quietly
+stop holding.
+
+The partition therefore treats a declaring package as indivisible:
+
+- If **any** test anywhere under the declaring package is marked
+  `@oxi.mark.inprocess`, the whole package runs on the main process. An
+  unmarked test in that package follows its neighbours, because the package —
+  not the module — is what the fixture is keyed by.
+- If **any** module in the declaring package is arranged, the whole package
+  joins that component and runs on the main process with it.
+
+Both cost the package its worker. That worker was already the only one it had:
+a declaring package is co-located onto a single worker whatever else happens,
+and oxitest warns you when that costs a run its parallelism. Narrow the
+fixture's package, or drop it to `lifetime="module"`, if the cost matters.
+
+A package that declares a `package` fixture but neither marks nor arranges
+anything is unaffected and keeps its worker.
+
 ## Future: free-threaded Python
 
 CPython 3.13+ includes an experimental build mode without the GIL. When PyO3's support
