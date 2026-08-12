@@ -119,7 +119,7 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 ## Diagnostic System
 
-**Diagnostic** — A user-facing message emitted by the Python bridge and rendered by the Rust reporter. Carries severity (error, warning, notice), context (e.g. "fixture teardown"), message, and optional file/lineno. Frozen dataclass in `result.py`, `DiagnosticEntry` struct in `stats.rs`.
+**Diagnostic** — A user-facing message emitted by the Python bridge and rendered by the Rust reporter. Carries severity (error, warning, notice), context (e.g. "fixture teardown"), message, and optional file/lineno. Frozen dataclass in `result.py`, `DiagnosticEntry` struct in `stats.rs`. Every path a Diagnostic prints is shown against the **Rootdir**, and the run announces the Rootdir once at its start so a reader can resolve one (#1851). The base is never the worker's current directory, which is process-global and may be moved by `patch.chdir`. A path outside the Rootdir stays absolute, and `<plugin:…>` and `<builtin>` are origin labels rather than paths. Paths stay canonical **internally**: the relative form is display only.
 
 **DiagnosticSeverity** — One of `error`, `warning`, or `notice`. Controls color in the reporter summary block (red, yellow, dim) and sort order (errors first).
 

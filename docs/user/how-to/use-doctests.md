@@ -196,6 +196,7 @@ examples, both are collected:
 
 ```console
 $ oxitest --doctest-modules tests/
+rootdir: /home/you/projects/myproject
 collected 5 items
 
 tests/test_math.py::test_add                    PASSED

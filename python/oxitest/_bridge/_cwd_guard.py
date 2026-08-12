@@ -40,9 +40,14 @@ def _capture_safe_cwd() -> str | None:
         return None
 
 
-# Captured at import, before any test runs. This is the only restore target
-# reachable from both the serial PyO3 path and the parallel worker path --
-# `rootdir` reaches only worker.py, and the serial path never goes through it.
+# Captured at import, before any test runs.
+#
+# The rootdir would also be reachable from both paths — `bridge.rs` sets it in
+# the kwargs of `create_session` for the serial path, and `worker.py` passes it
+# for the parallel one — but it is the wrong target for this guard. This module
+# restores a directory that was *deleted*, and the rootdir is where the run was
+# rooted rather than where the process started; restoring to it would move a
+# worker that a test had legitimately placed somewhere else.
 _SAFE_CWD = _capture_safe_cwd()
 
 
