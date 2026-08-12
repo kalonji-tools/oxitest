@@ -16,6 +16,7 @@ from oxitest._bridge._fixture_registry import (
     FrameworkSource,
     PluginModuleSource,
 )
+from oxitest._bridge._paths import format_path
 
 _BUILTIN_MODULE_PREFIX = "oxitest._bridge._builtins"
 _BUILTIN_CONFTEST = "<builtin>"
@@ -28,9 +29,17 @@ _RESET = "\033[0m"
 class TreeRenderer:
     """Renders fixture dependency trees with optional ANSI color and verbosity."""
 
-    def __init__(self, *, use_color: bool = True, verbosity: int = 0) -> None:
+    def __init__(
+        self,
+        *,
+        use_color: bool = True,
+        verbosity: int = 0,
+        rootdir: str | None = None,
+    ) -> None:
         self._use_color = use_color
         self._verbosity = verbosity
+        #: The base an origin path is shown against (#1851).
+        self._rootdir = rootdir
 
     def _dim(self, text: str) -> str:
         if self._use_color:
@@ -62,7 +71,7 @@ class TreeRenderer:
             return f"{name}{tag_str}"
 
         # Verbosity 2: name + tags + origin
-        origin = _origin_header(defn)
+        origin = _origin_header(defn, self._rootdir)
         origin_str = f" ({origin})" if origin else ""
         if self._use_color:
             origin_str = f" {_DIM}({origin}){_RESET}" if origin else ""
@@ -185,7 +194,7 @@ def _origin_key(defn: FixtureDef[Any]) -> tuple[int, str]:
     return (2, defn.declaration_path)
 
 
-def _origin_header(defn: FixtureDef[Any]) -> str:
+def _origin_header(defn: FixtureDef[Any], rootdir: str | None) -> str:
     if _is_builtin(defn):
         return "built-in"
     if isinstance(defn.source, PluginModuleSource):
@@ -193,9 +202,9 @@ def _origin_header(defn: FixtureDef[Any]) -> str:
     if isinstance(defn.source, FrameworkSource) and not defn.source.origin:
         mod = getattr(defn.source.func, "__module__", "plugin")
         return f"plugin ({mod})"
-    if not isinstance(defn.source, FrameworkSource):
-        return defn.declaration_path
-    return defn.declaration_path
+    # Display only. `declaration_path` stays canonical because `_origin_key`
+    # sorts on it and two consumers test its exact value (#1851).
+    return format_path(defn.declaration_path, rootdir)
 
 
 # Graph coloring states for DFS cycle detection.
@@ -293,5 +302,7 @@ def tree_fixtures_from_registry(
     if pattern:
         roots = [r for r in roots if pattern in r]
 
-    renderer = TreeRenderer(use_color=use_color, verbosity=verbosity)
+    renderer = TreeRenderer(
+        use_color=use_color, verbosity=verbosity, rootdir=registry.rootdir
+    )
     return renderer.render(all_defs, graph, roots, total, pattern)

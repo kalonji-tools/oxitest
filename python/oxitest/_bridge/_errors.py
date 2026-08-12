@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 __all__ = [
     "AmbiguousFixtureError",
     "ArrangeError",
@@ -36,6 +34,8 @@ __all__ = [
 
 
 from typing import TYPE_CHECKING, Any
+
+from oxitest._bridge._paths import format_path
 
 if TYPE_CHECKING:
     from oxitest._bridge.result import TestResult
@@ -162,7 +162,7 @@ class BoundaryError(FixtureError):
     #: cited here never existed; ADR-0009 Amendment 3 retracted its dial.
     CODE = "fixture-boundary"
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 — four name the access, and the last two are the display base and the leaf probe
         self,
         name: str,
         namespace: str,
@@ -170,10 +170,11 @@ class BoundaryError(FixtureError):
         module_path: str,
         *,
         leaf_exists: bool = True,
+        rootdir: str | None = None,
     ) -> None:
         qualified = f"{namespace}.{name}" if namespace else name
-        anchor_rel = _relpath(anchor)
-        test_rel = _relpath(module_path)
+        anchor_rel = format_path(anchor, rootdir)
+        test_rel = format_path(module_path, rootdir)
         message = (
             f"[{self.CODE}] fixture '{qualified}' is not visible from this test.\n"
             f"  Fixture anchor: {anchor_rel}\n"
@@ -465,21 +466,6 @@ class BroadFixtureTypeError(FixtureError):
         self.broad_type = broad_type
 
 
-def _relpath(path: str) -> str:
-    """Format a source-code path for diagnostic messages.
-
-    Returns the CWD-relative path when possible, falling back to the absolute
-    path on cross-drive paths (Windows raises ValueError there). Intended as
-    the shared formatter for `__code__.co_filename` in any error class in
-    this module — matches the `Defined at:` / `Arranged at:` convention used
-    across fixture diagnostics.
-    """
-    try:
-        return os.path.relpath(path)
-    except ValueError:
-        return path
-
-
 # ─── Arrange errors ──────────────────────────────────────────────────────────
 
 
@@ -597,9 +583,15 @@ class ArrangeError(OxitestError):
 
     """
 
-    def __init__(self, fn: Any, illegal: list[tuple[str, Any]]) -> None:
+    def __init__(
+        self,
+        fn: Any,
+        illegal: list[tuple[str, Any]],
+        *,
+        rootdir: str | None = None,
+    ) -> None:
         code = fn.__code__
-        arranged_at = f"{_relpath(code.co_filename)}:{code.co_firstlineno}"
+        arranged_at = f"{format_path(code.co_filename, rootdir)}:{code.co_firstlineno}"
         count_word = (
             "1 illegal entry"
             if len(illegal) == 1
@@ -607,7 +599,7 @@ class ArrangeError(OxitestError):
         )
         illegal_lines = "\n".join(
             f"    - {name!r} (function scope) — defined at "
-            f"{_relpath(defn.source.func.__code__.co_filename)}:"
+            f"{format_path(defn.source.func.__code__.co_filename, rootdir)}:"
             f"{defn.source.func.__code__.co_firstlineno}"
             for name, defn in illegal
         )

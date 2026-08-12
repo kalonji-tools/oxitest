@@ -565,7 +565,11 @@ def _run_arrange_phase(
         test_is_async=test_is_async,
     )
     if illegal:
-        return ArrangeFailed(error=_error_result(str(ArrangeError(fn_raw, illegal))))
+        return ArrangeFailed(
+            error=_error_result(
+                str(ArrangeError(fn_raw, illegal, rootdir=effective_session.rootdir))
+            )
+        )
 
     cell: ArrangeReady | ArrangeReadyAsync = ArrangeReady()
 

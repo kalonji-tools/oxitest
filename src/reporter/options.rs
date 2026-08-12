@@ -22,6 +22,10 @@ pub struct ReporterOpts {
     pub(crate) show_durations: Option<usize>,
     pub(crate) name_width: usize,
     pub(crate) strict_suite_lines: Vec<String>,
+    /// The base a diagnostic path is shown against (#1851). `None` in the
+    /// test builder, which has no project. The run announces it so that a
+    /// relative path inside a diagnostic can be resolved.
+    pub(crate) rootdir: Option<camino::Utf8PathBuf>,
 }
 
 // ─── Builder ──────────────────────────────────────────────────────────────────
@@ -45,6 +49,7 @@ pub struct ReporterOptsBuilder {
     show_durations: Option<usize>,
     name_width: usize,
     strict_suite_lines: Vec<String>,
+    rootdir: Option<camino::Utf8PathBuf>,
 }
 
 impl ReporterOptsBuilder {
@@ -64,6 +69,7 @@ impl ReporterOptsBuilder {
             show_durations: None,
             name_width: DEFAULT_NAME_WIDTH,
             strict_suite_lines: vec![],
+            rootdir: None,
         }
     }
 
@@ -83,6 +89,7 @@ impl ReporterOptsBuilder {
             show_durations: cfg.output.durations,
             name_width: DEFAULT_NAME_WIDTH,
             strict_suite_lines: vec![],
+            rootdir: Some(cfg.rootdir.clone()),
         }
     }
 
@@ -160,6 +167,7 @@ impl ReporterOptsBuilder {
             show_durations: self.show_durations,
             name_width: self.name_width,
             strict_suite_lines: self.strict_suite_lines,
+            rootdir: self.rootdir,
         }
     }
 }
@@ -304,23 +312,23 @@ mod tests {
 
     #[test]
     fn test_print_collected_no_async() {
-        super::super::print_collected(10, 10, 0);
+        super::super::print_collected(10, 10, 0, None);
     }
 
     #[test]
     fn test_print_collected_with_async() {
-        super::super::print_collected(10, 10, 3);
+        super::super::print_collected(10, 10, 3, None);
     }
 
     #[test]
     fn test_print_collected_with_parametrize() {
         // fn_count < total triggers "from N functions" display
-        super::super::print_collected(45, 12, 0);
+        super::super::print_collected(45, 12, 0, None);
     }
 
     #[test]
     fn test_print_collected_with_parametrize_and_async() {
-        super::super::print_collected(45, 12, 5);
+        super::super::print_collected(45, 12, 5, None);
     }
 
     #[test]

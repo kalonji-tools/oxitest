@@ -474,10 +474,10 @@ def test_plugin_fixture_is_attributed_to_its_plugin_in_the_listing() -> None:
     """
     defn = _make_plugin_def()
 
-    assert _origin_header(defn) == "plugin (my_plugin)", (
+    assert _origin_header(defn, None) == "plugin (my_plugin)", (
         "falling through to the raw defining path prints a long site-packages "
         "string that tells a user nothing about which installed package owns "
-        f"the fixture; got {_origin_header(defn)!r}"
+        f"the fixture; got {_origin_header(defn, None)!r}"
     )
     assert _origin_key(defn) == (1, "my_plugin"), (
         "the sort key groups a plugin's fixtures together and beside the "
