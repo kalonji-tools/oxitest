@@ -80,6 +80,20 @@ Two run counts, and neither is a rate. Measured on macOS arm64, CPython 3.12, 3 
 
 Three remedies were weighed and refused. Removing the OS arm for async tests trades a rare, detected wrong result for a class of unbounded hangs, because that arm is the only thing that bounds a coroutine which blocks. Offsetting the OS timer past the loop's deadline would make the **span** a Deadline bounds depend on how slow the test's fixtures are. Loosening the two exposed tests would mean accepting the `WarnedResult`, which is the defect itself. Separately, the two timers do not bound the same span at all — filed as [#2082](https://github.com/kalonji-tools/oxitest/issues/2082), and that is why the offset was refused.
 
+### Audit — 2026-08-12
+
+**The fourth known limit above is no longer structural.** It says *"This is structural, not a coincidence of configuration — there is no combination of settings that avoids it."* That was true of the arrangement it described, where an async test on Unix armed `ITIMER_REAL` and `asyncio.wait_for` on the same value.
+
+[#2082](https://github.com/kalonji-tools/oxitest/issues/2082) changed the arrangement. A Deadline now bounds the **call of the test function**, and it is armed inside `_async_test_core` rather than around the whole of `next_fn()`. Exactly **one** timer is armed for one test: the OS arm where it bounds blocking calls, and `asyncio.wait_for` where it does not. With no `wait_for`, there is no `asyncio.timeouts.Timeout._on_timeout` for a `SIGALRM` to land inside, so the loss described above has no second participant.
+
+The entry is kept rather than deleted, because it records why the two-timer arrangement existed and what it cost. [#2070](https://github.com/kalonji-tools/oxitest/issues/2070) stays closed: it decided correctly for the code it decided against.
+
+**The remedy this ADR refused is also gone.** It says *"Offsetting the OS timer past the loop's deadline would make the **span** a Deadline bounds depend on how slow the test's fixtures are."* No offset was applied. The fixtures moved outside the span instead, so the span no longer depends on them at all.
+
+**Which timer governed is still observable, and the marker's meaning narrowed.** `leaked N task(s) (cancelled)` now records **which arm ran**, rather than which of two timers won a race. It still fires: measured on Linux 6.18.41 x86_64, CPython 3.12.13, `python -m oxitest run --timeout 1 --warnings` against a 3 s awaiting body, reporting `1 timeout` in 1.16 s with `leaked 1 task(s) (cancelled)` in the output.
+
+**Two tests carry the invariant.** `test_the_os_arm_leaves_wait_for_unarmed` asserts that `wait_for` is not armed where the OS arm is, and `test_an_arm_that_cannot_bound_blocking_calls_is_not_armed_for_async` asserts the reverse. Both exist because a mutant survived without them: on Linux `SIGALRM` wins every race, so restoring the second timer changes no outcome that a Linux assertion can read. What it changes is the gap between the two timers — measured at 502.6 ms before and 0.045 ms after — and that gap is this limit's window.
+
 ## Consequences
 
 - `signal.alarm` is gone from `_timeout.py`. Save-and-restore is not implementable on it: its read is destructive — `alarm(0)` returns the remaining seconds *and* cancels — and its granularity is integer seconds, so any sub-second remainder would restore as zero, which means cancel. `signal.setitimer`/`getitimer` drive the same `ITIMER_REAL` slot with a non-destructive read and float precision.
