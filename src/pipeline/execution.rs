@@ -656,6 +656,7 @@ fn execute_phases(
         ctx.cfg.exec.min_parallel_tests,
         &arranged_fixture_groups,
         &declaring_modules,
+        &declaring_package_dirs(ctx.fixture_modules),
         &arranged_display,
         estimated,
         cpu_count,

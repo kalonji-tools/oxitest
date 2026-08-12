@@ -1,0 +1,7 @@
+[tool.oxitest]
+testpaths = ["package_subtree_async"]
+python_files = ["test_*.py"]
+strict = "abort"
+# Force parallelism regardless of test count: a serial fallback would pass
+# vacuously, because the serial answer was already correct.
+min_parallel_tests = 1

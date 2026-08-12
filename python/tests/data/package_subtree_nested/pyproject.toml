@@ -1,0 +1,5 @@
+[tool.oxitest]
+testpaths = ["package_subtree_nested"]
+python_files = ["test_*.py"]
+strict = "abort"
+min_parallel_tests = 1
