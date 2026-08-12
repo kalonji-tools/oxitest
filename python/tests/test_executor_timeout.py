@@ -603,6 +603,53 @@ def test_a_slow_async_teardown_is_not_cut_by_the_deadline() -> None:
     )
 
 
+def test_an_arm_that_cannot_bound_blocking_calls_is_not_armed_for_async() -> None:
+    """Only the arm that bounds blocking calls is armed; the other one is not.
+
+    Two timers on one test is what ADR-0016's fourth known limit needs to
+    happen, so #2082 arms exactly one. Where the arm cannot bound a blocking
+    call it buys an outcome name and no bound — measured, a 1s Deadline
+    reporting a timeout 3.02s late — so `asyncio.wait_for` is left as the only
+    enforcement and this context is never entered.
+
+    Written because a mutant survived: dropping `not cls.bounds_blocking_calls`
+    from the guard in `_async_test_core` left the whole suite green. Nothing
+    else asserts this half of the dispatch.
+    """
+    # Arrange
+    entered: list[str] = []
+
+    class _Probe(_WindowsTimeoutContext):
+        def __enter__(self) -> None:
+            entered.append("armed")
+
+        def __exit__(self, exc_type: object = None, *_: object) -> None:
+            del exc_type
+
+    async def body() -> None:
+        pass
+
+    plan = ExecutionPlan(
+        fn=body,
+        fn_name="test_x",
+        kwargs=MappingProxyType({}),
+        marks=(),
+        no_message_lines=(),
+        is_async=True,
+    )
+
+    # Act
+    asyncio.run(_async_test_core(plan, 60, context_cls=_Probe))
+
+    # Assert
+    assert entered == [], (
+        "an arm that cannot bound a blocking call must not be armed for an async"
+        " test. Arming it adds a second timer holding the same value as"
+        " asyncio.wait_for, which is the precondition for the deadline loss"
+        f" ADR-0016 records as its fourth known limit. Got {entered!r}"
+    )
+
+
 def test_the_alarm_capability_decides_which_arm_the_platform_gets() -> None:
     """Windows selects the arm that is skipped for async tests; Unix does not.
 
