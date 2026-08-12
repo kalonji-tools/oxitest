@@ -209,6 +209,14 @@ git diff --quiet "$BASE" HEAD             # 2. empty ⇒ nothing lost or gained
 
 `git rebase -i` works here **provided `GIT_SEQUENCE_EDITOR` is set** — it is only the interactive editor that is unavailable, not the command, so `--autosquash` is usable too. The two bracketing commands are the point: tree equality proves the regroup preserved content whatever the commits became, which means every gate result from before the regroup still applies afterwards. The baseline is **captured, not chosen** — a ref taken before the edits predates the content it protects, so a *correct* regroup reports `TREE DIFFERS`, presentationally identical to one that lost work.
 
+**Disposition at close (`artifact`).** A pull request that closes an issue leaves a **disposition table** on that issue before the merge: one row per acceptance criterion, naming where each went — shipped, discharged by another issue, filed as a new one, or ruled out of scope. The table carries the literal marker `<!-- disposition -->`, and `just merge-ready` refuses the merge without it.
+
+The gate reads **presence only** and never the rows. An author who writes a dishonest table is not a problem a gate solves; an author who never writes one is, and that is what this catches. The marker counts only where it **renders as nothing** — inside a code fence or a code span it is a display of the convention rather than a use of it, which is what stops the gate from passing its own documentation.
+
+The test an author applies: **does every acceptance criterion have an owner after this merge?**
+
+This is an obligation at close time rather than a detector afterwards because every detector built for it failed (#2057). Unticked checkboxes fire on **70%** of completed issues and reach neither known orphan — one of them has no checkboxes at all. Deferral vocabulary reaches **0** of the two, because a spec's non-goals use the same words. "Referenced by an open issue" scored 8.7% and its recall was an artefact of a person having already noticed. The information exists unambiguously at exactly one moment — when the author closes the issue knowing what they did not ship — so the obligation sits there.
+
 **Merge sequence** — this order, every time:
 
 1. rebase onto latest `main`;
@@ -273,6 +281,10 @@ Only `close` lists its premises. `re-scope` and `re-word` are recoverable — `c
 Re-prioritising needs no evidence — `priority:` and `size:` are judgements (prose).
 
 **The triage-state label is different (`artifact`).** It is the pipeline's routing decision, so a flip to `ready-for-agent` must show that each blocker its triage named has cleared. One issue was `ready-for-human` for two stated reasons; the first cleared, the label was flipped with no comment, and the second — an undecided consumer-visible shape — was silently implied to have cleared with it.
+
+**Orphaned remainders (`artifact`).** Sweep for closed issues that an open issue's reference is the sole record of, and review each by hand. Scoped to the backlog closed **before** the disposition gate shipped (#2057): every recorded instance lives there, and after the gate the artifact is the record. Each entry names the closed issue, the obligation it left, and the owner it now has.
+
+This half stays human, deliberately. Automating it means automating the weakest signal measured on #2057 — "referenced by at least one open issue" matched 8.7% of the closed backlog, and every match was downstream of a person having already noticed — and a report that is mostly noise trains its readers to skip it. Two orphans were found this way in one sweep, which is also the only mechanism in this repo's history that has ever found one.
 
 ### Evidence for analysis outputs (`artifact`)
 
