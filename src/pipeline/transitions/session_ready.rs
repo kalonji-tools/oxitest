@@ -69,7 +69,8 @@ impl Pipeline {
         );
         shared.fixture_modules = fixture_modules;
         // Non-fatal registration diagnostics ride the same queue the doctest
-        // coverage rule uses; `ready` drains it into the reporter. They cannot
+        // coverage rule uses. `ready` drains it on the path that reaches it, and
+        // the three early exits below drain it themselves (#2055). They cannot
         // affect the exit code, which is what makes an unparsable `__init__.py`
         // survivable where an unparsable `__fixtures__.py` is not (#1765).
         shared.pending_diagnostics.extend(diagnostics);

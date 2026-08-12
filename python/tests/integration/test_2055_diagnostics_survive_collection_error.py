@@ -267,6 +267,52 @@ def test_fx_boundary_refusal_carries_the_diagnostic(tmp: TempDir) -> None:
     )
 
 
+def test_the_session_channel_drains_too(tmp: TempDir) -> None:
+    """The *other* channel: diagnostics Python emits into the session.
+
+    ``early_exit_with_diagnostics`` drains two channels, and the six tests above
+    exercise only ``pending_diagnostics``. A mutant replacing the
+    ``drain_session_diagnostics`` call with an empty vector **survived** all of
+    them, which is what this test exists to answer.
+
+    A directory whose name is not a Python identifier cannot be written as
+    ``fx.<ns>.<name>``, and ``_module_source_registrar`` reports that with
+    ``emit_diagnostic`` during collection — the session channel, not the
+    pipeline queue.
+    """
+    integ.write_project(
+        tmp,
+        tests={},
+        pyproject=PYPROJECT_FX,
+        extra_files={
+            "proj/__init__.py": "",
+            "proj/integration-tests/__fixtures__.py": (
+                "import oxitest as oxi\n"
+                "\n"
+                '@oxi.fixture(lifetime="function")\n'
+                "def conn() -> int:\n"
+                "    return 1\n"
+            ),
+            "proj/integration-tests/test_it.py": (
+                "from oxitest import Fixture\n"
+                "\n"
+                "def test_it(conn: Fixture[int]) -> None:\n"
+                '    assert conn == 1, "the fixture resolves by bare name"\n'
+            ),
+            # The unrelated collection error that used to discard the above.
+            "proj/test_broken.py": "def test_broken(\n",
+        },
+    )
+
+    out, _err, _rc = helpers.run_oxitest(tmp, "--warnings")
+
+    assert "fixture namespace" in out, (
+        "this diagnostic reaches the reporter through the session channel "
+        "rather than through pending_diagnostics, so without it the second "
+        f"half of early_exit_with_diagnostics is never exercised: {out!r}"
+    )
+
+
 def test_the_drain_does_not_reach_the_ctrf_report(tmp: TempDir) -> None:
     """The change is console-only, and this pins that it stays so.
 
