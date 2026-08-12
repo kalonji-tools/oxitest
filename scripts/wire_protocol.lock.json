@@ -1,0 +1,27 @@
+{
+  "protocol_version": 8,
+  "wire_result": [
+    "duration_ms",
+    "field_diffs",
+    "file",
+    "frames",
+    "left",
+    "lineno",
+    "message",
+    "no_message_lines",
+    "node_id",
+    "op",
+    "outcome",
+    "protocol_version",
+    "right",
+    "source_line",
+    "strict",
+    "usage_error"
+  ],
+  "worker_task_item": [
+    "fn_name",
+    "markers",
+    "node_id",
+    "param_id"
+  ]
+}

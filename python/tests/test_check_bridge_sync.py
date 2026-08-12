@@ -27,6 +27,7 @@ mismatch.
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
 import shutil
 import subprocess
@@ -35,7 +36,8 @@ import textwrap
 from pathlib import Path
 from types import ModuleType
 
-from oxitest import TempDir
+import oxitest as oxi
+from oxitest import StdCapture, TempDir
 
 # ── Script location ──────────────────────────────────────────────────────────
 
@@ -223,6 +225,29 @@ def _build_mock_repo(dst: TempDir, py_version: int, rs_version: int) -> None:
     )
     rs_path.write_text(rs_text, encoding="utf-8")
 
+    # The scaffold owes the script a wire-shape lock, generated after the
+    # rewrite so it records the version this mock repo actually declares (#2074).
+    # Without it every mock-repo run fails on the missing lock, and a test about
+    # the version constants would be reporting a scaffold gap instead.
+    generated = subprocess.run(
+        [
+            sys.executable,
+            str(dst / "scripts" / "check_bridge_sync.py"),
+            "--update-lock",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=dst,
+        check=False,
+        timeout=30,
+    )
+    assert generated.returncode == 0, (
+        "the scaffold must be able to write its own lock — a refusal here means "
+        "the mock repo is internally inconsistent and every assertion built on "
+        f"it is meaningless; stdout={generated.stdout!r} stderr={generated.stderr!r}"
+    )
+
 
 def test_script_exits_zero_when_versions_match(tmp: TempDir) -> None:
     """Baseline: the mock-repo scaffold passes when both constants equal.
@@ -248,12 +273,13 @@ def test_script_exits_zero_when_versions_match(tmp: TempDir) -> None:
         f"check is failing on the scaffold; stdout={result.stdout!r} "
         f"stderr={result.stderr!r}"
     )
-    assert "protocol version in sync" in result.stdout, (
-        "aggregate OK line must name the protocol-version check — if the "
-        "summary drifts and drops this token, prek's success output would "
-        "no longer document that the check was included in the run; "
-        f"stdout={result.stdout!r}"
-    )
+    for token in ("protocol version", "wire shape lock"):
+        assert token in result.stdout, (
+            f"aggregate OK line must name the {token!r} check — if the summary "
+            "drifts and drops a token, prek's success output would no longer "
+            "document that the check was included in the run; "
+            f"stdout={result.stdout!r}"
+        )
 
 
 def test_script_exits_nonzero_and_reports_mismatch(tmp: TempDir) -> None:
@@ -642,6 +668,174 @@ def test_to_wire_unions_all_three_field_sources(tmp: TempDir) -> None:
     assert fields == {"node_id", "message", "frames"}, (
         "the union of the three sources is what the Rust field set is compared "
         f"against; a missing source reports drift that does not exist; got {fields}"
+    )
+
+
+# ── Wire shape lock: lock_report and update_lock ─────────────────────────────
+
+
+def _shape_without(module: ModuleType, field: str) -> dict[str, object]:
+    """A recorded shape missing one wire field, as if it predated that field.
+
+    Built from the live shape rather than a literal, so a field added to the
+    real wire.rs cannot leave these tests asserting a stale set.
+    """
+    lock = dict(module.live_wire_shape())
+    lock["wire_result"] = [f for f in lock["wire_result"] if f != field]
+    return lock
+
+
+def test_lock_report_accepts_a_record_that_matches_the_tree() -> None:
+    """The committed lock must describe the tree it ships with."""
+    module = _load_script_module()
+    live = module.live_wire_shape()
+
+    verdict, lines = module.lock_report(live, live)
+
+    assert verdict == "ok", (
+        "a shape compared against itself must be accepted — a failure here "
+        f"means the writer and the reader disagree on the format; got {lines}"
+    )
+
+
+def test_lock_report_refuses_a_shape_change_that_kept_the_version() -> None:
+    """This is the defect the lock exists to catch (#2074).
+
+    A field added to both the Rust and the Python side passes every other
+    check, because they all compare the two sides against each other and the
+    two sides agree. Only the recorded shape disagrees.
+    """
+    module = _load_script_module()
+    live = module.live_wire_shape()
+
+    verdict, lines = module.lock_report(_shape_without(module, "usage_error"), live)
+
+    assert verdict == "unbumped", (
+        "a wire field that appeared without a PROTOCOL_VERSION bump must be "
+        f"refused — wire.rs instructs a bump on any field change; got {verdict}"
+    )
+    assert any("usage_error" in line for line in lines), (
+        "the report must name the field that moved — 'the shape changed' alone "
+        f"leaves the reader diffing two sorted lists by eye; got {lines}"
+    )
+
+
+def test_lock_report_separates_a_stale_record_from_an_unbumped_version() -> None:
+    """A stale lock and an unbumped version are different mistakes.
+
+    One means the record was not regenerated after a legitimate bump. The other
+    means the protocol moved silently. One message for both would send the
+    reader to the wrong fix.
+    """
+    module = _load_script_module()
+    live = module.live_wire_shape()
+    stale = dict(live)
+    stale["protocol_version"] = int(live["protocol_version"]) - 1
+
+    verdict, _ = module.lock_report(stale, live)
+
+    assert verdict == "stale", (
+        "a record naming another protocol version is stale, not unbumped; "
+        f"got {verdict}"
+    )
+
+
+def test_read_lock_reports_malformed_json_instead_of_crashing(tmp: TempDir) -> None:
+    """The lock is hand-editable, so a bad edit must not print a stack trace.
+
+    It is named in the prek hook's trigger set, and a conflict resolved badly
+    inside it is the likely path here. A traceback out of a pre-commit hook
+    reads as a broken tool rather than as a malformed input.
+    """
+    module = _load_script_module()
+    path = tmp / "wire_protocol.lock.json"
+    path.write_text('{ "protocol_version": 8, ', encoding="utf-8")
+
+    with oxi.raises(module.UnreadableLockError) as caught:
+        module.read_lock(path)
+
+    assert "not valid JSON" in str(caught.value), (
+        "the message must say the file is unparsable, so the reader edits the "
+        f"lock rather than hunting a bridge mismatch; got {caught.value!r}"
+    )
+
+
+def test_update_lock_rewrites_an_unreadable_lock(tmp: TempDir, cap: StdCapture) -> None:
+    """The check tells the reader to run --update-lock, so it must survive one.
+
+    A record that cannot be parsed records nothing, so there is no shape in it
+    to compare and nothing the refusal could protect.
+
+    ``cap`` is not decoration. ``update_lock`` writes to stdout, and inside a
+    parallel worker stdout *is* the LDJSON protocol channel — an uncaptured
+    print reaches the drain as a non-protocol line (#2074).
+    """
+    module = _load_script_module()
+    path = tmp / "wire_protocol.lock.json"
+    path.write_text("{ not json", encoding="utf-8")
+
+    result = module.update_lock(path)
+    cap.readouterr()
+
+    assert result == 0, (
+        "the documented recovery path must work — if it refused too, an "
+        "unreadable lock would be unfixable except by hand"
+    )
+    assert json.loads(path.read_text(encoding="utf-8")) == module.live_wire_shape(), (
+        "the rewritten record must equal the live shape"
+    )
+
+
+def test_update_lock_refuses_to_record_a_change_without_a_bump(
+    tmp: TempDir, cap: StdCapture
+) -> None:
+    """The refusal is the enforcement, not the lock file.
+
+    A record that can always be regenerated is advisory: change the fields,
+    regenerate, never bump. Refusing here leaves bumping as the only way on.
+    """
+    module = _load_script_module()
+    path = tmp / "wire_protocol.lock.json"
+    path.write_text(
+        json.dumps(_shape_without(module, "usage_error"), indent=2), encoding="utf-8"
+    )
+    before = path.read_text(encoding="utf-8")
+
+    result = module.update_lock(path)
+
+    assert "REFUSED" in cap.readouterr().out, (
+        "the refusal must say so on stdout — a silent non-zero exit leaves the "
+        "developer without the one instruction that unblocks them"
+    )
+    assert result == 1, (
+        "regenerating over an unbumped version would record the new shape "
+        "against the old version and destroy the evidence that it moved"
+    )
+    assert path.read_text(encoding="utf-8") == before, (
+        "a refused update must not write — a partial write would leave the "
+        "record claiming a shape the version does not describe"
+    )
+
+
+def test_update_lock_writes_after_a_version_bump(tmp: TempDir, cap: StdCapture) -> None:
+    """A bumped version is the case the writer exists to serve."""
+    module = _load_script_module()
+    live = module.live_wire_shape()
+    stale = _shape_without(module, "usage_error")
+    stale["protocol_version"] = int(live["protocol_version"]) - 1
+    path = tmp / "wire_protocol.lock.json"
+    path.write_text(json.dumps(stale, indent=2), encoding="utf-8")
+
+    result = module.update_lock(path)
+    cap.readouterr()
+
+    assert result == 0, (
+        "a shape change carrying a version bump is the supported path and must "
+        "be writable, or the only escape from a refusal is editing by hand"
+    )
+    assert json.loads(path.read_text(encoding="utf-8")) == live, (
+        "the written record must equal the live shape, or the next run reports "
+        "a mismatch the developer just resolved"
     )
 
 
