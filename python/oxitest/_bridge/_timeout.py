@@ -374,7 +374,7 @@ def _timeout_message(effective: float, requested: int) -> str:
     )
 
 
-def finish_against_deadline(
+def _finish_against_deadline(
     ctx: _TimeoutContext, seconds: int, result: TestResult
 ) -> TestResult:
     """Rewrite a pass into a warning when the deadline was taken away.
@@ -419,7 +419,6 @@ def make_timeout_wrapper(
     platform, which is the only way either branch gets covered by CI.
     """
     cls = context_cls if context_cls is not None else _timeout_context_class()
-    arm = not is_async
 
     def wrapper(next_fn: Any) -> Any:
         # Bound before the `with` rather than as `with cls(seconds) as ctx`, so
@@ -427,7 +426,7 @@ def make_timeout_wrapper(
         # afterwards for the deadline it actually armed (#2001).
         ctx = cls(seconds)
         try:
-            if not arm:
+            if is_async:
                 # An async test owns its own deadline, armed inside the
                 # coroutine. The `except` below is still required — the async
                 # core raises OxitestTimeoutError out of `asyncio.wait_for` on
@@ -442,6 +441,6 @@ def make_timeout_wrapper(
             return TimeoutResult(
                 message=_timeout_message(ctx.effective_seconds, seconds)
             )
-        return finish_against_deadline(ctx, seconds, result)
+        return _finish_against_deadline(ctx, seconds, result)
 
     return wrapper
