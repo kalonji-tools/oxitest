@@ -55,8 +55,27 @@ That asymmetry is the whole reason the two homes exist. Behaviour cannot move in
 - Adding a bridge check means adding it to the script and a test for its **extractor**, not a second assertion of the same contract from the test suite.
 - The script is now a single point of failure for source symmetry, which is the point. Its extractors are parsers over source text and can return a partial set that reads as agreement, so each one is pinned by a test against a fixture with a known field set.
 
+### The version is part of the shape
+
+Every check above compares **two files at one commit**, and that shape has a blind spot: a field added to *both* sides agrees with itself. Measured before the fix — `errors=0`, no output — while the protocol had silently changed.
+
+`wire.rs` instructs: *"Bump when adding, removing, or changing fields in `WorkerTask` or `WireResult`."* Nothing enforced it.
+
+The obvious fix is to diff against the previous commit, and it does not work here. The CI Quality job runs `prek run --all-files`, which has no base ref, so a diff-based check would run at `git commit` and not in CI — the shape of defect #1974, a gate installed into an environment it cannot execute in.
+
+So the previous state becomes an ordinary file. `scripts/wire_protocol.lock.json` records the field sets the current `PROTOCOL_VERSION` describes, and `lock_report` holds one invariant: **the record equals the tree**. Two failures, deliberately distinct, because they are different mistakes with different fixes:
+
+| State | Verdict |
+|---|---|
+| field sets moved, version unchanged | `unbumped` — the protocol changed silently |
+| anything else differs | `stale` — the record was not regenerated after a real bump |
+
+**The refusal is the enforcement, not the file.** A record that can always be regenerated is advisory: change the fields, regenerate, never bump. `--update-lock` refuses to write when the shape moved and the version did not, which leaves bumping as the only way forward.
+
 ## What this does not reach
 
-Every check compares two files **at one commit**. None relates a field change to a version bump.
+`wire.rs` names `WorkerTask` **and** `WireResult`. The lock records `WireResult` and `WorkerTaskItem` — the two the script already extracts.
 
-`wire.rs` instructs: *"Bump when adding, removing, or changing fields in `WorkerTask` or `WireResult`."* Nothing enforces it. A field added to both sides with `PROTOCOL_VERSION` left unchanged passes all six checks — measured, `errors=0`, no output. That defect is only visible in a **diff**, so it is a different mechanism from anything here and is recorded on #2074 rather than solved by this ADR.
+`WorkerTask` carries nine fields. `protocol_version` is covered by the version check. The other eight — `modules`, `fixture_modules`, `plugins`, `timeout_secs`, `keep_tmp`, `rootdir`, `show_locals`, `show_internals` — and every field of `WorkerTaskModule` have **no extractor**, so a change to those still passes every check including the lock.
+
+That is a narrower gap in the same dimension, left open deliberately: closing it means three new extractors, and the measurement that justified the lock was taken on `WireResult`.

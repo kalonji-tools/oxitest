@@ -7,15 +7,19 @@ Exits 0 if all pairs match, 1 with a diff if any mismatch is found.
 
 from __future__ import annotations
 
+import argparse
 import ast
+import json
 import re
 import sys
 from pathlib import Path
+from typing import TypedDict
 
 # Repo root is two levels up from scripts/
 ROOT = Path(__file__).resolve().parent.parent
 RUST_PATH = ROOT / "src" / "bridge.rs"
 PYTHON_PATH = ROOT / "python" / "oxitest" / "_bridge" / "result.py"
+LOCK_PATH = Path(__file__).resolve().parent / "wire_protocol.lock.json"
 
 # Rust struct name -> Python class name (or list of class names for union types)
 #
@@ -424,8 +428,166 @@ def _check_task_format() -> int:
     return 0
 
 
+class WireShape(TypedDict):
+    """The wire contract a single PROTOCOL_VERSION describes."""
+
+    protocol_version: int | None
+    wire_result: list[str]
+    worker_task_item: list[str]
+
+
+def live_wire_shape() -> WireShape:
+    """Read the wire shape the tree currently describes.
+
+    The Rust side alone is recorded. The other checks already refuse when the
+    Python side disagrees with it, so storing both would store one fact twice
+    and could disagree with itself.
+    """
+    return {
+        "protocol_version": parse_protocol_version_rs(WIRE_RUST_PATH),
+        "wire_result": sorted(parse_worker_result_fields(WIRE_RUST_PATH)),
+        "worker_task_item": sorted(parse_worker_task_item_fields(WIRE_RUST_PATH)),
+    }
+
+
+def lock_report(lock: WireShape, live: WireShape) -> tuple[str, list[str]]:
+    """Judge a recorded shape against the live one. Pure, so it is testable.
+
+    Returns the verdict and the lines explaining it. The verdict is one of:
+
+    - ``ok`` — the record describes the tree.
+    - ``unbumped`` — the field sets moved and PROTOCOL_VERSION did not. This is
+      the defect the lock exists to catch (#2074): a field added to *both* sides
+      passes every other check, because they all compare the two sides against
+      each other and the two sides agree.
+    - ``stale`` — anything else differs, so the record was not regenerated after
+      a legitimate bump.
+
+    The two failures are separated because they are different mistakes with
+    different fixes, and one message for both would send the reader to the
+    wrong one.
+    """
+    if lock == live:
+        return "ok", []
+    changed = [
+        key
+        for key in ("wire_result", "worker_task_item")
+        if lock.get(key) != live.get(key)
+    ]
+    if changed and lock.get("protocol_version") == live["protocol_version"]:
+        lines = [
+            "MISMATCH: the wire shape changed and PROTOCOL_VERSION is still"
+            f" {live['protocol_version']}"
+        ]
+        for key in changed:
+            was, now = set(lock.get(key, [])), set(live.get(key, []))
+            lines.append(f"  {key}:")
+            if now - was:
+                lines.append(f"    added:   {sorted(now - was)}")
+            if was - now:
+                lines.append(f"    removed: {sorted(was - now)}")
+        lines.append(
+            "  bump PROTOCOL_VERSION in wire.rs and result.py, then run"
+            " python scripts/check_bridge_sync.py --update-lock"
+        )
+        return "unbumped", lines
+    return "stale", [
+        f"MISMATCH: {LOCK_PATH.name} is stale — it records protocol version"
+        f" {lock.get('protocol_version')}, the tree describes"
+        f" {live['protocol_version']}",
+        "  run python scripts/check_bridge_sync.py --update-lock",
+    ]
+
+
+class UnreadableLockError(Exception):
+    """The lock file exists but is not valid JSON."""
+
+
+def read_lock(path: Path) -> WireShape | None:
+    """Load a recorded shape, or None when the file is absent.
+
+    Raises ``UnreadableLockError`` on malformed JSON rather than letting a
+    ``JSONDecodeError`` reach the top. The file is hand-editable and is named in
+    the prek hook's trigger set, so a conflict resolved badly inside it is a
+    likely path here — and a stack trace out of a pre-commit hook reads as a
+    broken tool rather than as a malformed input.
+    """
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        msg = f"{path.name} is not valid JSON: {exc}"
+        raise UnreadableLockError(msg) from exc
+
+
+def _check_protocol_lock() -> int:
+    """Refuse a wire-shape change that did not bump PROTOCOL_VERSION.
+
+    ``wire.rs`` instructs: "Bump when adding, removing, or changing fields in
+    WorkerTask or WireResult." Nothing enforced it.
+
+    A diff-based check cannot do this job. The CI Quality job runs
+    ``prek run --all-files``, which has no base ref, so the check would work at
+    ``git commit`` and not in CI — the shape of defect #1974 recorded. The lock
+    makes the previous state an ordinary file, so this is a two-file comparison
+    at one commit like every other check here.
+    """
+    try:
+        lock = read_lock(LOCK_PATH)
+    except UnreadableLockError as exc:
+        print(f"ERROR: {exc} — fix it by hand, or run --update-lock to rewrite it")
+        return 1
+    if lock is None:
+        print(f"ERROR: {LOCK_PATH.name} not found — run --update-lock")
+        return 1
+    verdict, lines = lock_report(lock, live_wire_shape())
+    for line in lines:
+        print(line)
+    return 0 if verdict == "ok" else 1
+
+
+def update_lock(path: Path | None = None) -> int:
+    """Write the lock, refusing when the shape moved without a version bump.
+
+    This refusal is the enforcement. A record that can always be regenerated is
+    advisory: change the fields, regenerate, never bump. Refusing here leaves
+    bumping the version as the only way forward.
+    """
+    path = LOCK_PATH if path is None else path
+    live = live_wire_shape()
+    try:
+        lock = read_lock(path)
+    except UnreadableLockError as exc:
+        # The check tells the reader to run --update-lock to rewrite an
+        # unreadable file, so this path has to survive it. A record that cannot
+        # be parsed records nothing, and there is no shape in it to compare.
+        print(f"{exc} — rewriting it")
+        lock = None
+    if lock is not None and lock_report(lock, live)[0] == "unbumped":
+        print(
+            "REFUSED: the wire shape changed and PROTOCOL_VERSION is still"
+            f" {live['protocol_version']}. Bump it first — regenerating here"
+            " would record the new shape against the old version and lose the"
+            " only evidence that the protocol moved."
+        )
+        return 1
+    path.write_text(json.dumps(live, indent=2) + "\n", encoding="utf-8")
+    print(f"wrote {path.name} for protocol version {live['protocol_version']}")
+    return 0
+
+
 def main() -> int:
     """Parse Rust/Python structs, compare for sync, and return mismatch count."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--update-lock",
+        action="store_true",
+        help="rewrite wire_protocol.lock.json from the tree",
+    )
+    args = parser.parse_args()
+    if args.update_lock:
+        return update_lock()
     rust = parse_rust_structs(RUST_PATH)
     python = parse_python_classes(PYTHON_PATH)
     errors = 0
@@ -435,11 +597,12 @@ def main() -> int:
     errors += _check_wire_format()
     errors += _check_task_format()
     errors += _check_protocol_version()
+    errors += _check_protocol_lock()
     if errors == 0:
         total = len(PAIRS) + len(REPORTER_PAIRS) + 1  # +1 for RawFrame
         print(
             f"OK: all {total} bridge contracts + wire format + task format"
-            " + protocol version in sync"
+            " + protocol version + wire shape lock in sync"
         )
     return 1 if errors else 0
 
