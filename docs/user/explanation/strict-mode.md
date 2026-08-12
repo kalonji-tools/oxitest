@@ -18,7 +18,7 @@ excluded.
 Strict mode makes oxitest enforce conventions that experienced teams apply manually,
 automatically, and at the point where violations are cheapest to fix: before the test suite runs.
 
-## The eight checks
+## The nine checks
 
 ### Bare assert
 
@@ -147,6 +147,46 @@ fixtures are excluded from this check.
     inner types. If strict mode flags a `TempDir` fixture as unused, annotate
     the test parameter as bare `TempDir` instead (it's `@injectable`, so no
     `Fixture[T]` wrapper is needed).
+
+### Module-level definition
+
+A module-level `def` or `async def` in a `test_*.py` file must be one of three
+things: a test, a fixture declaration, or file-local. Anything else is a shared
+utility living somewhere no other module can import it from.
+
+=== "Triggers"
+
+    ```python
+    # test_orders.py
+    def build_order(**kwargs):   # not a test, not a fixture, not _-prefixed
+        return Order(**kwargs)
+
+    def test_total(): ...
+    ```
+
+=== "Clean"
+
+    ```python
+    # test_orders.py
+    def _build_order(**kwargs):  # file-local, stays here
+        return Order(**kwargs)
+
+    def test_total(): ...
+    ```
+
+    ```python
+    # or move it somewhere tests can import
+    # tests/helpers/orders.py
+    def build_order(**kwargs):
+        return Order(**kwargs)
+    ```
+
+The check reads **module level only**, so a `class` is never flagged — neither a
+class-based test nor a `@dataclass` parametrize case object — and neither is a
+method inside one.
+
+A definition that is both `test_`-named and `@oxi.fixture`-decorated is legal
+here. That overlap is a separate question and belongs in its own diagnostic.
 
 ### Broad fixture type
 

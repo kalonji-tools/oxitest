@@ -8,7 +8,7 @@ from pathlib import Path
 from oxitest import Fixture, Fixtures
 
 
-def record(event: str) -> None:
+def _record(event: str) -> None:
     with Path(f"{os.environ['ASYNCLOG']}.{os.getpid()}").open(
         "a", encoding="utf-8"
     ) as handle:
@@ -23,4 +23,4 @@ async def test_a(fx: Fixtures, eager_a: Fixture[str]) -> None:
     assert eager_a == "a-eager", (
         f"the injected async package fixture must resolve, got {eager_a!r}"
     )
-    record("USE a")
+    _record("USE a")

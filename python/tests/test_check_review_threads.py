@@ -294,7 +294,7 @@ def test_truncation_outranks_a_clean_page() -> None:
 # ── Whole-script behaviour ───────────────────────────────────────────────────
 
 
-def run_script(
+def _run_script(
     *args: str, ambient: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
     """Run the script and decode its output as UTF-8, whatever the locale says.
@@ -337,7 +337,7 @@ def test_the_help_output_decodes_under_a_hostile_ambient_encoding() -> None:
     hostile = {**os.environ, "PYTHONIOENCODING": "cp1252"}
 
     # Act
-    result = run_script("--help", ambient=hostile)
+    result = _run_script("--help", ambient=hostile)
 
     # Assert
     assert result.stdout is not None, (
@@ -354,7 +354,7 @@ def test_the_help_output_decodes_under_a_hostile_ambient_encoding() -> None:
 def test_the_script_is_executable_and_documents_itself() -> None:
     """Subprocess run of the real script — proves it parses and its args work."""
     # Arrange / Act
-    result = run_script("--help")
+    result = _run_script("--help")
 
     # Assert
     assert result.returncode == 0, (

@@ -848,7 +848,7 @@ pub fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult {
 
 /// Check if a call target is one of the recognized fixture decorator forms:
 /// `oxi.fixture(...)`, `oxitest.fixture(...)`, or bare `fixture(...)`.
-fn is_fixture_call(func: &ast::Expr) -> bool {
+pub fn is_fixture_call(func: &ast::Expr) -> bool {
     match func {
         ast::Expr::Attribute(a) => {
             if a.attr.as_str() != "fixture" {

@@ -8,7 +8,7 @@ from pathlib import Path
 from oxitest import Fixtures
 
 
-def record(event: str) -> None:
+def _record(event: str) -> None:
     with Path(f"{os.environ['NESTASYNCLOG']}.{os.getpid()}").open(
         "a", encoding="utf-8"
     ) as handle:
@@ -20,4 +20,4 @@ async def test_outer(fx: Fixtures) -> None:
     assert value == "outer", (
         f"the outer async package fixture must resolve, got {value!r}"
     )
-    record("USE outer")
+    _record("USE outer")

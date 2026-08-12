@@ -17,6 +17,7 @@ mod edit_distance;
 mod filter;
 mod import_graph;
 mod inspect;
+mod module_defs;
 mod parallel;
 mod parallel_context;
 mod pipeline;

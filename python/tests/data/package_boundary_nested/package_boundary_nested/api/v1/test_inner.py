@@ -8,7 +8,7 @@ from pathlib import Path
 from oxitest import Fixtures
 
 
-def record(event: str) -> None:
+def _record(event: str) -> None:
     with Path(f"{os.environ['NESTLOG']}.{os.getpid()}").open(
         "a", encoding="utf-8"
     ) as handle:
@@ -20,4 +20,4 @@ def test_inner(fx: Fixtures) -> None:
         "the inner package fixture must resolve, and must have been built on "
         "the outer package's value"
     )
-    record("USE inner")
+    _record("USE inner")
