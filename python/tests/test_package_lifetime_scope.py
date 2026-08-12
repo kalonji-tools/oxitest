@@ -204,7 +204,7 @@ def test_end_package_is_inert_for_an_unknown_anchor() -> None:
     # there would abort a clean run.
     #
     # A miss is normal here, not everywhere: that the *hit* happens is proved
-    # end to end by test_1839_package_boundary.py, since a unit test handing
+    # end to end by test_package_boundary.py, since a unit test handing
     # the anchor over cannot see which value the caller picks.
     assert session.get_cache_stats() is not None, (
         "end_package on an unused anchor must leave the session usable"
