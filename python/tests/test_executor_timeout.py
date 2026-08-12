@@ -12,7 +12,8 @@ from types import MappingProxyType
 from typing import Any
 
 import oxitest as oxi
-from oxitest import Fixture, TempDir
+from oxitest import Fixture, Patcher, TempDir
+from oxitest._bridge import _middleware
 from oxitest._bridge._errors import OxitestTimeoutError
 from oxitest._bridge._mark_api import MarkInfo
 from oxitest._bridge._middleware import (
@@ -647,6 +648,63 @@ def test_an_arm_that_cannot_bound_blocking_calls_is_not_armed_for_async() -> Non
         " test. Arming it adds a second timer holding the same value as"
         " asyncio.wait_for, which is the precondition for the deadline loss"
         f" ADR-0016 records as its fourth known limit. Got {entered!r}"
+    )
+
+
+def test_the_os_arm_leaves_wait_for_unarmed(patch: Patcher) -> None:
+    """Exactly one timer is armed per test — never both.
+
+    This is the whole of #2082's decision, and on Linux it is invisible to
+    behaviour: `SIGALRM` wins every race there, so arming `asyncio.wait_for`
+    alongside it changes no outcome. It changes the **gap** between the two
+    timers, from 502.6 ms to 0.045 ms measured, and that gap is the collision
+    window in ADR-0016's fourth known limit. The defect it reintroduces is
+    macOS-only, so no Linux assertion on a result can see it.
+
+    Written because a mutant survived: passing `timeout_secs` instead of `None`
+    to `_run_with_timeout` restores both timers, and the whole suite stayed
+    green. What that mutation changes is the argument, so the argument is what
+    this test reads.
+    """
+    if not hasattr(signal, "alarm"):
+        return
+
+    # Arrange
+    seen: list[int | None] = []
+    # This whole file drives the bridge's private surface; every other test
+    # here reaches it through `from ... import`, which SLF001 does not see.
+    # patch.setattr needs the module object, so the attribute form is forced.
+    real = _middleware._run_with_timeout  # noqa: SLF001
+
+    async def recording(
+        fn: Any, resolved: Any, no_message_lines: Any, timeout_secs: int | None
+    ) -> TestResult:
+        seen.append(timeout_secs)
+        return await real(fn, resolved, no_message_lines, timeout_secs)
+
+    patch.setattr(_middleware, "_run_with_timeout", recording)
+
+    async def body() -> None:
+        pass
+
+    plan = ExecutionPlan(
+        fn=body,
+        fn_name="test_x",
+        kwargs=MappingProxyType({}),
+        marks=(),
+        no_message_lines=(),
+        is_async=True,
+    )
+
+    # Act
+    asyncio.run(_async_test_core(plan, 60, context_cls=_UnixTimeoutContext))
+
+    # Assert
+    assert seen == [None], (
+        "where the OS arm is armed it already bounds everything asyncio.wait_for"
+        " would, so wait_for must be left unarmed and _run_with_timeout must"
+        " receive None. A seconds value here means two timers hold the same"
+        f" deadline microseconds apart, which is option B. Got {seen!r}"
     )
 
 
