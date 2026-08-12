@@ -15,7 +15,15 @@ use crate::config::Config;
 ///
 /// Resolves `.`, `..`, and symlinks via `std::fs::canonicalize`.
 /// Falls back to the original path if canonicalization fails.
-fn normalize_path(path: &Utf8Path) -> Utf8PathBuf {
+///
+/// Also used by the plugin-anchor boundary in `bridge.rs`, so that an anchor
+/// is spelled the way the collector spells what it is compared against. A
+/// second idiom there would reintroduce the divergence this removes (#1767).
+///
+/// `pub` rather than `pub(crate)`: `collector` is a private module
+/// (`lib.rs`), so the crate boundary is already the limit and
+/// `clippy::redundant_pub_crate` refuses the narrower spelling.
+pub fn normalize_path(path: &Utf8Path) -> Utf8PathBuf {
     match std::fs::canonicalize(path.as_std_path()) {
         Ok(p) => Utf8PathBuf::from_path_buf(p).unwrap_or_else(|_| path.to_owned()),
         Err(_) => path.to_owned(),
