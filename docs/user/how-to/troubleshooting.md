@@ -51,6 +51,13 @@ $ oxitest --timeout 30
 timeout = 30
 ```
 
+!!! warning "A timeout covers the test, not its fixtures"
+
+    The limit covers the test function itself. A fixture that hangs during setup
+    or teardown is **not** stopped by it — the worker's watchdog is what stops
+    that, and it kills the whole worker rather than the one test. If a hang looks
+    like it survives the timeout you set, check whether it is in a fixture.
+
 !!! tip "Derive timeouts from history"
     For suites with cached timing data, `timeout_multiplier` derives a per-test
     timeout from the cached duration automatically — no need to guess a fixed value.
