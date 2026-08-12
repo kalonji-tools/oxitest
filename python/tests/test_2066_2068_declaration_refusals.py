@@ -314,3 +314,200 @@ def test_a_self_referential_class_does_not_recurse_forever() -> None:
         "the cycle must be walked once and reported once; without a seen set "
         "this reaches the user as RecursionError instead of a diagnostic"
     )
+
+
+# --------------------------------------------------------------------------
+# #2066 — a definition that is both test_-named and a fixture
+# --------------------------------------------------------------------------
+
+
+def test_a_test_named_inline_fixture_is_refused() -> None:
+    """Two walks read one definition, and neither refused it before #2066."""
+    # Arrange
+    registry = FixtureRegistry()
+    mod = _module("/t/pkg/test_overlap.py")
+
+    @fixture(lifetime="function")
+    def test_both() -> int:
+        return 1
+
+    _attach(mod, "test_both", test_both)
+
+    # Act / Assert
+    with raises(UsageError) as caught:
+        register_module_source_fixtures(
+            registry, mod, anchor_package_path="/t/pkg/test_overlap.py"
+        )
+
+    assert "test_both" in str(caught.value), (
+        "the refusal must name the definition that is read two ways"
+    )
+
+
+def test_a_test_named_declaration_home_fixture_is_not_refused() -> None:
+    """A __fixtures__.py is not scanned for tests, so there is no overlap."""
+    # Arrange
+    registry = FixtureRegistry()
+    mod = _module("/t/pkg/__fixtures__.py")
+
+    @fixture(lifetime="function")
+    def test_both() -> int:
+        return 1
+
+    _attach(mod, "test_both", test_both)
+
+    # Act — must not raise
+    register_module_source_fixtures(registry, mod, anchor_package_path="/t/pkg")
+
+    # Assert
+    assert registry.get_in_namespace("test_both", "pkg") is not None, (
+        "the default python_files is test_*.py, so a __fixtures__.py holds no "
+        "tests and a test_-named fixture there is read one way, not two"
+    )
+
+
+def test_a_non_test_named_inline_fixture_still_registers() -> None:
+    """The refusal keys on the name, and must not disarm the inline route."""
+    # Arrange
+    registry = FixtureRegistry()
+    mod = _module("/t/pkg/test_overlap.py")
+
+    @fixture(lifetime="function")
+    def conn() -> int:
+        return 1
+
+    _attach(mod, "conn", conn)
+
+    # Act
+    register_module_source_fixtures(
+        registry, mod, anchor_package_path="/t/pkg/test_overlap.py"
+    )
+
+    # Assert
+    assert registry.get_in_namespace("conn", "test_overlap") is not None, (
+        "an ordinary inline declaration is the feature #1712 shipped and must "
+        "survive a refusal aimed only at the test_ prefix"
+    )
+
+
+# --------------------------------------------------------------------------
+# End-to-end: one defect, one name
+#
+# #2067 enforces "a test function returns None" at three points, two of which
+# run at collection, upstream of Python registration. Both would otherwise
+# report the #2066 overlap under a name that describes a different defect.
+# These pin the deferral, and the two controls pin that it disarms nothing.
+# --------------------------------------------------------------------------
+
+
+def _run_cold(project: Path) -> tuple[str, str, int]:
+    """Run *project* with no item cache, and return ``(stdout, stderr, rc)``.
+
+    The item cache serves a file's collected items **without importing it**, and
+    both refusals here happen at import. A cache left by an earlier run hides
+    them completely — which is why #2068 also bumps ``CACHE_VERSION``.
+    """
+    shutil.rmtree(project / ".oxitest_cache", ignore_errors=True)
+    return helpers.run_oxitest(project, "--warnings")
+
+
+def test_the_yield_overlap_reports_the_overlap_not_the_generator() -> None:
+    """#2067's collection guard defers, so the overlap owns this definition."""
+    # Act
+    stdout, stderr, rc = _run_cold(_OVERLAP_YIELD)
+    output = stdout + stderr
+
+    # Assert
+    assert rc == 3, (
+        f"the overlap is refused at registration, which exits 3\n"
+        f"stdout:\n{stdout}\nstderr:\n{stderr}"
+    )
+    assert "is a test by name and a fixture by decorator" in output, (
+        f"the overlap owns this definition; the generator message names a "
+        f"different defect, and its hint tells the user to move the generator "
+        f"into a fixture, which is what they already did\n{output}"
+    )
+    assert "contains yield, so calling it returns a generator" not in output, (
+        f"naming one defect twice under two names is what test_returns.rs and "
+        f"prescan.rs both argue against\n{output}"
+    )
+
+
+def test_the_strict_return_overlap_reports_the_overlap() -> None:
+    """Under strict the run aborts before import, so the check must defer."""
+    # Act
+    stdout, stderr, rc = _run_cold(_OVERLAP_RETURN_STRICT)
+    output = stdout + stderr
+
+    # Assert
+    assert rc == 3, (
+        f"the overlap is refused at registration, which exits 3\n"
+        f"stdout:\n{stdout}\nstderr:\n{stderr}"
+    )
+    assert "test-returns-value" not in output, (
+        f"a strict run aborts before any module is imported, so while this "
+        f"violation stands the registrar refusal is unreachable and the user "
+        f"is told the wrong thing\n{output}"
+    )
+    assert "is a test by name and a fixture by decorator" in output, (
+        f"the overlap must be what the user is told, in every strict setting\n{output}"
+    )
+
+
+def test_a_class_method_fixture_is_refused_end_to_end() -> None:
+    """The registrar refusal reaches a real run, not only a direct call."""
+    # Act
+    stdout, stderr, rc = _run_cold(_METHOD_FIXTURE)
+    output = stdout + stderr
+
+    # Assert
+    assert rc == 3, (
+        f"a method fixture is refused at registration, which exits 3\n"
+        f"stdout:\n{stdout}\nstderr:\n{stderr}"
+    )
+    assert "is decorated @oxi.fixture on a method of class TestThing" in output, (
+        f"the refusal must name the real cause\n{output}"
+    )
+    assert "fixture 'conn' not found" not in output.replace(
+        "\"fixture 'conn' not found\"", ""
+    ), (
+        f"the misattributed message is the defect; it must not survive except "
+        f"as the quotation inside the new message\n{output}"
+    )
+
+
+def test_a_plain_generator_test_is_still_refused() -> None:
+    """CONTROL — the deferral must not disarm the guard it defers to."""
+    # Act
+    stdout, stderr, rc = _run_cold(_GEN_SYNC)
+    output = stdout + stderr
+
+    # Assert
+    assert rc == 3, (
+        f"#2067's collection guard owns every generator test that is not also "
+        f"a declaration; a deferral that swallowed those would undo it\n"
+        f"stdout:\n{stdout}\nstderr:\n{stderr}"
+    )
+    assert "contains yield, so calling it returns a generator" in output, (
+        f"the generator message must still be what a plain generator test "
+        f"gets\n{output}"
+    )
+
+
+def test_a_plain_test_returning_a_value_still_violates_strict() -> None:
+    """CONTROL — the strict check must still fire where no fixture is declared."""
+    # Act
+    stdout, stderr, rc = _run_cold(_RETURN_STRICT)
+    output = stdout + stderr
+
+    # Assert
+    assert rc == 3, (
+        f"strict = 'abort' turns the violation into a refusal, so a passing "
+        f"run here would mean the check never fired\n"
+        f"stdout:\n{stdout}\nstderr:\n{stderr}"
+    )
+    assert "test-returns-value" in output, (
+        f"#2067's check owns every test that is not also a declaration, and a "
+        f"deferral that swallowed those would silently undo that issue\n"
+        f"stdout:\n{stdout}\nstderr:\n{stderr}"
+    )

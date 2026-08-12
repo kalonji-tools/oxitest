@@ -506,6 +506,9 @@ def _refuse_generator_test(path: str, fn_name: str, fn: object, lineno: int) -> 
     belongs to the runtime guard in ``_runners.py``, which classifies the
     returned value instead.
     """
+    # No #2066 deferral here: registration runs upstream, so its refusal already
+    # wins. A guard clause was measured to change nothing and deleted.
+    # `test_the_yield_overlap_reports_the_overlap_not_the_generator` pins it.
     if inspect.isgeneratorfunction(fn) or inspect.isasyncgenfunction(fn):
         raise CollectionError(_generator_test_message(path, fn_name, lineno))
 
