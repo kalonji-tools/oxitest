@@ -187,12 +187,11 @@ affected_base = "main"
 
 [tool.oxitest.doctest]
 scope = "public"
-# python/tests/helpers/ and python/tests/integration/helpers.py are test
-# infrastructure, not public API — the same reason conftest.py is excluded
-# in src/pipeline/collection.rs. These files only exist outside conftest.py
-# because #1700 retired the helper registry (#1787 split the integration
-# suite's helpers out of python/tests/integration/conftest.py the same way).
-skip = ["python/tests/helpers/", "python/tests/integration/helpers.py"]
+# `testpaths` above holds a test root and a library root. The audit asks which
+# of them carries public API, and that is this key (#1790). Before it existed
+# the only way to say so was a pair of `skip` entries naming the test helpers
+# one by one.
+roots = ["python/oxitest"]
 
 [tool.coverage.run]
 source = ["python/oxitest"]
