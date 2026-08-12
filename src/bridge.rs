@@ -656,10 +656,19 @@ pub fn plugin_fixture_homes(
                 .getattr("plugin_module")
                 .and_then(|v| v.extract())
                 .map_err(py_collect_err)?,
+            // Python spells this anchor; Rust compares it against directories
+            // from `std::fs::canonicalize`. Normalised here, where the struct
+            // is built, rather than at either consumer: `anchor_dir` reaches
+            // both `register_plugin_home` and `record_plugin_anchor`, and the
+            // worker `(module, anchor)` pairs derive from this field, so
+            // normalising at one consumer leaves the others spelling it the
+            // Python way and the dedup seed misses (#1767, #1717).
+            // `test_plugin_anchor_seed_matches_when_imported_off_sys_path`
+            // carries the mechanism and the platform it bites on.
             anchor_dir: home
                 .getattr("anchor_dir")
                 .and_then(|v| v.extract::<String>())
-                .map(Utf8PathBuf::from)
+                .map(|s| crate::collector::normalize_path(Utf8Path::new(&s)))
                 .map_err(py_collect_err)?,
             namespace: home
                 .getattr("namespace")
