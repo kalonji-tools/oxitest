@@ -20,7 +20,17 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::types::{DurationMs, OutcomeKind};
 
-const CACHE_VERSION: u32 = 2;
+/// Bumped 2 → 3 by #2067.
+///
+/// The item cache serves a file's `CollectedItem`s without importing it, so a
+/// cache written before a *collection guard* existed keeps serving items the
+/// guard would now refuse. mtime does not change on an oxitest upgrade, so the
+/// stale entry survives indefinitely. Bumping this discards every existing
+/// cache once, which is the only point at which the new guard can see the file.
+///
+/// Bump this whenever a change makes collection refuse something it previously
+/// accepted.
+const CACHE_VERSION: u32 = 3;
 
 /// Timing and outcome record for a single test, stored by node ID.
 ///
@@ -193,7 +203,9 @@ mod tests {
         let cache_dir = dir.child(".oxitest_cache");
         cache_dir.create_dir_all().unwrap();
         cache_dir.child("timings.json").write_str(
-            r#"{"version":2,"timings":{"tests/test_foo.py::test_a":{"duration_ms":42.5,"age":0}}}"#
+            &format!(
+                r#"{{"version":{CACHE_VERSION},"timings":{{"tests/test_foo.py::test_a":{{"duration_ms":42.5,"age":0}}}}}}"#
+            )
         ).unwrap();
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
         let cache = TestCache::load(utf8_dir);
@@ -267,7 +279,9 @@ mod tests {
         let cache_dir = dir.child(".oxitest_cache");
         cache_dir.create_dir_all().unwrap();
         cache_dir.child("timings.json").write_str(
-            r#"{"version":2,"timings":{"tests/test_foo.py::test_a":{"duration_ms":10.0,"age":0}}}"#
+            &format!(
+                r#"{{"version":{CACHE_VERSION},"timings":{{"tests/test_foo.py::test_a":{{"duration_ms":10.0,"age":0}}}}}}"#
+            )
         ).unwrap();
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
         let cache = TestCache::load(utf8_dir);
@@ -309,7 +323,7 @@ mod tests {
         );
 
         let cache = CacheFile {
-            version: 2,
+            version: CACHE_VERSION,
             timings,
             modules: AHashMap::new(),
         };

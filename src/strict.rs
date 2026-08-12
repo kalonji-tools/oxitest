@@ -13,6 +13,20 @@ use crate::bridge::{RawViolation, ViolationKind};
 use crate::config::Config;
 use crate::types::{NodeId, TestOutcome};
 
+/// Render a line list as `line 3` or `lines 3, 5`.
+///
+/// Four violation renderings need this — two for `BareAssert` and two for
+/// `TestReturnsValue` — and they were four verbatim copies (#2067 stage 8).
+fn lines_phrase(lines: &[usize]) -> String {
+    let nums = lines
+        .iter()
+        .map(std::string::ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let label = if lines.len() == 1 { "line" } else { "lines" };
+    format!("{label} {nums}")
+}
+
 // ── Violation types ───────────────────────────────────────────────────────────
 
 /// A strict-mode violation that is tied to a specific test item.
@@ -52,6 +66,10 @@ pub enum PerTestViolation {
     SingleCaseParametrize {
         node_id: NodeId,
     },
+    TestReturnsValue {
+        node_id: NodeId,
+        lines: Vec<usize>,
+    },
     UnusedFixture {
         node_id: NodeId,
         fixture_name: String,
@@ -69,6 +87,7 @@ impl PerTestViolation {
             | Self::MissingReturnAnnotation { node_id, .. }
             | Self::ModuleLevelDef { node_id, .. }
             | Self::SingleCaseParametrize { node_id }
+            | Self::TestReturnsValue { node_id, .. }
             | Self::UnusedFixture { node_id, .. } => node_id,
         }
     }
@@ -185,6 +204,18 @@ pub fn check_collected(raw: Vec<RawViolation>) -> Vec<StrictViolation> {
                 ViolationKind::SingleCaseParametrize => Some(StrictViolation::PerTest(
                     PerTestViolation::SingleCaseParametrize { node_id },
                 )),
+                ViolationKind::TestReturnsValue => {
+                    // Same `detail` shape as BareAssert: space-separated line
+                    // numbers, one per offending `return`.
+                    let lines: Vec<usize> = r
+                        .detail
+                        .split_whitespace()
+                        .filter_map(|s| s.parse().ok())
+                        .collect();
+                    Some(StrictViolation::PerTest(
+                        PerTestViolation::TestReturnsValue { node_id, lines },
+                    ))
+                }
                 ViolationKind::UnusedFixture => {
                     Some(StrictViolation::PerTest(PerTestViolation::UnusedFixture {
                         node_id,
@@ -218,18 +249,11 @@ impl std::fmt::Display for PerTestViolation {
                 if lines.is_empty() {
                     write!(f, "{:<60}  bare-assert", node_id.as_ref())
                 } else {
-                    let nums = lines
-                        .iter()
-                        .map(|n| n.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    let label = if lines.len() == 1 { "line" } else { "lines" };
                     write!(
                         f,
-                        "{:<60}  bare-assert        {} {}",
+                        "{:<60}  bare-assert        {}",
                         node_id.as_ref(),
-                        label,
-                        nums
+                        lines_phrase(lines)
                     )
                 }
             }
@@ -285,6 +309,14 @@ impl std::fmt::Display for PerTestViolation {
             Self::SingleCaseParametrize { node_id } => {
                 write!(f, "{:<60}  single-case-parametrize", node_id.as_ref())
             }
+            Self::TestReturnsValue { node_id, lines } => {
+                write!(
+                    f,
+                    "{:<60}  test-returns-value   {}",
+                    node_id.as_ref(),
+                    lines_phrase(lines)
+                )
+            }
             Self::UnusedFixture {
                 node_id,
                 fixture_name,
@@ -337,13 +369,7 @@ pub fn per_test_error(v: &PerTestViolation) -> TestOutcome {
             if lines.is_empty() {
                 "strict: bare assert (no line info)".to_string()
             } else {
-                let nums = lines
-                    .iter()
-                    .map(|n| n.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let label = if lines.len() == 1 { "line" } else { "lines" };
-                format!("strict: bare assert on {label} {nums}")
+                format!("strict: bare assert on {}", lines_phrase(lines))
             }
         }
         PerTestViolation::BroadFixtureType { detail, .. } => {
@@ -371,6 +397,14 @@ pub fn per_test_error(v: &PerTestViolation) -> TestOutcome {
         ),
         PerTestViolation::SingleCaseParametrize { .. } => {
             "strict: @parametrize with a single case — use a plain test instead".to_string()
+        }
+        PerTestViolation::TestReturnsValue { lines, .. } => {
+            format!(
+                "strict: a test function returns None, but this one returns a value \
+                 ({}). oxitest discards it, so an assertion written as \
+                 `return a == b` never runs. Use `assert a == b, \"why it matters\"`",
+                lines_phrase(lines)
+            )
         }
         PerTestViolation::UnusedFixture { fixture_name, .. } => {
             format!("strict: fixture '{fixture_name}' is defined but never used")

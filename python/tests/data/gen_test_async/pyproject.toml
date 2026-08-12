@@ -1,0 +1,7 @@
+[project]
+name = "gen-test-async"
+version = "0.1.0"
+
+[tool.oxitest]
+testpaths = ["pkg"]
+python_files = ["test_*.py"]

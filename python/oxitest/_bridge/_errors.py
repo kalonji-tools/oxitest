@@ -417,6 +417,21 @@ class CollectionError(OxitestError):
     """
 
 
+class TestReturnedValueError(OxitestError):
+    """Raised when calling a test returned a generator instead of running (#2067).
+
+    The runtime half of *a test function returns None*. Collection refuses
+    every shape a static answer can see; a ``functools.wraps`` wrapper is not
+    one of them, because ``isgeneratorfunction`` answers False on the wrapper
+    while the call still returns a generator.
+
+    Its own class rather than ``UsageError`` so it can be enrolled in
+    ``_USAGE_ERROR_TYPES`` alone. ``UsageError`` is also raised from places
+    that run during a test — ``_fixture_session.py`` among them — and
+    enrolling the whole class would re-vote those to exit 4 as a side effect.
+    """
+
+
 # ─── Unified fixture backend errors ──────────────────────────────────────────
 
 
@@ -624,6 +639,7 @@ _USAGE_ERROR_TYPES: tuple[type[BaseException], ...] = (
     AsyncFixtureAccessError,
     BoundaryError,
     FixtureNotFoundError,
+    TestReturnedValueError,
 )
 
 

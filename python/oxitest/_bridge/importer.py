@@ -476,6 +476,40 @@ def _import_test_module(
     return module
 
 
+def _generator_test_message(path: str, fn_name: str, lineno: int) -> str:
+    """Why a generator test cannot run, and the two ways out.
+
+    Mirrors ``_inline_cap_message``: what is wrong, why it is wrong, then the
+    remedy. Naming the fixture route is load-bearing — ``yield`` is correct
+    Python in a fixture, so a message that only says "remove it" reads as a ban
+    on a construct the framework elsewhere requires.
+    """
+    return (
+        f"{fn_name} in {path} line {lineno} contains yield, so calling it "
+        f"returns a generator instead of running.\n"
+        f"None of the test body executes, and the test is reported as passed. "
+        f"A test function returns None.\n"
+        f"Hint: remove the yield, or move the generator into a fixture, where "
+        f"yield is how teardown is expressed."
+    )
+
+
+def _refuse_generator_test(path: str, fn_name: str, fn: object, lineno: int) -> None:
+    """Refuse a test function whose call returns a generator (#2067).
+
+    Both predicates, not one: ``isasyncgenfunction`` is a separate answer, and
+    an async generator is the worse case because ``iscoroutinefunction`` is
+    False for it — ``_expand_item`` sets ``is_async`` from that — so it runs
+    down the *sync* path and its ``await``-less body is discarded silently.
+
+    Function-side, so it cannot see through ``functools.wraps``. That case
+    belongs to the runtime guard in ``_runners.py``, which classifies the
+    returned value instead.
+    """
+    if inspect.isgeneratorfunction(fn) or inspect.isasyncgenfunction(fn):
+        raise CollectionError(_generator_test_message(path, fn_name, lineno))
+
+
 def _collect_items(
     members: Iterable[tuple[str, object]],
     path: str,
@@ -487,6 +521,10 @@ def _collect_items(
     violations: list[CollectedViolation] = []
     for fn_name, fn in members:
         lineno = getattr(getattr(fn, "__code__", None), "co_firstlineno", 0)
+        # Before the mark read, so `@oxi.mark.skip` cannot route a malformed
+        # declaration past the guard: a skip is a decision about a test that
+        # could have run, and this one could not.
+        _refuse_generator_test(path, fn_name, fn, lineno)
         marker_names = [m.name for m in get_marks(fn)]
         items.extend(_expand_item(fn_name, lineno, marker_names, fn))
         if collect_violations:
