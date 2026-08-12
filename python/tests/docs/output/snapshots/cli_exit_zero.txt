@@ -1,3 +1,4 @@
+rootdir: <TMPDIR>
 collected 2 items
 
 ··
