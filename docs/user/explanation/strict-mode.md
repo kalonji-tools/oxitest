@@ -265,6 +265,7 @@ Detected during test collection.
     Output:
 
     ```text
+    rootdir: /home/you/projects/myproject
     collected 42 items
 
     STRICT VIOLATIONS

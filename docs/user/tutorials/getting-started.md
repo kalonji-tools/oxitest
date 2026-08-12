@@ -57,6 +57,7 @@ $ oxitest
 You should see output similar to this:
 
 ```text
+rootdir: /home/you/projects/calculator
 collected 3 items
 
 ···
@@ -97,6 +98,7 @@ $ oxitest
 The output now includes a diagnostic block for the failing test:
 
 ```text
+rootdir: /home/you/projects/calculator
 collected 3 items
 
 ·F·
@@ -154,6 +156,7 @@ $ oxitest tests/test_math.py::test_addition
 ```
 
 ```text
+rootdir: /home/you/projects/calculator
 collected 1 item
 
 ·
