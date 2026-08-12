@@ -1036,6 +1036,72 @@ def test_a_capped_deadline_is_the_one_enforced() -> None:
     )
 
 
+def test_an_async_timeout_message_reports_the_capped_deadline() -> None:
+    """The async path reports the deadline it armed, not the one it asked for.
+
+    ADR-0016 decision 1 caps a nested Deadline at whatever the enclosing one has
+    left, and `_timeout_message` says so when the two differ. Before #2082 the
+    async path got this for free, because the wrapper entered the context that
+    armed the timer and read `effective_seconds` off it. #2082 moved the arming
+    into `_async_test_core`, so the wrapper's context is never entered for an
+    async test and its `effective_seconds` is the *requested* value. Building
+    the result inside the core is what keeps the cap visible.
+
+    The probe caps to a value the request cannot produce, and it is given to the
+    core alone. If the construction ever moves back out to the wrapper, the
+    wrapper builds the message from its own unentered context, the capped
+    wording disappears, and this test fails. No timer is armed and nothing
+    sleeps, so there is no race to lose — which is why this can assert the
+    message where `test_a_capped_deadline_is_the_one_enforced` can only assert
+    timing.
+    """
+    # Arrange
+    capped_to = 0.5
+    requested = 60
+
+    class _CappedProbe(_UnixTimeoutContext):
+        # Neither __enter__ nor __exit__ touches a real timer, so this runs on
+        # every platform — SIGALRM is absent on Windows.
+        def __enter__(self) -> None:
+            self._effective_seconds = capped_to
+
+        def __exit__(self, exc_type: object = None, *_: object) -> None:
+            del exc_type
+
+    async def body() -> None:
+        raise OxitestTimeoutError
+
+    plan = ExecutionPlan(
+        fn=body,
+        fn_name="test_x",
+        kwargs=MappingProxyType({}),
+        marks=(),
+        no_message_lines=(),
+        is_async=True,
+    )
+
+    # Act
+    result = asyncio.run(_async_test_core(plan, requested, context_cls=_CappedProbe))
+
+    # Assert
+    timed_out = helpers.assert_result(
+        result,
+        TimeoutResult,
+        why="the body raised OxitestTimeoutError, and the async core is the only"
+        " place that turns it into a result once the arming moved inward",
+    )
+    assert "0.5s" in timed_out.message, (
+        "the message must name the deadline that was armed, not the one that was"
+        f" requested. A message naming {requested}s means it was built from a"
+        " context that never armed anything, which is the wrapper's — and an"
+        f" enclosing deadline's cap is then invisible. Got {timed_out.message!r}"
+    )
+    assert "capped" in timed_out.message, (
+        "a capped deadline says so, or the developer debugs against a limit that"
+        f" was never armed (#2001). Got {timed_out.message!r}"
+    )
+
+
 def test_a_cancelled_slot_is_detected() -> None:
     """Code that cancels the timer voids the deadline, and that must be visible."""
     if not hasattr(signal, "alarm"):

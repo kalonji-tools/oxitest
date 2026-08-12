@@ -38,11 +38,11 @@ from oxitest._bridge._timeout import (
     Timeout,
     TimeoutOff,
     TimeoutSet,
+    _finish_against_deadline,
     _timeout_context_class,
     _timeout_message,
     _TimeoutContext,
     extract_timeout_seconds,
-    finish_against_deadline,
     make_timeout_wrapper,
 )
 from oxitest._bridge.result import (
@@ -352,7 +352,7 @@ async def _async_test_core(
             return TimeoutResult(
                 message=_timeout_message(ctx.effective_seconds, timeout_secs)
             )
-        return finish_against_deadline(ctx, timeout_secs, result)
+        return _finish_against_deadline(ctx, timeout_secs, result)
     finally:
         async_teardown_sink.reset(token)
         await _teardown_async_generators(async_teardowns)
