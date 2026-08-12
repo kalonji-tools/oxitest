@@ -40,6 +40,7 @@ from oxitest._bridge._fixture_registry import (
 )
 from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge._namespace_validation import namespace_defect
+from oxitest._bridge._paths import format_path
 from oxitest._bridge._visibility import anchors_overlap
 from oxitest._bridge.result import DiagnosticSeverity
 
@@ -176,8 +177,8 @@ def register_module_source_fixtures(
             msg = (
                 f"fixture '{namespace}.{attr_name}' declared twice in "
                 f"overlapping packages:\n"
-                f"  {existing.declaration_path}\n"
-                f"  {module_path}\n"
+                f"  {format_path(existing.declaration_path, registry.rootdir)}\n"
+                f"  {format_path(module_path, registry.rootdir)}\n"
                 f"→ delete one declaration (ADR-0009 slice-1 coexistence)"
             )
             raise UsageError(msg)
@@ -208,11 +209,15 @@ def register_module_source_fixtures(
     # namespace — so no separate counter is needed to tell an empty
     # __fixtures__.py from one that declared something.
     if namespace_is_new and registry.has_namespace(namespace):
-        _warn_if_unreachable(namespace, anchor_package_path, is_inline=is_inline)
+        _warn_if_unreachable(
+            namespace,
+            format_path(anchor_package_path, registry.rootdir),
+            is_inline=is_inline,
+        )
 
 
 def _warn_if_unreachable(
-    namespace: str, anchor_package_path: str, *, is_inline: bool
+    namespace: str, anchor_display: str, *, is_inline: bool
 ) -> None:
     """Report a namespace that cannot be written as ``fx.<namespace>`` (#1782).
 
@@ -225,6 +230,10 @@ def _warn_if_unreachable(
     ``fx.integration-tests.conn`` is valid Python that means
     ``fx.integration - tests.conn``, so the access never reaches oxitest and
     the run reports a missing fixture named ``integration``.
+
+    *anchor_display* is already formatted for display (#1851). This function is
+    module-level and holds no registry, so the caller — which has one — applies
+    ``format_path`` and no rootdir crosses this boundary.
     """
     defect = namespace_defect(namespace)
     if defect is None:
@@ -235,7 +244,7 @@ def _warn_if_unreachable(
         "fixture namespace",
         f"namespace '{namespace}' cannot be written as "
         f"fx.{namespace}.<name> because it is {defect}.\n"
-        f"  Derived from the {origin} name: {anchor_package_path}\n"
+        f"  Derived from the {origin} name: {anchor_display}\n"
         f"Shortcut access (fx.<name>) still works. To use qualified access, "
         f"rename the {origin} to a valid Python identifier.",
     )

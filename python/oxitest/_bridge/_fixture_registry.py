@@ -33,6 +33,7 @@ from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import AmbiguousFixtureError, FixtureNotFoundError
 from oxitest._bridge._fixture_type import _FixtureMarker
 from oxitest._bridge._lifetime import Lifetime
+from oxitest._bridge._paths import format_path
 from oxitest._bridge._visibility import anchor_depth, anchors_overlap, is_visible
 from oxitest._bridge.result import CollectedViolation, DiagnosticSeverity, ViolationKind
 
@@ -484,7 +485,14 @@ class FixtureRegistry:
     ``PluginRegistry`` (dataclass with lazy cached_property).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, rootdir: str | None = None) -> None:
+        # The base a diagnostic path is shown against (#1851). It is carried
+        # here rather than passed to each printer because three of them are
+        # reached through the registry and one of those — the shadow notice in
+        # `register` — has no other argument to read it from. `None` is the
+        # session's own default, and `_paths.format_path` renders a path
+        # unchanged under it.
+        self._rootdir = rootdir
         # name -> list of FixtureDef, ordered from root conftest to leaf conftest
         self._by_name: dict[str, list[FixtureDef[Any]]] = {}
         # type -> list of FixtureDef, indexed by fixture_type for type-based resolve
@@ -500,11 +508,28 @@ class FixtureRegistry:
         # make that loop scale with the suite instead of with the feature.
         self._autouse_names: dict[str, None] = {}
 
+    @property
+    def rootdir(self) -> str | None:
+        """The base a diagnostic path is shown against, or ``None`` (#1851).
+
+        Read by the module-source registrar, which receives this registry and
+        holds no session of its own.
+        """
+        return self._rootdir
+
     def register(self, defn: FixtureDef[Any]) -> list[CollectedViolation]:
         for shadower, shadowed in _shadowing_pairs(
             self._by_name.get(defn.name, ()), defn
         ):
-            scope = f" within {shadower.anchor}" if shadower.anchor is not None else ""
+            # The anchor is the third path in this one message (#1851). Leaving
+            # it absolute while the other two are relative reads worse than
+            # leaving all three absolute, because the reader cannot tell the
+            # three apart by shape any more.
+            scope = (
+                f" within {format_path(shadower.anchor, self._rootdir)}"
+                if shadower.anchor is not None
+                else ""
+            )
             # Shadowing a plain fixture is a naming question; shadowing an
             # autouse one stops it running for that whole subtree. Naming only
             # the first reads as a style nit for a behaviour change (#1716).
@@ -521,8 +546,11 @@ class FixtureRegistry:
             emit_diagnostic(
                 DiagnosticSeverity.NOTICE,
                 "fixture registration",
-                f"fixture '{defn.name}' in {shadower.declaration_path} "
-                f"shadows definition in {shadowed.declaration_path}{scope}{suppressed}",
+                f"fixture '{defn.name}' in "
+                f"{format_path(shadower.declaration_path, self._rootdir)} "
+                "shadows definition in "
+                f"{format_path(shadowed.declaration_path, self._rootdir)}"
+                f"{scope}{suppressed}",
             )
         self._by_name.setdefault(defn.name, []).append(defn)
         self._by_type.setdefault(defn.fixture_type, []).append(defn)

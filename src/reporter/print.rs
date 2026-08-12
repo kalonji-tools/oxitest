@@ -10,7 +10,24 @@ use super::stats::RunStats;
 use super::{ReporterOpts, sep_width};
 use crate::colors;
 
-pub fn print_collected(total: usize, fn_count: usize, async_count: usize) {
+/// Print the start-of-run header: the rootdir, then the collected count.
+///
+/// The rootdir is announced because every path inside a diagnostic is shown
+/// against it (#1851), and a relative path is not resolvable on its own. It is
+/// printed here rather than gated on whether a diagnostic follows, because the
+/// reporter cannot know that yet — and because a header that appears only on
+/// some runs is a worse contract than one that always does.
+///
+/// `None` means the run has no project, which is the test builder's default.
+pub fn print_collected(
+    total: usize,
+    fn_count: usize,
+    async_count: usize,
+    rootdir: Option<&camino::Utf8Path>,
+) {
+    if let Some(root) = rootdir {
+        println!("rootdir: {root}");
+    }
     let suffix = if total == 1 { "" } else { "s" };
     let from_fns = if fn_count > 0 && fn_count < total {
         format!(

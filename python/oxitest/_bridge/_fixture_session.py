@@ -384,7 +384,7 @@ class FixtureSession:
     ) -> None:
         BuiltinFixture.ensure_registered()
         self._rootdir = rootdir
-        self._registry = FixtureRegistry()
+        self._registry = FixtureRegistry(rootdir=rootdir)
         self._plugin_registry = plugin_registry or PluginRegistry()
         self._async_mgr = SharedAsyncManager(async_backend or AsyncioBackend())
         self._session_scope = _Scope()
@@ -1053,7 +1053,12 @@ class FixtureSession:
         defn = self._registry.get_in_namespace(name, namespace)
         anchor = (defn.anchor if defn is not None else None) or anchors[0]
         return BoundaryError(
-            name, namespace, anchor, module_path, leaf_exists=defn is not None
+            name,
+            namespace,
+            anchor,
+            module_path,
+            leaf_exists=defn is not None,
+            rootdir=self._rootdir,
         )
 
     def validate_fx_boundaries(

@@ -84,7 +84,12 @@ fn progress_style(use_color: bool) -> ProgressStyle {
 
 impl TtyReporter {
     pub fn new(opts: ReporterOpts) -> Self {
-        super::print_collected(opts.total, opts.fn_count, opts.async_count);
+        super::print_collected(
+            opts.total,
+            opts.fn_count,
+            opts.async_count,
+            opts.rootdir.as_deref(),
+        );
         let pb = ProgressBar::new(opts.total as u64);
         let style = progress_style(opts.use_color);
         pb.set_style(style);
