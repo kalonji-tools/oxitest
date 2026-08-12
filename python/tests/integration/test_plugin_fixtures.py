@@ -411,6 +411,12 @@ def test_plugin_inside_testpaths_registers_once(tmp: TempDir) -> None:
     `testpaths = ["."]` walks the plugin package itself. Its __fixtures__.py
     would then be registered twice — once ambient, once anchored — under the
     same derived namespace, giving one fixture two scope buckets.
+
+    This does *not* cover whether the dedup seed matches. Two things stop it:
+    the plugin anchor is a sibling of the tests, so the ancestor walk never
+    reaches it; and `[1] == [1]` holds whether the fixture has one scope bucket
+    or two. `test_plugin_anchor_is_spelled_so_the_dedup_seed_matches` covers
+    that (#1767).
     """
     _write_plugin_project(
         tmp,
@@ -455,6 +461,11 @@ def test_a_plugin_anchor_mid_chain_does_not_stop_the_walk(tmp: TempDir) -> None:
     `test_plugin_inside_testpaths_registers_once` cannot cover this: its plugin
     anchor is a sibling of the tests, so it never appears in a test's ancestor
     chain.
+
+    This tells `continue` from `break`, and nothing else. A seed that never
+    matches reaches neither, so this passes whether or not the anchor's
+    spelling matches — see
+    `test_plugin_anchor_is_spelled_so_the_dedup_seed_matches` (#1767).
     """
     # Arrange
     integ.write_project(
@@ -491,3 +502,129 @@ def test_a_plugin_anchor_mid_chain_does_not_stop_the_walk(tmp: TempDir) -> None:
 
     # Assert
     integ.assert_passed(out, rc, count=1)
+
+
+# ── the dedup seed's spelling (#1767) ─────────────────────────────────────────
+
+_SHADOW = "shadows definition in <plugin:suite>"
+
+
+def _write_seed_project(tmp: TempDir, *, extra: dict[str, str] | None = None) -> None:
+    """Scaffold a project whose plugin anchor sits in the test's ancestor chain.
+
+    The seed is only consulted for a directory the ancestor walk reaches, so a
+    plugin that is a *sibling* of the tests cannot exercise it — which is why
+    `test_plugin_inside_testpaths_registers_once` cannot cover this either.
+    Here `suite/` is both the plugin and the declared test root, so the walk
+    from `suite/api/test_seed.py` passes through the seeded directory.
+    """
+    integ.write_project(
+        tmp,
+        tests={},
+        pyproject="[tool.oxitest]\ntestpaths = ['suite']\nplugins = ['suite']\n",
+        extra_files={
+            "suite/__init__.py": _PLUGIN_ENTRY,
+            "suite/__fixtures__.py": (
+                "import oxitest as oxi\n\n\n"
+                "@oxi.fixture(lifetime='module')\n"
+                "def from_plugin() -> str:\n"
+                "    return 'plugin-value'\n"
+            ),
+            "suite/api/test_seed.py": (
+                "from oxitest import Fixtures\n\n\n"
+                "def test_reaches_the_plugin_fixture(fx: Fixtures) -> None:\n"
+                "    assert fx.from_plugin, 'the plugin fixture must resolve'\n"
+            ),
+            **(extra or {}),
+        },
+    )
+
+
+def test_the_shadow_notice_fires_when_a_user_home_shadows_the_plugin(
+    tmp: TempDir,
+) -> None:
+    """A user declaration shadowing the plugin's emits the notice.
+
+    This is the positive control for the three tests below, and it is the only
+    thing keeping them honest. They assert the notice is *absent*, so they are
+    silent if the notice stops being emitted under that wording — which is the
+    failure mode this whole file was found to have for #1717, one level up.
+
+    Rewording `_fixture_registry`'s notice therefore fails *here*, loudly,
+    instead of turning the three negative assertions into assertions that
+    cannot fire. `"no longer fires"` cannot serve as the shared anchor: it sits
+    in the `suppressed` clause, which is emitted only when the shadowed fixture
+    is autouse and the shadower is not, and neither is autouse here.
+    """
+    # Arrange
+    _write_seed_project(
+        tmp,
+        extra={
+            "suite/api/__fixtures__.py": (
+                "import oxitest as oxi\n\n\n"
+                "@oxi.fixture(lifetime='module')\n"
+                "def from_plugin() -> str:\n"
+                "    return 'user-value'\n"
+            )
+        },
+    )
+
+    # Act
+    out, _, rc = helpers.run_oxitest(tmp, "--warnings", cwd=".")
+
+    # Assert
+    integ.assert_passed(out, rc, count=1)
+    assert _SHADOW in out, (
+        "the notice this file's other assertions look for was not emitted; if "
+        "its wording changed, every 'not in out' assertion below is now inert"
+    )
+
+
+def test_plugin_anchor_is_spelled_so_the_dedup_seed_matches(tmp: TempDir) -> None:
+    """The plugin home is registered once, not also as a user declaration home.
+
+    `collect_items` seeds `registered_fixture_dirs` with each activated plugin's
+    anchor and skips those directories during the ancestor walk (#1717). The
+    anchor is spelled in Python (`plugin_loader.py`) and compared in Rust, and a
+    seed whose spelling cannot match the collected directory registers the same
+    `__fixtures__.py` a second time — once as a plugin, once anchored (#1767).
+
+    The *value* cannot see this: both registrations resolve to one build, so an
+    assertion on the fixture's value passes either way. The shadow notice is
+    what differs, so this asserts on the diagnostic — and therefore needs
+    `--warnings`, without which the notice never reaches stdout.
+    """
+    # Arrange
+    _write_seed_project(tmp)
+
+    # Act
+    out, _, rc = helpers.run_oxitest(tmp, "--warnings", cwd=".")
+
+    # Assert
+    integ.assert_passed(out, rc, count=1)
+    assert _SHADOW not in out, (
+        "the plugin home was registered twice: the anchor's spelling did not "
+        "match the collected directory, so the dedup seed was never consulted"
+    )
+
+
+def test_plugin_anchor_seed_matches_in_a_worker(tmp: TempDir) -> None:
+    """The same property on the parallel path.
+
+    `collect_items` builds the `(module, anchor)` pairs the workers register
+    from, from a second seed. A serial-only test leaves that seed unproven, and
+    it is the half that crosses a process boundary, where a duplicate
+    registration is hardest to see.
+    """
+    # Arrange
+    _write_seed_project(tmp)
+
+    # Act
+    out, _, rc = helpers.run_oxitest(tmp, "--warnings", "-n", "2", cwd=".")
+
+    # Assert
+    integ.assert_passed(out, rc, count=1)
+    assert _SHADOW not in out, (
+        "the plugin home was registered twice on the parallel path: the "
+        "worker's anchor spelling did not match the collected directory"
+    )
