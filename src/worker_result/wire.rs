@@ -9,13 +9,17 @@ use camino::Utf8PathBuf;
 /// [`WireResult`]. The coordinator warns on version mismatch.
 ///
 /// Stays `pub(crate)` against `clippy::redundant_pub_crate`, which would widen it
-/// to `pub` like the rest of the crate. `scripts/check_bridge_sync.py:341` matches
-/// this declaration with `r"pub\(crate\)\s+const\s+PROTOCOL_VERSION…"` to check it
-/// against `result.py`, and `python/tests/test_check_protocol_version.py` rewrites
-/// it with the same literal. Widening it makes both silently find nothing — the
-/// prek `bridge-sync` hook reports "`PROTOCOL_VERSION` not found", and the test's own
-/// assertion message says every downstream check becomes meaningless. The coupling
-/// is a Python script parsing Rust source as text; the qualifier is load-bearing.
+/// to `pub` like the rest of the crate. `parse_protocol_version_rs` in
+/// `scripts/check_bridge_sync.py` matches this declaration with
+/// `r"pub\(crate\)\s+const\s+PROTOCOL_VERSION…"` to check it against `result.py`,
+/// and `python/tests/test_check_bridge_sync.py` rewrites it with the same literal.
+/// Widening it makes both silently find nothing — the prek `bridge-sync` hook
+/// reports "`PROTOCOL_VERSION` not found", and the test's own assertion message
+/// says every downstream check becomes meaningless. The coupling is a Python
+/// script parsing Rust source as text; the qualifier is load-bearing.
+///
+/// Cited by symbol, not by line (#2074). The previous form named
+/// `check_bridge_sync.py:341`, and that line had already moved.
 #[allow(clippy::redundant_pub_crate)]
 pub(crate) const PROTOCOL_VERSION: u32 = 8;
 
