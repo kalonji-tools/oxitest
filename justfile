@@ -263,9 +263,17 @@ preflight: clean check-locks check test-rust build test-python
     @just _log {{_green}} "Preflight passed"
 
 # Format code and fix typos
-fmt *args: (_log _yellow "Formatting...")
-    ruff format {{args}} python/
-    cargo fmt {{args}}
+#
+# No paths and no `*args`. `pyproject.toml`'s `[tool.ruff] include` declares
+# the linted surface and `just check` reads it the same way, so a path here
+# would be a second copy of that declaration — which is how `scripts/` and
+# `benchmarks/` came to be checked and never formatted. One argument list
+# cannot serve all three tools either: a path breaks `cargo fmt`, and
+# `--check` never reaches `codespell`, which then writes. `just check` is
+# the check-mode entry point (#2064).
+fmt: (_log _yellow "Formatting...")
+    ruff format
+    cargo fmt
     codespell --toml pyproject.toml --write-changes
 
 # Build all documentation sites
