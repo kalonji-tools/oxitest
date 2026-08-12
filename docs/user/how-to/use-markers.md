@@ -92,15 +92,23 @@ oxitest stops the test and reports it with status `timeout` if it exceeds the li
 `seconds` must be a positive integer. A global timeout can also be set in
 `pyproject.toml` via the `timeout` key.
 
+The limit covers the **test function itself**. Fixture setup and fixture teardown run
+outside it, so a fixture that takes longer than the limit does not make the test time
+out — and a fixture that hangs is stopped by oxitest's watchdog rather than by the
+timeout. This is the same for sync and async tests.
+
 !!! warning "A blocking call is not interrupted on Windows"
 
-    What a deadline can interrupt depends on what the test is doing, and on the
-    platform:
+    What a deadline can interrupt depends on what the test **body** is doing, and
+    on the platform:
 
-    | The test is | Linux / macOS | Windows |
+    | The test body is | Linux / macOS | Windows |
     |---|---|---|
     | running Python code, or `await`ing | bounded | bounded |
     | blocked in a C call — `time.sleep`, a socket read, `subprocess.wait` | bounded | **not bounded** |
+
+    The table is about the body because that is what the deadline covers. Fixture
+    setup and teardown are outside it on every platform.
 
     On Unix the deadline is delivered by `SIGALRM`, which interrupts a blocking
     call. Windows has no equivalent, so oxitest raises the timeout at the next
