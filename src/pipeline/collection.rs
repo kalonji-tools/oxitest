@@ -1040,8 +1040,9 @@ pub(super) fn collect_items(
                     cache.update_module_cache(file, mtime, &arc_items);
                 }
                 raw_violations.extend(file_violations);
-                // Bare-assert and module-level-definition detection: both reuse
-                // the pre-parsed AST when available (#1783).
+                // Bare-assert, module-level-definition and test-returns-value
+                // detection: all three reuse the pre-parsed AST when available
+                // (#1783, #2067).
                 if collect_violations {
                     if let Some((ref source, ref stmts)) = cached_ast {
                         raw_violations.extend(bare_asserts::collect_bare_asserts_from_ast(
@@ -1050,9 +1051,13 @@ pub(super) fn collect_items(
                         raw_violations.extend(crate::module_defs::collect_module_defs_from_ast(
                             file, source, stmts,
                         ));
+                        raw_violations.extend(crate::test_returns::collect_test_returns_from_ast(
+                            file, source, stmts,
+                        ));
                     } else {
                         raw_violations.extend(bare_asserts::collect_bare_asserts(file));
                         raw_violations.extend(crate::module_defs::collect_module_defs(file));
+                        raw_violations.extend(crate::test_returns::collect_test_returns(file));
                     }
                 }
                 items.extend(arc_items);

@@ -507,6 +507,7 @@ class ViolationKind(StrEnum):
     SINGLE_CASE_PARAMETRIZE = "single_case_parametrize"
     BROAD_FIXTURE_TYPE = "broad_fixture_type"
     UNUSED_FIXTURE = "unused_fixture"
+    TEST_RETURNS_VALUE = "test_returns_value"
 
 
 @dataclass(frozen=True, slots=True)

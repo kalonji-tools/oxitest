@@ -15,6 +15,7 @@ __all__ = [
 ]
 
 import contextlib
+import inspect
 import sys as _sys
 import warnings
 from collections.abc import Callable
@@ -29,6 +30,7 @@ from oxitest._bridge._diagnostics import (
     dispatch_exception,
     is_debuggable,
 )
+from oxitest._bridge._errors import TestReturnedValueError
 from oxitest._bridge._timeout import OxitestTimeoutError
 from oxitest._bridge.result import PassedResult, WarnedResult
 from oxitest._oxitest import trace as _rust_trace
@@ -145,6 +147,45 @@ def _debug_post_mortem(
         backend.post_mortem(tb)
 
 
+def _refuse_generator_result(fn: Callable[..., Any], returned: object) -> None:
+    """Refuse a call that returned a generator instead of running (#2067).
+
+    Value-side, so a ``functools.wraps`` wrapper cannot hide the shape:
+    ``isgeneratorfunction`` answers False on the wrapper while the call still
+    returns a generator. That case is why this point exists — the collection
+    guard in ``importer.py`` catches every shape a static answer can see.
+
+    Generators only, **not** ``returned is not None``. A non-None return ran
+    its body, so it is a smell rather than the silent defect, and the
+    ``test-returns-value`` strict check owns it.
+
+    Both predicates, for the reason the collection guard uses both: an async
+    generator reaches this *sync* runner, because ``is_async`` is derived from
+    ``iscoroutinefunction``, which answers False for one.
+
+    ``TestReturnedValueError`` is enrolled in ``_USAGE_ERROR_TYPES``, so
+    ``_handle_runtime_exception`` sets ``usage_error`` and the run exits 4
+    without being stopped — every sibling test still reports (#1761).
+    """
+    if not (inspect.isgenerator(returned) or inspect.isasyncgen(returned)):
+        return
+    name = getattr(fn, "__name__", "<test>")
+    # The message must not name a wrapper as the cause. A wrapped generator is
+    # one way to reach this point; an ordinary `async def` that returns a
+    # generator is another, and it has no wrapper at all. Naming the wrapper
+    # sent that second reader looking for a decorator that is not there.
+    msg = (
+        f"{name} returned a {type(returned).__name__} instead of None, so none "
+        f"of its body ran and the test proved nothing.\n"
+        f"Only the returned value shows this shape, so collection could not "
+        f"refuse it. A test function returns None.\n"
+        f"Hint: remove the yield, or return nothing. To express setup and "
+        f"teardown, move the generator into a fixture, where yield is how "
+        f"teardown is written."
+    )
+    raise TestReturnedValueError(msg)
+
+
 def _call_with_warnings(
     fn: Callable[..., Any],
     all_kwargs: dict[str, Any],
@@ -157,7 +198,12 @@ def _call_with_warnings(
     """
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        fn(**all_kwargs)
+        returned = fn(**all_kwargs)
+    # Outside the `with`, to keep the block to the one statement it guards.
+    # Position is not load-bearing beyond that: the refusal raises before
+    # `check_warnings` either way, and a call that returns a generator ran no
+    # part of the body, so there is never a warning to lose.
+    _refuse_generator_result(fn, returned)
     has_warnings, warning_msg = check_warnings(w, all_kwargs)
     if has_warnings:
         return WarnedResult(message=warning_msg, no_message_lines=no_message_lines)
@@ -204,7 +250,8 @@ async def run_base_async(
     try:
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            await fn(**all_kwargs)
+            returned = await fn(**all_kwargs)
+        _refuse_generator_result(fn, returned)
         has_warnings, warning_msg = check_warnings(w, all_kwargs)
         if has_warnings:
             return WarnedResult(message=warning_msg, no_message_lines=no_message_lines)

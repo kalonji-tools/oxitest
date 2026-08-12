@@ -409,6 +409,7 @@ pub enum ViolationKind {
     MissingReturnAnnotation,
     ModuleLevelDef,
     SingleCaseParametrize,
+    TestReturnsValue,
     UnusedFixture,
     Unknown,
 }
@@ -440,6 +441,7 @@ impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for ViolationKind {
             "missing_return_annotation" => ViolationKind::MissingReturnAnnotation,
             "module_level_def" => ViolationKind::ModuleLevelDef,
             "single_case_parametrize" => ViolationKind::SingleCaseParametrize,
+            "test_returns_value" => ViolationKind::TestReturnsValue,
             "unused_fixture" => ViolationKind::UnusedFixture,
             _ => ViolationKind::Unknown,
         })

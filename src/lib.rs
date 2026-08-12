@@ -29,6 +29,7 @@ mod retry;
 mod scheduler;
 mod strict;
 mod target;
+mod test_returns;
 mod types;
 mod worker_result;
 mod worker_session;
