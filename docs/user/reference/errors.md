@@ -323,6 +323,12 @@ built-in fixture. The bare-name route also reports this error when the fixture
 proxy, it has no namespace segment to attribute the failure to, so it cannot
 raise `BoundaryError`.
 
+A fixture that is declared correctly also reports as not found when its
+declaration file could not be parsed, because a file that does not parse
+registers nothing. Look for a diagnostic beside this error naming that file
+and its syntax error — it is printed with the run, and `--warnings` expands
+it. Fix the parse error rather than the fixture name.
+
 **Fix:** Declare a fixture returning type `T` with `@oxi.fixture(lifetime=...)`
 in the `__fixtures__.py` or `__init__.py` of the test's own package, or of an
 ancestor of it. Check that the fixture has a return type annotation matching
