@@ -1115,3 +1115,58 @@ Fixing the first route alone leaves the second double-building. That was measure
 **`process` is untouched.** It *"guarantees at most one instance per process, and constrains the scheduler not at all"*, so a phase boundary inside one process is not a violation of its contract. A rule that moves a subtree onto the coordinator is already inside that tier's `≤ 1 + N`, the `1` being the coordinator when an inprocess or arranged test resolves it.
 
 **`reject_inprocess_inside_package` is deleted, along with the restriction it enforced.** `@oxi.mark.inprocess` now works inside a declaring package. The data project that proved the rejection proves the exactly-once run instead.
+
+### Amendment 19 — a declaration home is a module or a package, never a method (2026-08-12)
+
+Two definitions were accepted in silence and then reported as something else.
+Both are now refused at registration, exit 3, regardless of `strict`.
+
+| Shape | Read as, before | Now |
+|---|---|---|
+| `test_`-named **and** `@oxi.fixture`, at module level in a test file | a test *and* a fixture — the body runs once as a test and once per consumer | refused (#2066) |
+| `@oxi.fixture` on a method of any class | nothing — every consumer reports `fixture not found` | refused (#2068) |
+
+**Registration, not the prescan.** Registration reads a marker attribute and so
+sees every import spelling. `prescan.rs` recognises `@oxi.fixture`,
+`@oxitest.fixture` and `@fixture`, so a static refusal would be incomplete by
+construction — the same reason Amendment 8 gives for moving the home-kind cap
+there in #1859.
+
+**#2066 is gated on an inline home.** A `__fixtures__.py` is not matched by the
+default `python_files`, so a `test_`-named declaration there is read one way and
+stays legal. #2068 is **not** gated: a method fixture registers nothing in any
+home.
+
+**Neither #2067 guard needs to defer, and this was established by measurement
+rather than by reasoning.** Both guards run at collection, and the plan for this
+change assumed they would therefore speak before a refusal raised at import —
+so a deferral was written into each. Each was then measured to change the output
+by nothing at all, and both were deleted.
+
+The refusal wins in every body shape because registration raises during module
+import, and the resulting collection error is reported instead of a strict
+violation. All four cells — `return <value>` with `strict` off and on, `yield`,
+and a body returning `None` — report the overlap.
+
+The premise behind the deferrals was measured on `main` *before* the refusal
+existed, where `test-returns-value` and the generator message were indeed what
+a user saw. That observation was true and the inference drawn from it was not.
+Ordering is now pinned by tests rather than by guard clauses, so an inversion
+fails loudly instead of silently restoring the wrong message.
+
+**Why a method fixture is refused rather than supported.** Four costs, each
+measured rather than assumed:
+
+1. no instance exists at registration — `_loader.py` builds one per test, in the
+   loader;
+2. the inline `module` cap is wrong for a per-test instance;
+3. `anchor_package_path == defining_module_path` is how inline-ness is encoded,
+   and a class is a third level a path cannot express;
+4. the module-stem namespace would collide across two classes in one module,
+   which the registrar already treats as a hard error.
+
+**`CACHE_VERSION` is bumped 3 → 4.** The item cache serves a file's collected
+items without importing it, and its eligibility test scans top-level statements
+only — a `ClassDef` answers "no fixtures here". So a file whose only fixture
+decorator sits inside a class stayed cache-eligible, and an entry written before
+this change would serve its items and skip the refusal.
