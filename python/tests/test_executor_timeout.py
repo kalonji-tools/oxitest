@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import signal
 import sys
 import threading
@@ -14,12 +15,17 @@ import oxitest as oxi
 from oxitest import Fixture, TempDir
 from oxitest._bridge._errors import OxitestTimeoutError
 from oxitest._bridge._mark_api import MarkInfo
-from oxitest._bridge._middleware import ExecutionPlan, _effective_timeout_secs
+from oxitest._bridge._middleware import (
+    ExecutionPlan,
+    _async_test_core,
+    _effective_timeout_secs,
+)
 from oxitest._bridge._timeout import (
     TimeoutOff,
     TimeoutSet,
     _IdleHandler,
     _IdleTimer,
+    _timeout_context_class,
     _timeout_message,
     _UnixTimeoutContext,
     _WindowsTimeoutContext,
@@ -369,6 +375,111 @@ def test_sync_test_always_arms_even_when_blocking_calls_are_unbounded() -> None:
     assert entered == ["armed"], (
         "a sync test must keep the arm on every platform — dropping it would"
         " leave the sync path with no deadline enforcement at all"
+    )
+
+
+# ── The two arms bound different spans (#2082 AC1) ───────────────────────────
+#
+# The armed arm wraps the whole of `next_fn()` (`_timeout.py:412`), so it bounds
+# async fixture setup *and* the body. Where the arm is skipped, `asyncio.wait_for`
+# is the only enforcement left, and it is armed inside `_async_test_core` **after**
+# `_unpack_async_fixtures` returns (`_middleware.py:299` → `:251`), so it bounds
+# the body alone. One Deadline, two spans, decided by the arm.
+#
+# Only the unarmed half is asserted here, and deliberately: arming the real Unix
+# context needs SIGALRM, absent on Windows. The armed half is already settled by
+# `test_wait_for_never_governs_a_deadline_on_linux`, so pairing them here would
+# buy a skip on two platforms and no new coverage.
+
+#: Longer than the deadline below, so a bounded setup cannot reach its end.
+_SETUP_SECONDS = 2
+_SPAN_DEADLINE_SECONDS = 1
+
+
+def test_an_unarmed_arm_leaves_async_fixture_setup_outside_the_deadline() -> None:
+    """Where the OS arm is skipped, async fixture setup has no Deadline at all.
+
+    `asyncio.wait_for` starts after the fixtures are unpacked, so it cannot bound
+    them. A fixture that sleeps longer than the whole Deadline still runs to its
+    end, and the test then reports **passed** — later than the limit the user
+    asked for. On Windows that is every async test (#1998 AC2), which makes a
+    hanging async fixture unbounded there.
+
+    The assertion is on the setup reaching its end rather than on elapsed wall
+    time: a bound would have cancelled the sleep mid-flight, so the marker is
+    absent exactly when the span is covered, and no timing threshold is needed.
+
+    Scope: this drives `_async_test_core` under `asyncio.run`, where production
+    drives it under `session.run` (`_middleware.py:341`). The ordering that
+    creates the span sits inside `_async_test_core`, so it holds either way —
+    but this does not cover the production composition.
+    """
+    setup_reached_its_end: list[str] = []
+
+    async def slow_setup() -> str:
+        await asyncio.sleep(_SETUP_SECONDS)
+        setup_reached_its_end.append("finished")
+        return "ready"
+
+    async def body(slow: str) -> None:
+        assert slow == "ready", f"fixture must resolve before the body, got {slow!r}"
+
+    plan = ExecutionPlan(
+        fn=body,
+        fn_name="test_x",
+        kwargs=MappingProxyType({"slow": slow_setup()}),
+        marks=(),
+        no_message_lines=(),
+        is_async=True,
+    )
+    wrapper = make_timeout_wrapper(
+        _SPAN_DEADLINE_SECONDS,
+        is_async=True,
+        context_cls=_WindowsTimeoutContext,
+    )
+
+    result = wrapper(
+        lambda: asyncio.run(_async_test_core(plan, _SPAN_DEADLINE_SECONDS))
+    )
+
+    assert setup_reached_its_end == ["finished"], (
+        f"a {_SETUP_SECONDS}s fixture setup must run to its end under a"
+        f" {_SPAN_DEADLINE_SECONDS}s Deadline when the OS arm is skipped, because"
+        f" asyncio.wait_for is armed after the fixtures are unpacked and cannot"
+        f" reach them — an empty marker means something bounded the setup, so the"
+        f" two arms now agree and this issue's premise is gone"
+    )
+    assert isinstance(result, PassedResult), (
+        f"the unarmed arm must report a pass, got {result!r} — the body finished"
+        f" inside its own {_SPAN_DEADLINE_SECONDS}s window, and only the unbounded"
+        f" setup pushed the run past the Deadline. A TimeoutResult here means the"
+        f" arm bounded the setup after all"
+    )
+
+
+def test_the_alarm_capability_decides_which_arm_the_platform_gets() -> None:
+    """Windows selects the arm that is skipped for async tests; Unix does not.
+
+    This is what makes the test above mean something on Windows: without it, that
+    test proves a property of a class nobody has shown Windows selects. Dispatch
+    is on `hasattr(signal, "alarm")` (`_timeout.py:332`), so the expectation here
+    is keyed on `sys.platform` instead — an independent oracle, rather than a
+    restatement of the branch under test.
+    """
+    on_windows = sys.platform == "win32"
+    expected = _WindowsTimeoutContext if on_windows else _UnixTimeoutContext
+
+    selected = _timeout_context_class()
+
+    assert selected is expected, (
+        f"{sys.platform} must select {expected.__name__}, got {selected.__name__}"
+        f" — the arm decides whether an async test's fixture setup is bounded, so"
+        f" selecting the wrong one silently changes what a Deadline covers"
+    )
+    assert selected.bounds_blocking_calls is not on_windows, (
+        f"{selected.__name__} must report bounds_blocking_calls="
+        f"{not on_windows} — `arm` is computed from it (`_timeout.py:396`), so"
+        f" this capability is what skips the OS arm for async tests on Windows"
     )
 
 
