@@ -112,7 +112,14 @@ name = "bridge-sync"
 language = "system"
 entry = "python scripts/check_bridge_sync.py"
 pass_filenames = false
-files = "(bridge\\.rs|worker_result\\.rs|result\\.py|worker\\.py)$"
+# The five paths the script reads, anchored and spelled in full (#2074). The
+# previous filter named `worker_result.rs`, and no such file exists — the module
+# is a directory, so the file is `worker_result/wire.rs`. Four of the six checks
+# read it, and the hook never ran on it. Bare basenames also over-matched in the
+# other direction: `bridge\.rs$` caught `src/query/bridge.rs`, and `result\.py$`
+# caught `python/tests/test_result.py`. Anchoring both ends states the set the
+# script's own path constants define, so a rename breaks the filter loudly.
+files = "^(src/bridge\\.rs|src/reporter/bridge\\.rs|src/worker_result/wire\\.rs|python/oxitest/_bridge/result\\.py|python/oxitest/_bridge/worker\\.py)$"
 
 [[repos.hooks]]
 id = "platform-sets"
