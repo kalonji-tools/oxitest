@@ -151,6 +151,36 @@ def parse_worker_item_reads(path: Path) -> set[str]:
     return fields
 
 
+def parse_wire_base_fields(path: Path) -> set[str]:
+    """Extract the required wire field names from the ``_wire_base`` return dict.
+
+    Read through the AST rather than by a regex over the whole file. ``result.py``
+    holds many dict literals, so a regex could only tell ``_wire_base`` apart by
+    listing the names it already expected — and a required field outside that list
+    was then invisible. Adding a sixth key to ``_wire_base`` produced no mismatch.
+
+    Returns an empty set if ``_wire_base`` is absent or stops returning a literal
+    dict, which the caller reports as an error rather than as agreement.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.FunctionDef) and node.name == "_wire_base"):
+            continue
+        for stmt in node.body:
+            if isinstance(stmt, ast.Return) and isinstance(stmt.value, ast.Dict):
+                keys = {
+                    key.value
+                    for key in stmt.value.keys
+                    if isinstance(key, ast.Constant) and isinstance(key.value, str)
+                }
+                # "type" is the LDJSON envelope discriminator. It selects the
+                # line kind the drain loop dispatches on ("result",
+                # "diagnostic", "trace"), so no Rust variant carries it and
+                # comparing it would always mismatch.
+                return keys - {"type"}
+    return set()
+
+
 def parse_to_wire_fields(path: Path) -> set[str]:
     """Extract wire field names from per-outcome to_wire() methods and helpers.
 
@@ -160,12 +190,7 @@ def parse_to_wire_fields(path: Path) -> set[str]:
     - Direct output[...] assignments (frames, field_diffs)
     """
     text = path.read_text(encoding="utf-8")
-    fields: set[str] = set()
-    # Required fields from _wire_base dict literal
-    for m in re.finditer(r'"(\w+)"\s*:', text):
-        key = m.group(1)
-        if key in ("node_id", "outcome", "duration_ms", "protocol_version"):
-            fields.add(key)
+    fields: set[str] = parse_wire_base_fields(path)
     # Optional fields from _wire_optional keyword args
     for m in re.finditer(r"_wire_optional\([^)]+\)", text, re.DOTALL):
         call = m.group(0)
@@ -222,13 +247,23 @@ def _check_main_pairs(rust: dict[str, set[str]], python: dict[str, set[str]]) ->
         # ``kind: TestKind`` on the Python side (#1564). PyO3 FromPyObject
         # resolves via attribute lookup, so the property satisfies the Rust
         # field. If we grow a second such bridge, promote this to a table.
-        if (
-            rust_name == "CollectedItem"
-            and rust_only == {"param_id"}
-            and "kind" in py_only
-        ):
-            rust_only = set()
-            py_only = py_only - {"kind"}
+        if rust_name == "CollectedItem" and rust_only == {"param_id"}:
+            if "kind" in py_only:
+                rust_only = set()
+                py_only = py_only - {"kind"}
+            else:
+                # Naming the absent field matters (#2074). Without this the
+                # report is "Rust-only fields: ['param_id']", which is true and
+                # sends the reader to the wrong side of the bridge: param_id is
+                # not missing, the field backing it is.
+                print(
+                    f"ERROR: Python class '{py_name}' has no 'kind' field. Rust"
+                    " reads 'param_id' through the @property backed by"
+                    " 'kind: TestKind' (#1564), so 'kind' is what satisfies the"
+                    " Rust field."
+                )
+                errors += 1
+                continue
         label = py_name if isinstance(py_name, str) else "per-outcome union"
         if rust_only or py_only:
             print(f"MISMATCH: {rust_name} (Rust) vs {label} (Python)")
