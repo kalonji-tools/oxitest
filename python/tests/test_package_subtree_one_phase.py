@@ -3,10 +3,9 @@
 Each dispatch phase owns its own fixture session, so a subtree spread across two
 of them builds its ``lifetime="package"`` fixture once in each and the tier's
 exactly-once promise silently stops holding. Two independent routes could split
-a subtree. This module covers the first — the ``@oxi.mark.inprocess`` mark —
-plus nested anchors and an async twin, async being the dimension every arm that
-established the rule held constant. The arrangement route is the second, and it
-needs no mark at all.
+a subtree, and this module has one project per route, one for nested anchors,
+and one async twin — async being the dimension every arm that established the
+rules held constant.
 
 **These tests count builds, not outcomes.** An exit code cannot see a double
 build — before #2058 the split was refused at collection, and after it the run
@@ -68,6 +67,38 @@ def test_an_inprocess_mark_does_not_split_a_declaring_package_subtree(
     assert len(run.running_pids) == 1, (
         f"both tests must run in one process; two PIDs means the subtree split "
         f"even though only one instance happened to be built. uses={run.uses}"
+    )
+
+
+def test_arrangement_does_not_split_a_declaring_package_subtree(tmp: TempDir) -> None:
+    """Route 2 — no mark is involved, which is why route 1 does not cover it.
+
+    ``@oxi.arrange`` on one module of a declaring package used to leave its
+    unarranged siblings in the parallel remainder. The subtree now travels whole
+    into the component instead of being excluded from arrangement, which also
+    restores the co-location ``@oxi.arrange`` asked for.
+    """
+    # Arrange / Act
+    run = run_with_event_log(
+        _DATA_ROOT / "package_subtree_arranged",
+        tmp,
+        "SUBTREE_ARRANGED_LOG",
+        "-n",
+        "2",
+    )
+
+    # Assert
+    assert run.rc == 0, (
+        f"the project must run green; rc={run.rc}\n"
+        f"stdout:\n{run.stdout}\nstderr:\n{run.stderr}"
+    )
+    assert len(run.setups) == 1, (
+        f"arrangement must not split the subtree — this route needs no mark, so "
+        f"the inprocess rule alone leaves it double-building. setups={run.setups}"
+    )
+    assert len(run.running_pids) == 1, (
+        f"the arranged module and its unarranged sibling must share one process. "
+        f"uses={run.uses}"
     )
 
 

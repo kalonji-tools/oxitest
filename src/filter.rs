@@ -435,7 +435,7 @@ pub fn group_by_package(
 /// Shallowest rather than nearest: a fixture declared higher up spans the whole
 /// subtree, so co-locating on a deeper anchor would still let the scheduler
 /// split the outer package across workers and rebuild its value.
-fn outermost_declaring_ancestor(
+pub fn outermost_declaring_ancestor(
     module_path: &Utf8Path,
     declaring_dirs: &[Utf8PathBuf],
 ) -> Option<Utf8PathBuf> {

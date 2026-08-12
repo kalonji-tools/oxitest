@@ -1,0 +1,8 @@
+[tool.oxitest]
+testpaths = ["package_subtree_arranged"]
+python_files = ["test_*.py"]
+strict = "abort"
+# Force parallelism regardless of test count, so the unarranged sibling would
+# genuinely reach a worker if the planner let the subtree split. A serial
+# fallback would pass vacuously.
+min_parallel_tests = 1

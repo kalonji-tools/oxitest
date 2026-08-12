@@ -127,10 +127,15 @@ pub(super) struct FixturePartition {
 ///
 /// Returns a [`FixturePartition`] where `arranged[i]` contains the
 /// module groups for fixture component `i`.
+///
+/// `declaring_dirs` are the anchors of `lifetime="package"` declarations. A
+/// subtree under one of them travels whole into a single component, because
+/// arrangement is the second of the two routes that can split it.
 pub(super) fn partition_by_fixture_groups(
     groups: Vec<ModuleGroup>,
     fixture_groups: &[Vec<String>],
     declaring_modules: &[String],
+    declaring_dirs: &[Utf8PathBuf],
     arranged_display: &std::collections::HashMap<String, String>,
 ) -> FixturePartition {
     if fixture_groups.is_empty() {
@@ -165,17 +170,59 @@ pub(super) fn partition_by_fixture_groups(
     let mut arranged: Vec<Vec<ModuleGroup>> = vec![vec![]; fixture_groups.len()];
     let mut remaining = Vec::new();
 
+    // Which component each declaring package subtree travels into, decided once
+    // for the whole subtree (#2058).
+    //
+    // Arrangement is the second route that splits a subtree, and it needs no
+    // mark to do it: `@oxi.arrange` on one module of a declaring package leaves
+    // its siblings in the parallel remainder, which is two phases and so two
+    // builds. ADR-0009 Amendment 15 recorded the identical pair one tier down.
+    //
+    // The subtree is kept *inside* a component rather than excluded from
+    // arrangement altogether. Excluding it — which is what this code did before
+    // #2058 — sends it to a worker and silently discards the co-location
+    // `@oxi.arrange` asked for, which is the same objection
+    // `test_arrange_groups_at_module_tier_on_the_runner` already raises for a
+    // module.
+    // A module reaches its anchor through `outermost_declaring_ancestor`, which
+    // `group_by_package` already uses. Shallowest wins, so the answer does not
+    // depend on the order the anchors arrive in — and the anchor rule stays
+    // stated in one place rather than two.
+    //
+    // First matching component wins, scanning the subtree in group order. A
+    // subtree cannot sit in two buckets, and both the group order and
+    // `fixture_groups` order are deterministic, so the choice is stable — the
+    // rule a declaring module already follows.
+    let subtree_component: std::collections::HashMap<&Utf8PathBuf, Option<usize>> = declaring_dirs
+        .iter()
+        .map(|dir| {
+            let component = groups
+                .iter()
+                .filter(|group| group.module_path.starts_with(dir))
+                .flat_map(|group| group.items.iter())
+                .find_map(|item| {
+                    item.fixture_deps.iter().find_map(|(qualifier, _)| {
+                        fixture_to_group.get(qualifier.as_str()).copied()
+                    })
+                });
+            (dir, component)
+        })
+        .collect();
+
     for ModuleGroup { module_path, items } in groups {
+        // The whole declaring subtree goes where its anchor goes (#2058).
+        if let Some(anchor) =
+            crate::filter::outermost_declaring_ancestor(&module_path, declaring_dirs)
+        {
+            match subtree_component.get(&anchor).copied().flatten() {
+                Some(index) => arranged[index].push(ModuleGroup::new(module_path, items)),
+                None => remaining.push(ModuleGroup::new(module_path, items)),
+            }
+            continue;
+        }
+
         // A declaring module travels whole, and stays *arranged* if any of its
         // items asked to be (#1750).
-        //
-        // Not excluded from arrangement the way `unarrange_declaring_subtrees`
-        // excludes a declaring subtree one tier up. That asymmetry is the point:
-        // a subtree spans modules and cannot be forced into one bucket, whereas
-        // a module is already the scheduling unit. Excluding it would send it to
-        // a worker and silently drop the co-location `@oxi.arrange` promises —
-        // pinned by `test_arrange_groups_at_module_tier_on_the_runner`, which
-        // asserts the component runs on the runner rather than in a worker.
         //
         // Decided before bucketing rather than moved back afterwards: moving
         // afterwards would reunite the items as *two* `ModuleGroup`s sharing one
@@ -321,6 +368,7 @@ pub(super) fn plan_execution(
             parallel_groups,
             arranged_fixture_groups,
             declaring_modules,
+            declaring_dirs,
             arranged_display,
         );
 
@@ -522,6 +570,7 @@ mod tests {
             groups,
             &components,
             &declaring,
+            &[],
             &std::collections::HashMap::new(),
         );
 
@@ -540,6 +589,126 @@ mod tests {
         assert!(
             remaining.is_empty(),
             "nothing is left behind; a remainder here is that second session"
+        );
+    }
+
+    #[test]
+    fn test_a_declaring_package_subtree_travels_whole_into_one_component() {
+        // Arrange — two modules under one anchor; only the first is arranged.
+        let arranged_item = TestItem::builder_raw("pkg/test_a.py::test_one")
+            .fixture_deps(vec![("side".to_string(), String::new())])
+            .arc();
+        let plain = TestItem::builder_raw("pkg/sub/test_b.py::test_two").arc();
+        let groups = vec![
+            ModuleGroup::new(Utf8PathBuf::from("pkg/test_a.py"), vec![arranged_item]),
+            ModuleGroup::new(Utf8PathBuf::from("pkg/sub/test_b.py"), vec![plain]),
+        ];
+        let components = vec![vec!["side".to_string()]];
+        let declaring_dirs = [Utf8PathBuf::from("pkg")];
+
+        // Act
+        let FixturePartition {
+            arranged,
+            remaining,
+        } = partition_by_fixture_groups(
+            groups,
+            &components,
+            &[],
+            &declaring_dirs,
+            &std::collections::HashMap::new(),
+        );
+
+        // Assert
+        assert_eq!(
+            arranged[0].len(),
+            2,
+            "the unarranged sibling must follow its anchor into the component; leaving \
+             it in the remainder is the second phase that double-builds the package fixture"
+        );
+        assert!(
+            remaining.is_empty(),
+            "a remainder here is that second phase"
+        );
+    }
+
+    #[test]
+    fn test_the_outermost_anchor_owns_the_subtree_whatever_order_the_anchors_arrive_in() {
+        // Arrange — a package and its own subpackage both declare, and the
+        // *inner* anchor is listed first. The order is deliberate, and it is the
+        // order `group_by_package_gives_the_outermost_declaration_the_subtree`
+        // uses for the same reason: an ancestor happens to sort before its
+        // descendant today, so an in-order test cannot tell a rule that reads
+        // the depth from one that reads the position.
+        let outer_item = TestItem::builder_raw("pkg/test_a.py::test_one")
+            .fixture_deps(vec![("side".to_string(), String::new())])
+            .arc();
+        let inner_item = TestItem::builder_raw("pkg/inner/test_b.py::test_two").arc();
+        let groups = vec![
+            ModuleGroup::new(Utf8PathBuf::from("pkg/test_a.py"), vec![outer_item]),
+            ModuleGroup::new(Utf8PathBuf::from("pkg/inner/test_b.py"), vec![inner_item]),
+        ];
+        let components = vec![vec!["side".to_string()]];
+        let declaring_dirs = [Utf8PathBuf::from("pkg/inner"), Utf8PathBuf::from("pkg")];
+
+        // Act
+        let FixturePartition {
+            arranged,
+            remaining,
+        } = partition_by_fixture_groups(
+            groups,
+            &components,
+            &[],
+            &declaring_dirs,
+            &std::collections::HashMap::new(),
+        );
+
+        // Assert
+        assert_eq!(
+            arranged[0].len(),
+            2,
+            "the outermost anchor owns the whole subtree. Honouring the inner \
+             anchor instead splits its ancestor across two phases, which is the \
+             double build this tier exists to prevent"
+        );
+        assert!(
+            remaining.is_empty(),
+            "a module stranded here is that second phase"
+        );
+    }
+
+    #[test]
+    fn test_a_declaring_package_subtree_that_arranges_nothing_stays_whole_in_the_remainder() {
+        // Arrange — an anchor whose subtree names no arranged fixture at all.
+        let plain_a = TestItem::builder_raw("pkg/test_a.py::test_one").arc();
+        let plain_b = TestItem::builder_raw("pkg/sub/test_b.py::test_two").arc();
+        let groups = vec![
+            ModuleGroup::new(Utf8PathBuf::from("pkg/test_a.py"), vec![plain_a]),
+            ModuleGroup::new(Utf8PathBuf::from("pkg/sub/test_b.py"), vec![plain_b]),
+        ];
+        let components = vec![vec!["side".to_string()]];
+        let declaring_dirs = [Utf8PathBuf::from("pkg")];
+
+        // Act
+        let FixturePartition {
+            arranged,
+            remaining,
+        } = partition_by_fixture_groups(
+            groups,
+            &components,
+            &[],
+            &declaring_dirs,
+            &std::collections::HashMap::new(),
+        );
+
+        // Assert
+        assert!(
+            arranged[0].is_empty(),
+            "a subtree that asked for no arrangement must not be pulled onto the runner"
+        );
+        assert_eq!(
+            remaining.len(),
+            2,
+            "it stays whole in the remainder, where `group_by_package` merges it"
         );
     }
 
@@ -610,6 +779,7 @@ mod tests {
             groups,
             &fixture_groups,
             &[],
+            &[],
             &std::collections::HashMap::new(),
         );
         assert!(arranged.is_empty());
@@ -634,6 +804,7 @@ mod tests {
         } = partition_by_fixture_groups(
             groups,
             &fixture_groups,
+            &[],
             &[],
             &std::collections::HashMap::new(),
         );
@@ -672,6 +843,7 @@ mod tests {
         } = partition_by_fixture_groups(
             groups,
             &fixture_groups,
+            &[],
             &[],
             &std::collections::HashMap::new(),
         );
