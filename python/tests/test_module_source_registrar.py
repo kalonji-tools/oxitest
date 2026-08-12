@@ -289,7 +289,7 @@ def test_a_conftest_declaration_still_clashes_with_any_anchor() -> None:
 # The cap moved here from the Rust prescan, which recognized three decorator
 # spellings and so silently did not apply to any other. These exercise the
 # registrar directly; the end-to-end path is covered by
-# test_1859_alias_enforcement.py, which runs oxitest as a subprocess and
+# test_alias_enforcement.py, which runs oxitest as a subprocess and
 # therefore cannot see this code from a coverage run.
 
 

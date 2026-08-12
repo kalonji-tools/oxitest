@@ -155,5 +155,5 @@ def test_decorated_fixture_raising_surfaces_error(tmp: TempDir) -> None:
 # fixture-not-found at test time" — no longer holds: the file is imported and
 # the alias resolves, so there is nothing to diagnose. The replacement coverage
 # is `test_aliased_fixture_in_fixtures_home_resolves` in
-# test_1859_alias_enforcement.py, which asserts the fixture works rather than
+# test_alias_enforcement.py, which asserts the fixture works rather than
 # that oxitest complains about it.
