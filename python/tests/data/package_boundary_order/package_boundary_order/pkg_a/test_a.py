@@ -8,7 +8,7 @@ from pathlib import Path
 from oxitest import Fixtures
 
 
-def record(event: str) -> None:
+def _record(event: str) -> None:
     with Path(f"{os.environ['P2LOG']}.{os.getpid()}").open(
         "a", encoding="utf-8"
     ) as handle:
@@ -18,4 +18,4 @@ def record(event: str) -> None:
 def test_a(fx: Fixtures) -> None:
     engine = fx.pkg_a.engine_a
     assert engine == "a", f"pkg_a's package fixture must be injected, got {engine!r}"
-    record("USE a")
+    _record("USE a")

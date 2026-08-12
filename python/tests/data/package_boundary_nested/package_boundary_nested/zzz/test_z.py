@@ -8,7 +8,7 @@ from pathlib import Path
 from oxitest import Fixtures
 
 
-def record(event: str) -> None:
+def _record(event: str) -> None:
     with Path(f"{os.environ['NESTLOG']}.{os.getpid()}").open(
         "a", encoding="utf-8"
     ) as handle:
@@ -17,4 +17,4 @@ def record(event: str) -> None:
 
 def test_z(fx: Fixtures) -> None:
     assert fx.zzz.other == "other", "the sibling package fixture must be injected"
-    record("USE other")
+    _record("USE other")

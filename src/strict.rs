@@ -40,6 +40,11 @@ pub enum PerTestViolation {
         node_id: NodeId,
         mark_name: String,
     },
+    ModuleLevelDef {
+        node_id: NodeId,
+        fn_name: String,
+        lineno: usize,
+    },
     MissingReturnAnnotation {
         node_id: NodeId,
         fixture_name: String,
@@ -62,6 +67,7 @@ impl PerTestViolation {
             | Self::InvalidModuleMark { node_id, .. }
             | Self::MissingMarkReason { node_id, .. }
             | Self::MissingReturnAnnotation { node_id, .. }
+            | Self::ModuleLevelDef { node_id, .. }
             | Self::SingleCaseParametrize { node_id }
             | Self::UnusedFixture { node_id, .. } => node_id,
         }
@@ -154,6 +160,16 @@ pub fn check_collected(raw: Vec<RawViolation>) -> Vec<StrictViolation> {
                         detail: r.detail,
                     },
                 )),
+                ViolationKind::ModuleLevelDef => {
+                    // detail is "<name> <lineno>" -- split from the right, the
+                    // line number is the only field that cannot contain a space.
+                    let (fn_name, lineno) = r.detail.rsplit_once(' ')?;
+                    Some(StrictViolation::PerTest(PerTestViolation::ModuleLevelDef {
+                        node_id,
+                        fn_name: fn_name.to_string(),
+                        lineno: lineno.parse().ok()?,
+                    }))
+                }
                 ViolationKind::MissingMarkReason => Some(StrictViolation::PerTest(
                     PerTestViolation::MissingMarkReason {
                         node_id,
@@ -255,6 +271,17 @@ impl std::fmt::Display for PerTestViolation {
                     fixture_name
                 )
             }
+            Self::ModuleLevelDef {
+                node_id,
+                fn_name,
+                lineno,
+            } => {
+                write!(
+                    f,
+                    "{:<60}  module-level-def   {fn_name} line {lineno}",
+                    node_id.as_ref()
+                )
+            }
             Self::SingleCaseParametrize { node_id } => {
                 write!(f, "{:<60}  single-case-parametrize", node_id.as_ref())
             }
@@ -334,6 +361,14 @@ pub fn per_test_error(v: &PerTestViolation) -> TestOutcome {
         PerTestViolation::MissingReturnAnnotation { fixture_name, .. } => {
             format!("strict: fixture '{fixture_name}' is missing a return type annotation")
         }
+        PerTestViolation::ModuleLevelDef {
+            fn_name, lineno, ..
+        } => format!(
+            "strict: '{fn_name}' (line {lineno}) is a module-level definition in a \
+             test file that is neither a test nor a fixture declaration. Move it \
+             to a module tests can import, or prefix it with '_' to mark it \
+             file-local"
+        ),
         PerTestViolation::SingleCaseParametrize { .. } => {
             "strict: @parametrize with a single case — use a plain test instead".to_string()
         }
