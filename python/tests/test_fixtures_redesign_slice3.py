@@ -193,43 +193,6 @@ def test_no_collapse_warning_without_a_package_declaration(tmp: TempDir) -> None
     )
 
 
-def test_inprocess_inside_a_package_is_rejected_at_collection(tmp: TempDir) -> None:
-    """The one combination that cannot honour exactly-once is refused up front.
-
-    `@oxi.mark.inprocess` splits marked items into a phase that runs on the
-    coordinator's session while the rest of the package runs on a worker's, so
-    the fixture is built once in each. Reproduced before this check existed:
-    one marked test plus `-n 4` produced two SETUPs with different PIDs.
-
-    Rejected at collection rather than warned about, following ADR-0009's
-    precedent for B1 violations — the guarantee cannot hold, and a tier that
-    quietly stops being exactly-once under load is the failure this whole slice
-    exists to prevent.
-    """
-    # Arrange
-    log = Path(tmp) / "events.log"
-    env = {**os.environ, "SLICE3_LOG": str(log)}
-
-    # Act
-    stdout, stderr, rc = helpers.run_oxitest(
-        _DATA_ROOT / "slice3_inprocess_reject", env=env
-    )
-
-    # Assert
-    assert rc != 0, (
-        f"the combination must fail collection, not run; rc={rc}\n"
-        f"stdout:\n{stdout}\nstderr:\n{stderr}"
-    )
-    combined = stdout + stderr
-    assert "inprocess" in combined and 'lifetime="package"' in combined, (
-        f"the error must name both halves of the conflict, or the user cannot "
-        f"tell which of the two to change.\n{combined}"
-    )
-    assert "test_marked" in combined, (
-        f"the error must name the offending test — a package can hold many.\n{combined}"
-    )
-
-
 def test_exactly_once_survives_parallel_execution(tmp: TempDir) -> None:
     """The guarantee holds when the scheduler distributes work across workers.
 

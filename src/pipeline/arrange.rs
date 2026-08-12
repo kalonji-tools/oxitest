@@ -5,8 +5,31 @@
 
 use std::sync::Arc;
 
+use camino::Utf8PathBuf;
+
 use crate::scheduler::ModuleGroup;
 use crate::types::TestItem;
+
+/// The declaring anchors whose subtree holds at least one `inprocess` item.
+///
+/// Returned rather than tested per module because the question is about the
+/// *subtree*, not the module: a module with no marked test of its own still has
+/// to follow its anchor, and it cannot know that from its own items.
+///
+/// An anchor with no marked test anywhere beneath it is absent, so a suite that
+/// never combines the two features keeps every group exactly where it was.
+fn hot_package_anchors(groups: &[ModuleGroup], declaring_dirs: &[Utf8PathBuf]) -> Vec<Utf8PathBuf> {
+    declaring_dirs
+        .iter()
+        .filter(|dir| {
+            groups.iter().any(|group| {
+                group.module_path.starts_with(dir)
+                    && group.items.iter().any(|item| item.markers.has_inprocess())
+            })
+        })
+        .cloned()
+        .collect()
+}
 
 /// Result of splitting module groups into main-process and parallel-eligible sets.
 pub(super) struct InprocessPartition {
@@ -21,14 +44,39 @@ pub(super) struct InprocessPartition {
 /// Tests marked `@oxi.mark.inprocess` are extracted into their own group list.
 /// If a module has a mix of inprocess and non-inprocess tests, the module appears
 /// in both lists with the appropriate subset.
+///
+/// `declaring_dirs` are the anchors of `lifetime="package"` declarations. A
+/// subtree under one of them is kept whole — see [`hot_package_anchors`].
 pub(super) fn partition_inprocess_groups(
     groups: Vec<ModuleGroup>,
     declaring_modules: &[String],
+    declaring_dirs: &[Utf8PathBuf],
 ) -> InprocessPartition {
     let mut inprocess = Vec::new();
     let mut parallel = Vec::new();
 
+    let hot = hot_package_anchors(&groups, declaring_dirs);
+
     for ModuleGroup { module_path, items } in groups {
+        // A declaring *package* subtree must not span two dispatch phases, for
+        // the same reason a declaring module must not: each phase owns a fixture
+        // session, so a split builds the package fixture once in each and the
+        // tier's exactly-once promise does not hold (#2058).
+        //
+        // The whole subtree follows the mark, not just the marked module. One
+        // marked test anywhere under the anchor pulls every module beneath it to
+        // the coordinator, because the anchor — not the module — is the unit the
+        // fixture is keyed by.
+        //
+        // The cost is bounded and already reported: a declaring subtree collapses
+        // onto a single worker whatever happens here, and
+        // `warn_about_package_collapse` names the anchor when it does. What this
+        // moves is that one worker's work onto the coordinator.
+        if hot.iter().any(|dir| module_path.starts_with(dir)) {
+            inprocess.push(ModuleGroup::new(module_path, items));
+            continue;
+        }
+
         // A module that can resolve a `lifetime="module"` fixture must not span
         // two dispatch phases: each phase owns a fixture session, so a split
         // builds that fixture twice and the tier's once-per-module promise does
@@ -218,6 +266,7 @@ pub(super) fn plan_execution(
     min_parallel_tests: usize,
     arranged_fixture_groups: &[Vec<String>],
     declaring_modules: &[String],
+    declaring_dirs: &[Utf8PathBuf],
     arranged_display: &std::collections::HashMap<String, String>,
     estimated: Option<std::time::Duration>,
     cpu_count: usize,
@@ -252,7 +301,7 @@ pub(super) fn plan_execution(
     let InprocessPartition {
         inprocess: inprocess_groups,
         parallel: parallel_groups,
-    } = partition_inprocess_groups(groups, declaring_modules);
+    } = partition_inprocess_groups(groups, declaring_modules, declaring_dirs);
 
     let optimal_worker_count =
         crate::config::compute_optimal_workers(mode, cpu_count, estimated, spawn_overhead_ms);
@@ -317,7 +366,7 @@ mod tests {
         let InprocessPartition {
             inprocess: inp,
             parallel: par,
-        } = partition_inprocess_groups(groups, &[]);
+        } = partition_inprocess_groups(groups, &[], &[]);
         assert_eq!(inp.len(), 1, "one module in inprocess");
         assert_eq!(inp[0].items.len(), 1);
         assert_eq!(inp[0].items[0].node_id.as_ref(), "test_a.py::test_serial");
@@ -341,7 +390,7 @@ mod tests {
         let InprocessPartition {
             inprocess: inp,
             parallel: par,
-        } = partition_inprocess_groups(groups, &declaring);
+        } = partition_inprocess_groups(groups, &declaring, &[]);
 
         assert_eq!(
             inp.len(),
@@ -358,6 +407,99 @@ mod tests {
             par.is_empty(),
             "nothing is left in the parallel set; a remainder here is the second session"
         );
+    }
+
+    #[test]
+    fn test_a_declaring_package_subtree_follows_an_inprocess_mark_anywhere_beneath_it() {
+        // Arrange — two modules under one anchor; only the second carries a mark.
+        let plain = TestItem::builder_raw("pkg/test_a.py::test_plain").arc();
+        let marked = TestItem::builder_raw("pkg/sub/test_b.py::test_marked")
+            .markers(vec!["inprocess".to_string()])
+            .arc();
+        let groups = vec![
+            ModuleGroup::new(Utf8PathBuf::from("pkg/test_a.py"), vec![plain]),
+            ModuleGroup::new(Utf8PathBuf::from("pkg/sub/test_b.py"), vec![marked]),
+        ];
+        let declaring_dirs = [Utf8PathBuf::from("pkg")];
+
+        // Act
+        let InprocessPartition {
+            inprocess: inp,
+            parallel: par,
+        } = partition_inprocess_groups(groups, &[], &declaring_dirs);
+
+        // Assert
+        assert_eq!(
+            inp.len(),
+            2,
+            "the unmarked module must follow its anchor; leaving it behind puts the \
+             package fixture in two sessions, which is the #2058 double build"
+        );
+        assert!(
+            par.is_empty(),
+            "a remainder here is the second dispatch phase the tier cannot survive"
+        );
+    }
+
+    #[test]
+    fn test_a_declaring_package_subtree_without_a_mark_keeps_its_parallelism() {
+        // Arrange — an anchor whose subtree carries no inprocess mark at all.
+        let plain = TestItem::builder_raw("pkg/test_a.py::test_plain").arc();
+        let groups = vec![ModuleGroup::new(
+            Utf8PathBuf::from("pkg/test_a.py"),
+            vec![plain],
+        )];
+        let declaring_dirs = [Utf8PathBuf::from("pkg")];
+
+        // Act
+        let InprocessPartition {
+            inprocess: inp,
+            parallel: par,
+        } = partition_inprocess_groups(groups, &[], &declaring_dirs);
+
+        // Assert
+        assert!(
+            inp.is_empty(),
+            "declaring a package fixture must not by itself move work onto the \
+             coordinator. Without this scoping every declaring package in a suite \
+             would serialise onto the runner — a cost larger than the defect being \
+             fixed, and one no exactly-once assertion can detect"
+        );
+        assert_eq!(par.len(), 1, "the module stays eligible for a worker");
+    }
+
+    #[test]
+    fn test_an_unrelated_subtree_is_untouched_by_a_declaring_neighbour() {
+        // Arrange — a marked module that shares a name prefix but not an anchor.
+        let marked = TestItem::builder_raw("pkg_other/test_b.py::test_marked")
+            .markers(vec!["inprocess".to_string()])
+            .arc();
+        let plain = TestItem::builder_raw("pkg/test_a.py::test_plain").arc();
+        let groups = vec![
+            ModuleGroup::new(Utf8PathBuf::from("pkg/test_a.py"), vec![plain]),
+            ModuleGroup::new(Utf8PathBuf::from("pkg_other/test_b.py"), vec![marked]),
+        ];
+        let declaring_dirs = [Utf8PathBuf::from("pkg")];
+
+        // Act
+        let InprocessPartition {
+            inprocess: inp,
+            parallel: par,
+        } = partition_inprocess_groups(groups, &[], &declaring_dirs);
+
+        // Assert — `pkg_other` is not inside `pkg`, so the anchor is not hot.
+        assert_eq!(
+            inp.len(),
+            1,
+            "only the genuinely marked module goes in-process; matching on a shared \
+             name prefix would drag an unrelated subtree onto the coordinator"
+        );
+        assert_eq!(
+            inp[0].module_path.as_str(),
+            "pkg_other/test_b.py",
+            "the marked module is the one that moved"
+        );
+        assert_eq!(par.len(), 1, "the declaring subtree keeps its worker");
     }
 
     #[test]
@@ -410,7 +552,7 @@ mod tests {
         let InprocessPartition {
             inprocess: inp,
             parallel: par,
-        } = partition_inprocess_groups(groups, &[]);
+        } = partition_inprocess_groups(groups, &[], &[]);
         assert!(inp.is_empty());
         assert_eq!(par.len(), 1);
         assert_eq!(par[0].items.len(), 2);
@@ -429,7 +571,7 @@ mod tests {
         let InprocessPartition {
             inprocess: inp,
             parallel: par,
-        } = partition_inprocess_groups(groups, &[]);
+        } = partition_inprocess_groups(groups, &[], &[]);
         assert_eq!(inp.len(), 1);
         assert_eq!(inp[0].items.len(), 2);
         assert!(par.is_empty());
@@ -450,7 +592,7 @@ mod tests {
         let InprocessPartition {
             inprocess: inp,
             parallel: par,
-        } = partition_inprocess_groups(groups, &[]);
+        } = partition_inprocess_groups(groups, &[], &[]);
         assert_eq!(inp.len(), 1, "only test_a.py has inprocess items");
         assert_eq!(par.len(), 2, "both modules have parallel items");
     }
@@ -584,6 +726,7 @@ mod tests {
             250.0,
             1,
             arranged_fixture_groups,
+            &[],
             &[],
             &std::collections::HashMap::new(),
             None,

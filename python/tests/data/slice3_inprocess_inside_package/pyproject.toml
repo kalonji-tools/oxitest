@@ -1,5 +1,5 @@
 [tool.oxitest]
-testpaths = ["slice3_inprocess_reject"]
+testpaths = ["slice3_inprocess_inside_package"]
 python_files = ["test_*.py"]
 strict = "abort"
 # Arrangement pins modules to the main process, which would collapse a parallel

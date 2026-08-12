@@ -1086,8 +1086,6 @@ pub(super) fn collect_items(
         None
     };
 
-    errors.extend(reject_inprocess_inside_package(&items, &fixture_modules));
-
     CollectionOutput {
         items,
         errors,
@@ -1096,52 +1094,6 @@ pub(super) fn collect_items(
         fixture_modules,
         diagnostics,
     }
-}
-
-/// Reject `@oxi.mark.inprocess` inside a package-lifetime subtree.
-///
-/// `lifetime="package"` promises exactly one instance per run, enforced by
-/// co-locating the declaring subtree into one task. `inprocess` breaks that
-/// promise from underneath: `arrange::partition_inprocess_groups` splits marked
-/// items into a separate phase that runs on the *coordinator's* session while
-/// the rest run on a worker's, so the fixture is built once in each — a silent,
-/// load-dependent duplicate that only appears under `-n`.
-///
-/// Rejected at collection time, before any test runs, following ADR-0009's
-/// precedent for B1 violations: the combination cannot be honoured, so saying
-/// so up front beats a guarantee that quietly is not one. Lifting the
-/// restriction means teaching the planner to keep a declaring subtree in a
-/// single phase — tracked separately, not worked around here.
-fn reject_inprocess_inside_package(
-    items: &[Arc<types::TestItem>],
-    fixture_modules: &[types::FixtureModule],
-) -> Vec<types::CollectError> {
-    let declaring: Vec<&camino::Utf8Path> = fixture_modules
-        .iter()
-        .filter(|m| m.declares_package())
-        .map(|m| m.anchor.as_path())
-        .collect();
-    if declaring.is_empty() {
-        return Vec::new();
-    }
-
-    items
-        .iter()
-        .filter(|item| item.markers.has_inprocess())
-        .filter_map(|item| {
-            let module = camino::Utf8Path::new(item.module_path());
-            let anchor = declaring.iter().find(|dir| module.starts_with(dir))?;
-            Some(types::CollectError::PyError(format!(
-                "{} is marked @oxi.mark.inprocess but sits inside {anchor}, which \
-                 declares a lifetime=\"package\" fixture.\n\
-                 inprocess tests run on the main process while the rest of the \
-                 package runs on a worker, so the package fixture would be built \
-                 once in each — the exactly-once guarantee cannot hold.\n\
-                 Hint: drop the inprocess mark.",
-                item.node_id,
-            )))
-        })
-        .collect()
 }
 
 /// Scan files for docstrings with `>>>` examples and create doctest `TestItem`s.
