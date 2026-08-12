@@ -70,7 +70,7 @@ _PATCH = (
 )
 
 
-def _spec(findings: list[dict], *, slug: str = "improve") -> dict:
+def _spec(findings: list[dict], *, slug: object = "improve") -> dict:
     """A pass spec carrying the given findings."""
     return {
         "slug": slug,
@@ -540,4 +540,157 @@ def test_the_script_is_executable_and_documents_itself() -> None:
     assert "spec" in result.stdout.lower(), (
         "the help text names the spec argument, which is the only documentation "
         "someone running it from stage 8 will see"
+    )
+
+
+# ── The marker's two fields (#2088) ──────────────────────────────────────────
+
+
+def _load_dispose_module() -> ModuleType:
+    """Load ``scripts/dispose_finding.py``, the marker's other reader.
+
+    `scripts/` is not a package and the two scripts do not import each other,
+    so the marker's form is built independently in each. That is what the
+    agreement test below pins.
+    """
+    path = _REPO_ROOT / "scripts" / "dispose_finding.py"
+    spec = importlib.util.spec_from_file_location("dispose_finding_under_test", path)
+    if spec is None or spec.loader is None:
+        msg = f"could not load module spec from {path}"
+        raise RuntimeError(msg)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_validation_rejects_a_non_integer_finding_id() -> None:
+    r"""A marker this script writes must be one its readers can match.
+
+    `dispose_finding.py` takes an integer, and `_MARKER` reads `#\\d+`, so a
+    non-numeric id posts threads that no disposition can reach and that the
+    duplicate guard cannot see (#2088).
+    """
+    # Arrange
+    module = _load_script_module()
+    diff = module.DiffIndex({"x.py": _PATCH})
+    spec = _spec([{"id": "F1", "title": "t", "body": "b", "path": "x.py"}])
+
+    # Act
+    problems = module.validate(spec, diff, existing_markers=set())
+
+    # Assert
+    assert len(problems) == 1, (
+        f"a non-integer id must be refused before anything is written, got {problems}"
+    )
+    assert "F1" in problems[0], (
+        "the message names the offending value, because the author has to find "
+        "it in a spec file that may carry many findings"
+    )
+
+
+def test_validation_rejects_a_boolean_finding_id() -> None:
+    """`isinstance(True, int)` is True, so a bare int check would pass this.
+
+    `f"#{True}"` renders `#True`, which `_MARKER` cannot match — the exact
+    defect the integer check exists to refuse (#2088).
+    """
+    # Arrange
+    module = _load_script_module()
+    diff = module.DiffIndex({"x.py": _PATCH})
+    spec = _spec([{"id": True, "title": "t", "body": "b", "path": "x.py"}])
+
+    # Act
+    problems = module.validate(spec, diff, existing_markers=set())
+
+    # Assert
+    assert len(problems) == 1, (
+        f"a bool id renders as #True and is unmatchable, so it must be refused "
+        f"like any other non-integer, got {problems}"
+    )
+
+
+def test_validation_rejects_a_slug_that_cannot_appear_in_a_marker() -> None:
+    """The id is only half the marker; the slug is interpolated too.
+
+    `_MARKER` reads `[^*]+` for the slug, so a slug holding an asterisk blinds
+    the duplicate guard exactly as a bad id does (#2088).
+    """
+    # Arrange
+    module = _load_script_module()
+    diff = module.DiffIndex({"x.py": _PATCH})
+    spec = _spec([{"id": 1, "title": "t", "body": "b", "path": "x.py"}], slug="my*pass")
+
+    # Act
+    problems = module.validate(spec, diff, existing_markers=set())
+
+    # Assert
+    assert len(problems) == 1, (
+        f"a slug holding an asterisk is unreadable by the guard that refuses a "
+        f"second post, so it must be refused at validation, got {problems}"
+    )
+    assert "my*pass" in problems[0], (
+        "the message names the slug, because it is declared once at the top of "
+        "the spec and applies to every finding under it"
+    )
+
+
+def test_validation_rejects_a_slug_that_is_not_a_string() -> None:
+    """A spec is JSON, so `slug` can arrive as any type.
+
+    The asterisk test covers a string the guard cannot read. This covers the
+    other arm: a value that is not a string at all, which `"*" in slug` would
+    raise on for an integer and pass silently for a list (#2088).
+    """
+    # Arrange
+    module = _load_script_module()
+    diff = module.DiffIndex({"x.py": _PATCH})
+    spec = _spec([{"id": 1, "title": "t", "body": "b", "path": "x.py"}], slug=123)
+
+    # Act
+    problems = module.validate(spec, diff, existing_markers=set())
+
+    # Assert
+    assert len(problems) == 1, (
+        f"a non-string slug must be refused before it is interpolated into a "
+        f"marker, got {problems}"
+    )
+    assert "123" in problems[0], (
+        "the message names the value, because a spec file carries the slug once "
+        "and every finding under it inherits the fault"
+    )
+
+
+def test_the_marker_form_agrees_across_both_scripts() -> None:
+    """One marker form is built in three places, in two scripts.
+
+    `post_review_findings.marker` writes it, `_MARKER` reads it, and
+    `dispose_finding` builds it again to find a thread. The scripts do not
+    import each other, so nothing but this test holds the three together
+    (#2088).
+    """
+    # Arrange
+    post = _load_script_module()
+    dispose = _load_dispose_module()
+    slug, finding_id = "improve", 7
+    written = f"**{post.marker(slug, finding_id)}**"
+    # A thread as `dispose_finding` sees one, carrying exactly what the writer
+    # produces. Asking `find_thread` to locate it exercises that script's own
+    # construction of the marker — comparing against a literal spelled here
+    # would only pin this file against itself.
+    thread = {"comments": {"nodes": [{"body": f"{written} — a title"}]}}
+
+    # Act
+    found = dispose.find_thread([thread], slug, finding_id)
+
+    # Assert
+    assert found is thread, (
+        f"`dispose_finding` could not find a thread whose marker "
+        f"`post_review_findings` wrote as {written!r}. The two scripts do not "
+        f"import each other, so nothing else holds their forms together"
+    )
+    seen = post.existing_markers([{"body": f"{written} — a title"}])
+    assert seen == {post.marker(slug, finding_id)}, (
+        f"the duplicate guard must see what the writer produces, or a pass "
+        f"posted twice doubles every thread instead of being refused; got {seen}"
     )
