@@ -6,7 +6,9 @@ import os
 from pathlib import Path
 
 import oxitest
+from oxitest._bridge._fixture_registry import FixtureRegistry
 from oxitest._bridge._paths import format_path
+from oxitest._bridge.fixture_lister import tree_fixtures_from_registry
 from tests import helpers
 
 #: A rootdir spelled by the platform, so every case below is portable.
@@ -278,4 +280,29 @@ def test_a_sentinel_survives_a_working_directory_inside_the_rootdir(
         "a sentinel names where a fixture came from when there is no file to "
         "name, and relativising it invents a path that does not exist; "
         f"got {shown!r}"
+    )
+
+
+def test_the_fixture_tree_shows_an_origin_against_the_rootdir() -> None:
+    """The listing is a printer too, and it reads the base off the registry.
+
+    Covers the wiring as well as the rendering: the renderer takes its base
+    from ``registry.rootdir``, so a test that called ``_origin_header``
+    directly would leave that one line unproven.
+    """
+    root = str(Path(os.sep, "proj"))
+    declared_at = str(Path(root, "pkg", "api", "__fixtures__.py"))
+    registry = FixtureRegistry(rootdir=root)
+    registry.register(
+        helpers.make_fixture_def("thing", lambda: "v", declaration_path=declared_at)
+    )
+
+    rendered = tree_fixtures_from_registry(registry, verbosity=2)
+
+    assert str(Path("pkg", "api", "__fixtures__.py")) in rendered, (
+        "the listing names where to go and edit a fixture, and the rootdir "
+        f"prefix is identical on every row, so it carries nothing: {rendered!r}"
+    )
+    assert root not in rendered, (
+        f"no row should still carry the absolute rootdir prefix: {rendered!r}"
     )
