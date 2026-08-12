@@ -29,15 +29,15 @@ placed", never as "the remainder is owned".
 Second known limit: ``gh issue view --json comments`` returns one page and
 exposes no truncation signal, so an issue with more comments than that page
 holds would hide a marker in a later comment and refuse an author who complied.
-``check_review_threads.py`` guards the same class of failure because its GraphQL
-query returns ``pageInfo.hasNextPage``; this one has nothing to read. The
-busiest issue in this repository carries 17 comments, measured with
-``gh issue list --state all --limit 400 --json number,comments``, so the case is
-far off. Move to GraphQL if it ever approaches.
+Nothing here can read a truncation signal. The busiest issue in this repository
+carries 17 comments, measured with ``gh issue list --state all --limit 400
+--json number,comments``, so the case is far off. Move to GraphQL if it ever
+approaches.
 
 Run by ``just merge-ready`` at merge-sequence step 4, after
 ``check_closing_issues.py`` — this gate's question is only meaningful once the
-closure set is known to agree with the title.
+closure set is known to agree with the title. Nothing else runs it: a CI context
+carrying this check was built and removed on #2072.
 """
 
 from __future__ import annotations

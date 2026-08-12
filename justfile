@@ -56,7 +56,6 @@ check: (_log _blue "Running static checks...")
     cargo clippy --all-targets -- -D warnings
     codespell --toml pyproject.toml
     actionlint
-    python scripts/check_rollup_agreement.py
     python scripts/check_subprocess_encoding.py
     python scripts/check_justfile_quoting.py
 
@@ -66,17 +65,25 @@ check-locks: (_log _blue "Checking lock files...")
     cargo metadata --locked --format-version 1 --quiet > /dev/null
 
 # Deliberately NOT part of `preflight`, which runs earlier in the merge sequence
-# than findings are meant to be resolved. All three checks accept `--pr`, so
-# `args` reaches each unchanged.
+# than a closing set or a disposition table is settled. Both checks accept
+# `--pr`, so `args` reaches each unchanged.
 #
 # Order is load-bearing: the disposition check runs last because its question —
 # does every closing issue say where its undelivered scope went — is only
 # meaningful once the closure set is known to agree with the title (#2057).
 #
+# The unresolved-thread check that used to run first is gone (#2072).
+# `required_conversation_resolution` is enabled on `main` and now binds at
+# merge, because the merge no longer bypasses branch protection.
+#
+# The two checks below have no such platform equivalent, so this recipe is the
+# only thing that runs them and nothing forces you to run it. A CI context
+# carrying them was built and removed on #2072 — see the merge sequence in
+# CLAUDE.md for why, and for when to revisit it.
+#
 # Only the line directly above a recipe becomes its `just --list` description.
-# Refuse the merge on unresolved threads, unnamed closures, or a missing disposition (stage 9, step 4)
+# Refuse the merge on unnamed closures or a missing disposition (stage 9, step 4)
 merge-ready *args: (_log _blue "Checking merge readiness...")
-    python scripts/check_review_threads.py {{ args }}
     python scripts/check_closing_issues.py {{ args }}
     python scripts/check_disposition.py {{ args }}
 
@@ -223,6 +230,27 @@ mutate path old new *test_cmd: mutation-guard
     fi
     just _log {{ _yellow }} "SURVIVED — the suite passed with the mutant applied. This is a finding, not a pass."
     exit 3
+
+# The Rust path, and it is a different shape from `mutate` above (#2072).
+# cargo-mutants generates mutants from the AST and runs each one itself, so
+# three failure modes of the anchored applier cannot occur here:
+#
+#   1. No anchor. There is nothing to match zero or many times, so "the mutant
+#      never applied" — which reads exactly like SURVIVED — is not a state.
+#   2. No dirty-tree guard needed. cargo-mutants copies the source tree to a
+#      scratch directory and mutates the copy, so uncommitted work is never
+#      destroyed by a revert. `mutation-guard` is deliberately not a dependency.
+#   3. An orphaned binding is reported as `unviable`, not as a VOID this recipe
+#      has to distinguish from tooling failure. Measured on this crate:
+#      `5 mutants tested in 61s: 2 caught, 3 unviable`.
+#
+# Scope it. Unfiltered, this crate offers 3607 candidates at roughly one build
+# each. `--file` takes a glob; `--re` filters by mutant description.
+#
+# Only the line directly above a recipe becomes its `just --list` description.
+# Run Rust mutants under cargo-mutants — scope with --file or --re (#2072)
+mutate-rust *args: (_log _blue "Running Rust mutants...")
+    cargo mutants {{ args }}
 
 # Full pre-push gate: clean, check, test everything
 preflight: clean check-locks check test-rust build test-python

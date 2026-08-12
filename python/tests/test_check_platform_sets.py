@@ -37,8 +37,7 @@ def _load_script_module() -> ModuleType:
     The scripts directory is not a package, so this uses ``importlib.util``.
     The ``sys.modules`` registration is load-bearing: the script defines a
     ``@dataclass``, and ``dataclasses._process_class`` resolves the defining
-    module through ``sys.modules``. Same reason as the sibling loader in
-    ``test_check_rollup_agreement.py``.
+    module through ``sys.modules``.
     """
     spec = importlib.util.spec_from_file_location(
         "check_platform_sets_under_test", _SCRIPT_PATH

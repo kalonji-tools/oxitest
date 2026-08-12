@@ -3,8 +3,9 @@
 
 Each finding becomes a thread anchored where the finding is, so a reader clicks
 straight to the code rather than hunting for a symbol named in a table. The
-thread's Resolve button records the disposition, and ``check_review_threads.py``
-refuses to merge while any thread is unresolved (#2007).
+thread's Resolve button records the disposition, and GitHub's
+``required_conversation_resolution`` setting refuses to merge while any thread is
+unresolved (#2007, #2072).
 
 Anchoring is narrower than GitHub's documentation suggests. All of the following
 were measured against a live pull request, not read:

@@ -55,7 +55,7 @@ ADR = "docs/adr/0013-platform-support-is-what-ci-tests.md"
 
 # Rollups are identified by display name, not job id: the job is called
 # `required` in every workflow, and only the `name:` is what branch protection
-# matches on. Same rule as scripts/check_rollup_agreement.py.
+# matches on.
 REQUIRED_JOB_SUFFIX = " (required)"
 
 # Only this action produces a wheel, so only its `target:` is a wheel target.

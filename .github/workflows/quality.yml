@@ -95,10 +95,22 @@ jobs:
 
       - name: Check result
         shell: bash
+        env:
+          NEEDS: ${{ toJSON(needs) }}
         run: |
           # Allowlist, not a failure-blocklist — see docs.yml's `required` job (#1925).
-          case "${{ needs.code-quality.result }}" in
-            success|skipped) ;;
-            *) echo "Code Quality ended in '${{ needs.code-quality.result }}'; only success or skipped may pass"; exit 1 ;;
-          esac
+          #
+          # Reads results from toJSON(needs), and prints the observed set before
+          # judging it — see test.yml's `required` job for the full reasoning
+          # (#2072).
+          echo "Jobs this rollup waited on:"
+          echo "$NEEDS" | jq -r 'del(.changes) | to_entries[] | "  \(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e '
+            del(.changes)
+            | (length > 0)
+              and all(.[]; .result == "success" or .result == "skipped")
+          ' > /dev/null || {
+            echo "A quality job did not pass; only success or skipped may pass"
+            exit 1
+          }
           echo "Quality checks passed or were skipped"

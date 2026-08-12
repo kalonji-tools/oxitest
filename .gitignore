@@ -216,6 +216,11 @@ junit.xml
 # Bacon
 .bacon-locations
 
+# cargo-mutants scratch trees and reports (#2072). It writes `mutants.out/` in
+# the working directory and rotates the previous run to `mutants.out.old/`.
+mutants.out/
+mutants.out.old/
+
 # Agent tooling artifacts.
 #
 # These are NOT ignored merely as noise. Several mandated skills instruct the

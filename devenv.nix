@@ -36,6 +36,13 @@ in
     # Snapshot testing (matches CI's cargo-insta)
     cargo-insta
 
+    # Rust mutation testing (#2072). Mutants are generated from the AST, so the
+    # "anchor matched zero or many times" state that `scripts/apply_mutant.py`
+    # exists to detect cannot arise. It does not replace `just mutate`: this
+    # mutates Rust only, and Python mutants still go through the anchored
+    # applier.
+    cargo-mutants
+
     # Benchmarking
     hyperfine
 
