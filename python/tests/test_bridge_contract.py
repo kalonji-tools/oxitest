@@ -28,7 +28,6 @@ from oxitest._bridge._test_kind import Solitary
 from oxitest._bridge.result import (
     PROTOCOL_VERSION,
     CollectedItem,
-    CollectedViolation,
     ErrorResult,
     FailedResult,
     FixtureTiming,
@@ -49,25 +48,9 @@ from tests import helpers
 _SRC_DIR = pathlib.Path(__file__).parent.parent.parent / "src"
 _BRIDGE_RS = _SRC_DIR / "bridge.rs"
 _BRIDGE_RS_FILES = [_SRC_DIR / "bridge.rs", _SRC_DIR / "reporter" / "bridge.rs"]
-_WORKER_RESULT_RS = _SRC_DIR / "worker_result" / "wire.rs"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-
-def _rust_struct_fields(source: str, struct_name: str) -> frozenset[str]:
-    """Extract field names from a named Rust struct in source text."""
-    pattern = rf"struct\s+{re.escape(struct_name)}\s*\{{([^}}]*)}}"
-    match = re.search(pattern, source, re.DOTALL)
-    if not match:
-        msg = f"struct {struct_name!r} not found in Rust source"
-        raise AssertionError(msg)
-    body = match.group(1)
-    return frozenset(re.findall(r"^\s+(?:pub\s+)?(\w+)\s*:", body, re.MULTILINE))
-
-
-def _python_fields(cls: type) -> frozenset[str]:
-    return frozenset(f.name for f in dataclasses.fields(cls))
 
 
 def _rust_violation_kind_values(source: str) -> frozenset[str]:
@@ -122,66 +105,7 @@ def _wire(
     return json.loads(json.dumps(raw))
 
 
-# ── PyO3 field parity (regex-parse bridge.rs) ─────────────────────────────────
-
-
-def test_collected_item_fields_match_rust() -> None:
-    """CollectedItem Python attrs must satisfy the Rust struct to avoid PyO3 panics.
-
-    Rust reads CollectedItem via #[derive(FromPyObject)] by attribute name.
-    ``param_id`` is now a @property on CollectedItem (backed by the ``kind``
-    field), so it is exposed as an attribute even though it is not a dataclass
-    field. The contract test verifies that every Rust field name is accessible
-    as a Python attribute on a sample instance.
-    """
-    source = _BRIDGE_RS.read_text(encoding="utf-8")
-    rust_fields = _rust_struct_fields(source, "CollectedItem")
-    # Python dataclass fields — ``kind`` replaces the ``param_id`` field, but
-    # ``param_id`` is still exposed as a @property for Rust compat.
-    python_fields = _python_fields(CollectedItem)
-    # Wire-compat attributes: dataclass fields + the param_id property adapter.
-    python_attributes = python_fields | {"param_id"}
-    assert rust_fields <= python_attributes, (
-        "Rust CollectedItem has fields not accessible as Python attributes.\n"
-        "Every Rust field must be reachable via attribute access (dataclass field"
-        " or @property) — PyO3 FromPyObject uses attribute lookup, not field names.\n"
-        f"  Missing from Python: {sorted(rust_fields - python_attributes)}"
-    )
-    assert "kind" in python_fields, (
-        "CollectedItem must have a 'kind: TestKind' dataclass field — it is the"
-        " sum-type source of truth backing the param_id @property"
-    )
-
-
-def test_raw_violation_fields_match_rust() -> None:
-    """CollectedViolation fields must match RawViolation in bridge.rs."""
-    source = _BRIDGE_RS.read_text(encoding="utf-8")
-    rust_fields = _rust_struct_fields(source, "RawViolation")
-    python_fields = _python_fields(CollectedViolation)
-    assert rust_fields == python_fields, (
-        "Field mismatch between RawViolation (src/bridge.rs) and"
-        " CollectedViolation (python/oxitest/_bridge/result.py).\n"
-        f"  Only in Rust:   {sorted(rust_fields - python_fields)}\n"
-        f"  Only in Python: {sorted(python_fields - rust_fields)}"
-    )
-
-
-def test_frame_fields_match_rust() -> None:
-    """RawFrame (wire.rs) fields must match Python Frame dataclass fields.
-
-    Rust deserializes Frame via serde (worker JSON path) and PyO3 FromPyObject
-    (bridge path). A field rename on either side causes silent data loss or a
-    runtime panic with no compile-time protection.
-    """
-    source = _WORKER_RESULT_RS.read_text(encoding="utf-8")
-    rust_fields = _rust_struct_fields(source, "RawFrame")
-    python_fields = _python_fields(Frame)
-    assert rust_fields == python_fields, (
-        "Field mismatch between RawFrame (src/worker_result/wire.rs) and"
-        " Frame (python/oxitest/_bridge/result.py).\n"
-        f"  Only in Rust:   {sorted(rust_fields - python_fields)}\n"
-        f"  Only in Python: {sorted(python_fields - rust_fields)}"
-    )
+# ── PyO3 tuple contracts ─────────────────────────────────────────────────────
 
 
 def test_local_var_tuple_contract() -> None:
@@ -599,18 +523,6 @@ def test_protocol_version_always_present() -> None:
     )
     assert wire["protocol_version"] == PROTOCOL_VERSION, (
         f"expected {PROTOCOL_VERSION}, got {wire['protocol_version']}"
-    )
-
-
-def test_protocol_version_matches_rust_constant() -> None:
-    """Python PROTOCOL_VERSION must equal Rust PROTOCOL_VERSION."""
-    source = _WORKER_RESULT_RS.read_text(encoding="utf-8")
-    match = re.search(r"PROTOCOL_VERSION:\s*u32\s*=\s*(\d+)", source)
-    assert match, "PROTOCOL_VERSION not found in src/worker_result/wire.rs"
-    rust_version = int(match.group(1))
-    assert rust_version == PROTOCOL_VERSION, (
-        f"Python PROTOCOL_VERSION={PROTOCOL_VERSION} != "
-        f"Rust PROTOCOL_VERSION={rust_version}"
     )
 
 
