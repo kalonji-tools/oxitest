@@ -208,20 +208,35 @@ ignore-words-list = "NotIn,ser,sotre,ratatui"
 build = [
     "maturin>=1.7,<2",
 ]
+# Declared once, consumed by two environments, because two different things
+# parse `.github/workflows/*.yml` and they are installed by different commands:
+#
+#   prek's lint env — scripts/check_platform_sets.py, via the `platform-sets`
+#     hook. quality.yml passes exactly `--only-group lint --only-group typecheck
+#     --only-group test` to the setup-python composite, so that is the
+#     environment prek runs in. PyYAML was already present locally only as a
+#     transitive dependency of mkdocs, which `--only-group` excludes — the
+#     checker would have passed here and died in CI (#1974).
+#
+#   the test suite — python/tests/test_rollup_results_check.py. Every test job
+#     passes `--group test` and nothing else (test.yml, and the platform-test
+#     composite), and the local devenv venv agrees: a `lint`-only declaration
+#     reproduces exactly the #1974 failure one environment over (#2076).
+#
+# A second literal in `test` would be a copy of this fact; `include-group` is
+# the idiom already used below for `build` and by `dev` for all four.
+workflow = [
+    "pyyaml>=6",
+]
 test = [
     { include-group = "build" },
+    { include-group = "workflow" },
     "coverage>=7",
 ]
 lint = [
     "ruff>=0.4",
     "codespell>=2",
-    # scripts/check_platform_sets.py, run by the `platform-sets` prek hook.
-    # It must be in `lint` specifically: quality.yml passes exactly
-    # `--only-group lint --only-group typecheck --only-group test` to the
-    # setup-python composite, so that is the environment prek runs in. PyYAML was
-    # already present locally only as a transitive dependency of mkdocs, which
-    # `--only-group` excludes — the checker would have passed here and died in CI.
-    "pyyaml>=6",
+    { include-group = "workflow" },
 ]
 typecheck = [
     "ty",
