@@ -18,7 +18,6 @@ __all__ = [
     "run_test",
 ]
 
-import contextlib
 import functools
 import hashlib
 import inspect
@@ -31,9 +30,7 @@ from typing import TYPE_CHECKING, Any, assert_never
 
 from oxitest._bridge._async_session_guard import acquire_session_guarded
 from oxitest._bridge._boundary import (
-    advance_async_gen,
     safe_teardown,
-    setup_completed,
 )
 from oxitest._bridge._cwd_guard import report_and_repair
 from oxitest._bridge._debugger import _NULL_DEBUGGER, DebuggerBackend, _PdbBackend
@@ -53,7 +50,6 @@ from oxitest._bridge._fixture_context import (
     _in_teardown,
     _test_run_context,
     _warn_callback_teardown,
-    _warn_teardown,
 )
 from oxitest._bridge._fixture_registry import FixtureScope
 from oxitest._bridge._fixture_session import (
@@ -81,7 +77,10 @@ from oxitest._bridge._metadata import (
     get_marks,
 )
 from oxitest._bridge._middleware import (
+    ArrangedStep,
+    AsyncArranged,
     ExecutionPlan,
+    SyncArranged,
     _compose,
     _MiddlewarePipeline,
     build_pipeline,
@@ -178,6 +177,10 @@ class _ChainContext:
     default_timeout: int | None
     session: _SessionProtocol
     arrange_session: AsyncSession | None
+    #: Arranged async fixtures, queued rather than advanced. The middleware
+    #: advances each one inside the body coroutine, so the fixture's setup, the
+    #: test body and the fixture's teardown share one task (#1740).
+    arrange_pending: tuple[ArrangedStep, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -331,7 +334,7 @@ def _build_execution_chain(
         default_backend=backend,
     )
     timeout = parse_timeout(ctx.default_timeout)
-    pipeline = _MiddlewarePipeline(timeout=timeout)
+    pipeline = _MiddlewarePipeline(timeout=timeout, arranged=ctx.arrange_pending)
     middlewares = pipeline.build_for(plan, strategy)
     execute = build_pipeline(middlewares, plan, _base)
     for wrapper in reversed(mark_result.wrappers):
@@ -392,82 +395,91 @@ def _promote_for_wide_async(session: _SessionProtocol) -> AsyncSession | None:
     return acquire()
 
 
-def _drive_arrange_async_each(
-    value: Any,
-    fixture_name: str,
-    session: AsyncSession,
-    fn_teardowns: list[Callable[[], None]],
-) -> None:
-    """Advance an arranged async-each fixture on the caller-supplied session.
-
-    The fixture instantiator returns coroutines/asyncgens for async fixtures
-    unchanged (pass-through). For arranged fixtures this would leave setup
-    un-run and teardown unregistered. Advance the coroutine or async generator
-    on the per-test session, and register a teardown that drains the generator
-    on the same session, routing failures through `safe_teardown` +
-    `_warn_teardown` — the sync convention.
-
-    The session is the same one later reused by the middleware for the test
-    body, so async resources bound to the session's loop (Events, Queues,
-    etc.) yielded in setup remain valid across setup → body → teardown.
-    """
-    if inspect.isasyncgen(value):
-        agen = value
-
-        async def _first() -> Any:
-            return await advance_async_gen(agen)
-
-        def _teardown(agen_ref: Any = agen, name: str = fixture_name) -> None:
-            async def _drain() -> None:
-                # Registered before the first advance (#1962), so this can be
-                # reached for a fixture whose setup never completed; advancing
-                # it here would run that setup during teardown.
-                if not setup_completed(agen_ref):
-                    return
-                with contextlib.suppress(StopAsyncIteration):
-                    await agen_ref.__anext__()
-
-            safe_teardown(
-                lambda: session.run(_drain()),
-                name,
-                warn=_warn_teardown,
-            )
-
-        # Registered BEFORE the advance. This was the widest of the six windows
-        # — the whole closure above was built between the advance and this
-        # append, with no `try`/`except` anywhere around it (#1962).
-        fn_teardowns.append(_teardown)
-        session.run(_first())
-        return
-    # coroutine — await it; no teardown for plain coroutine fixtures
-    session.run(value)
-
-
 def _resolve_arranged_entry(
     entry: Any,
     effective_session: _SessionProtocol,
     module_path: str,
     fn_teardowns: list[Callable[[], None]],
     get_each_session: Callable[[], AsyncSession],
-) -> None:
-    """Resolve one arranged entry (name or type) and drive if async-each.
+) -> list[ArrangedStep]:
+    """Resolve one arranged entry (name or type); queue it if it is async.
 
     `get_each_session` is a lazy accessor: the caller only pays for an
     async session when at least one arranged entry turns out to be an
-    async fixture.
+    async fixture. It is still called for an async entry, because the body
+    must run on that session for the loop to be shared.
+
+    An async entry is **queued rather than advanced**. Advancing it here needs
+    its own ``session.run``, and ``run_until_complete`` makes a task per call,
+    so the fixture's setup would run in a task the test body never enters.
+    ``_async_test_core`` advances the queue inside the body coroutine instead,
+    which gives setup, body and teardown one task (#1740).
+
+    Returns this entry's steps in teardown-registration order. A sync entry's
+    own teardowns are **moved out of** *fn_teardowns* into the returned list,
+    because LIFO has to hold **across** the two kinds:
+    ``@arrange('sync_a', 'async_b', 'sync_c')`` tears down ``sync_c``, then
+    ``async_b``, then ``sync_a``, and only one ordered list can express that.
+
+    They are moved by slicing rather than by passing a private list. A
+    function-lifetime fixture registers into ``scope_refs.teardowns``, which is
+    the session's own per-test list, so a list passed here is **ignored** for
+    exactly the fixtures this has to reorder — and it is ignored silently.
     """
+    start = len(fn_teardowns)
     if isinstance(entry, type):
         value = effective_session.get_fixture_by_type(entry, module_path, fn_teardowns)
         fixture_name = entry.__name__
     else:  # str
         value = effective_session.get_fixture_by_name(entry, module_path, fn_teardowns)
         fixture_name = entry
+    # A dependency is set up before the fixture that asked for it, so its
+    # teardown is registered first and the reversed drain runs it last.
+    steps: list[ArrangedStep] = [
+        SyncArranged(name=fixture_name, call=call) for call in fn_teardowns[start:]
+    ]
+    del fn_teardowns[start:]
     # If the fixture is async (each-scope), the value returned by the
     # instantiator is the raw coroutine/asyncgen (pass-through from
-    # _unpack_sync). Advance it on the per-test session so the fixture's
-    # setup actually runs and its teardown lands in fn_teardowns.
+    # _unpack_sync). Acquire the session the body will run on, then queue the
+    # value for the body coroutine to advance.
     if inspect.iscoroutine(value) or inspect.isasyncgen(value):
-        _drive_arrange_async_each(value, fixture_name, get_each_session(), fn_teardowns)
+        get_each_session()
+        steps.append(AsyncArranged(name=fixture_name, value=value))
+    return steps
+
+
+def _resolve_arranged_entries(
+    arranged: tuple[Any, ...],
+    effective_session: _SessionProtocol,
+    module_path: str,
+    fn_teardowns: list[Callable[[], None]],
+    get_each_session: Callable[[], AsyncSession],
+) -> list[ArrangedStep]:
+    """Resolve every arranged entry and return its steps in declaration order.
+
+    Extracted from :func:`_run_arrange_phase` to keep that function under the
+    complexity limit.
+
+    **The diversion is conditional.** When no entry is async, every teardown
+    goes back to *fn_teardowns* and the executor drains them exactly as it did
+    before #1740 — there is no body coroutine to move them into for a sync
+    test, and no reason to move them for an async one. Only a test that
+    arranges at least one async fixture takes the new path.
+    """
+    steps: list[ArrangedStep] = []
+    for entry in arranged:
+        steps.extend(
+            _resolve_arranged_entry(
+                entry, effective_session, module_path, fn_teardowns, get_each_session
+            )
+        )
+    if any(isinstance(step, AsyncArranged) for step in steps):
+        return steps
+    # No async entry, so there is no body coroutine to move these into. Put
+    # them back exactly where they were and leave the pre-#1740 path alone.
+    fn_teardowns.extend(step.call for step in steps if isinstance(step, SyncArranged))
+    return []
 
 
 @dataclass(frozen=True, slots=True)
@@ -482,9 +494,14 @@ class ArrangeReadyAsync:
     Threaded to the middleware so the async test body reuses the same loop
     the arrange fixtures were set up on — closes the ADR-0006 body-loop-
     identity gap.
+
+    ``pending`` carries the arranged async fixtures themselves, un-advanced.
+    The middleware advances them inside the body coroutine, which closes the
+    task-identity gap the loop invariant does not reach (#1740).
     """
 
     session: AsyncSession
+    pending: tuple[ArrangedStep, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -588,10 +605,9 @@ def _run_arrange_phase(
                 assert_never(cell)
 
     try:
-        for entry in arranged:
-            _resolve_arranged_entry(
-                entry, effective_session, module_path, fn_teardowns, get_each_session
-            )
+        pending_async = _resolve_arranged_entries(
+            arranged, effective_session, module_path, fn_teardowns, get_each_session
+        )
     except (
         FixtureNotFoundError,
         FixtureSetupError,
@@ -601,6 +617,8 @@ def _run_arrange_phase(
         return ArrangeFailed(
             error=_error_result(str(exc), usage_error=is_usage_error(exc))
         )
+    if isinstance(cell, ArrangeReadyAsync):
+        return replace(cell, pending=tuple(pending_async))
     return cell
 
 
@@ -726,10 +744,12 @@ def _run_test_impl(
         match arrange_result:
             case ArrangeFailed(error=arrange_err):
                 return arrange_err
-            case ArrangeReadyAsync(session=acquired_session):
+            case ArrangeReadyAsync(session=acquired_session, pending=queued):
                 arrange_session: AsyncSession | None = acquired_session
+                arrange_pending: tuple[ArrangedStep, ...] = queued
             case ArrangeReady():
                 arrange_session = None
+                arrange_pending = ()
             case _:
                 assert_never(arrange_result)
 
@@ -739,6 +759,7 @@ def _run_test_impl(
             default_timeout=default_timeout,
             session=effective_session,
             arrange_session=arrange_session,
+            arrange_pending=arrange_pending,
         )
         execute = _build_execution_chain(
             resolved, plan, mark_result, chain_ctx, debug=debug

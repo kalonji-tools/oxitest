@@ -696,11 +696,21 @@ def test_shared_session_precedence_over_arrange_session(tmp: TempDir) -> None:
     loop-bound resources on that session; running the body elsewhere would
     break them.
 
-    Known limitation (pre-existing before #1545): when both are present,
-    an @arrange fixture that yields a loop-bound resource on the arrange
-    session's loop cannot be used from the body — same cross-loop issue
-    as pre-refactor code. Fixing the mixed case is a bigger design
-    question about coalescing session lifetimes; out of scope for #1545.
+    The known limitation this test recorded is **discharged** (#1740). It read:
+
+        Known limitation (pre-existing before #1545): when both are present,
+        an @arrange fixture that yields a loop-bound resource on the arrange
+        session's loop cannot be used from the body — same cross-loop issue
+        as pre-refactor code.
+
+    The executor no longer advances an arranged async fixture on the arrange
+    session. It queues the fixture, and the body coroutine advances it, so the
+    fixture runs on whatever loop the body runs on. When a shared session wins
+    the precedence, that is the shared loop, and all three coincide.
+
+    The old sanity assertion required the arrange loop to differ from the
+    shared one. It is removed rather than repaired: it asserted the limitation,
+    so it cannot survive the fix. The assertion below pins what replaced it.
     """
     (tmp / "state.py").write_text("seen = {}\n", encoding="utf-8")
     (tmp / "__fixtures__.py").write_text(
@@ -748,10 +758,10 @@ def test_shared_session_precedence_over_arrange_session(tmp: TempDir) -> None:
         "        'middleware picks shared_session first because shared '\n"
         "        f'fixtures may yield loop-bound resources on it; got {seen}'\n"
         "    )\n"
-        "    assert seen['body'] != seen['arrange'], (\n"
-        "        'sanity: arrange session should be a different loop from '\n"
-        "        'shared session (otherwise the precedence test proves '\n"
-        "        f'nothing); got {seen}'\n"
+        "    assert seen['body'] == seen['arrange'], (\n"
+        "        'an arranged async fixture must run on the body loop — the '\n"
+        "        'body coroutine advances it now, so a loop-bound resource it '\n"
+        "        f'yields is usable from the test (#1740); got {seen}'\n"
         "    )\n",
         encoding="utf-8",
     )
