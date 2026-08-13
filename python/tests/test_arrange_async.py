@@ -775,3 +775,93 @@ def test_shared_session_precedence_over_arrange_session(tmp: TempDir) -> None:
     assert "2 passed" in stdout, (
         f"async body + precedence-check test must both pass, got:\n{stdout}"
     )
+
+
+def test_arrange_and_proxy_routes_build_once(tmp: TempDir) -> None:
+    """@arrange('conn') plus ``await fx.conn`` in one test builds once.
+
+    This pair is the only legal way to arrange a fixture *and* read its value:
+    the collector refuses @arrange together with a ``Fixture[T]`` parameter for
+    the same fixture. Before #2093 it built twice, so the body observed an
+    instance the arranged setup had not touched.
+    """
+    (tmp / "state.py").write_text("builds = []\n", encoding="utf-8")
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import fixture\n"
+        "\n"
+        "from state import builds\n"
+        "\n"
+        "@fixture(lifetime='function')\n"
+        "async def conn():\n"
+        "    builds.append('conn')\n"
+        "    yield len(builds)\n",
+        encoding="utf-8",
+    )
+    (tmp / "test_sample.py").write_text(
+        "from oxitest import Fixtures, arrange\n"
+        "from state import builds\n"
+        "\n"
+        "@arrange('conn')\n"
+        "async def test_arranged_and_proxied(fx: Fixtures):\n"
+        "    value = await fx.conn\n"
+        "    assert value == 1, (\n"
+        "        f'the proxy must observe the arranged build, not a second '\n"
+        "        f'one — got {value} with builds={builds}'\n"
+        "    )\n"
+        "\n"
+        "def test_built_once():\n"
+        "    assert builds == ['conn'], (\n"
+        "        f'@arrange and the fx. proxy must share one build per test, '\n"
+        "        f'got {builds}'\n"
+        "    )\n",
+        encoding="utf-8",
+    )
+
+    stdout, _stderr, _rc = helpers.run_oxitest(tmp)
+    assert "2 passed" in stdout, f"both tests must pass, got:\n{stdout}"
+
+
+def test_arranged_async_fixture_tears_down_after_its_dependency(
+    tmp: TempDir,
+) -> None:
+    """An arranged async fixture's async dependency tears down after it.
+
+    The dependency is built inside ``_build_async`` while the per-step sink is
+    pointed at the arranged step, so both teardowns land in one list. A
+    dependency is set up first, so LIFO puts its teardown last (#2093).
+    """
+    (tmp / "state.py").write_text("order = []\n", encoding="utf-8")
+    (tmp / "__fixtures__.py").write_text(
+        "from oxitest import Fixture, fixture\n"
+        "\n"
+        "from state import order\n"
+        "\n"
+        "@fixture(lifetime='function')\n"
+        "async def inner():\n"
+        "    yield 'inner'\n"
+        "    order.append('inner')\n"
+        "\n"
+        "@fixture(lifetime='function')\n"
+        "async def outer(inner: Fixture[str]):\n"
+        "    yield 'outer'\n"
+        "    order.append('outer')\n",
+        encoding="utf-8",
+    )
+    (tmp / "test_sample.py").write_text(
+        "from oxitest import arrange\n"
+        "from state import order\n"
+        "\n"
+        "@arrange('outer')\n"
+        "async def test_uses_outer():\n"
+        "    pass\n"
+        "\n"
+        "def test_dependency_torn_down_last():\n"
+        "    assert order == ['outer', 'inner'], (\n"
+        "        f'a dependency is set up first, so LIFO tears it down last; '\n"
+        "        f'got {order}'\n"
+        "    )\n",
+        encoding="utf-8",
+    )
+
+    stdout, _stderr, _rc = helpers.run_oxitest(tmp)
+    assert "2 passed" in stdout, f"both tests must pass, got:\n{stdout}"
