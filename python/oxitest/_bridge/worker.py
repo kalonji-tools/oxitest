@@ -3,7 +3,7 @@
 Reads a single JSON task from stdin, runs each test item using executor.run_test,
 and writes one JSON result line per test to stdout.
 
-Task schema (stdin, protocol v7):
+Task schema (stdin). ``PROTOCOL_VERSION`` in ``result.py`` declares the version:
     {
         "protocol_version": int,
         "modules": [{
