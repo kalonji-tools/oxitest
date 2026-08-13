@@ -259,17 +259,39 @@ class _BoundaryCase:
     expected: str | None
 
 
-@oxi.parametrize(
-    # None means "no boundary of its own": SESSION_BOUNDARY, drained at
-    # end_task. Right for shared=True and the builtins' session tier, which
-    # have nothing narrower to wait for, and the correct backstop for the
-    # function tier when no per-test sink is active.
-    each=_BoundaryCase(FixtureScope.EACH, None),
-    session=_BoundaryCase(FixtureScope.SESSION, None),
-    module=_BoundaryCase(FixtureScope.MODULE, _MOD_A),
-    package=_BoundaryCase(FixtureScope.PACKAGE, _ANCHOR),
-    process=_BoundaryCase(FixtureScope.PROCESS, PROCESS_BOUNDARY),
-)
+#: One case per ``FixtureScope`` member, keyed by case id.
+#:
+#: Module-level rather than inline so a separate test can read the set it
+#: covers. A parametrized invocation receives one case and cannot see the
+#: table, so the table could never have been its own ratchet (#2111).
+#:
+#: None means "no boundary of its own": SESSION_BOUNDARY, drained at
+#: end_task. Right for shared=True and the builtins' session tier, which
+#: have nothing narrower to wait for, and the correct backstop for the
+#: function tier when no per-test sink is active.
+_BOUNDARY_CASES = {
+    "each": _BoundaryCase(FixtureScope.EACH, None),
+    "session": _BoundaryCase(FixtureScope.SESSION, None),
+    "module": _BoundaryCase(FixtureScope.MODULE, _MOD_A),
+    "package": _BoundaryCase(FixtureScope.PACKAGE, _ANCHOR),
+    "process": _BoundaryCase(FixtureScope.PROCESS, PROCESS_BOUNDARY),
+}
+
+
+def test_the_boundary_table_covers_every_fixture_scope() -> None:
+    """The table below is only a ratchet if something reads the set it covers."""
+    # Act
+    covered = {case.scope for case in _BOUNDARY_CASES.values()}
+
+    # Assert
+    assert covered == set(FixtureScope), (
+        "a FixtureScope with no row in _BOUNDARY_CASES is a tier whose async "
+        "teardown key nothing pins, and a row for a member that no longer "
+        "exists is a table describing a vocabulary the registry dropped"
+    )
+
+
+@oxi.parametrize(**_BOUNDARY_CASES)
 def test_async_teardown_boundary_covers_every_scope(
     scope: FixtureScope, expected: str | None
 ) -> None:
@@ -278,9 +300,10 @@ def test_async_teardown_boundary_covers_every_scope(
     Both async registration sites share this mapping, and before #1839 they
     each carried their own copy that disagreed — the same ``lifetime="module"``
     fixture was disposed per module through one access spelling and at the end
-    of the run through the other. A table over all six members is the ratchet
-    against a later refactor quietly collapsing an arm; the end-to-end suites
-    reach only ``package``.
+    of the run through the other. A table over all five members is the ratchet
+    against a later refactor quietly collapsing an arm, and
+    ``test_the_boundary_table_covers_every_fixture_scope`` is what makes it one;
+    the end-to-end suites reach only ``package``.
     """
     # Arrange
     defn = replace(_package_defn("engine", lambda: "engine"), scope=scope)
