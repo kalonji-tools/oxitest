@@ -109,14 +109,10 @@ needs no `await` — the framework resolves those before the test body starts:
 --8<-- "python/tests/docs/how-to/fixture_anchors/api/test_api.py:async-injection"
 ```
 
-!!! warning "Known limitation: one async fixture, two access routes"
-    Reaching the same `function`-lifetime **async** fixture through both a
-    `Fixture[T]` parameter and `await fx.<name>` in one test builds it
-    **twice**. The parameter route hands an un-awaited coroutine to the
-    execution middleware, which cannot share the per-test cache the `fx.`
-    proxy uses.
-
-    Use one route per test until this converges:
+!!! note "One async fixture, several access routes — one instance"
+    Reaching the same `function`-lifetime **async** fixture through more than
+    one route in a single test builds it **once**. Every route resolves
+    through the same per-test cache, so each one observes the same object:
 
     ```python
     from oxitest import Fixture, Fixtures
@@ -124,22 +120,19 @@ needs no `await` — the framework resolves those before the test body starts:
     from myapp import Channel  # whatever the fixture returns
 
 
-    # Two instances — avoid.
     async def test_mixed(channel: Fixture[Channel], fx: Fixtures) -> None:
-        proxied = await fx.channel  # not the same object as `channel`
-
-
-    # One instance — prefer either route on its own.
-    async def test_param(channel: Fixture[Channel]) -> None: ...
-
-
-    async def test_proxy(fx: Fixtures) -> None:
-        channel = await fx.channel
+        proxied = await fx.channel
+        assert proxied is channel, "one build per test, whatever route"
     ```
 
-    Sync fixtures are unaffected — every route converges on one instance
-    there. Tracked in
-    [#1805](https://github.com/kalonji-tools/oxitest/issues/1805).
+    The same holds for `@oxi.arrange` together with `await fx.<name>` — which
+    is the only way to arrange a fixture *and* read its value, because
+    `@oxi.arrange` and a `Fixture[T]` parameter for one fixture are refused at
+    collection.
+
+    Sync fixtures behave the same way. This converged in
+    [#2093](https://github.com/kalonji-tools/oxitest/issues/2093); before that
+    the parameter route built its own instance.
 
 ### Disposal
 
