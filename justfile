@@ -247,9 +247,46 @@ mutate path old new *test_cmd: mutation-guard
 # Scope it. Unfiltered, this crate offers 3607 candidates at roughly one build
 # each. `--file` takes a glob; `--re` filters by mutant description.
 #
+# WHICH SURFACE A VERDICT COVERS (#2113). There is no `mutants.toml` and no
+# `.cargo/mutants.toml`, so cargo-mutants runs its default test command,
+# `cargo test`. The Python suite never runs. So a MISSED verdict here means
+# "no Rust unit test refuses this mutant". It does NOT mean "nothing refuses
+# this mutant", and a reader who takes it that way deletes tested behaviour.
+#
+# For a module whose behaviour is visible end to end only, the verdict carries
+# no information at all. Measured on `src/reporter/print.rs`, which writes its
+# output with `println!`; five of its six functions return nothing, and no Rust
+# test calls the one that returns an `ExitCode`:
+#
+#      41 mutants tested in 4m: 28 missed, 1 caught, 12 unviable
+#
+# That is 1 of 29 viable mutants caught, and no test could move it: `cargo test`
+# cannot observe what that file does. The four tests that call into it, in
+# `src/reporter/options.rs`, assert nothing for the same reason.
+#
+# So a gate that brings a file into the mutation-tested set must name a surface
+# `cargo test` can observe — a function that returns a value, not one that
+# prints. Gate G7 of the #2100 audit slate was first specified against
+# `src/reporter/print.rs`; it is respecified against `src/reporter/format/`,
+# where the same rendering behaviour returns `String`. #2113 carries the worked
+# case and the reasoning.
+#
+# Giving cargo-mutants the Python suite instead was refused, on cost measured
+# at #2113: the `cargo test` phase is 3 s, and `just build` plus
+# `just test-python` is 44.7 s. cargo-mutants 27.0.0 also offers no arbitrary
+# test command — `--test-tool` takes `cargo` or `nextest`, and the config
+# schema has no `test_command` key. Reach for `just mutate` instead: its
+# default test command is `just test-python`, so the two recipes cover
+# opposite surfaces.
+#
+# The notice below is printed BEFORE cargo mutants, not after: cargo mutants
+# exits non-zero on a missed mutant and `just` then abandons the recipe, so a
+# trailing line would be skipped on exactly the runs that need it.
+#
 # Only the line directly above a recipe becomes its `just --list` description.
 # Run Rust mutants under cargo-mutants — scope with --file or --re (#2072)
 mutate-rust *args: (_log _blue "Running Rust mutants...")
+    @just _log {{ _yellow }} "MISSED below means no Rust unit test refuses the mutant. It does not mean nothing refuses it — this recipe runs cargo test only (#2113)."
     cargo mutants {{ args }}
 
 # Full pre-push gate: clean, check, test everything

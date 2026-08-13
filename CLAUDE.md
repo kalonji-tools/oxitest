@@ -51,10 +51,12 @@ just preflight
 # justfile is authoritative for which.
 just mutate <path> <old-anchor-file> <new-anchor-file> [test-cmd...]
 
-# Run Rust mutants under cargo-mutants (#2072). Prefer this for Rust: mutants
-# come from the AST, so "the anchor never matched" — which reads exactly like
-# SURVIVED — is not a possible state, and the scratch-tree copy means a dirty
-# worktree is never destroyed. Always scope it; unfiltered is 3607 candidates.
+# Run Rust mutants under cargo-mutants (#2072). Prefer this for Rust code that
+# Rust unit tests observe: mutants come from the AST, so "the anchor never
+# matched" — which reads exactly like SURVIVED — is not a possible state, and
+# the scratch-tree copy means a dirty worktree is never destroyed. It runs
+# `cargo test` only; the recipe's comment block says what a MISSED verdict
+# covers (#2113). Always scope it; unfiltered is 3607 candidates.
 just mutate-rust --file 'src/worker_result/*.rs'
 
 # Clean build artifacts
