@@ -23,7 +23,7 @@ from oxitest._bridge._fixture_registry import (
     FixtureRegistry,
     _fixture_inner_type,
 )
-from oxitest._bridge._fixture_type import FixtureRef
+from oxitest._bridge._fixture_type import FixtureRef, type_display_name
 from oxitest._bridge._fixtures import Fixtures
 from oxitest._bridge._fn_metadata import _update, get_metadata
 from oxitest._bridge._loader import _load_module, _LoadError, already_imported
@@ -62,7 +62,7 @@ def _get_fixture_deps(fn: object) -> tuple[tuple[str, str], ...]:
             continue
         is_fix, inner = _fixture_inner_type(hint)
         if is_fix:
-            deps.append((param_name, inner.__name__))
+            deps.append((param_name, type_display_name(inner)))
     return tuple(deps)
 
 
@@ -279,7 +279,7 @@ def _get_fixref_deps(layer: ResolvedCases) -> tuple[tuple[str, str], ...]:
         callable_args = get_args(inner)
         if callable_args:
             fixture_type = callable_args[-1]  # last arg is return type T
-            type_name = getattr(fixture_type, "__name__", str(fixture_type))
+            type_name = type_display_name(fixture_type)
         else:
             type_name = str(inner)
         deps.append((name, type_name))

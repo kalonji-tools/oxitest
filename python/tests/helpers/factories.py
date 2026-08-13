@@ -18,6 +18,7 @@ from oxitest._bridge._fixture_registry import (
     FrameworkSource,
 )
 from oxitest._bridge._fixture_session import FixtureSession
+from oxitest._bridge._fixture_type import BindingType
 from oxitest._bridge._module_source_registrar import register_module_source_fixtures
 from oxitest._bridge._test_kind import from_wire
 from oxitest._bridge._test_meta import TestMeta
@@ -36,7 +37,7 @@ def make_fixture_def(  # noqa: PLR0913 — test helper, all kwargs have defaults
     declaration_path: str = "",
     doc: str = "",
     depends_on: tuple[tuple[str, type], ...] = (),
-    fixture_type: type | None = None,
+    fixture_type: BindingType | None = None,
 ) -> FixtureDef:
     """Create a ``FixtureDef`` with sensible defaults.
 
@@ -68,7 +69,7 @@ def make_fixture_def(  # noqa: PLR0913 — test helper, all kwargs have defaults
         factory = _fn
     # Explicit fixture_type overrides annotation extraction
     if fixture_type is not None:
-        ft: type = fixture_type
+        ft: BindingType = fixture_type
     else:
         # Try to extract return type; fall back to object
         hints = safe_type_hints(factory)
