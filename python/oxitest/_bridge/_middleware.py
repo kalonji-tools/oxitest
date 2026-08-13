@@ -24,10 +24,12 @@ from oxitest._bridge._async_session_guard import acquire_session_guarded
 from oxitest._bridge._boundary import (
     advance_async_gen,
     async_safe_call,
+    safe_teardown,
     setup_completed,
 )
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
 from oxitest._bridge._errors import FixtureSetupError
+from oxitest._bridge._fixture_context import _warn_teardown
 from oxitest._bridge._runners import run_base_async
 
 if TYPE_CHECKING:
@@ -218,16 +220,91 @@ class AsyncDepGuardMiddleware:
         return next_fn
 
 
+@dataclass(frozen=True, slots=True)
+class SyncArranged:
+    """One already-set-up sync arranged fixture, awaiting its teardown."""
+
+    name: str
+    call: Callable[[], None]
+
+
+@dataclass(frozen=True, slots=True)
+class AsyncArranged:
+    """One arranged async fixture, un-advanced.
+
+    The executor queues these rather than advancing them: its own
+    ``session.run`` makes a task the test body never enters, so the fixture's
+    setup would run where the body cannot reach it (#1740).
+    """
+
+    name: str
+    value: Any
+
+
+#: One arranged fixture, in declaration order. Both kinds travel in one list so
+#: the teardown pass is a single reversed walk — LIFO has to hold *across* the
+#: two kinds, and `@arrange('sync_a', 'async_b', 'sync_c')` tears down
+#: ``sync_c``, then ``async_b``, then ``sync_a``.
+ArrangedStep = SyncArranged | AsyncArranged
+
+
+async def _advance_arranged(
+    arranged: tuple[ArrangedStep, ...],
+) -> TestResult | None:
+    """Phase 0: advance each queued arranged async fixture, in order.
+
+    Returns a TestResult on setup error, or None on success.
+
+    Advancing here — inside the body coroutine — puts the fixture's setup, the
+    test body and the fixture's teardown in one task. A sync step is already
+    set up by the executor and is skipped.
+    """
+    for step in arranged:
+        if isinstance(step, SyncArranged):
+            continue
+        try:
+            if inspect.isasyncgen(step.value):
+                await advance_async_gen(step.value)
+            else:
+                # coroutine — await it; no teardown for plain coroutine fixtures
+                await step.value
+        except Exception as exc:  # noqa: BLE001 — arranged setup runs user code
+            return _error_result(str(FixtureSetupError(step.name, exc)))
+    return None
+
+
+async def _teardown_arranged(arranged: tuple[ArrangedStep, ...]) -> None:
+    """Phase 4: tear down arranged fixtures, most recent first.
+
+    Runs after :func:`_teardown_async_generators`, so a parameter fixture's
+    teardown still precedes every arranged one — the order the executor
+    produced when it drained these from ``fn_teardowns``.
+
+    Both kinds are drained in one reversed walk, because LIFO holds across
+    them: a sync fixture declared after an async one is torn down first.
+    """
+    for step in reversed(arranged):
+        if isinstance(step, SyncArranged):
+            safe_teardown(step.call, step.name, warn=_warn_teardown)
+        elif inspect.isasyncgen(step.value):
+            # One element, so its own ``reversed`` is the identity. Reusing it
+            # keeps one drain, one ``setup_completed`` guard and one wording for
+            # the teardown diagnostic. A plain coroutine arranged fixture has no
+            # post-``yield`` half, so it is not drained at all.
+            await _teardown_async_generators([(step.name, step.value)])
+
+
 async def _unpack_async_fixtures(
     kwargs: Any,
-) -> tuple[dict[str, Any], list[tuple[str, Any]]] | TestResult:
+    async_teardowns: list[tuple[str, Any]],
+) -> dict[str, Any] | TestResult:
     """Phase 1: await coroutines and advance async generators.
 
-    Returns (resolved_kwargs, async_teardowns) on success, or a TestResult
-    on fixture setup error.
+    Returns the resolved kwargs on success, or a TestResult on fixture setup
+    error. *async_teardowns* is owned by the caller, so an arranged fixture
+    advanced before this call is already queued in it.
     """
     resolved: dict[str, Any] = {}
-    async_teardowns: list[tuple[str, Any]] = []
     for k, v in kwargs.items():
         if inspect.isasyncgen(v):
             try:
@@ -245,7 +322,7 @@ async def _unpack_async_fixtures(
                 return _error_result(str(FixtureSetupError(k, exc)))
         else:
             resolved[k] = v
-    return resolved, async_teardowns
+    return resolved
 
 
 async def _run_with_timeout(
@@ -301,6 +378,7 @@ async def _async_test_core(
     timeout_secs: int | None = None,
     *,
     context_cls: type[_TimeoutContext] | None = None,
+    arranged: tuple[ArrangedStep, ...] = (),
 ) -> TestResult:
     """Await coroutines, run the test body, teardown async fixtures.
 
@@ -315,16 +393,21 @@ async def _async_test_core(
     ``context_cls`` exists for tests, for the reason ``make_timeout_wrapper``
     gives: it makes both arms reachable from one platform.
     """
-    unpacked = await _unpack_async_fixtures(plan.kwargs)
-    if isinstance(unpacked, TestResult):
-        return unpacked
-    resolved, async_teardowns = unpacked
+    async_teardowns: list[tuple[str, Any]] = []
     # Fixtures resolved lazily inside the body (via `await fx.<ns>.<name>`)
     # append their generators to this same list, so the drain below covers
     # them too. Doing it any later would run their post-yield half after this
-    # loop has closed.
+    # loop has closed. Set before the arranged advance, because an arranged
+    # fixture's own dependencies resolve through the same sink (#1740).
     token = async_teardown_sink.set(async_teardowns)
     try:
+        arranged_error = await _advance_arranged(arranged)
+        if arranged_error is not None:
+            return arranged_error
+        unpacked = await _unpack_async_fixtures(plan.kwargs, async_teardowns)
+        if isinstance(unpacked, TestResult):
+            return unpacked
+        resolved = unpacked
         cls = context_cls if context_cls is not None else _timeout_context_class()
         if timeout_secs is None or not cls.bounds_blocking_calls:
             # This arm cannot bound a blocking call, so arming it would buy an
@@ -356,6 +439,7 @@ async def _async_test_core(
     finally:
         async_teardown_sink.reset(token)
         await _teardown_async_generators(async_teardowns)
+        await _teardown_arranged(arranged)
 
 
 @dataclass(frozen=True, slots=True)
@@ -372,6 +456,7 @@ class _SessionRunMiddleware:
 
     session: AsyncSession
     timeout_secs: int | None = None
+    arranged: tuple[ArrangedStep, ...] = ()
 
     def apply(
         self, *, plan: ExecutionPlan, next_fn: Callable[[], TestResult]
@@ -380,9 +465,10 @@ class _SessionRunMiddleware:
             return next_fn
         session = self.session
         secs = self.timeout_secs
+        arranged = self.arranged
 
         def _base() -> TestResult:
-            return session.run(_async_test_core(plan, secs))
+            return session.run(_async_test_core(plan, secs, arranged=arranged))
 
         return _base
 
@@ -397,6 +483,7 @@ class AsyncBridgeMiddleware:
 
     backend: AsyncBackend
     timeout_secs: int | None = None
+    arranged: tuple[ArrangedStep, ...] = ()
 
     def apply(
         self, *, plan: ExecutionPlan, next_fn: Callable[[], TestResult]
@@ -405,10 +492,11 @@ class AsyncBridgeMiddleware:
             return next_fn
         backend = self.backend
         secs = self.timeout_secs
+        arranged = self.arranged
 
         def _base() -> TestResult:
             with acquire_session_guarded(backend) as session:
-                return session.run(_async_test_core(plan, secs))
+                return session.run(_async_test_core(plan, secs, arranged=arranged))
 
         return _base
 
@@ -428,6 +516,8 @@ class _MiddlewarePipeline:
     """
 
     timeout: Timeout
+    #: Arranged async fixtures the executor queued rather than advanced (#1740).
+    arranged: tuple[ArrangedStep, ...] = ()
     _pre_guard: list[Middleware] = field(default_factory=list)
     _post_guard: list[Middleware] = field(default_factory=list)
     _pre_session: list[Middleware] = field(default_factory=list)
@@ -445,9 +535,17 @@ class _MiddlewarePipeline:
             secs = _effective_timeout_secs(plan, self.timeout)
             match strategy:
                 case Shared(session=s) | Arrange(session=s):
-                    mws.append(_SessionRunMiddleware(session=s, timeout_secs=secs))
+                    mws.append(
+                        _SessionRunMiddleware(
+                            session=s, timeout_secs=secs, arranged=self.arranged
+                        )
+                    )
                 case Fresh(backend=b):
-                    mws.append(AsyncBridgeMiddleware(backend=b, timeout_secs=secs))
+                    mws.append(
+                        AsyncBridgeMiddleware(
+                            backend=b, timeout_secs=secs, arranged=self.arranged
+                        )
+                    )
                 case _:
                     assert_never(strategy)
         return mws
