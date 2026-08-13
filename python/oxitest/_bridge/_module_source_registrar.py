@@ -178,6 +178,7 @@ def register_module_source_fixtures(
             FixtureDef(
                 name=attr_name,
                 fixture_type=_infer_return_type(obj),
+                is_generator=_is_generator(obj),
                 scope=LIFETIME_SCOPES[marker.lifetime],
                 source=ModuleSource(
                     func=obj,
@@ -328,6 +329,7 @@ def register_plugin_source_fixtures(  # noqa: PLR0913 — five are the declarati
             FixtureDef(
                 name=attr_name,
                 fixture_type=_infer_return_type(obj),
+                is_generator=_is_generator(obj),
                 scope=LIFETIME_SCOPES[marker.lifetime],
                 source=PluginModuleSource(
                     func=obj,
@@ -639,6 +641,17 @@ def _is_async(obj: Any) -> bool:
     un-awaited (kalonji-tools/oxitest#1733).
     """
     return inspect.iscoroutinefunction(obj) or inspect.isasyncgenfunction(obj)
+
+
+def _is_generator(obj: Any) -> bool:
+    """Whether *obj* yields, so its annotation wraps what it provides.
+
+    A yield fixture declared ``Yields[T]`` binds under the generator alias and
+    provides ``T``. Only the callable's shape separates it from a plain
+    function that *returns* an iterator under the same annotation, so this
+    cannot be answered from the annotation alone (#2094).
+    """
+    return inspect.isgeneratorfunction(obj) or inspect.isasyncgenfunction(obj)
 
 
 def _infer_return_type(obj: Any) -> type:

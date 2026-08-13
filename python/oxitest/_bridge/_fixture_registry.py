@@ -30,7 +30,11 @@ from typing import (
 
 from oxitest._bridge._boundary import safe_type_hints
 from oxitest._bridge._diagnostic_collector import emit_diagnostic
-from oxitest._bridge._errors import AmbiguousFixtureError, FixtureNotFoundError
+from oxitest._bridge._errors import (
+    AmbiguousFixtureError,
+    FixtureNotFoundError,
+    FixtureTypeMismatchError,
+)
 from oxitest._bridge._fixture_type import _FixtureMarker
 from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge._paths import format_path
@@ -184,7 +188,24 @@ class FixtureDef(Generic[T]):
     autouse: bool = False
     namespace: str = ""  # Fixtures() instance name; empty = no namespace
     is_async: bool = False  # True = async def or async generator fixture
+    is_generator: bool = (
+        False  # the callable yields; fixture_type wraps what it provides
+    )
     depends_on: tuple[tuple[str, type], ...] = ()  # (qualifier, binding_type) pairs
+
+    @property
+    def provides(self) -> Any:
+        """The type a consumer receives.
+
+        For a yield fixture this is the type it yields; its ``fixture_type``
+        is the generator alias that wraps it. For every other fixture the two
+        are identical. See CONTEXT.md, "Provided Type".
+        """
+        if self.is_generator:
+            args = get_args(self.fixture_type)
+            if args:
+                return args[0]
+        return self.fixture_type
 
     @property
     def func(self) -> Callable[..., T]:
@@ -961,9 +982,16 @@ class FixtureRegistry:
         # Multiple matches — try qualifier
         if qualifier:
             named = self._by_name.get(qualifier, [])
-            matched = [d for d in named if d.fixture_type == fixture_type]
+            matched = [d for d in named if d.provides == fixture_type]
             if len(matched) == 1:
                 return matched[0]
+            if len(named) == 1:
+                only = named[0]
+                raise FixtureTypeMismatchError(
+                    qualifier,
+                    getattr(only.provides, "__name__", str(only.provides)),
+                    getattr(fixture_type, "__name__", str(fixture_type)),
+                )
         raise AmbiguousFixtureError(
             fixture_type.__name__,
             [d.name for d in unique],
