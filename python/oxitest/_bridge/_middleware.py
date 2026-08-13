@@ -239,6 +239,15 @@ class AsyncArranged:
 
     name: str
     value: Any
+    #: Teardowns registered while *this* step was being advanced.
+    #:
+    #: A converged async fixture resolves through ``_build_async``, which
+    #: registers its post-``yield`` half through ``async_teardown_sink``.
+    #: That sink normally points at the parameter drain (phase 3), which
+    #: would move an arranged fixture's teardown a phase earlier and break
+    #: LIFO across mixed arranged fixtures. ``_advance_arranged`` points the
+    #: sink here instead, so the teardown stays in phase 4 where #1740 put it.
+    owned: list[tuple[str, Any]] = field(default_factory=list)
 
 
 #: One arranged fixture, in declaration order. Both kinds travel in one list so
@@ -262,6 +271,9 @@ async def _advance_arranged(
     for step in arranged:
         if isinstance(step, SyncArranged):
             continue
+        # Anything this step's setup registers belongs to this step, not to
+        # the parameter drain — see AsyncArranged.owned (#2093).
+        token = async_teardown_sink.set(step.owned)
         try:
             if inspect.isasyncgen(step.value):
                 await advance_async_gen(step.value)
@@ -270,6 +282,8 @@ async def _advance_arranged(
                 await step.value
         except Exception as exc:  # noqa: BLE001 — arranged setup runs user code
             return _error_result(str(FixtureSetupError(step.name, exc)))
+        finally:
+            async_teardown_sink.reset(token)
     return None
 
 
@@ -286,6 +300,14 @@ async def _teardown_arranged(arranged: tuple[ArrangedStep, ...]) -> None:
     for step in reversed(arranged):
         if isinstance(step, SyncArranged):
             safe_teardown(step.call, step.name, warn=_warn_teardown)
+        elif step.owned:
+            # This step resolved through _build_async, which registered into
+            # the sink pointed at it — in setup order, so a dependency sits
+            # before its dependent. Passed as-is: _teardown_async_generators
+            # reverses internally, which is already the LIFO this needs.
+            # Reversing here first double-reverses and tears the dependency
+            # down before its dependent (#2093).
+            await _teardown_async_generators(step.owned)
         elif inspect.isasyncgen(step.value):
             # One element, so its own ``reversed`` is the identity. Reusing it
             # keeps one drain, one ``setup_completed`` guard and one wording for
@@ -397,8 +419,11 @@ async def _async_test_core(
     # Fixtures resolved lazily inside the body (via `await fx.<ns>.<name>`)
     # append their generators to this same list, so the drain below covers
     # them too. Doing it any later would run their post-yield half after this
-    # loop has closed. Set before the arranged advance, because an arranged
-    # fixture's own dependencies resolve through the same sink (#1740).
+    # loop has closed. Set before the arranged advance so that the sink is
+    # never unset while a fixture resolves — but an arranged fixture and its
+    # dependencies do *not* land here: `_advance_arranged` redirects the sink
+    # to the step it advances, so they drain in phase 4 with the arranged
+    # fixtures rather than in phase 3 with these (#1740, #2093).
     token = async_teardown_sink.set(async_teardowns)
     try:
         arranged_error = await _advance_arranged(arranged)
