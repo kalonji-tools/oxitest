@@ -48,6 +48,11 @@ class RunMode:
 
 
 _SERIAL = RunMode(label="serial", args=("--serial",))
+#: One worker, which is a distinct mode rather than a slower ``--serial``: it
+#: takes the parallel path and so has a worker catalog, while leaving no second
+#: worker for assignment to vary across. A verdict that held at ``--serial`` and
+#: at ``-n 2`` was never asserted here in between (#1759).
+_SINGLE = RunMode(label="-n 1", args=("-n", "1"))
 _PARALLEL = RunMode(label="-n 2", args=("-n", "2"))
 
 
@@ -153,9 +158,11 @@ def test_a_shortcut_that_resolves_to_nothing_is_refused() -> None:
     )
     _module, _lineno, message = errors[0]
     assert "cannot resolve fixture 'nope'" in message, (
-        f"the shortcut miss carries one message for typo, cross-boundary and "
-        f"foreign-inline alike, because telling them apart needs the unfiltered "
-        f"catalog and would make the diagnostic vary with scheduling; got {message}"
+        f"the shortcut miss names the segment it could not resolve, whatever "
+        f"the cause; separating a typo from a cross-boundary reach still needs "
+        f"the unfiltered catalog and stays deferred (#1759 non-goal 2). The "
+        f"remedy clause does branch, on a pure name test — see "
+        f"test_shortcut_miss_message.py; got {message}"
     )
 
 
@@ -352,7 +359,7 @@ def test_a_selected_violation_is_still_refused_under_the_same_filter() -> None:
     )
 
 
-@oxi.parametrize(serial=_SERIAL, parallel=_PARALLEL)
+@oxi.parametrize(serial=_SERIAL, single=_SINGLE, parallel=_PARALLEL)
 def test_the_refusal_does_not_depend_on_the_execution_mode(case: RunMode) -> None:
     """The verdict is reached before any worker exists, so it cannot vary.
 
