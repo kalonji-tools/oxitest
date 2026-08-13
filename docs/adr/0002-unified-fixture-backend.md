@@ -22,3 +22,28 @@ oxitest had three separate fixture mechanisms — conftest (name-based, `Fixture
 - **`CollectedItem.fixture_names`** replaced by `fixture_deps: tuple[(str, str), ...]` carrying `(qualifier, binding_type_name)` pairs. Cache version bump.
 - **`depends_on` on `FixtureDef`** stores `tuple[(str, type), ...]` (injection points), resolved to graph edges by the graph builder.
 - **Override precedence**: builtins (lowest) → plugins → root conftest → leaf conftest (highest). A conftest fixture can override a builtin or plugin fixture of the same type.
+
+## Amendment — the index keys on the Binding Type, the qualifier matches the Provided Type (#2094)
+
+A yield fixture declares `Yields[T]`, which is exactly `Generator[T, None, None]`. It **provides** `T`. The two are different types. The type index keys on the first; the qualifier comparison matches on the second.
+
+`FixtureDef` therefore carries `is_generator` and derives `provides`. Only `FixtureRegistry.resolve`'s qualifier branch reads `provides`. `_by_type` is unchanged.
+
+### Why the index is not unwrapped
+
+Indexing a yield fixture under `T` is the obvious correction, and it is wrong. It was built and measured, and it fails:
+
+```
+python/tests/test_dependency_teardown_boundary.py::test_plugin_fixture_survives_the_first_test
+AmbiguousFixtureError: 2 fixtures provide type 'Conn': 'conn', 'owner'
+```
+
+A module-lifetime `owner() -> Iterator[Conn]` then joins `_by_type[Conn]` beside a plugin fixture that provides `Conn`. The rescue fails because `FixtureSession.get_fixture_by_type` disambiguates with `qualifier=t.__name__` — the *type's* name — and no fixture carries it.
+
+A narrower variant that unwraps only `Generator` and `AsyncGenerator` passes the whole suite. It passes **because it does not unwrap `Iterator`**, which is the annotation on the fixture that regresses. Its green run is a false negative, not evidence.
+
+**Do not enlarge `_by_type`.** Every failure measured while deciding this traces to an enlarged index. `python/tests/test_provided_type.py::test_the_binding_type_of_a_yield_fixture_is_not_unwrapped` pins the invariant.
+
+### The consequence for the domain model
+
+`CONTEXT.md` previously defined **Binding Type** as *"the type a fixture provides, used as the primary key for resolution"*. For a yield fixture those clauses name different types, and the registry implemented the definition literally. The glossary now separates **Binding Type** from **Provided Type**; that separation is the fix, and the code follows it.

@@ -63,9 +63,11 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 **Fixture[T]** — Type annotation that signals oxitest to inject a fixture whose binding type is `T`. Resolution: match by type first; if ambiguous, the parameter name acts as a qualifier.
 
-**Binding Type** — The type a fixture provides, used as the primary key for resolution. For a declaration, the return annotation. For plugins, `FixtureProvider.fixture_type`. For builtins, the registered `fixture_type`.
+**Binding Type** — The primary key for type-based resolution. For a declaration, the return annotation exactly as written. For plugins, `FixtureProvider.fixture_type`. For builtins, the registered `fixture_type`. **Not always what a consumer receives** — see Provided Type.
 
-**Qualifier** — The parameter name used to disambiguate when multiple fixtures share the same binding type. Only consulted when type-based resolution yields more than one candidate.
+**Provided Type** — The type a consumer receives. For a Yield Fixture it is the type yielded, which the Binding Type wraps: `Yields[T]` is `Generator[T, None, None]`, so the Binding Type is the generator and the Provided Type is `T`. For every other fixture the two are identical. A Yield Fixture is therefore absent from the type index and is reachable by name — which is correct, and is why the index is not unwrapped (ADR-0002 amendment, #2094).
+
+**Qualifier** — The parameter name used to disambiguate when multiple fixtures share the same binding type. Only consulted when type-based resolution yields more than one candidate. **It matches on the Provided Type.** Comparing Binding Types rejects the very fixture the name selects, because a Yield Fixture's Binding Type is a generator and no parameter is annotated with one. When the name matches exactly one fixture and the types still disagree, nothing is ambiguous and the run reports `FixtureTypeMismatchError` instead.
 
 **FixtureRef[T]** — Type annotation on a dataclass field indicating the field holds a reference to a fixture function, not a literal value. Resolved at execution time.
 
