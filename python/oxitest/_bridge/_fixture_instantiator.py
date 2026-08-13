@@ -667,19 +667,30 @@ class FixtureInstantiator:
         - the value is cached **raw**, never ``FrozenProxy``-wrapped —
           function lifetime is the tier whose values a test may freely
           mutate; ADR-0005 freezes only what outlives a test;
-        - an async def is neither resolved eagerly on the session loop nor
-          cached: the sync route hands its coroutine to the execution
-          middleware exactly as before, and a coroutine object can only be
-          awaited once, so caching it would hand a dead coroutine to the
-          next route. The proxy route caches the *awaited value* in
-          ``_build_async`` instead;
+        - an async def is not resolved eagerly on the session loop, but it
+          *is* cached: every route resolves through ``_build_async``, which
+          caches the **awaited value**. The old objection — that a coroutine
+          object can only be awaited once — applied to the *factory*
+          coroutine. What this route returns is a new wrapper coroutine per
+          access, so a second route gets its own wrapper and a cache hit
+          (#2093);
         - teardowns go to ``scope_refs.teardowns``, which **is** the per-test
           ``fn_teardowns`` list, so the executor keeps draining them exactly
           once per test with unchanged ordering — a cache hit skips
           ``_instantiate`` entirely and therefore cannot double-register.
         """
         if defn.is_async:
-            return self._instantiate(defn, ctx, ctx.fn_teardowns)
+            # Calling an `async def` returns a coroutine and runs nothing, so
+            # this is the wrapper — no second method is needed to make one.
+            #
+            # Deliberately a coroutine rather than an `AsyncFixtureHandle`.
+            # Three consumers classify this value with `inspect.iscoroutine` —
+            # the sync test guard (`AsyncDepGuardMiddleware`), the parameter
+            # unpacker, and the executor's arranged-step classifier. A handle
+            # is not a coroutine, so the guard would stop seeing it, and that
+            # guard *builds a message* rather than raising — ADR-0006's
+            # illegal cell would reopen with nothing reporting the loss.
+            return self._build_async(defn, ctx, scope_refs)
         key = _per_test_key(defn)
         if key in scope_refs.cache:
             scope_refs.hits[key] = scope_refs.hits.get(key, 0) + 1
