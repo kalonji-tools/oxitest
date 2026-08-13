@@ -438,7 +438,10 @@ parameter was resolved by type rather than by name.
 
 **Fix:** Name the parameter after the fixture you want. Name-based resolution
 takes precedence over type-based resolution, so `primary_db: Fixture[DatabaseHandle]`
-selects one candidate unambiguously.
+selects one candidate unambiguously — provided that fixture's *provided type*
+matches the annotation. A fixture declared `Yields[T]` provides `T`, not
+`Yields[T]`. When the name matches exactly one fixture and the types still
+disagree, the run reports `FixtureTypeMismatchError` instead.
 
 ---
 
@@ -451,6 +454,21 @@ fixture matches such a type, so type-based resolution cannot choose one.
 
 **Fix:** Use the concrete type the fixture returns. If the value genuinely has
 no useful type, resolve by name instead — name the parameter after the fixture.
+
+---
+
+```text
+FixtureTypeMismatchError: fixture 'target' provides 'str', but the parameter is annotated Fixture[int]. Correct the annotation, or name a different fixture.
+```
+
+**Cause:** The parameter name matches exactly one fixture, and that fixture
+provides a different type than the annotation declares. For a yield fixture the
+provided type is the type it yields — a fixture declared `Yields[str]` provides
+`str`.
+
+**Fix:** Correct whichever of the two is wrong: the annotation, or the fixture
+named. This is not an ambiguity — exactly one fixture carries the name, so
+renaming the parameter cannot help.
 
 ---
 
