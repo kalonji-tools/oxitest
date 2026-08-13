@@ -39,8 +39,6 @@ pub struct FileProfile {
     pub(super) path: Utf8PathBuf,
     pub(super) prescan_us: u64,
     pub(super) collection_us: u64,
-    /// True if this file was skipped by lazy collection (not imported).
-    pub(super) lazy_skipped: bool,
 }
 
 /// Aggregate collection timing profile.
@@ -99,15 +97,6 @@ pub(super) fn format_collection_profile(profile: &CollectionProfile) -> String {
         "  collection: {collection_ms:.0}ms ({collection_pct:.1}%)"
     );
     let _ = writeln!(out, "  other:      {other_ms:.0}ms ({other_pct:.1}%)");
-
-    let lazy_count = profile.files.iter().filter(|f| f.lazy_skipped).count();
-    let eager_count = file_count - lazy_count;
-    if lazy_count > 0 || eager_count < file_count {
-        let _ = writeln!(
-            out,
-            "  lazy: {lazy_count} files skipped, eager: {eager_count} files imported"
-        );
-    }
 
     // Top 5 slowest files
     let mut sorted: Vec<&FileProfile> = profile.files.iter().collect();
@@ -937,7 +926,6 @@ pub(super) fn collect_items(
                         path: file.clone(),
                         prescan_us,
                         collection_us: 0,
-                        lazy_skipped: false,
                     });
                 }
                 continue;
@@ -1020,7 +1008,6 @@ pub(super) fn collect_items(
                     path: file.clone(),
                     prescan_us,
                     collection_us: 0,
-                    lazy_skipped: false,
                 });
             }
             continue;
@@ -1071,7 +1058,6 @@ pub(super) fn collect_items(
                 path: file.clone(),
                 prescan_us,
                 collection_us,
-                lazy_skipped: false,
             });
         }
     }
@@ -1913,13 +1899,11 @@ mod tests {
                     path: Utf8PathBuf::from("tests/test_fast.py"),
                     prescan_us: 2_000,
                     collection_us: 8_000,
-                    lazy_skipped: false,
                 },
                 FileProfile {
                     path: Utf8PathBuf::from("tests/test_slow.py"),
                     prescan_us: 5_000,
                     collection_us: 45_000,
-                    lazy_skipped: false,
                 },
             ],
             total_us: 65_000,
@@ -1940,13 +1924,11 @@ mod tests {
                     path: Utf8PathBuf::from("fast.py"),
                     prescan_us: 1_000,
                     collection_us: 2_000,
-                    lazy_skipped: false,
                 },
                 FileProfile {
                     path: Utf8PathBuf::from("slow.py"),
                     prescan_us: 3_000,
                     collection_us: 20_000,
-                    lazy_skipped: false,
                 },
             ],
             total_us: 30_000,
@@ -1968,7 +1950,6 @@ mod tests {
                 path: Utf8PathBuf::from("empty.py"),
                 prescan_us: 0,
                 collection_us: 0,
-                lazy_skipped: false,
             }],
             total_us: 100,
         };
@@ -1978,30 +1959,6 @@ mod tests {
             !out.contains("Slowest files:"),
             "should not show slowest files when all timings are zero"
         );
-    }
-
-    #[test]
-    fn profile_shows_lazy_eager_split() {
-        let profile = CollectionProfile {
-            files: vec![
-                FileProfile {
-                    path: Utf8PathBuf::from("tests/test_fast.py"),
-                    prescan_us: 2_000,
-                    collection_us: 8_000,
-                    lazy_skipped: true,
-                },
-                FileProfile {
-                    path: Utf8PathBuf::from("tests/test_slow.py"),
-                    prescan_us: 5_000,
-                    collection_us: 45_000,
-                    lazy_skipped: false,
-                },
-            ],
-            total_us: 65_000,
-        };
-        let out = format_collection_profile(&profile);
-        assert!(out.contains("lazy: 1"));
-        assert!(out.contains("eager: 1"));
     }
 
     #[test]
