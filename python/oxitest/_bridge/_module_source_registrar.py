@@ -131,9 +131,11 @@ def register_module_source_fixtures(
             continue
 
         # `test_` rather than a shared predicate because the other half of this
-        # pair is `python_ast::is_test_fn` (`python_ast.rs:69`), which hardcodes
+        # pair is `python_ast::is_test_fn` (`src/python_ast.rs`), which hardcodes
         # the same prefix and is not configurable. The two cannot drift by
         # configuration, only by an edit — so each names the other (#2066).
+        # `_fixture_session._looks_like_test_module` is a third copy, for the
+        # same reason and with the same rule (#1759).
         #
         # `is_inline` gates it: a __fixtures__.py is not matched by the default
         # `python_files`, so a test_-named declaration there is read once rather
