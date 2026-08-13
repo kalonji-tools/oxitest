@@ -23,6 +23,6 @@ def test_mapping():
 def test_only_on_linux():
     if sys.platform != "linux":
         oxitest.skip("requires Linux")
-    assert True, "should only run on Linux"
+    assert sys.platform == "linux", "the guard above admits only this platform"
 # --8<-- [end:skip-runtime]
 # fmt: on

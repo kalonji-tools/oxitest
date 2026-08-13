@@ -17,13 +17,14 @@ def test_export(fx: Fixtures) -> None:
 
 # --8<-- [start:arrange]
 @oxitest.arrange("reset_database")
-def test_insert_user() -> None:
-    assert True, "reset_database fixture should run for side effects"
+def test_insert_user(fx: Fixtures) -> None:
+    assert fx.db.rows == ["fresh"], "reset_database refilled the table first"
 # --8<-- [end:arrange]
 
 # --8<-- [start:arrange-multiple]
 @oxitest.arrange("reset_database", "app_config")
-def test_cold_start() -> None:
-    assert True, "fixtures should run for side effects"
+def test_cold_start(fx: Fixtures) -> None:
+    assert fx.db.rows == ["fresh"], "reset_database refilled the table first"
+    assert fx.db.loaded_config == ["loaded"], "app_config loaded the settings"
 # --8<-- [end:arrange-multiple]
 # fmt: on
