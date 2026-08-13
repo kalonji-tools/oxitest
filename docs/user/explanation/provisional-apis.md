@@ -24,6 +24,11 @@ Some oxitest plugin protocols are marked **provisional**. This means:
 | `Reporter` | 1.0.0 |
 | `CoverageProvider` | 1.0.0 |
 
+`FixtureProvider` was reviewed for retirement and kept.
+[ADR-0009](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0009-fixture-system-redesign.md)
+Rule 8 lists it, and that entry records the decision and the reason. It stays
+stable surface.
+
 ## Graduation policy
 
 A provisional protocol is graduated to stable when:
