@@ -35,7 +35,11 @@ from oxitest._bridge._errors import (
     FixtureNotFoundError,
     FixtureTypeMismatchError,
 )
-from oxitest._bridge._fixture_type import _FixtureMarker
+from oxitest._bridge._fixture_type import (
+    BindingType,
+    _FixtureMarker,
+    type_display_name,
+)
 from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge._paths import format_path
 from oxitest._bridge._visibility import anchor_depth, anchors_overlap, is_visible
@@ -182,7 +186,7 @@ FixtureSource = (
 @dataclass(frozen=True, slots=True)
 class FixtureDef(Generic[T]):
     name: str
-    fixture_type: type  # binding type for type-based resolve
+    fixture_type: BindingType  # the raw annotation — not always a class (#2098)
     scope: FixtureScope
     source: FixtureSource  # where this fixture comes from
     autouse: bool = False
@@ -517,7 +521,7 @@ class FixtureRegistry:
         # name -> list of FixtureDef, ordered from root conftest to leaf conftest
         self._by_name: dict[str, list[FixtureDef[Any]]] = {}
         # type -> list of FixtureDef, indexed by fixture_type for type-based resolve
-        self._by_type: dict[type, list[FixtureDef[Any]]] = {}
+        self._by_type: dict[BindingType, list[FixtureDef[Any]]] = {}
         # namespace -> defs declared into it. Replaces a bare set[str]: the keys
         # still answer "does this namespace exist", and the values turn the
         # per-test visibility question into a scan of one namespace rather than
@@ -617,7 +621,7 @@ class FixtureRegistry:
         defs = self._by_name.get(name)
         return defs[-1] if defs else None
 
-    def get_by_type(self, t: type) -> tuple[FixtureDef[Any], ...]:
+    def get_by_type(self, t: BindingType) -> tuple[FixtureDef[Any], ...]:
         """Return fixture definitions registered for the given type."""
         return tuple(self._by_type.get(t, ()))
 
@@ -941,7 +945,7 @@ class FixtureRegistry:
         matches = [
             fixture_type
             for fixture_type in self._by_type
-            if fixture_type.__name__ == type_name
+            if type_display_name(fixture_type) == type_name
         ]
         if not matches:
             raise FixtureNotFoundError(type_name)
@@ -952,7 +956,7 @@ class FixtureRegistry:
         return self.resolve(matches[0]).name
 
     def resolve(
-        self, fixture_type: type, qualifier: str | None = None
+        self, fixture_type: BindingType, qualifier: str | None = None
     ) -> FixtureDef[Any]:
         """Resolve a fixture by its binding type.
 
@@ -971,7 +975,7 @@ class FixtureRegistry:
         """
         candidates = self._by_type.get(fixture_type, [])
         if not candidates:
-            raise FixtureNotFoundError(fixture_type.__name__)
+            raise FixtureNotFoundError(type_display_name(fixture_type))
         # Deduplicate by name — keep only the most-local (last) entry per name
         by_name: dict[str, FixtureDef[Any]] = {}
         for d in candidates:
@@ -989,11 +993,11 @@ class FixtureRegistry:
                 only = named[0]
                 raise FixtureTypeMismatchError(
                     qualifier,
-                    getattr(only.provides, "__name__", str(only.provides)),
-                    getattr(fixture_type, "__name__", str(fixture_type)),
+                    type_display_name(only.provides),
+                    type_display_name(fixture_type),
                 )
         raise AmbiguousFixtureError(
-            fixture_type.__name__,
+            type_display_name(fixture_type),
             [d.name for d in unique],
         )
 

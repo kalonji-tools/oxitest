@@ -1,7 +1,23 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Generator
-from typing import Annotated, Any, TypeVar
+from typing import Annotated, Any, TypeAlias, TypeVar
+
+BindingType: TypeAlias = object
+"""What ``Fixture[T]`` puts in the type index — **not** always a class.
+
+`CONTEXT.md` calls this the **Binding Type**: the raw annotation, used as the
+key of ``FixtureRegistry._by_type``. Only some of the forms a parameter may
+legally carry are classes. ``str | int`` is a ``types.UnionType``,
+``list[str]`` is a ``types.GenericAlias``, and ``Union[str, int]`` is a
+``typing`` alias — none of them is an instance of ``type``.
+
+Annotated ``type`` until #2098, which is why four call sites read ``__name__``
+off one without a guard: the annotation said a non-class could not arrive, so
+neither a reader nor ``ty`` expected one, and a ``Fixture[str | int]``
+parameter stopped collection for the whole run. Use
+:func:`type_display_name` to name one.
+"""
 
 
 class _FixtureMarker:
@@ -198,7 +214,40 @@ def injectable(cls: _T) -> _T:
     return cls
 
 
+def type_display_name(fixture_type: BindingType) -> str:
+    """The name to print for a binding type.
+
+    A class carries ``__name__``. A PEP 604 union does not: ``str | int`` is a
+    ``types.UnionType``, and reading ``__name__`` off one raises
+    ``AttributeError`` — which stopped collection for the whole run, because
+    the first reader of it runs while parameters are being collected (#2098).
+
+    ``str()`` renders a union the way its author spelled it, so the fallback is
+    the better name here and not a degraded one.
+
+    Every caller that names a binding type goes through this function. Six call
+    sites each held their own copy of the read, two guarded and four not, which
+    is how the crash survived: a guard added to one branch does not protect its
+    siblings.
+
+    The union result depends on the interpreter, so it is not shown below. From
+    CPython 3.14 ``types.UnionType`` *is* ``typing.Union``, so ``str | int``
+    carries ``__name__`` and renders ``'Union'``; below 3.14 it has none and
+    renders ``'str | int'``. ``test_union_annotation.py`` pins both arms.
+
+    Examples:
+        >>> from oxitest._bridge._fixture_type import type_display_name
+        >>> type_display_name(str)
+        'str'
+        >>> type_display_name(list[str])
+        'list'
+
+    """
+    return getattr(fixture_type, "__name__", str(fixture_type))
+
+
 __all__ = [
+    "BindingType",
     "Fixture",
     "FixtureRef",
     "Yields",
@@ -208,4 +257,5 @@ __all__ = [
     "_FixtureType",
     "_YieldsAlias",
     "injectable",
+    "type_display_name",
 ]
