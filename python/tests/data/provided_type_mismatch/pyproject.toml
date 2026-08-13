@@ -1,0 +1,4 @@
+[tool.oxitest]
+testpaths = ["ptm"]
+python_files = ["test_*.py"]
+strict = "abort"

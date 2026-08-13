@@ -467,6 +467,24 @@ class BroadFixtureTypeError(FixtureError):
         self.broad_type = broad_type
 
 
+class FixtureTypeMismatchError(FixtureError):
+    """Raised when the qualifier names a fixture that provides another type.
+
+    Distinct from :class:`AmbiguousFixtureError`: exactly one fixture carries
+    the name, so nothing is ambiguous. The name and the annotation disagree.
+    """
+
+    def __init__(self, param_name: str, provided: str, annotated: str) -> None:
+        super().__init__(
+            f"fixture '{param_name}' provides '{provided}',"
+            f" but the parameter is annotated Fixture[{annotated}]."
+            f" Correct the annotation, or name a different fixture."
+        )
+        self.param_name = param_name
+        self.provided = provided
+        self.annotated = annotated
+
+
 # ─── Arrange errors ──────────────────────────────────────────────────────────
 
 
