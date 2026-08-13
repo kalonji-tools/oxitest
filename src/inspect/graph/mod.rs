@@ -1,7 +1,6 @@
 //! In-memory graph connecting the five inspect node types.
 //!
-//! [`InspectGraph`] holds typed vectors for each node kind and a list of
-//! [`BrokenEdge`]s for unresolved fixture references.  [`NodeRef`] is a
+//! [`InspectGraph`] holds typed vectors for each node kind.  [`NodeRef`] is a
 //! lightweight handle (kind + index) used by the navigation stack,
 //! search results, and detail views.
 
@@ -63,22 +62,6 @@ impl NodeRef {
     }
 }
 
-// ── BrokenEdge ───────────────────────────────────────────────────────────────
-
-/// An edge that could not be resolved during graph construction.
-///
-/// Typically a fixture dependency name that does not match any known
-/// fixture node.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BrokenEdge {
-    /// The node that references the missing target.
-    pub from: NodeRef,
-    /// The qualifier (name) that could not be resolved.
-    pub qualifier: String,
-    /// The binding type of the unresolved reference (e.g. `"fixture"`).
-    pub binding_type: String,
-}
-
 // ── InspectGraph ─────────────────────────────────────────────────────────────
 
 /// The immutable in-memory graph consumed by the inspect TUI.
@@ -89,7 +72,6 @@ pub struct InspectGraph {
     pub marks: Vec<MarkNode>,
     pub declarations: Vec<DeclarationNode>,
     pub plugins: Vec<PluginNode>,
-    pub broken_edges: Vec<BrokenEdge>,
     /// Autouse fixtures that **apply** to each module, keyed by module path and
     /// held in firing order (widest lifetime first, ADR-0009 Rule 7).
     ///
@@ -271,11 +253,6 @@ mod tests {
         assert!(
             graph.is_empty(),
             "default graph should have no nodes in any vector"
-        );
-        assert_eq!(
-            graph.broken_edges.len(),
-            0,
-            "default graph should have no broken edges"
         );
     }
 

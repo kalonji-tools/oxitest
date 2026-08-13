@@ -5,8 +5,7 @@ use ratatui::text::{Line, Span};
 use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef};
 
 use super::styles::{
-    bool_field, broken_edge_line, broken_edges_for, connection_line, field_line, preview_edges,
-    section_header, sigil_style,
+    bool_field, connection_line, field_line, preview_edges, section_header, sigil_style,
 };
 
 /// The tier row to show a user for this fixture, as `(label, value)`.
@@ -48,16 +47,6 @@ pub fn render_fixture<'a>(graph: &InspectGraph, node_ref: &NodeRef) -> Vec<Line<
 
     if !fixture.description.is_empty() {
         lines.push(field_line("description", &fixture.description));
-    }
-
-    // Broken edges (unresolved dependencies)
-    let broken = broken_edges_for(&graph.broken_edges, node_ref);
-    if !broken.is_empty() {
-        lines.push(Line::from(""));
-        lines.push(section_header("Depends On"));
-        for edge in &broken {
-            lines.push(broken_edge_line(&edge.qualifier, &edge.binding_type));
-        }
     }
 
     // Consumers

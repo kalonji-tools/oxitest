@@ -6,8 +6,8 @@ use crate::inspect::app::FixtureDataState;
 use crate::inspect::graph::{InspectGraph, NodeKind, NodeRef};
 
 use super::styles::{
-    autouse_line, bool_field, broken_edge_line, broken_edges_for, connection_line, field_line,
-    note_line, preview_edges, section_header, sigil_style,
+    autouse_line, bool_field, connection_line, field_line, note_line, preview_edges,
+    section_header, sigil_style,
 };
 
 pub fn render_test<'a>(
@@ -36,18 +36,6 @@ pub fn render_test<'a>(
         lines.push(section_header("Fixture Dependencies"));
         for &dep_idx in &test.fixture_deps {
             lines.push(connection_line('F', &graph.fixtures[dep_idx].name));
-        }
-    }
-
-    // Broken edges (unresolved fixture deps)
-    let broken = broken_edges_for(&graph.broken_edges, node_ref);
-    if !broken.is_empty() {
-        if test.fixture_deps.is_empty() {
-            lines.push(Line::from(""));
-            lines.push(section_header("Fixture Dependencies"));
-        }
-        for edge in &broken {
-            lines.push(broken_edge_line(&edge.qualifier, &edge.binding_type));
         }
     }
 

@@ -2,14 +2,13 @@
 //!
 //! Signals are lightweight diagnostic hints derived from the structure of the
 //! [`InspectGraph`].  They surface actionable patterns — unused fixtures,
-//! broken dependency edges, high fan-in nodes — without requiring a full
-//! analysis pass.
+//! high fan-in nodes — without requiring a full analysis pass.
 //!
 //! Call [`detect_signals`] once after the graph is fully built.  The
 //! returned [`Signal`] list is consumed by the overview panel (Task 2) and
 //! rendered in the TUI (Task 3).
 
-use super::graph::{BrokenEdge, InspectGraph, NodeKind, NodeRef};
+use super::graph::{InspectGraph, NodeKind, NodeRef};
 
 // ── SignalKind ────────────────────────────────────────────────────────────────
 
@@ -20,9 +19,6 @@ pub enum SignalKind {
     /// One or more fixtures are defined but never consumed by any test or
     /// other fixture.
     UnusedFixtures,
-    /// The graph contains edges that could not be resolved during construction
-    /// (e.g. a fixture dependency name that matches no known fixture).
-    BrokenEdges,
     /// A fixture is consumed by more than half of all tests, making it a
     /// high-coupling hotspot.
     HighFanIn,
@@ -68,7 +64,6 @@ pub fn detect_signals(graph: &InspectGraph) -> Vec<Signal> {
     }
     let mut signals = Vec::new();
     detect_unused_fixtures(graph, &mut signals);
-    detect_broken_edges(graph, &mut signals);
     detect_high_fan_in(graph, &mut signals);
     detect_deep_chains(graph, &mut signals);
     detect_scope_mismatches(graph, &mut signals);
@@ -111,33 +106,6 @@ fn detect_unused_fixtures(graph: &InspectGraph, signals: &mut Vec<Signal>) {
             affected,
         });
     }
-}
-
-/// Report edges that the builder could not resolve.
-///
-/// The builder already collects `BrokenEdge` records during `resolve_edges`;
-/// this detector simply promotes them into [`Signal`]s so they surface in the
-/// overview panel.
-fn detect_broken_edges(graph: &InspectGraph, signals: &mut Vec<Signal>) {
-    if graph.broken_edges.is_empty() {
-        return;
-    }
-
-    let affected: Vec<NodeRef> = graph
-        .broken_edges
-        .iter()
-        .map(|BrokenEdge { from, .. }| from.clone())
-        .collect();
-
-    let count = affected.len();
-    signals.push(Signal {
-        kind: SignalKind::BrokenEdges,
-        message: format!(
-            "{count} unresolved fixture reference{s}",
-            s = if count == 1 { "" } else { "s" }
-        ),
-        affected,
-    });
 }
 
 /// Flag fixtures consumed by more than half of all tests.
@@ -203,7 +171,7 @@ const fn detect_scope_mismatches(graph: &InspectGraph, signals: &mut Vec<Signal>
 mod tests {
     use super::*;
     use crate::inspect::graph::{
-        BrokenEdge, InspectGraph, NodeKind, NodeRef,
+        InspectGraph, NodeKind, NodeRef,
         nodes::{DeclarationNode, FixtureNode, TestNode},
     };
 
@@ -417,51 +385,6 @@ mod tests {
         assert!(
             unused.is_empty(),
             "builtin and plugin fixtures must not be flagged as unused"
-        );
-    }
-
-    // ── Test: broken edges produce a BrokenEdges signal ──────────────────────
-
-    #[test]
-    fn broken_edges_detected() {
-        let mut graph = InspectGraph::default();
-        // Declaration node so declaration_idx=Some(0) is valid.
-        graph.declarations.push(DeclarationNode {
-            anchor: String::new(),
-            home: "fixtures-file".to_string(),
-            path: "__fixtures__.py".to_string(),
-            fixtures: vec![],
-        });
-        // Need at least one fixture so detect_signals doesn't return early.
-        graph
-            .fixtures
-            .push(make_fixture("real_fixture", false, vec![]));
-
-        let from = NodeRef {
-            kind: NodeKind::Test,
-            index: 0,
-        };
-        graph.broken_edges.push(BrokenEdge {
-            from: from.clone(),
-            qualifier: "missing_fixture".to_string(),
-            binding_type: "fixture".to_string(),
-        });
-
-        let signals = detect_signals(&graph);
-        let broken: Vec<_> = signals
-            .iter()
-            .filter(|s| s.kind == SignalKind::BrokenEdges)
-            .collect();
-
-        assert_eq!(
-            broken.len(),
-            1,
-            "one BrokenEdges signal should be emitted when graph.broken_edges is non-empty"
-        );
-        assert_eq!(
-            broken[0].affected,
-            vec![from],
-            "the affected NodeRef should be the 'from' node of the broken edge"
         );
     }
 

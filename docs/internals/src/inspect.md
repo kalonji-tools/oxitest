@@ -143,8 +143,6 @@ Five typed vectors, one per node kind:
 | `conftests` | `ConftestNode` | `C` | `path` |
 | `plugins` | `PluginNode` | `P` | `name` |
 
-Plus `broken_edges: Vec<BrokenEdge>` for unresolved fixture references.
-
 `NodeRef` is a lightweight handle: `{ kind: NodeKind, index: usize }`. All navigation,
 search, and rendering use `NodeRef` to reference nodes without borrowing the graph.
 
@@ -189,7 +187,7 @@ After the split in #1189, the detail module has this layout:
 | File | Responsibility |
 |------|----------------|
 | `detail/mod.rs` | Dispatch: `render_detail()`, `render_preview()`, `collect_selectable_edges()`, `edge_node_at()`, `selectable_edge_count()` |
-| `detail/styles.rs` | Shared helpers: `field_line()`, `bool_field()`, `section_header()`, `connection_line()`, `broken_edge_line()`, `preview_edges()` |
+| `detail/styles.rs` | Shared helpers: `field_line()`, `bool_field()`, `section_header()`, `connection_line()`, `preview_edges()` |
 | `detail/test.rs` | `render_test()`, `preview_test()`, `collect_edges()` |
 | `detail/fixture.rs` | `render_fixture()`, `preview_fixture()`, `collect_edges()` |
 | `detail/mark.rs` | `render_mark()`, `preview_mark()`, `collect_edges()` |
@@ -201,7 +199,7 @@ After the split in #1189, the detail module has this layout:
 Every per-node-type submodule exports three functions:
 
 1. **`render_*(graph, node_ref) -> Vec<Line>`** -- full detail view. Shows all fields,
-   all edge groups, broken edges, description text.
+   all edge groups, description text.
 2. **`preview_*(graph, node_ref) -> Vec<Line>`** -- compact preview for the right pane.
    Shows 2-3 key properties, top 3 edges per group with a "N more" truncation line.
    Omits description and some boolean fields.
@@ -214,9 +212,8 @@ Every per-node-type submodule exports three functions:
 ### Shared styles
 
 `detail/styles.rs` provides rendering primitives used by all per-node submodules:
-label/value field lines, section headers, connection lines with sigil prefixes, broken
-edge lines with warning styling, and `preview_edges()` which truncates edge lists at a
-configurable maximum.
+label/value field lines, section headers, connection lines with sigil prefixes, and
+`preview_edges()` which truncates edge lists at a configurable maximum.
 
 ## Event loop and input
 
@@ -350,7 +347,6 @@ corresponding `NodeRef`.
 | Variant | Condition |
 |---------|-----------|
 | `UnusedFixtures` | Conftest-defined fixtures with no consumers and `autouse = false`. Builtins and plugin fixtures are excluded. |
-| `BrokenEdges` | Unresolved fixture dependency references from `graph.broken_edges`. |
 | `HighFanIn` | Fixtures consumed by >50% of all tests (threshold: `tests.len() / 2`). Skipped when fewer than 2 tests. |
 | `DeepChains` | Reserved -- requires fixture-to-fixture dependency edges (not yet captured). |
 | `ScopeMismatches` | Reserved -- requires scope-aware edge traversal (not yet implemented). |

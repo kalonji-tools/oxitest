@@ -339,10 +339,8 @@ mod tests {
         graph
     }
 
-    /// Build a graph with a fixture that has broken edges.
-    fn fixture_with_broken_edges_graph() -> InspectGraph {
-        use crate::inspect::graph::BrokenEdge;
-
+    /// Build a graph with a fixture that has no selectable edges.
+    fn fixture_with_no_edges_graph() -> InspectGraph {
         let mut graph = InspectGraph::default();
         graph.fixtures.push(FixtureNode {
             lifetime: "function".to_string(),
@@ -358,14 +356,6 @@ mod tests {
             consumers: vec![],
             declaration_idx: None,
             plugin_idx: None,
-        });
-        graph.broken_edges.push(BrokenEdge {
-            from: NodeRef {
-                kind: NodeKind::Fixture,
-                index: 0,
-            },
-            qualifier: "missing_dep".to_string(),
-            binding_type: "fixture".to_string(),
         });
         graph
     }
@@ -572,29 +562,6 @@ mod tests {
         assert!(
             text.contains("Defined In"),
             "fixture with declaration_idx should show the Defined In section"
-        );
-    }
-
-    #[test]
-    fn render_detail_fixture_broken_edge() {
-        let graph = fixture_with_broken_edges_graph();
-        let node_ref = NodeRef {
-            kind: NodeKind::Fixture,
-            index: 0,
-        };
-        let lines = render_detail(
-            &graph,
-            Some(&node_ref),
-            crate::inspect::app::FixtureDataState::Ready,
-        );
-        let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
-        assert!(
-            text.contains("missing_dep"),
-            "broken edge detail should show the unresolved qualifier"
-        );
-        assert!(
-            text.contains("unresolved"),
-            "broken edge detail should indicate the edge is unresolved"
         );
     }
 
@@ -1191,7 +1158,7 @@ mod tests {
 
     #[test]
     fn fixture_with_no_edges_has_zero_count() {
-        let graph = fixture_with_broken_edges_graph();
+        let graph = fixture_with_no_edges_graph();
         let node_ref = NodeRef {
             kind: NodeKind::Fixture,
             index: 0,
@@ -1209,7 +1176,6 @@ mod tests {
 mod snapshot_tests {
     use super::*;
     use crate::inspect::app::InspectApp;
-    use crate::inspect::graph::BrokenEdge;
     use crate::inspect::graph::nodes::*;
     use crate::inspect::nav::Screen;
     use crate::inspect::ui::draw;
@@ -1461,47 +1427,6 @@ mod snapshot_tests {
             selected: 0,
         });
         assert_snapshot!("detail_plugin", render_to_string(&app, 120, 24));
-    }
-
-    #[test]
-    fn snap_detail_fixture_broken_edge() {
-        let mut graph = InspectGraph::default();
-        graph.fixtures.push(FixtureNode {
-            lifetime: "function".to_string(),
-            anchor: "tests".to_string(),
-            home: "fixtures-file".to_string(),
-            name: "db_session".to_string(),
-            binding_type: "fixture".to_string(),
-            scope: "each".to_string(),
-            autouse: false,
-            source: "tests/__fixtures__.py".to_string(),
-            is_async: true,
-            description: "".to_string(),
-            consumers: vec![],
-            declaration_idx: None,
-            plugin_idx: None,
-        });
-        graph.broken_edges.push(BrokenEdge {
-            from: NodeRef {
-                kind: NodeKind::Fixture,
-                index: 0,
-            },
-            qualifier: "missing_dep".to_string(),
-            binding_type: "fixture".to_string(),
-        });
-        let mut app = InspectApp::new(Some(graph), None);
-        app.terminal_width = 120;
-        app.nav.push(Screen::NodeFocus {
-            node: NodeRef {
-                kind: NodeKind::Fixture,
-                index: 0,
-            },
-            selected: 0,
-        });
-        assert_snapshot!(
-            "detail_fixture_broken_edge",
-            render_to_string(&app, 120, 24)
-        );
     }
 
     #[test]

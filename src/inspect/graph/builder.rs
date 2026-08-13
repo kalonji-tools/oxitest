@@ -2,8 +2,7 @@
 //!
 //! [`GraphBuilder`] accumulates nodes via `add_*_entries` methods, then
 //! [`resolve_edges`](GraphBuilder::resolve_edges) wires cross-references, populates inverse edges,
-//! groups parametrized tests, and records broken edges for unresolved
-//! fixture dependencies.
+//! and groups parametrized tests.
 
 use std::collections::HashMap;
 
@@ -333,8 +332,7 @@ impl GraphBuilder {
     /// 2. **Fixture -> Declaration** membership edges (by source path)
     /// 3. **Fixture -> Plugin** edges (by `<plugin:name>` source prefix)
     /// 4. **Parametrize grouping** (strip `[param_id]` from `node_id`)
-    /// 5. **Broken edges** for unresolved fixture references
-    /// 6. **Inverse edges** (`consumers`, `used_by`, `declaration.fixtures`)
+    /// 5. **Inverse edges** (`consumers`, `used_by`, `declaration.fixtures`)
     pub(crate) fn resolve_edges(&mut self) {
         self.resolve_test_to_mark_edges();
         self.resolve_fixture_to_declaration_edges();

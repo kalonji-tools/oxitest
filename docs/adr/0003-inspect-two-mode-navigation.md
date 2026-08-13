@@ -48,7 +48,7 @@ Option 2. The two-mode model serves both workflows with a single entry point, an
 1. **Fixture Gravity** — fixtures ranked by consumer count (phase 2).
 2. **Marks** — all marks with test counts (phase 1).
 3. **Conftests** — conftest files with fixture/helper counts (phase 1 for helpers, phase 2 for fixtures).
-4. **Signals** — graph-derived diagnostics (phase 2): unused fixtures, unused helpers, broken edges, high fan-in fixtures, deep dependency chains, scope mismatches.
+4. **Signals** — graph-derived diagnostics (phase 2): unused fixtures, unused helpers, high fan-in fixtures, deep dependency chains, scope mismatches.
 
 Sections requiring phase-2 data show a loading indicator until the background Python session delivers fixture/plugin metadata. Marks and Conftests (helper counts) are available immediately.
 
