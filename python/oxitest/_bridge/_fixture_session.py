@@ -286,8 +286,30 @@ async def _task_group_factory() -> AsyncGenerator[_TrackedTaskGroup, None]:
                 t.cancel()
 
 
+def _looks_like_test_module(segment: str) -> bool:
+    """Whether *segment* has the shape of a test module stem.
+
+    Mirrors the **default** ``python_files``, which carries two patterns
+    (``src/config/mod.rs``: ``vec!["test_*.py", "*_test.py"]``). Hardcoded
+    rather than read, because run configuration does not cross the bridge into
+    a session: ``FixtureSession`` receives ``rootdir`` and nothing else
+    (``src/bridge.rs``, ``FixtureSession::new``). A project that configures
+    ``python_files`` away from the default keeps the older message, which is a
+    recorded non-goal on #1759.
+
+    This is the same trade ``python_ast::is_test_fn`` and
+    ``_module_source_registrar`` already make for the ``test_`` prefix: the
+    copies cannot drift by configuration, only by an edit, so each names the
+    others (#2066, #1759). Change this and change those.
+
+    A pure name test. It reads no file, opens no catalog, and asks the registry
+    nothing — which is what keeps the verdict independent of the schedule.
+    """
+    return segment.startswith("test_") or segment.endswith("_test")
+
+
 def shortcut_miss_message(name: str) -> str:
-    """The one message a failed ``fx.<name>`` shortcut carries.
+    """The message a failed ``fx.<name>`` shortcut carries, in two tails.
 
     Factored out because two gates raise it now: the access-time route in
     :meth:`FixtureSession.get_fixture_shortcut`, and the collection-time route
@@ -295,15 +317,27 @@ def shortcut_miss_message(name: str) -> str:
     hint this specific would drift, and the drift would be invisible — each
     gate's own tests would keep passing against its own copy.
     """
-    return (
+    hint = (
         f"cannot resolve fixture '{name}'.\n"
         f"  Hint: '{name}' is neither a package segment reachable from "
         f"this test nor a fixture visible to it. A shortcut "
         f"(fx.{name}) needs a fixture of that name declared in this "
         f"test's own package or an ancestor of it; a fixture declared "
         f"inline in another test module is never visible here. Check "
-        f"the spelling, or use the qualified form fx.<package>.{name}."
+        f"the spelling, or "
     )
+    if _looks_like_test_module(name):
+        # `name` looks like a test module stem, so `fx.<name>.<leaf>` already
+        # *is* the qualified form and advising it repeats the user's own input.
+        # The remedy is worded to hold on both routes into this message: a
+        # segment naming an inline declaration, and a bare `fx.<name>` shortcut
+        # for a fixture that a declaration home holds out of reach. Raising the
+        # declaration to a common ancestor is correct for both (#1759).
+        return hint + (
+            "move the declaration to a __fixtures__.py in a package that is "
+            "an ancestor of both modules."
+        )
+    return hint + f"use the qualified form fx.<package>.{name}."
 
 
 def _collect_requested_names(
@@ -1038,12 +1072,15 @@ class FixtureSession:
         anchors and therefore never reaches the ``BoundaryError`` branch — the
         legacy API is exempt from B1 until #1720 retires it (#1760).
 
-        The guarantee is scoped to directory anchors. Inline declarations are
-        registered on module import, so their presence in the full catalog
-        depends on worker assignment, ``-k`` selection, and import order; a
-        ``BoundaryError`` for one would be a diagnostic that changes with the
-        schedule. They fall through to ``FixtureNotFoundError``, whose hint
-        names the inline cap unconditionally (#1759).
+        The guarantee is scoped to directory anchors, and the access route
+        decides which class is reported. A literal ``fx.<stem>.<name>`` is read
+        out by prescan and refused at collection with ``BoundaryError``, the
+        same verdict in serial, at ``-n 1`` and at ``-n 2`` (#1758). A dynamic
+        ``getattr`` reaches the access-time gate instead, where an inline
+        declaration's presence still depends on worker assignment, ``-k``
+        selection, and import order, so it reports ``FixtureNotFoundError``
+        under ``-n 2``. That last difference is deferred, not owned (#1759
+        non-goal 2).
         """
         if self._registry.has_visible_anchor(namespace, module_path):
             return FixtureNotFoundError(name, namespace=namespace)
@@ -1362,14 +1399,14 @@ class FixtureSession:
         ``FixtureNotFoundError`` rather than ``BoundaryError``: a bare name has
         no segment to attribute the boundary to (ADR-0009 Rule 5, as amended).
 
-        One message covers every miss — typo, cross-boundary, and foreign
-        inline alike — because the alternatives are not distinguishable
-        *deterministically*. Telling them apart needs the unfiltered catalog,
-        which contains inline declarations, and those register only in the
-        worker that imported their module. Branching on it made the diagnostic
-        vary with worker assignment, which is the scheduling-dependent message
-        ADR-0009 Rule 5 rules out. So the wording states what is true in all
-        three cases rather than guessing which one happened.
+        Two tails cover every miss. A segment shaped like a test module stem
+        gets the inline remedy; anything else gets the spelling advice and the
+        qualified form. The split is a pure name test, so it cannot vary with
+        worker assignment — which is the scheduling-dependent message ADR-0009
+        Rule 5 rules out. Telling a *typo* apart from a *cross-boundary reach*
+        still needs the unfiltered catalog, which contains inline declarations,
+        and those register only in the worker that imported their module. That
+        distinction stays deferred (#1759 non-goal 2).
         """
         defn = self._registry.get_visible(name, module_path)
         if defn is None:
