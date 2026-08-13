@@ -280,7 +280,7 @@ The redesign retires the following surface. Each entry names what goes and why.
 - **`conftest.py` as a special filename** — replaced by `__fixtures__.py` / `__helpers__.py` / `__init__.py`. Walk-up-tree conftest discovery (`find_conftest_paths` in `conftest_loader.py`) is replaced by hierarchical AST prescan on the ancestor chain of the tests being collected.
 - **`registrar-in-test-module` strict violation and its `# oxitest: allow[registrar-in-test-module]` escape hatch** — the whole class of violation becomes nonsensical (there is no registrar to be in a test module). The allow-comment escape hatch was itself an [ADR-0008](0008-config-fail-closed-narrow-scope.md) violation and its removal restores the no-escape-hatch discipline.
 - **`ConftestSource` variant** in `_fixture_registry.py` — replaced by a location-agnostic source variant carrying `defining_module_path` + `anchor_package_path`.
-- **`FixtureProvider` and `HelperProvider` plugin protocols** — plugins converge with the user path via `@oxi.fixture` + `register_fixtures` hook (Rule 6).
+- **`FixtureProvider` and `HelperProvider` plugin protocols** — `HelperProvider` is retired ([#1788](https://github.com/kalonji-tools/oxitest/issues/1788), Amendment 5). **`FixtureProvider` is not, and that is a decision rather than unfinished work** — [#1720](https://github.com/kalonji-tools/oxitest/issues/1720)'s Q21 kept it, because `oxi-nixinfra`'s `HostProvider` implements it through an unpinned flake input, so retirement breaks a named downstream implementer the day it lands. The convergence route this bullet offered as the replacement does not exist either: the `register_fixtures` hook is [#1718](https://github.com/kalonji-tools/oxitest/issues/1718), `CLOSED NOT_PLANNED`, and Rule 6's hook is retracted by Amendment 9. `docs/user/explanation/provisional-apis.md` lists `FixtureProvider` under **Stable protocols**, and `docs/user/reference/stability.md` extends semver protection to *"`Plugin` dataclass and protocol interfaces"* without naming it. Both are correct; this bullet was the document that disagreed with them (Amendment 20).
 - **[ADR-0005](0005-immutable-by-default-interfaces.md) Rule 4's `Fixtures` / `Helpers` `&mut` exception** — no mutable registrar exists; the decorator writes marker attributes directly at import time, no accumulation phase.
 
 > **The helper entries are retired; the rest still stands — Amendment 5 (#1781).**
@@ -371,7 +371,10 @@ The redesign retires the following surface. Each entry names what goes and why.
 > `@oxi.fixture` + `register_fixtures` hook"*. Only the first half survives: the
 > static decorator path shipped (#1717, Amendment 8); the runtime hook is
 > retracted and #1718 is closed `wontfix`. `FixtureProvider`'s retirement is
-> unaffected and remains #1720's work.
+> unaffected and remains #1720's work. *(The last sentence no longer holds.
+> #1720 closed `COMPLETED` on 2026-08-10 and kept `FixtureProvider`, so the
+> retirement is not pending work under any owner — see Amendment 20 and the
+> corrected bullet in Rule 8.)*
 
 ### Reconciliation with prior ADRs
 
@@ -559,9 +562,13 @@ The one structural lesson worth carrying: the helper column entered this ADR by 
 
 ## Consequences
 
-- **New declaration surface for users.** All fixture declarations move to module-level `@oxi.fixture(lifetime=...)` in one of three reserved file kinds — originally "fixture and helper declarations … `@oxi.helper` … four reserved file kinds", per Amendment 5. Existing users need a migration path (see follow-on impl, Documentation phase). Green-field users will see only the new surface **once [#1720](https://github.com/kalonji-tools/oxitest/issues/1720) retires the legacy one** — not before. Amendment 4 corrects the original present tense: both surfaces are live today, and the legacy registrar is still what a newcomer meets first.
+- **New declaration surface for users.** All fixture declarations move to module-level `@oxi.fixture(lifetime=...)` in one of three reserved file kinds — originally "fixture and helper declarations … `@oxi.helper` … four reserved file kinds", per Amendment 5. **A green-field user now meets only this surface.** [#1720](https://github.com/kalonji-tools/oxitest/issues/1720) closed `COMPLETED` on 2026-08-10 and executed the retirement (Amendment 13): `Fixtures()` refuses construction with a migration message naming `@oxi.fixture` and a declaration file, and not one of the four newcomer-facing sites Amendment 4 named survives. Amendment 4's closing sentence — *"both surfaces are live today, and the legacy registrar is still what a newcomer meets first"* — was true when it was written and is retracted here; Amendment 20 holds the measurement. **What did not go is plugin surface, not user surface.** Rule 8 also lists `FixtureProvider`, and #1720 kept it on purpose, so a green-field **plugin author** still meets a protocol this ADR lists as retired. Rule 8's entry states that, and the two audiences are why this bullet cannot answer for both.
 - **Both catalog views reachable from every proxy.** `FixturesProxy` (originally "and `HelpersProxy`", retracted by Amendment 5) must be able to consult the **B1-filtered** view for resolution decisions and the **full** view for diagnostic attribution. Losing the second view produces misleading diagnostics (`FixtureNotFoundError` in place of `BoundaryError`). This bullet originally read "**Two catalogs on every proxy** … carry both the B1-filtered catalog and the full catalog"; Amendment 2 retracted that object-count reading, and Rule 5 now states the constraint as reachability. The shipped implementation asks the single `FixtureRegistry` two questions rather than materialising a per-test catalog — `has_visible_anchor` (`python/oxitest/_bridge/_fixture_registry.py:466`, filtered) beside `has_namespace` (`:462`, full), which is exactly the pair the `BoundaryError`-vs-`FixtureNotFoundError` decision consults (`python/oxitest/_bridge/_fixture_session.py:809`).
-- **Prescan-time errors replace collection-time errors for lifetime-cap violations.** Lifetime-cap violations fire at prescan, before any Python import and before any fixture instantiation — the inline cap at `src/pipeline/collection.rs:188` and the rootdir-`session` rule at `:288`. **B1 boundary violations do not.** This bullet originally claimed both fired at prescan; Amendment 2 moved B1 enforcement to access time, because prescan extracts *declarations* and never *usages*, so nothing at collection time knows a test intends to reach `fx.admin.conn`. The "better tooling (e.g., editor squiggles on illegal declarations)" this bullet promises therefore depends on collection-time usage extraction, which is unbuilt and tracked by [#1758](https://github.com/kalonji-tools/oxitest/issues/1758) — it is not a consequence already purchased by the lifetime-cap gate.
+- **Enforcement fires early, but not all of it at prescan.** This bullet originally read *"Prescan-time errors replace collection-time errors for lifetime-cap violations"* and placed both the lifetime cap and the B1 boundary at prescan. Three later changes moved three different pieces, in two directions, and Amendment 20 measures the result. What is true:
+    - The **inline lifetime cap** fires during registration, not at prescan. `_module_source_registrar.py` builds the message with `_inline_cap_message` and **accumulates** it rather than raising at the first one, so a user with several aliased declarations sees all of them in one run. [#1859](https://github.com/kalonji-tools/oxitest/issues/1859) moved the cap there, because registration reads a marker attribute and so sees every import spelling while `prescan.rs` recognises three — the same reasoning Amendment 19 records under *"Registration, not the prescan"*.
+    - The **rootdir-`process` rule** does fire before any Python import, in the Rust collection transition: `register_and_record` in `src/pipeline/collection.rs` refuses a `process` declaration outside a rootdir package. The tier is spelled `process`; `session` is Amendment 6's superseded name for it.
+    - **B1 boundary violations fire at both gates** — Amendment 14, shipped by [#1758](https://github.com/kalonji-tools/oxitest/issues/1758). The claim that *"prescan extracts declarations and never usages"* was Amendment 2's, it was true when written, and #1758 falsified it: `FxUsage`, `extract_fx_usages` and `PrescanItem.fx_usages` in `src/prescan.rs` extract them, and `validate_fx_boundaries` in `src/bridge.rs` drains them into `FixtureSession.validate_fx_boundaries`.
+    - The **"better tooling (e.g., editor squiggles on illegal declarations)"** this bullet promises no longer waits on collection-time usage extraction, which shipped. It waits on the IDE and type-checker stub question, which is [#1779](https://github.com/kalonji-tools/oxitest/issues/1779) and is open. Extraction is the input that promise needed; it is not the promise.
 - **Fallback to Python-import discovery survives, for tests and for declaration files alike — but not by the trigger this bullet named.** If AST prescan cannot parse a test file it emits `PrescanResult::Unavailable` and the file falls through to Python-import-based discovery (`files_collected.rs`, the `Unavailable` arm that pushes an empty `PrescanModule`), the same three-tier collection model already used for tests. A declaration file falls through too, on a **different variant**: `PrescanFixtureResult::NoFixtures` carrying `has_decorated_functions`, which imports the file and asks the runtime. Amendment 17 corrects the original text, which asserted declaration files had no fallback at all and illustrated the claim with `if flag: dec = fixture; @dec def x(): ...` — a snippet that parses fine, so it never reached `Unavailable` and does not reach it now. **The consequence is fulfilled; only its mechanism was misdescribed.** What remains loud is the genuinely unparsable file, and that is the [ADR-0006](0006-async-organizational-strategy.md) loud rejection Rules 1 and 3 invoke by name — so the disagreement Amendment 4 routed to [#1727](https://github.com/kalonji-tools/oxitest/issues/1727) was never between two live principles. Considered Option 2's rejection stands unchanged: it leaned on the fallback existing, and the fallback exists.
 - **Deferred design questions.** Five were listed; Amendment 4 finds three of them no longer open and gives all five a home.
     - IDE / type-checker stub generation for the `fx` proxy (auto-generated `.pyi` vs. dynamic-only vs. user-declared Protocol overlay) — **still open**, and until Amendment 4 the only item in this ADR with no filed home at all. Now [#1779](https://github.com/kalonji-tools/oxitest/issues/1779). Originally "the `fx` / `hlp` proxies"; the `hlp` half is retracted (Amendment 5), which narrows #1779's scope by half.
@@ -1170,3 +1177,50 @@ items without importing it, and its eligibility test scans top-level statements
 only — a `ClassDef` answers "no fixtures here". So a file whose only fixture
 decorator sits inside a class stayed cache-eligible, and an entry written before
 this change would serve its items and skip the refusal.
+
+### Amendment 20 — three Consequences that ran behind the code (2026-08-13)
+
+**Issue:** [#2109](https://github.com/kalonji-tools/oxitest/issues/2109), from the audit map [#2100](https://github.com/kalonji-tools/oxitest/issues/2100). Evidence: [#2101](https://github.com/kalonji-tools/oxitest/issues/2101). Amends the Consequences section and Rule 8. Measured on `main` `b39991fa`, on a tree with no tracked modifications.
+
+Amendment 14 states the rule this amendment applies: *"An ADR is a historical record for vocabulary, but its Consequences section states live facts, and those rot."* Three statements had rotted. Two of the three were themselves **corrections**, which is the sharper defect — a reader trusts a correction more than the claim it replaced.
+
+#### 1. Prescan does extract usages
+
+The prescan-time-errors bullet said *"prescan extracts declarations and never usages"* and that collection-time usage extraction is *"unbuilt and tracked by #1758"*. [#1758](https://github.com/kalonji-tools/oxitest/issues/1758) closed `COMPLETED` on 2026-08-11 and built it. `src/prescan.rs` holds `struct FxUsage`, `extract_fx_usages` and `collect_fx_usages`, and `PrescanItem` carries an `fx_usages` field. `src/pipeline/mod.rs` carries the map through the pipeline, `validate_fx_boundaries` in `src/bridge.rs` drains it, and `FixtureSession.validate_fx_boundaries` decides. Amendment 14 already described the two gates this produces; the Consequences bullet was never brought into step with it.
+
+**The same bullet was wrong about the lifetime cap, in the other direction.** It cited *"the inline cap at `src/pipeline/collection.rs:188`"*. That line is a parameter of `fn rootdir_package`, and the inline cap is not in Rust at all: [#1859](https://github.com/kalonji-tools/oxitest/issues/1859) moved it into the Python registrar, where `_inline_cap_message` raises it. The companion citation, *"the rootdir-`session` rule at `:288`"*, names a tier renamed by Amendment 6 and lands inside `fn declared_dir`. The rule itself survives, in `register_and_record`.
+
+**Both anchors were bare `path:line` into a file this ADR does not own, and both had moved.** The rewritten bullet cites symbols only.
+
+#### 2. The green-field bullet outlived its own condition
+
+Amendment 4 made the bullet conditional: green-field users would see only the new surface *"once #1720 retires the legacy one — not before"*. #1720 closed `COMPLETED`. Every site Amendment 4 named as evidence is clear:
+
+| Amendment 4 named | `b39991fa` holds |
+|---|---|
+| `use-fixtures.md` heading *"Legacy: `Fixtures()` in `conftest.py`"* | gone — `grep -n "Legacy" docs/user/how-to/use-fixtures.md` is empty |
+| `use-fixtures.md` *"still works and is not deprecated"* | gone — `grep -n "not deprecated"` is empty |
+| the `oxitest.helper` sentinel in `python/oxitest/__init__.py` | gone — `grep -n "helper" python/oxitest/__init__.py` is empty |
+| the module docstring leading its Public API with `Fixtures` | leads with `fixture` |
+| `stability.md` listing `Fixtures` under Stable | absent from that list; the page records that `Fixtures` was retired as a registry |
+
+And at runtime, `oxitest.Fixtures()` raises `TypeError: Fixtures() is no longer a registry.` with a migration message.
+
+**A correction that rots is worse than a claim that rots**, which is why this ranks with item 1 rather than below it.
+
+#### 3. Rule 8 retires a protocol #1720 kept
+
+Rule 8's bullet retired `FixtureProvider` and `HelperProvider` together. Only one went. `HelperProvider` is absent from `oxitest.plugin`; `FixtureProvider` is a live class there. #1720's Q21 kept it, on the ground Amendment 4's own conformance sweep (#1769) had already recorded under Rule 8: `HostProvider` in `oxi-nixinfra` implements it through an unpinned flake input, so retirement breaks a named downstream implementer immediately rather than at a version bump. `HelperProvider` had no implementer anywhere.
+
+The replacement route the bullet named is also gone: [#1718](https://github.com/kalonji-tools/oxitest/issues/1718) is `CLOSED NOT_PLANNED` and Amendment 9 retracted Rule 6's `register_fixtures` hook. So the bullet promised a migration to a hook that will not be built, away from a protocol that is not going.
+
+**This is the user-facing half.** `docs/user/explanation/provisional-apis.md` lists `FixtureProvider` as stable since 1.0.0 and `docs/user/reference/stability.md` extends semver protection to the plugin protocols. Those two pages were right and this ADR was wrong. The user page now carries a sentence routing the reader to Rule 8's entry, so neither document can be read alone and reach the wrong answer.
+
+#### What this amendment does not reach
+
+Two statements in this document still describe the pre-#1758 world, and both are deliberately left:
+
+- **Amendment 4's body** still reads *"The editor-squiggle promise rests on collection-time usage extraction, which #1758 records as unbuilt."*
+- **Rule 8's status line** still describes the retirement as future work.
+
+Both sit inside dated amendment bodies or status lines rather than in the Consequences section, and this ADR has never stated whether an amendment body is a frozen record of what that amendment found. #2101 records that gap and dispositions it separately. Correcting them here would settle that question by accident. Amendment 4 argued the other way for itself, in full: *"Amendment 4 should file or explicitly defer those two, and should **not** restate per-item status in this document — that is what rotted the first time."* Whether that binds every amendment or only Amendment 4 is exactly the undecided question, so this amendment does not act on either reading.
