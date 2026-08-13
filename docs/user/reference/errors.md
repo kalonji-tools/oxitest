@@ -590,12 +590,13 @@ by construction, so capture what you need during setup instead.
 
 ```text
 TestContext.name is not available here.
-  This TestContext was built for a fixture resolution, not for a test, so
+  This context was built for a fixture resolution, not for a test, so
   there is no test to name.
   Inside a fixture, ctx supports teardown registration only:
   ctx.addfinalizer(...) / ctx.on_teardown(...).
-  To read a test's identity, declare `ctx: TestContext` on the test itself and
-  pass what you need into the fixture.
+  To read the test's identity in a fixture, declare `test: TestIdentity` and
+  lifetime="function" (#1879).
+  On a test itself, use oxi.current_test().
 ```
 
 **Cause:** A **fixture** body read `ctx.name`, `ctx.node_id`, `ctx.marks` or

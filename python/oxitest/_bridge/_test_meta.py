@@ -36,6 +36,13 @@ class TestMeta:
     #: module-lifetime scope bucket, the second prefixes ``TempDir`` — so this
     #: is a claim about identity only, not about the whole bundle.
     describes_a_test: bool = True
+    #: Whether a ``TestIdentity`` resolved against this bundle may answer
+    #: (#1879). True only for a ``function``-lifetime fixture that is not
+    #: beneath a wider consumer. Deliberately NOT ``describes_a_test``: this
+    #: bundle still describes no test, and flipping that flag would make
+    #: ``TestContext.name`` answer inside a fixture, which #1874 exists to
+    #: prevent. The identity itself is read ambiently, not carried here.
+    identity_available: bool = False
 
     @property
     def param_id(self) -> str | None:

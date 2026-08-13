@@ -1,0 +1,2 @@
+[tool.oxitest]
+markers = ["slow"]

@@ -41,6 +41,7 @@ from oxitest._bridge._fixture_registry import (
 from oxitest._bridge._lifetime import Lifetime
 from oxitest._bridge._namespace_validation import namespace_defect
 from oxitest._bridge._paths import format_path
+from oxitest._bridge._test_identity import TestIdentity
 from oxitest._bridge._visibility import anchors_overlap
 from oxitest._bridge.result import DiagnosticSeverity
 
@@ -155,19 +156,9 @@ def register_module_source_fixtures(
             )
             continue
 
-        # An autouse function-lifetime async fixture fires for every test in
-        # its B1 boundary, sync ones included, so it manufactures the ADR-0006
-        # illegal cell for tests that never asked for it. One error at the
-        # declaration beats one on every sync test in scope (#1716).
-        #
-        # Enforced here rather than in the prescan AST for the same reason the
-        # cap above is: registration is marker-attribute based and sees every
-        # import spelling, while a static scan sees three (#1859). The wider
-        # tiers stay legal — the survey on #1739 found no framework restricting
-        # autouse for being async, and a per-module transaction is the
-        # canonical use.
-        if marker.autouse and marker.lifetime is Lifetime.FUNCTION and _is_async(obj):
-            violations.append(_async_autouse_message(attr_name, module_path))
+        signature_violation = _signature_violation(attr_name, marker, obj, module_path)
+        if signature_violation is not None:
+            violations.append(signature_violation)
             continue
 
         existing = _clashing_declaration(
@@ -324,6 +315,15 @@ def register_plugin_source_fixtures(  # noqa: PLR0913 — five are the declarati
             violations.append(_async_autouse_message(attr_name, plugin_module))
             continue
 
+        # #1879, ported to the plugin declaration route for the same reason the
+        # guard above is: a plugin must not do run-wide what a user is refused.
+        identity_violation = _test_identity_violation(
+            attr_name, marker, obj, plugin_module
+        )
+        if identity_violation is not None:
+            violations.append(identity_violation)
+            continue
+
         registry.register(
             FixtureDef(
                 name=attr_name,
@@ -464,6 +464,66 @@ def _method_fixture_violations(
         if isinstance(getattr(target, MARKER_ATTR, None), _FixtureMarker):
             found.append(_method_fixture_message(attr_name, class_name, module_path))
     return found
+
+
+def _signature_violation(
+    fn_name: str, marker: Any, obj: Any, module_path: str
+) -> str | None:
+    """The first declaration-legality violation for *obj*, or ``None``.
+
+    Both checks read the declaration alone — its marker and its signature — and
+    both accumulate rather than raise, so they belong behind one question. Kept
+    together also keeps ``register_module_source_fixtures`` under its
+    complexity budget as checks are added.
+    """
+    if marker.autouse and marker.lifetime is Lifetime.FUNCTION and _is_async(obj):
+        return _async_autouse_message(fn_name, module_path)
+    return _test_identity_violation(fn_name, marker, obj, module_path)
+
+
+def _test_identity_violation(
+    fn_name: str, marker: Any, obj: Any, module_path: str
+) -> str | None:
+    """The #1879 violation message for *obj*, or ``None`` if it is legal.
+
+    The condition lives here rather than at the two call sites so neither
+    registrar grows a branch: they ask one question and append one answer.
+    """
+    if marker.lifetime is Lifetime.FUNCTION or not _declares_test_identity(obj):
+        return None
+    return _test_identity_lifetime_message(fn_name, marker.lifetime.value, module_path)
+
+
+def _declares_test_identity(func: Any) -> bool:
+    """Whether *func* takes a ``TestIdentity`` parameter (#1879).
+
+    Reads the same hints ``_extract_depends_on`` walks. ``TestIdentity`` is
+    ``@injectable``, so it is annotated bare rather than wrapped in
+    ``Fixture[T]`` and never appears in ``depends_on``.
+    """
+    hints = safe_type_hints(func, include_extras=True)
+    if hints is None:
+        return False
+    return any(hint is TestIdentity for name, hint in hints.items() if name != "return")
+
+
+def _test_identity_lifetime_message(
+    fn_name: str, lifetime: str, module_path: str
+) -> str:
+    """Why TestIdentity is refused outside the function tier, and what to do.
+
+    Two exits rather than one, matching ``_async_autouse_message``: which is
+    right depends on whether the fixture wants per-test identity or wants the
+    wider lifetime. Offering only one would push an author into a tier they did
+    not want to keep a parameter they did.
+    """
+    return (
+        f"{fn_name} in {module_path} declares TestIdentity with "
+        f'lifetime="{lifetime}".\n'
+        f'A fixture wider than "function" is built one time, for whichever '
+        f"test arrives first, so there is no test to identify.\n"
+        f'→ set lifetime="function", or remove the TestIdentity parameter.'
+    )
 
 
 def _async_autouse_message(fn_name: str, module_path: str) -> str:

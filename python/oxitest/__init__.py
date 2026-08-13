@@ -53,6 +53,12 @@ TestContext — The running test's identity and imperative cleanup. Reach it
 current_test — `oxi.current_test()` → the running test's TestContext. Alias
                for TestContext.current(); raises outside a test body.
 
+TestIdentity — The identity of the test a fixture is being built for: `name`,
+               `node_id`, `marks`, `param_id`. Legal only in a fixture declared
+               `lifetime="function"`, where the fixture genuinely is built for
+               one test. Refused at registration in a wider fixture, and on a
+               test — a test uses `oxi.current_test()`.
+
 TempDir        — Injected bare (`tmp: TempDir`); unique temp dir deleted after test.
 TempDirFactory — Session-scoped factory; `factory.mktemp("label")` → TempDir.
 StdCapture     — Capture `sys.stdout`/`sys.stderr`; `cap.readouterr()`
@@ -79,8 +85,8 @@ approx          — Approximate floating-point comparison:
                  Supports scalars, sequences, mappings, and nested combos.
                  Parameters: rel (1e-6), abs (1e-12), nan_ok (False).
 
-Note: TempDir, TestContext, Patcher, StdCapture, FdCapture, LogCapture,
-      TempDirFactory and WarnCapture are decorated with ``@injectable`` —
+Note: TempDir, TestContext, TestIdentity, Patcher, StdCapture, FdCapture,
+      LogCapture, TempDirFactory and WarnCapture are decorated with ``@injectable`` —
       annotate parameters directly (`tmp: TempDir`) without wrapping in
       `Fixture[T]`.
 
@@ -180,6 +186,7 @@ from oxitest._bridge._plugin_config import (
 from oxitest._bridge._raises import raises as raises
 from oxitest._bridge._read_fixtures import _FixturesProxy as _FixturesProxy
 from oxitest._bridge._streams import force_utf8_streams
+from oxitest._bridge._test_identity import TestIdentity as TestIdentity
 from oxitest._bridge._warns import warns as warns
 from oxitest._bridge.parametrize import (
     parametrize as parametrize,
@@ -222,6 +229,7 @@ __all__ = [
     "TempDirFactory",
     "TestContext",
     "TestContextUnavailableError",
+    "TestIdentity",
     "TestResult",
     "WarnCapture",
     "Yields",
