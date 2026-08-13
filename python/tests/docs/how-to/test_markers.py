@@ -73,6 +73,7 @@ oxi_mark = [oxi.mark.timeout(5), oxi.mark.slow]
 # --8<-- [start:inprocess]
 @oxi.mark.inprocess
 def test_needs_debugger():
-    assert True, "inprocess test should run on coordinator"
+    entry = sys.modules["__main__"].__file__ or ""
+    assert not entry.endswith("worker.py"), "ran on the coordinator, not a worker"
 # --8<-- [end:inprocess]
 # fmt: on

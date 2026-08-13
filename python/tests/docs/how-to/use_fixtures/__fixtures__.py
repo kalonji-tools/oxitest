@@ -12,11 +12,6 @@ import oxitest
 from oxitest import TestContext
 
 
-@oxitest.fixture(lifetime="function")
-def reset_database() -> None:
-    """Side-effect-only fixture, reached by `@oxi.arrange` in the guide."""
-
-
 # fmt: off
 # --8<-- [start:imperative-teardown]
 @oxitest.fixture(lifetime="function")
@@ -30,8 +25,3 @@ def managed_file(ctx: TestContext) -> Path:
     return path
 # --8<-- [end:imperative-teardown]
 # fmt: on
-
-
-@oxitest.fixture(lifetime="package")
-def app_config() -> dict:
-    return {"db_url": "sqlite:///:memory:", "debug": True}

@@ -10,8 +10,14 @@ from oxitest import Fixture, fixture
 # fmt: off
 # --8<-- [start:basic-async]
 async def test_sleep_completes() -> None:
-    await asyncio.sleep(0)
-    assert True, "async test should complete"
+    done: list[str] = []
+
+    async def work() -> None:
+        await asyncio.sleep(0)
+        done.append("slept")
+
+    await work()
+    assert done == ["slept"], "the awaited coroutine ran before this line"
 # --8<-- [end:basic-async]
 
 # fmt: on
