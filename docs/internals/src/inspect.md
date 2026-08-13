@@ -140,7 +140,7 @@ Five typed vectors, one per node kind:
 | `tests` | `TestNode` | `T` | `node_id` |
 | `fixtures` | `FixtureNode` | `F` | `name` |
 | `marks` | `MarkNode` | `M` | `name` |
-| `conftests` | `ConftestNode` | `C` | `path` |
+| `declarations` | `DeclarationNode` | `D` | `path` |
 | `plugins` | `PluginNode` | `P` | `name` |
 
 `NodeRef` is a lightweight handle: `{ kind: NodeKind, index: usize }`. All navigation,
@@ -191,7 +191,7 @@ After the split in #1189, the detail module has this layout:
 | `detail/test.rs` | `render_test()`, `preview_test()`, `collect_edges()` |
 | `detail/fixture.rs` | `render_fixture()`, `preview_fixture()`, `collect_edges()` |
 | `detail/mark.rs` | `render_mark()`, `preview_mark()`, `collect_edges()` |
-| `detail/conftest.rs` | `render_conftest()`, `preview_conftest()`, `collect_edges()` |
+| `detail/declaration.rs` | `render_declaration()`, `preview_declaration()`, `collect_edges()` |
 | `detail/plugin.rs` | `render_plugin()`, `preview_plugin()`, `collect_edges()` |
 
 ### Three-function pattern
