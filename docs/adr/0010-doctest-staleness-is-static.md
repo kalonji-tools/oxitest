@@ -93,9 +93,16 @@ scan never *read* the file, whereas reachability holds either way.
 `declared_testpaths`, via `collector::coverage_roots`. That is legal only
 because no coverage path can reach `paths.testpaths` any more — the invariant
 became a property of the call graph rather than a rule review must uphold. It
-rests on one fact: **`src/config/merge.rs:120` is the sole writer of
-`declared_testpaths`.** Anything that starts writing it from argv reopens #1796,
-and no test can express that — which is why it is written here.
+rests on one fact: **`Config::merge_toml`, in `src/config/merge.rs`, is the sole
+writer of `declared_testpaths`** outside its `Default` and the test modules.
+Anything that starts writing it from argv reopens #1796, and no test can express
+that — which is why it is written here.
+
+Named by symbol rather than by line (#2112). The line this sentence used to cite
+had already drifted onto an unrelated field, and a stale line number rots
+silently: it lands on plausible neighbouring code and still reads as a citation.
+The same sentence, with the same defect, sat on `StalenessInputs::coverage_roots`
+in `src/pipeline/collection.rs`.
 
 The same reasoning is why the diagnostic reuses `doctest.coverage.stale-scope` /
 `stale-skip` rather than minting a context of its own. This ADR already reserves

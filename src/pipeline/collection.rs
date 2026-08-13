@@ -1310,8 +1310,11 @@ struct StalenessInputs<'a> {
     ///
     /// This is the guard's third input, and the reason it is legal: after
     /// #1798, `coverage_roots` cannot observe positional CLI paths, so ADR-0010's
-    /// invariant still holds. It rests on one fact —
-    /// `src/config/merge.rs:120` is the sole writer of `declared_testpaths`.
+    /// invariant still holds. It rests on one fact — `Config::merge_toml`, in
+    /// `src/config/merge.rs`, is the sole writer of `declared_testpaths` outside
+    /// its `Default` and the test modules. Named by symbol rather than by line:
+    /// a line number rots on position and fails silently, and the previous
+    /// wording had already drifted onto an unrelated field.
     /// Anything that starts writing it from argv reopens #1796, and no test
     /// can express that.
     coverage_roots: &'a [Utf8PathBuf],
