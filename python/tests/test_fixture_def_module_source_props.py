@@ -17,10 +17,13 @@ from oxitest._bridge._fixture_registry import (
 from oxitest._bridge._lifetime import Lifetime
 
 
-def _make_module_backed_def(name: str = "conn") -> FixtureDef:
-    def _conn() -> object:
-        return object()
+#: Module-level so the test can assert `.func` returns *this* callable.
+#: `isinstance(result, object)` could not: it is true of every value (#2111).
+def _conn() -> object:
+    return object()
 
+
+def _make_module_backed_def(name: str = "conn") -> FixtureDef:
     return FixtureDef(
         name=name,
         fixture_type=object,
@@ -38,11 +41,16 @@ def _make_module_backed_def(name: str = "conn") -> FixtureDef:
 def test_func_property_returns_module_source_func() -> None:
     """FixtureDef.func returns the wrapped callable for ModuleSource."""
     defn = _make_module_backed_def()
+
+    # Act
     fn = defn.func
-    result = fn()
-    assert isinstance(result, object), (
-        ".func on a ModuleSource-backed FixtureDef must return the wrapped "
-        "callable so the existing instantiator machinery can invoke it"
+
+    # Assert
+    assert fn is _conn, (
+        ".func on a ModuleSource-backed FixtureDef must return the *wrapped* "
+        "callable, not merely a callable — the instantiator invokes whatever "
+        "this returns, so a different function here silently runs the wrong "
+        "fixture body"
     )
 
 

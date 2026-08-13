@@ -25,6 +25,11 @@ def test_no_unexpected_rust_only_markers() -> None:
     python_markers = _BUILTIN_HANDLER_NAMES
     rust_only = rust_markers - python_markers
     expected_rust_only = {"inprocess"}
+    unexpected = rust_only - expected_rust_only
+    missing = expected_rust_only - rust_only
     assert rust_only == expected_rust_only, (
-        f"Unexpected Rust-only markers: {rust_only - expected_rust_only}"
+        f"Rust-only markers with no Python handler changed. "
+        f"Gained: {unexpected or '{}'}. Lost: {missing or '{}'}. "
+        f"A gained marker needs a Python handler or a line in this docstring. "
+        f"A lost marker means Rust dropped a builtin the docstring documents"
     )
