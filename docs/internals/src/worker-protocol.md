@@ -91,21 +91,25 @@ The coordinator's per-result watchdog deadline resets on each real line regardle
 
 ## Task Schema (stdin)
 
-Each line on stdin is a JSON object:
+Each line on stdin is a JSON object. Every task carries `protocol_version` as
+well; it is omitted below so the example stays about the task shape, and
+`PROTOCOL_VERSION` gives its value.
 
 ```json
 {
-    "protocol_version": 6,
     "modules": [
         {
             "module_path": "tests/test_math.py",
             "items": [
-                {"fn_name": "test_add", "param_id": null},
-                {"fn_name": "test_mul", "param_id": "x0"}
+                {"fn_name": "test_add", "param_id": null,
+                 "node_id": "tests/test_math.py::test_add", "markers": []},
+                {"fn_name": "test_mul", "param_id": "x0",
+                 "node_id": "tests/test_math.py::test_mul[x0]", "markers": ["slow"]}
             ]
         }
     ],
-    "conftest_paths": ["tests/conftest.py", "conftest.py"],
+    "fixture_modules": [{"module": "tests.__fixtures__", "anchor": "tests"}],
+    "plugins": {"modules": [], "settings": {}},
     "timeout_secs": 30,
     "keep_tmp": "failed",
     "rootdir": "/path/to/project",
@@ -116,13 +120,16 @@ Each line on stdin is a JSON object:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `protocol_version` | int | Wire format version. The worker **rejects** a task whose version it does not speak, or one carrying no version at all, exiting nonzero after emitting an `error` diagnostic. See [Version mismatch](#version-mismatch). |
+| `protocol_version` | int | Wire format version — `PROTOCOL_VERSION` in `src/worker_result/wire.rs` and `python/oxitest/_bridge/result.py` declares it. The worker **rejects** a task whose version it does not speak, or one carrying no version at all, exiting nonzero after emitting an `error` diagnostic. See [Version mismatch](#version-mismatch). |
 | `modules` | array | Modules to execute in this task |
 | `modules[].module_path` | string | Relative path to the test module file |
 | `modules[].items` | array | Test functions to execute in that module |
 | `modules[].items[].fn_name` | string | Function name within the module |
 | `modules[].items[].param_id` | string \| null | Parametrize case ID (e.g. `"x0"`) or null |
-| `conftest_paths` | array of strings | Conftest files to load for fixture resolution |
+| `modules[].items[].node_id` | string | Full test identifier: `module_path::fn_name[param_id]` |
+| `modules[].items[].markers` | array of strings | Marker names applied to this item |
+| `fixture_modules` | array | Fixture declaration modules to import, each `{"module", "anchor"}` — the anchor is the B1 boundary the declaration is scoped to |
+| `plugins` | object | The run's plugins: `{"modules": [str], "settings": {str: {str: any}}}`. A worker activates these before it registers fixture modules |
 | `timeout_secs` | int \| null | Per-test timeout in seconds, or null for no timeout |
 | `keep_tmp` | `string \| null` | Optional. `"failed"`, `"always"`, or omitted. Controls TempDir preservation. |
 | `rootdir` | string | Project rootdir, appended to the worker's `sys.path` so test modules can import sibling utility modules (#1780). |
@@ -166,7 +173,7 @@ relevant fields (compact JSON, falsy fields omitted).
 | `node_id` | string | Full test identifier: `module_path::fn_name[param_id]` |
 | `outcome` | string | Test result status -- drives variant selection (see below) |
 | `duration_ms` | float | Wall-clock execution time in milliseconds |
-| `protocol_version` | int | Wire format version (currently `5`). The coordinator warns once per drain call on mismatch. |
+| `protocol_version` | int | Wire format version — `PROTOCOL_VERSION` in `src/worker_result/wire.rs` and `python/oxitest/_bridge/result.py` declares it. The coordinator warns once per drain call on mismatch. |
 
 **Per-outcome fields:**
 
@@ -181,20 +188,21 @@ relevant fields (compact JSON, falsy fields omitted).
 | `warned` | `message`, `no_message_lines` | Warning text and print() line numbers |
 | `timeout` | `message` | Timeout description |
 
-**Examples:**
+**Examples.** Every result line carries `protocol_version`; it is omitted here so
+the examples stay about the per-outcome field sets.
 
 ```json
-{"node_id": "tests/test_math.py::test_add", "outcome": "passed", "duration_ms": 12.5, "protocol_version": 5}
+{"node_id": "tests/test_math.py::test_add", "outcome": "passed", "duration_ms": 12.5}
 ```
 
 ```json
-{"node_id": "tests/test_math.py::test_div", "outcome": "failed", "duration_ms": 3.1, "protocol_version": 5,
+{"node_id": "tests/test_math.py::test_div", "outcome": "failed", "duration_ms": 3.1,
  "message": "assert 1 / 0", "file": "tests/test_math.py", "lineno": 8, "source_line": "assert 1 / 0 == 0",
  "left": "ZeroDivisionError", "right": "0", "op": "=="}
 ```
 
 ```json
-{"node_id": "tests/test_net.py::test_fetch", "outcome": "skipped", "duration_ms": 0.1, "protocol_version": 5,
+{"node_id": "tests/test_net.py::test_fetch", "outcome": "skipped", "duration_ms": 0.1,
  "message": "needs network"}
 ```
 
@@ -322,8 +330,8 @@ written as JSON to the worker's stdin.
 pub struct WorkerTask<'a> {
     pub protocol_version: u32,
     pub modules: Vec<WorkerTaskModule<'a>>,
-    pub conftest_paths: &'a serde_json::value::RawValue,
     pub fixture_modules: &'a serde_json::value::RawValue,
+    pub plugins: &'a serde_json::value::RawValue,
     pub timeout_secs: Option<u64>,
     pub keep_tmp: &'a str,
     pub rootdir: &'a str,
@@ -344,7 +352,7 @@ pub struct WorkerTaskItem<'a> {
     pub fn_name: &'a str,
     pub param_id: Option<&'a str>,
     pub node_id: &'a str,
-    pub markers: &'a [String],
+    pub markers: Vec<&'a str>,
 }
 ```
 
@@ -415,7 +423,7 @@ Steps:
 
 - Use `#[serde(default)]` on every new `WireResult` variant field so older workers work.
 - Use `#[serde(skip_serializing_if = "Option::is_none")]` on new `WorkerTask` fields.
-- The `PROTOCOL_VERSION` constant (currently `7`) in both `src/worker_result/wire.rs` and
+- The `PROTOCOL_VERSION` constant in both `src/worker_result/wire.rs` and
   `python/oxitest/_bridge/result.py` should be bumped when adding, removing, or
   renaming wire fields.
 
