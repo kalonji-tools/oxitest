@@ -172,3 +172,47 @@ Tracked by [#1876](https://github.com/kalonji-tools/oxitest/issues/1876). Amends
 **`AsyncFixtureAccessError` no longer offers an exit that cannot work.** It listed *"Raise the fixture's lifetime so it is built outside the test"* at every tier, on the one route where raising the lifetime never helps — measured refusing at `function`, `module` and `package`. Above `function` it now offers the parameter route instead, which is the cell this amendment declares legal. It also printed `Lifetime: each`; `each` is a Scope, and no `@oxi.fixture` call accepts it.
 
 **What pins this.** `python/tests/data/async_guard_matrix/legal` holds nine cells, run serially and under `-n 2`. `illegal/` holds the four that stay illegal — the `function`-tier `FixtureRef` pair, and the sync-proxy cells at `module` and `package`. The proxy pair is the load-bearing half: it is the only assertion that the proxy stays stricter than this ADR's cell, and without it a change relaxing the proxy would leave every gate green.
+
+### Amendment 3 — one loop is necessary and not sufficient; the task is the second invariant (2026-08-12)
+
+**Status:** accepted. Implements [#1740](https://github.com/kalonji-tools/oxitest/issues/1740).
+
+This ADR reasons in loops. Its cross-cutting constraint says *"The implementation must use a per-test-lifetime loop shared across setup → body → teardown"*, and that is implemented and it holds. **It is not sufficient.**
+
+A fixture that holds an `anyio.CancelScope`, an `asyncio.TaskGroup`, or a `contextvars.ContextVar` across its `yield` depends on setup and teardown running in **one task**, not only on one loop. anyio made *"run all tests and fixtures in the same task"* a documented breaking change in 4.0, and named contextvar propagation as the driver. pytest-asyncio has the same defect open at [#1191](https://github.com/pytest-dev/pytest-asyncio/issues/1191).
+
+**The invariant.** At `lifetime="function"`, a fixture's setup, the test body and the fixture's teardown run in one task, on every declaration route: the `Fixture[T]` parameter, the `fx.` proxy, and `@oxi.arrange`.
+
+**What was measured, and what was wrong.** On `main` at `b98d2114`, CPython 3.12.13, Linux x86_64, with `--serial` and `-n 2` giving the same result:
+
+| Route at `lifetime="function"` | setup / body / teardown | Before |
+|---|---|---|
+| `fx.` proxy | Task-1 / Task-1 / Task-1 | already held |
+| `Fixture[T]` parameter | Task-2 / Task-2 / Task-2 | already held |
+| `@oxi.arrange` | Task-4 / Task-5 / Task-6 | **broken** |
+
+The two main routes already held it, because `_async_test_core` resolves the fixtures inside the body coroutine and drains their teardowns in its own `finally` — one `AsyncSession.run` covers the three phases. The arrange path advanced its fixtures before the body coroutine existed, so each `run_until_complete` made a task of its own.
+
+**The change.** The executor queues an arranged async fixture instead of advancing it. `_async_test_core` advances the queue, and drains it after the body.
+
+**`module` lifetime and wider are exempt, and the exemption is deliberate.** One setup serves many test bodies, so no task can span them. A fixture that needs the task invariant belongs at `function` lifetime. This is documented and **not** diagnosed: a registration-time warning would fire on every wide-lifetime async generator, and the overwhelming majority hold a connection or a directory across the yield and are correct. When the invariant is needed and absent, anyio raises `Attempted to exit cancel scope in a different task than it was entered in`, which names the problem better than anything this framework would synthesise at registration.
+
+**A persistent runner task was rejected.** It is the shape anyio's plugin and pytest-asyncio [#1193](https://github.com/pytest-dev/pytest-asyncio/pull/1193) use: hold one long-lived task on the session and submit work to it. An `AsyncSession` outlives one test whenever a fixture is wider than `function` lifetime, so a task held by the session would make a `module`-lifetime setup share a task with **every** body in that module — an invariant this ADR does not promise and the exemption above explicitly denies.
+
+**The public protocol does not change.** `AsyncSession.run(coro)` keeps its shape. The invariant is a property of where the framework calls it, not of the protocol, so a third-party backend inherits it by construction rather than by contract.
+
+**Teardown order is unchanged, and that cost the design its first shape.** LIFO holds *across* the two kinds of arranged fixture: `@arrange('sync_a', 'async_b', 'sync_c')` tears down `sync_c`, then `async_b`, then `sync_a`. Draining the async ones inside the body coroutine while the sync ones stayed in `fn_teardowns` put every async teardown first, which an existing test caught. Both kinds now travel in one ordered list and are drained in one reversed walk. A test that arranges no async fixture keeps the pre-#1740 path exactly.
+
+**One limitation is discharged.** `test_shared_session_precedence_over_arrange_session` recorded that *"an @arrange fixture that yields a loop-bound resource on the arrange session's loop cannot be used from the body"*. The body coroutine advances the fixture now, so it runs on whatever loop the body runs on.
+
+**One behaviour changes for sync arranged fixtures, and it is a cost of the ordering rule.** Because both kinds share one teardown pass, a **sync** arranged fixture's teardown now runs **inside the test's event loop** rather than after it closes. A teardown that drives its own loop therefore fails:
+
+```
+error in teardown of fixture 'sync_with_own_loop': asyncio.run() cannot be called from a running event loop
+```
+
+`safe_teardown` converts that to a warning diagnostic, so the test still reports `passed`. It applies only to a sync arranged fixture in a test that also arranges an async one — a sync test, or an async test arranging nothing async, keeps the pre-#1740 path and is unaffected.
+
+A sync teardown must not call `asyncio.run` or `loop.run_until_complete`. Narrowing the diversion to sync fixtures declared *after* the first async entry would shrink the exposure without removing it, and was rejected: it makes the behaviour depend on declaration position, which is harder to state than the rule it avoids.
+
+**What pins this.** `python/tests/test_async_task_identity.py`, against `python/tests/data/arranged_task_identity/`. It asserts task identity with `asyncio.current_task()` names rather than `id()` — CPython can give a freed task's address to the next task, and a first probe on this issue read "one task" from that reuse. `anyio` is deliberately **not** a test dependency: task identity is the invariant, and the standard library states it directly.

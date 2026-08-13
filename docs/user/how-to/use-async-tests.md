@@ -19,7 +19,8 @@ parametrize, timeouts, and fixture injection.
 ## Default backend — asyncio
 
 The built-in backend is `asyncio`. It is always available and requires no
-configuration. Each test gets a fresh event loop via `asyncio.run()`.
+configuration. Each test gets a fresh event loop, and the loop stays open
+across the whole test so an async fixture's teardown can still run on it.
 
 If your tests are already async and everything works, you do not need to read
 any further.
@@ -38,6 +39,46 @@ teardown half runs after the scope exits, even if a test failed.
 ```python
 --8<-- "python/tests/docs/how-to/fixture_anchors/api/__fixtures__.py:async-module-lifetime"
 ```
+
+### One task, at function lifetime
+
+At `lifetime="function"`, a fixture's setup, the test body and the fixture's
+teardown run in **one asyncio task**. That matters for anything whose identity
+is per-task rather than per-loop:
+
+- an `anyio.CancelScope` entered before the `yield` and exited after it
+- an `asyncio.TaskGroup` held across the `yield`
+- a `contextvars.ContextVar` set in setup and read from the test
+
+This holds however the fixture is reached — a `Fixture[T]` parameter, the
+`fx.` proxy, or `@oxi.arrange`.
+
+!!! warning "A sync `@oxi.arrange` teardown runs on the test's loop"
+    When an async test arranges both a sync fixture and an async one, the two
+    share a teardown pass so that disposal stays strictly last-in-first-out.
+    That pass runs inside the test's event loop, so a **sync** arranged
+    fixture's teardown must not drive its own:
+
+    ```python
+    @oxi.fixture(lifetime="function")
+    def connection() -> Iterator[Conn]:
+        conn = connect()
+        yield conn
+        asyncio.run(conn.aclose())   # fails — a loop is already running
+    ```
+
+    oxitest reports it as a teardown warning and the test still passes:
+    `error in teardown of fixture 'connection': asyncio.run() cannot be called
+    from a running event loop`. Make the fixture `async def` and `await` the
+    call instead. A sync test, or an async test that arranges nothing async, is
+    unaffected.
+
+!!! warning "Wider lifetimes are exempt"
+    At `lifetime="module"` and above, one setup serves many test bodies, so no
+    single task can span them. A fixture that holds a `CancelScope`, a
+    `TaskGroup`, or a `ContextVar` across its `yield` belongs at
+    `lifetime="function"`. Declared wider, anyio reports
+    `Attempted to exit cancel scope in a different task than it was entered in`.
 
 Where a declaration file may live, what each lifetime tier means, and how a
 namespace is derived are in
