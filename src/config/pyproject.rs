@@ -987,14 +987,22 @@ doctest = {}
         );
     }
 
+    /// One input per `ScopeEntry` variant. A missing variant is invisible here:
+    /// the loop still passes on the forms it does cover, so the count in the
+    /// name is what a reader checks the coverage against.
     #[test]
-    fn render_entry_round_trips_all_three_forms() {
-        for input in ["src/pkg/", "src/mod.py", "src/mod.py::foo"] {
+    fn render_entry_round_trips_all_four_forms() {
+        for input in [
+            "src/pkg/",
+            "src/mod.py",
+            "src/mod.py::foo",
+            "src/mod.py::Cls::foo",
+        ] {
             let entry = parse_scope_entry_str(input).unwrap();
             assert_eq!(
                 render_entry(&entry),
                 input,
-                "render_entry must round-trip parse_scope_entry_str for '{input}' so diagnostics quote the exact TOML form the user wrote",
+                "render_entry must round-trip parse_scope_entry_str for '{input}' so diagnostics quote the exact TOML form the user wrote — `stale_diagnostics` in src/pipeline/collection.rs interpolates this render into the message it shows the user, so a wrong render tells them to edit an entry they never wrote",
             );
         }
     }

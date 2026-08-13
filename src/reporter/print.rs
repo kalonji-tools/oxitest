@@ -137,17 +137,34 @@ pub fn flush() {
     let _ = io::stdout().flush();
 }
 
+/// Render the collection-error block, or the empty string when there is none.
+///
+/// Split out of [`print_collect_errors`] so a test can read what that function
+/// writes. `println!` goes to a stdout no Rust test can capture, so the two
+/// tests over it could only assert that it did not panic — which is true of a
+/// body that prints nothing at all (#2112). This is the same `fmt_` / `print_`
+/// split the rest of the reporter already uses: [`fmt_summary`],
+/// [`fmt_tip_block`] and [`fmt_diagnostics_block`] each return a `String` that
+/// [`print_summary_section`] prints.
+///
+/// Empty in, empty out — the caller prints nothing rather than a bare newline.
+pub fn fmt_collect_errors(collect_errors: &[CollectError], use_color: bool) -> String {
+    if collect_errors.is_empty() {
+        return String::new();
+    }
+    let sep = colors::color_dim(&"═".repeat(sep_width()), use_color);
+    let body = collect_errors
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    format!("\nCOLLECTION ERRORS\n{sep}\n{body}")
+}
+
 pub fn print_collect_errors(collect_errors: &[CollectError], use_color: bool) {
-    if !collect_errors.is_empty() {
-        println!("\nCOLLECTION ERRORS");
-        println!("{}", colors::color_dim(&"═".repeat(sep_width()), use_color));
-        let last = collect_errors.len() - 1;
-        for (i, ce) in collect_errors.iter().enumerate() {
-            println!("{ce}");
-            if i < last {
-                println!();
-            }
-        }
+    let block = fmt_collect_errors(collect_errors, use_color);
+    if !block.is_empty() {
+        println!("{block}");
     }
 }
 
