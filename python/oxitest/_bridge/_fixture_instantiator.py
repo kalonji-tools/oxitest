@@ -165,6 +165,14 @@ class _ResolutionContext:
     #: the teardown did not. None at test level and at function tier, where the
     #: constructing test's list already *is* the right boundary.
     owner_teardowns: list[Callable[[], None]] | None = None
+    #: True once resolution has descended beneath ANY wider-than-function
+    #: owner. Unlike ``owner_scope`` this ACCUMULATES: a module-lifetime
+    #: fixture may depend on a function-lifetime one, and the inner fixture is
+    #: then built once under the first test and cached for the module, so it
+    #: stops being per-test while still declaring ``lifetime="function"``
+    #: (#1879). ``owner_scope`` is overwritten at each descent and cannot
+    #: express ancestry.
+    under_wider_owner: bool = False
 
 
 def _cache_key(defn: FixtureDef[Any]) -> str:
@@ -255,12 +263,13 @@ def _async_teardown_boundary(
     return None
 
 
-def _resolve_deps(
+def _resolve_deps(  # noqa: PLR0913 — five resolve the dependencies, the sixth is the owner's tier, which this site cannot infer
     instantiator: FixtureInstantiator,
     fn: Callable[..., Any],
     ctx: _ResolutionContext,
     fn_name: str,
     resolve_user: Callable[[str], Any],
+    owner_tier: FixtureScope | None = None,
 ) -> dict[str, Any]:
     """Resolve fixture dependencies from type hints."""
     # A minimal TestMeta for fixture-to-fixture resolution. module_path and
@@ -270,11 +279,17 @@ def _resolve_deps(
     # fixture is built once for whichever test arrives first, so there is no
     # test to describe. `describes_a_test=False` is what makes TestContext say
     # so instead of reporting fn_name as the test's name (#1874).
+    # ``identity_available`` records whether a ``TestIdentity`` resolved under
+    # this bundle may answer: true for a `function`-lifetime fixture that no
+    # wider consumer caches (#1879). The identity itself is read ambiently.
     dep_meta = TestMeta(
         module_path=ctx.module_path,
         fn_name=fn_name,
         node_id="",
         describes_a_test=False,
+        identity_available=(
+            owner_tier is FixtureScope.EACH and not ctx.under_wider_owner
+        ),
     )
     hints = _get_hints(fn)
     deps: dict[str, Any] = {}
@@ -595,7 +610,12 @@ class FixtureInstantiator:
         # builtin resolved as one of *defn*'s dependencies must follow *defn*'s
         # teardown boundary, not its own (#1777).
         ctx = replace(
-            ctx, boundary_path=_boundary_for(defn, ctx), owner_scope=defn.scope
+            ctx,
+            boundary_path=_boundary_for(defn, ctx),
+            owner_scope=defn.scope,
+            under_wider_owner=(
+                ctx.under_wider_owner or defn.scope is not FixtureScope.EACH
+            ),
         )
         scope_refs = ctx.scope_callback(defn, ctx.module_path)
         # Placed before every branch below, so the async route inherits it too:
@@ -682,6 +702,7 @@ class FixtureInstantiator:
             ctx,
             fn_name=defn.name,
             resolve_user=lambda n: self.resolve_fixture(n, ctx),
+            owner_tier=defn.scope,
         )
         for dep_name, dep_val in deps.items():
             _reject_nonshared_async(dep_name, dep_val, defn.name)
@@ -794,6 +815,7 @@ class FixtureInstantiator:
             ctx,
             fn_name=defn.name,
             resolve_user=lambda n: self.resolve_fixture(n, ctx),
+            owner_tier=defn.scope,
         )
         for dep_name, dep_val in deps.items():
             if scope_refs is not None and not scope_refs.per_test:
@@ -863,6 +885,7 @@ class FixtureInstantiator:
             ctx,
             fn_name=defn.name,
             resolve_user=lambda n: self.resolve_fixture(n, ctx),
+            owner_tier=defn.scope,
         )
         # Async fixtures may depend on other async fixtures; only reject in sync context
         if not defn.is_async:

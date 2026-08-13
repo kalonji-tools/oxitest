@@ -36,6 +36,7 @@ from oxitest import (
     TempDir,
     TempDirFactory,
     TestContext,
+    TestIdentity,
     WarnCapture,
 )
 from oxitest._bridge._builtins._base import BuiltinFixture
@@ -58,7 +59,7 @@ HAS_BLOCK_SCOPED_FORM: dict[type, str] = {
 #: would mean narrowing the test. WarnCapture's block-scoped case is a
 #: different question, answered by oxi.warns().
 NEEDS_NONE: frozenset[type] = frozenset(
-    {TempDir, TempDirFactory, WarnCapture, TestContext}
+    {TempDir, TempDirFactory, WarnCapture, TestContext, TestIdentity}
 )
 
 #: Built-ins that need a block-scoped form and do not have one yet.

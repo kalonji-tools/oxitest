@@ -16,6 +16,11 @@
       show_root_toc_entry: false
       heading_level: 3
 
+The directory name is prefixed with whatever asked for it. A `TempDir` injected
+into a **test** is prefixed with the test's name; one resolved inside a
+**fixture** is prefixed with that *fixture's* name, not with the name of the
+test the fixture is being built for.
+
 ## TempDirFactory
 
 ::: oxitest._bridge._builtins._tempdir.TempDirFactory
@@ -230,14 +235,41 @@ Inside a fixture, `ctx` is for teardown. The four identity fields raise:
 | `name`, `node_id`, `marks`, `param_id` | works | **`TestIdentityUnavailableError`** |
 
 A fixture is built for whichever test arrives first at its lifetime tier, so
-"the current test" has no answer above `function` lifetime — and at `function`
-lifetime the identity is not threaded to the resolution site either. Reading
-one used to return the *fixture's* own name, so `f"test_{ctx.name}"` produced
-one identical string for the whole run.
+"the current test" has no answer above `function` lifetime. Reading one used to
+return the *fixture's* own name, so `f"test_{ctx.name}"` produced one identical
+string for the whole run.
 
-If a fixture needs the test's identity, declare `ctx: TestContext` on the
-**test** — where the four fields are real — and hand the value to the fixture
-from the test body.
+`TestContext` keeps refusing the four identity fields in every fixture, at
+every tier. To read the running test's identity in a fixture, declare
+[`TestIdentity`](#testidentity) instead.
+
+### TestIdentity
+
+`TestIdentity` carries the identity of the test a fixture is being built for.
+It is legal only in a fixture declared `lifetime="function"`, where the fixture
+genuinely is built for one specific test:
+
+```python
+@oxi.fixture(lifetime="function")
+def db_schema(test: TestIdentity) -> str:
+    return f"test_{test.name}"
+```
+
+It exposes `name`, `node_id`, `marks` and `param_id`. `module_path` stays on
+`TestContext` — it says where resolution is, which is not identity.
+
+Three positions refuse it, and each names what to use instead:
+
+| Position | Result |
+| --- | --- |
+| A fixture with a wider lifetime | Refused at registration, at the `@oxi.fixture` line |
+| A test | Refused — a test reads itself with `oxi.current_test()` |
+| A fixture reached beneath a wider-lifetime fixture | Refused at resolution |
+
+The third case is the one that is easy to miss. A `lifetime="function"` fixture
+that a `lifetime="module"` fixture depends on is built one time and cached by
+that consumer, so it stops being per-test even though its own declaration says
+it is.
 
 ## See also
 

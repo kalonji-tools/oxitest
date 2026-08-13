@@ -282,15 +282,16 @@ class TestIdentityUnavailableError(FixtureError):
     for every test in the run.
     """
 
-    def __init__(self, accessed: str) -> None:
+    def __init__(self, accessed: str, subject: str = "TestContext") -> None:
         super().__init__(
-            f"TestContext.{accessed} is not available here.\n"
-            f"  This TestContext was built for a fixture resolution, not for a "
+            f"{subject}.{accessed} is not available here.\n"
+            f"  This context was built for a fixture resolution, not for a "
             f"test, so there is no test to name.\n"
             f"  Inside a fixture, ctx supports teardown registration only: "
             f"ctx.addfinalizer(...) / ctx.on_teardown(...).\n"
-            f"  To read a test's identity, declare `ctx: TestContext` on the "
-            f"test itself and pass what you need into the fixture."
+            f"  To read the test's identity in a fixture, declare "
+            f'`test: TestIdentity` and lifetime="function" (#1879).\n'
+            f"  On a test itself, use oxi.current_test()."
         )
 
 

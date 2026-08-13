@@ -56,11 +56,43 @@ from oxitest._bridge._builtins._warncapture import (
     WarnCapture,
     _WarnCaptureFixture as _WarnCaptureFixture,
 )
+from oxitest._bridge._errors import TestIdentityUnavailableError, UsageError
+from oxitest._bridge._fixture_context import _test_run_context
+from oxitest._bridge._test_identity import TestIdentity
 
 
 class _TestContextFixture(BuiltinFixture, fixture_type=TestContext):
     def create(self, *, ctx: _BuiltinContext) -> TestContext:
         return TestContext(ctx.meta, ctx.teardown_stack)
+
+
+class _TestIdentityFixture(BuiltinFixture, fixture_type=TestIdentity):
+    def create(self, *, ctx: _BuiltinContext) -> TestIdentity:
+        # A test's own parameters resolve against the running test's real
+        # bundle. A test has one way to read itself and this is not it
+        # (#1949 Q5).
+        if ctx.meta.describes_a_test:
+            msg = (
+                "TestIdentity is for a fixture, not for a test.\n"
+                "A test reads its own identity with oxi.current_test().\n"
+                "→ replace the `TestIdentity` parameter with a call to "
+                "oxi.current_test()."
+            )
+            raise UsageError(msg)
+        # Registration refuses a wider *declared* lifetime, but a
+        # `function`-lifetime fixture reached beneath a wider consumer is cached
+        # by that consumer and stops being per-test. `_resolve_deps` answers
+        # both positions with one flag (#1879).
+        #
+        # The identity itself is read ambiently rather than from the resolution
+        # bundle: that bundle deliberately still describes no test, so that
+        # `ctx: TestContext` keeps refusing here (#1874). `meta is None` means
+        # no test is running at all, which the flag alone cannot say.
+        run_ctx = _test_run_context.get()
+        if not ctx.meta.identity_available or run_ctx.meta is None:
+            accessed = "name"
+            raise TestIdentityUnavailableError(accessed, "TestIdentity")
+        return TestIdentity(run_ctx.meta)
 
 
 __all__ = [
@@ -76,6 +108,7 @@ __all__ = [
     "TempDir",
     "TempDirFactory",
     "TestContext",
+    "TestIdentity",
     "WarnCapture",
     "_BuiltinContext",
     "current_test",
