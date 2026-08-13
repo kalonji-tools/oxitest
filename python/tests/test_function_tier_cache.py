@@ -10,7 +10,11 @@ fixtures write themselves (slice-2 precedent): the question is what the
 fixture actually did, not how a reporter phrased it. Builds are identified by
 a module-level counter, never ``id()`` — a freed instance's address can be
 reused by the very next allocation, which would fake cross-test sharing.
-All runs are ``--serial``: the assertions are ordering-sensitive.
+
+Runs are ``--serial`` wherever the assertions read the event log, because
+that log's ordering is what they check. Section (h) is the exception: it
+asserts identity *inside* the project and reads only the tally, so it runs
+under the parallel scheduler on purpose (#2093).
 """
 
 from __future__ import annotations
@@ -568,4 +572,141 @@ def test_async_param_and_proxy_routes_build_once(tmp: TempDir) -> None:
     assert teardowns == setups, (
         f"teardowns {teardowns} do not match setups {setups} — the single "
         "build must be drained exactly once, on the loop that created it"
+    )
+
+
+# ── (h) the routes converge under the parallel scheduler too (#2093) ─────────
+
+
+def test_async_routes_converge_under_parallel_scheduler(tmp: TempDir) -> None:
+    """Four tests, each taking both routes, run across workers and converge.
+
+    Every other convergence test in this file runs ``--serial``. The per-test
+    scope is created per test, so a scheduler that spreads tests across worker
+    processes must not change the answer — and nothing pinned that.
+    """
+    # Arrange
+    root = Path(tmp) / "proj"
+    pyproject = (
+        "[tool.oxitest]\n"
+        'testpaths = ["suite"]\n'
+        'python_files = ["test_*.py"]\n'
+        'strict = "abort"\n'
+        "min_parallel_tests = 1\n"
+    )
+    fixtures = (
+        "from __future__ import annotations\n"
+        "import oxitest as oxi\n"
+        "from oxitest import Yields\n"
+        "from suite._kinds import Token\n\n\n"
+        '@oxi.fixture(lifetime="function")\n'
+        "async def channel() -> Yields[Token]:\n"
+        "    yield Token(1)\n"
+    )
+    body = (
+        "from __future__ import annotations\n"
+        "from oxitest import Fixture, Fixtures\n"
+        "from suite._kinds import Token\n\n\n"
+    ) + "".join(
+        f"async def test_converge_{i}(\n"
+        f"    channel: Fixture[Token], fx: Fixtures\n"
+        f") -> None:\n"
+        f"    proxied = await fx.channel\n"
+        f"    assert channel is proxied, (\n"
+        f"        'route convergence must hold under the parallel "
+        f"scheduler, not only under --serial'\n"
+        f"    )\n\n\n"
+        for i in range(4)
+    )
+    _scaffold(
+        root,
+        {
+            "pyproject.toml": pyproject,
+            "suite/__init__.py": "",
+            "suite/_kinds.py": _KINDS,
+            "suite/__fixtures__.py": fixtures,
+            "suite/test_async.py": body,
+        },
+    )
+
+    # Act — deliberately no --serial
+    out, err, rc = helpers.run_oxitest(None, cwd=str(root))
+
+    # Assert
+    assert rc == 0, (
+        f"rc={rc} — convergence does not hold under the parallel scheduler"
+        f"\nstdout:\n{out}\nstderr:\n{err}"
+    )
+    assert "4 passed" in out, (
+        f"all four tests must pass; a smaller tally means the scheduler "
+        f"dropped tests rather than that convergence held\nstdout:\n{out}"
+    )
+
+
+# ── (i) a returning async fixture converges too, not only a yielding one ─────
+
+
+def test_async_returning_fixture_converges_on_both_routes(tmp: TempDir) -> None:
+    """An ``async def`` fixture that *returns* also builds once across routes.
+
+    Every other convergence test here uses an async generator, which takes
+    ``_build_async``'s ``isasyncgen`` branch. A fixture that returns takes the
+    ``iscoroutine`` branch and registers no teardown, and the change routes it
+    through the same cache — so the branch needs its own pin (#2093).
+    """
+    # Arrange
+    root = Path(tmp) / "proj"
+    log = Path(tmp) / "events.log"
+    fixtures = (
+        "from __future__ import annotations\n"
+        "import itertools\n"
+        "import pathlib\n"
+        "import oxitest as oxi\n"
+        "from suite._kinds import Token\n\n"
+        f"LOG = pathlib.Path({str(log)!r})\n"
+        "_COUNTER = itertools.count(1)\n\n\n"
+        '@oxi.fixture(lifetime="function")\n'
+        "async def channel() -> Token:\n"
+        "    token = Token(next(_COUNTER))\n"
+        "    with LOG.open('a', encoding='utf-8') as fh:\n"
+        "        fh.write(f'SETUP {token.seq}\\n')\n"
+        "    return token\n"
+    )
+    test_body = (
+        "from __future__ import annotations\n"
+        "from oxitest import Fixture, Fixtures\n"
+        "from suite._kinds import Token\n\n\n"
+        "async def test_returning_fixture(\n"
+        "    channel: Fixture[Token], fx: Fixtures\n"
+        ") -> None:\n"
+        "    proxied = await fx.channel\n"
+        "    assert channel is proxied, (\n"
+        "        'a returning async fixture must reach the same per-test "
+        "cache as a yielding one — the iscoroutine branch of _build_async "
+        "is on every route now'\n"
+        "    )\n"
+    )
+    _scaffold(
+        root,
+        {
+            "pyproject.toml": _PYPROJECT,
+            "suite/__init__.py": "",
+            "suite/_kinds.py": _KINDS,
+            "suite/__fixtures__.py": fixtures,
+            "suite/test_async.py": test_body,
+        },
+    )
+
+    # Act
+    out, err, rc = helpers.run_oxitest(None, "--serial", cwd=str(root))
+    events = _events(log)
+
+    # Assert
+    assert rc == 0, (
+        f"rc={rc} — the two routes did not observe the same instance"
+        f"\nstdout:\n{out}\nstderr:\n{err}"
+    )
+    assert len(_tagged(events, "SETUP")) == 1, (
+        f"a returning async fixture must build exactly once (events={events}) "
+        "— the iscoroutine branch must write the per-test cache too"
     )
