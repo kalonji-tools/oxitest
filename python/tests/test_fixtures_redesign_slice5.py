@@ -77,6 +77,43 @@ def test_another_files_inline_fixture_is_refused_at_collection() -> None:
     )
 
 
+def test_a_narrowed_run_advises_the_inline_remedy_not_the_qualified_form() -> None:
+    """The message a narrowing Target produces, read from a real run (#1759).
+
+    A file Target collects ``test_sibling.py`` alone, so ``test_inline`` is
+    never imported and the run reports the shortcut miss rather than the
+    boundary violation. That message used to end ``use the qualified form
+    fx.<package>.test_inline`` — which is the form the user already wrote.
+
+    Asserted end to end rather than on ``shortcut_miss_message`` alone: the
+    unit tests in ``test_shortcut_miss_message.py`` cannot see a call site that
+    stops using the function, and the user-visible advice would revert with
+    every one of them still green.
+    """
+    # Act
+    stdout, stderr, rc = helpers.run_oxitest(
+        _INLINE_CROSS / "slice5_inline_cross" / "test_sibling.py"
+    )
+    output = stdout + stderr
+
+    # Assert
+    assert rc == _EXIT_USAGE, (
+        f"the reach is illegal however the run is narrowed, so a file Target "
+        f"must still refuse with a usage error; rc={rc}\nstdout:\n{stdout}\n"
+        f"stderr:\n{stderr}"
+    )
+    assert "qualified form" not in output, (
+        f"fx.test_inline.per_module *is* the qualified form; advising it sends "
+        f"the user back to what they wrote and contradicts the inline rule the "
+        f"same message states one sentence earlier; got:\n{output}"
+    )
+    assert "__fixtures__.py" in output, (
+        f"the message must name the remedy that works — raising the "
+        f"declaration to a home both modules can see — rather than only "
+        f"refusing the access; got:\n{output}"
+    )
+
+
 def test_the_declaring_module_still_reaches_its_own_inline_fixture() -> None:
     """The control for the refusal above.
 
