@@ -511,36 +511,25 @@ def test_async_proxy_routes_build_once(tmp: TempDir) -> None:
     )
 
 
-# ── (g) async param + proxy routes still build twice (#1805) ─────────────────
+# ── (g) async param + proxy routes share the per-test cache (#2093) ──────────
 
 
-def test_async_param_and_proxy_routes_still_build_twice(tmp: TempDir) -> None:
-    """Mixing ``Fixture[T]`` and ``await fx.<name>`` on one async fixture builds twice.
+def test_async_param_and_proxy_routes_build_once(tmp: TempDir) -> None:
+    """``Fixture[T]`` and ``await fx.<name>`` on one async fixture build once.
 
-    A deferred defect against ADR-0009, not a design decision: the param route
-    hands an uncached coroutine to the execution middleware, so it cannot reach
-    the per-test cache the proxy route uses. Convergence is gated on #1740.
-
-    The scaffolded test asserts the **contract** and is marked
-    ``xfail(strict=True)``, so the suite never states a rule ADR-0009 denies.
-    When #1740 lands the inner test xpasses, a strict xpass fails the run, and
-    the ``rc == 0`` assertion below is what reports it.
+    The param route used to hand an uncached coroutine to the execution
+    middleware, so it could not reach the per-test cache the proxy route uses.
+    It now hands a wrapper coroutine that resolves through ``_build_async``,
+    which owns that cache. ADR-0009: function lifetime is once per test in the
+    fixture's B1 scope, whatever route reaches it.
     """
     # Arrange
     root = Path(tmp) / "proj"
     log = Path(tmp) / "events.log"
     test_body = (
         "from __future__ import annotations\n"
-        "import oxitest as oxi\n"
         "from oxitest import Fixture, Fixtures\n"
         "from suite._kinds import Token\n\n\n"
-        "@oxi.mark.xfail(\n"
-        "    reason='#1805 — the async param route hands an uncached "
-        "coroutine to the execution middleware, so it cannot share the "
-        "per-test cache the proxy route uses; convergence is gated on "
-        "#1740',\n"
-        "    strict=True,\n"
-        ")\n"
         "async def test_param_and_proxy_converge(\n"
         "    channel: Fixture[Token], fx: Fixtures\n"
         ") -> None:\n"
@@ -567,25 +556,16 @@ def test_async_param_and_proxy_routes_still_build_twice(tmp: TempDir) -> None:
 
     # Assert
     assert rc == 0, (
-        f"rc={rc} means the inner test did not xfail. If it xpassed, the param "
-        "and proxy routes have converged (#1740 landed) — drop the xfail "
-        "marker and this test becomes the permanent regression test. Any "
-        f"other failure is a real break.\nstdout:\n{out}\nstderr:\n{err}"
-    )
-    assert "xfailed" in out, (
-        "the run must report xfailed specifically — 'passed' would mean the "
-        "marker was dropped and the gap silently closed, or that the fixture "
-        f"never ran\nstdout:\n{out}"
+        f"rc={rc} — the param and proxy routes did not observe the same "
+        f"instance\nstdout:\n{out}\nstderr:\n{err}"
     )
     setups = _tagged(events, "SETUP")
     teardowns = _tagged(events, "TEARDOWN")
-    assert len(setups) == 2, (
-        f"the mixed-route access must build exactly twice, once per route "
-        f"(events={events}) — a third build would be a new leak that this "
-        "test's xfail alone would absorb silently"
+    assert len(setups) == 1, (
+        f"the mixed-route access must build exactly once (events={events}) — "
+        "the param route must hit the per-test cache the proxy route writes"
     )
-    assert sorted(teardowns) == sorted(setups), (
-        f"teardowns {teardowns} do not match setups {setups} — both instances "
-        "must be drained; a leaked async teardown is a real bug that the "
-        "deferred convergence does not excuse"
+    assert teardowns == setups, (
+        f"teardowns {teardowns} do not match setups {setups} — the single "
+        "build must be drained exactly once, on the loop that created it"
     )
