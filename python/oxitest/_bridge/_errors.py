@@ -63,7 +63,11 @@ def _default_fixture_not_found_message(name: str, namespace: str) -> str:
     declarations register on module import, so whether this process knows about
     one depends on worker assignment and import order — a hint that appeared
     only sometimes would be worse than one that is always true and sometimes
-    irrelevant (#1759).
+    irrelevant.
+
+    This holds for the *namespaced* message below. The bare shortcut message
+    (``shortcut_miss_message``) does branch, on a pure name test that reads no
+    catalog and so cannot vary with the schedule (#1759).
     """
     if namespace:
         return (

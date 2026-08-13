@@ -68,9 +68,11 @@ pub fn parse_file(path: &Utf8Path) -> Option<(String, Vec<ast::Stmt>)> {
 /// Check whether a name follows the `test_*` convention.
 ///
 /// `_module_source_registrar.py` restates this prefix, to refuse a definition
-/// that is both `test_`-named and `@oxi.fixture`-decorated (#2066). The prefix
-/// is not configurable, so the two copies cannot drift by configuration — only
-/// by an edit to one of them. Change this and change that.
+/// that is both `test_`-named and `@oxi.fixture`-decorated (#2066).
+/// `_fixture_session._looks_like_test_module` restates it a third time, to
+/// decide which remedy the shortcut-miss message advises (#1759). The prefix
+/// is not configurable, so the copies cannot drift by configuration — only by
+/// an edit to one of them. Change this and change those.
 pub fn is_test_fn(name: &str) -> bool {
     name.starts_with("test_")
 }
