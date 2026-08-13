@@ -1,4 +1,4 @@
-"""Wire protocol v6 — task-side version check and multi-module tasks (#1745, #1780)."""
+"""Task-side version check and multi-module tasks."""
 
 import json
 import os
