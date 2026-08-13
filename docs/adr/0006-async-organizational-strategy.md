@@ -216,3 +216,27 @@ error in teardown of fixture 'sync_with_own_loop': asyncio.run() cannot be calle
 A sync teardown must not call `asyncio.run` or `loop.run_until_complete`. Narrowing the diversion to sync fixtures declared *after* the first async entry would shrink the exposure without removing it, and was rejected: it makes the behaviour depend on declaration position, which is harder to state than the rule it avoids.
 
 **What pins this.** `python/tests/test_async_task_identity.py`, against `python/tests/data/arranged_task_identity/`. It asserts task identity with `asyncio.current_task()` names rather than `id()` — CPython can give a freed task's address to the next task, and a first probe on this issue read "one task" from that reuse. `anyio` is deliberately **not** a test dependency: task identity is the invariant, and the standard library states it directly.
+
+### Amendment 4 — the route that builds a function-lifetime async fixture owns where its teardown drains (2026-08-13)
+
+Amendment 3 made every declaration route share one task. It left open **where the teardown of a shared build goes** — a question that could not arise while each route built its own instance.
+
+**The rule.** At `lifetime="function"`, the route that *builds* the fixture owns its teardown destination. A fixture reached by the `Fixture[T]` parameter or the `fx.` proxy registers into the per-test sink and drains with the parameter fixtures. A fixture reached by `@oxi.arrange` registers into that arranged step and drains with the arranged fixtures, after them.
+
+**Why the destination cannot be read off the fixture.** Every route now resolves through `_build_async`, so the fixture definition says nothing about which one asked. The destination is set by `_advance_arranged`, which points `async_teardown_sink` at the step it is advancing and resets it after. Arranged steps are advanced before parameters are unpacked, so when both routes reach one fixture the arranged step builds it and owns its teardown.
+
+**What was measured.** On `main` at `7f4eaef6`, CPython 3.12.13, Linux x86_64:
+
+| Routes in one test | Legal? | Builds before | Builds after |
+|---|---|---|---|
+| `Fixture[T]` parameter + `fx.` proxy | yes | **2** | 1 |
+| `@oxi.arrange` + `fx.` proxy | yes | **2** | 1 |
+| `@oxi.arrange` + `Fixture[T]` parameter | **refused at collection** | — | unchanged |
+
+The third pair is refused by the collector, so `@oxi.arrange` plus the proxy is the only way to arrange a fixture *and* read its value.
+
+**Why the parameter route hands back a coroutine and not a handle.** Three consumers classify an async fixture value with `inspect.iscoroutine` — the sync-test guard, the parameter unpacker and the executor's arranged-step classifier. An `AsyncFixtureHandle` is not a coroutine, so the guard would stop seeing it. That guard *builds a message* rather than raising, so **the illegal cell of this ADR would reopen with nothing reporting the loss.** A wrapper coroutine keeps all three correct by construction.
+
+**One ordering trap, measured.** `_teardown_async_generators` reverses its own input. A step's owned teardowns are recorded in setup order, so they are passed as-is; reversing first double-reverses and tears a dependency down **before** its dependent.
+
+**What pins this.** `python/tests/test_function_tier_cache.py` sections (g) and (h) — the second runs under the parallel scheduler on purpose — and `test_arrange_and_proxy_routes_build_once` plus `test_arranged_async_fixture_tears_down_after_its_dependency` in `python/tests/test_arrange_async.py`.
