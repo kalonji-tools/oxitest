@@ -660,9 +660,19 @@ mod tests {
         assert!(w <= 100, "sep_width must not exceed cap of 100");
     }
 
+    /// The caching half of `sep_width` is `#[cfg(not(test))]`, so a test build
+    /// has nothing to be consistent about — it returns a literal. What a test
+    /// build does have is the fixed 80 that every snapshot in this crate is
+    /// rendered against, and that is the property worth pinning.
     #[test]
-    fn test_sep_width_is_consistent() {
-        assert_eq!(sep_width(), sep_width());
+    fn test_sep_width_is_the_deterministic_test_width() {
+        assert_eq!(
+            sep_width(),
+            80,
+            "test builds pin sep_width to 80 so separator lines are the same \
+             width on every machine; a different value here reflows every \
+             snapshot that renders a separator"
+        );
     }
 
     #[test]

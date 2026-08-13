@@ -32,14 +32,34 @@ const JITTER_SLACK: std::time::Duration = std::time::Duration::from_secs(2);
 #[cfg(test)]
 const SPAM_WINDOW: std::time::Duration = std::time::Duration::from_secs(10);
 
+/// The watchdog every spammer test runs under.
+///
+/// A constant rather than a local per test, because it is one of the two terms
+/// of the ceiling those tests assert — `SPAMMER_WATCHDOG + JITTER_SLACK` — and the
+/// invariant below cannot see a local. A test that raises its own watchdog past
+/// the spam window would otherwise pass vacuously, which is the exact defect
+/// #1962 fixed and this constant stops from returning (#2112).
+///
+/// Only the spammer tests use it. The other watchdogs in this file are locals
+/// on purpose: they assert no ceiling against `SPAM_WINDOW`, so they do not
+/// depend on the invariant below and must not be bound to it.
+#[cfg(test)]
+const SPAMMER_WATCHDOG: std::time::Duration = std::time::Duration::from_millis(50);
+
 // The relationship above is what makes the spammer tests mean anything: if the
 // window ever drops below the ceiling they assert, they pass because the
 // spammer ran out rather than because the watchdog fired, and nothing says so.
 // A test that silently stops testing its own name is the defect #1962 exists to
 // fix, so this invariant is checked rather than described.
+//
+// The ceiling is `SPAMMER_WATCHDOG + JITTER_SLACK`, not `JITTER_SLACK` alone: the
+// watchdog has to fire before the test can measure the slack after it. Checking
+// only the slack term made the message's "any ceiling" a claim the check did
+// not cover, and the gap grew with every millisecond added to the watchdog
+// (#2112).
 #[cfg(test)]
 const _: () = assert!(
-    SPAM_WINDOW.as_millis() > JITTER_SLACK.as_millis(),
+    SPAM_WINDOW.as_millis() > SPAMMER_WATCHDOG.as_millis() + JITTER_SLACK.as_millis(),
     "SPAM_WINDOW must outlast any ceiling asserted against it, or the spammer \
      tests pass vacuously"
 );
@@ -1046,12 +1066,11 @@ mod drain_tests {
             }
         });
 
-        let watchdog = Duration::from_millis(50);
         let start = std::time::Instant::now();
-        drain_until_eof(&line_rx, watchdog, &result_tx, 0);
+        drain_until_eof(&line_rx, SPAMMER_WATCHDOG, &result_tx, 0);
 
         assert!(
-            start.elapsed() <= watchdog + JITTER_SLACK,
+            start.elapsed() <= SPAMMER_WATCHDOG + JITTER_SLACK,
             "blank output must not reset the deadline, or a spamming worker \
              keeps the coordinator reading forever"
         );
@@ -1205,10 +1224,10 @@ mod drain_tests {
             }
         });
 
-        let watchdog = Duration::from_millis(50);
         let start = std::time::Instant::now();
 
-        let (outcome, received) = drain_worker_results(&line_rx, 1, watchdog, &result_tx, 0);
+        let (outcome, received) =
+            drain_worker_results(&line_rx, 1, SPAMMER_WATCHDOG, &result_tx, 0);
 
         let elapsed = start.elapsed();
         assert_eq!(received, 0, "no real result was ever sent");
@@ -1218,11 +1237,11 @@ mod drain_tests {
              the watchdog must fire. Got {outcome:?}"
         );
         assert!(
-            elapsed <= watchdog + JITTER_SLACK,
+            elapsed <= SPAMMER_WATCHDOG + JITTER_SLACK,
             "the watchdog did not fire within {:?}; elapsed={elapsed:?}. \
              Non-protocol lines are resetting the deadline, which holds the \
              drain open for as long as a test keeps printing.",
-            watchdog + JITTER_SLACK
+            SPAMMER_WATCHDOG + JITTER_SLACK
         );
         drop(handle);
     }
@@ -1328,7 +1347,7 @@ mod result_handler_tests {
 #[cfg(test)]
 mod repro_tests {
     use super::*;
-    use std::time::{Duration, Instant};
+    use std::time::Instant;
 
     /// Regression test for bug #44: a subprocess spamming empty lines must not
     /// prevent the watchdog from firing.
@@ -1358,10 +1377,10 @@ mod repro_tests {
             }
         });
 
-        let watchdog = Duration::from_millis(50);
         let start = Instant::now();
 
-        let (outcome, received) = drain_worker_results(&line_rx, 1, watchdog, &result_tx, 0);
+        let (outcome, received) =
+            drain_worker_results(&line_rx, 1, SPAMMER_WATCHDOG, &result_tx, 0);
 
         let elapsed = start.elapsed();
         assert_eq!(received, 0, "no real results were sent");
@@ -1372,10 +1391,10 @@ mod repro_tests {
         // Fails with the bug (elapsed ≈ the spam window); passes after the fix
         // (elapsed ≈ the watchdog).
         assert!(
-            elapsed <= watchdog + JITTER_SLACK,
+            elapsed <= SPAMMER_WATCHDOG + JITTER_SLACK,
             "BUG #44: watchdog did not fire within {:?}; elapsed={elapsed:?}. \
              Empty lines are resetting the recv_timeout timer.",
-            watchdog + JITTER_SLACK
+            SPAMMER_WATCHDOG + JITTER_SLACK
         );
     }
 }

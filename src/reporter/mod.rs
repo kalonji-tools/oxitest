@@ -256,19 +256,67 @@ mod tests {
         assert_eq!(vote.code(), ExitCode::Success);
     }
 
+    // Both tests read the block through `fmt_collect_errors`, which is what
+    // `print_collect_errors` prints. Asserting on the printed bytes is not
+    // available: `println!` writes to a stdout no Rust test can capture, so a
+    // test over the printing function alone can only observe that it did not
+    // panic — which a body that prints nothing also satisfies (#2112).
+
     #[test]
     fn test_print_collect_errors_is_noop_when_empty() {
-        use super::print::print_collect_errors;
-        // smoke test — no panic when slice is empty
+        use super::print::{fmt_collect_errors, print_collect_errors};
+
+        let block = fmt_collect_errors(&[], false);
+
+        assert!(
+            block.is_empty(),
+            "an empty error slice must render nothing at all — a header or a \
+             bare separator would announce collection errors on every clean run"
+        );
+        // The printing half must still not panic on the empty slice.
         print_collect_errors(&[], false);
         print_collect_errors(&[], true);
     }
 
     #[test]
     fn test_print_collect_errors_prints_when_non_empty() {
-        use super::print::print_collect_errors;
-        // smoke test — function must not panic when given errors
-        let errors = vec![CollectError::PyError("import failed".to_string())];
+        use super::print::{fmt_collect_errors, print_collect_errors};
+        let errors = vec![
+            CollectError::PyError("import failed".to_string()),
+            CollectError::PyError("syntax error".to_string()),
+        ];
+
+        let block = fmt_collect_errors(&errors, false);
+
+        assert!(
+            block.starts_with("\nCOLLECTION ERRORS\n"),
+            "the block must open with its own header — without it the errors \
+             run on from whatever the reporter printed last, and the reader \
+             cannot tell a collection failure from a test failure. Got: \
+             {block:?}"
+        );
+        // Both errors, in order, with the blank line between them. Asserting
+        // each one separately as well would add no refusal: a block holding
+        // this string holds both.
+        assert!(
+            block.contains("import failed\n\nsyntax error"),
+            "every collection error must reach the block, in order and \
+             separated by a blank line; one dropped here is a file that \
+             silently never ran, and two run together read as one traceback. \
+             Got: {block:?}"
+        );
+        assert!(
+            fmt_collect_errors(&errors, true).contains('\u{1b}'),
+            "the color block must carry an ANSI escape; the separator is the \
+             only colored part, so a plain one here means the run lost its \
+             dim rule and not that color was disabled"
+        );
+        assert!(
+            !block.contains('\u{1b}'),
+            "the plain block must carry no ANSI escape, or a redirected log \
+             fills with control bytes"
+        );
+        // The printing half must still not panic, in either color mode.
         print_collect_errors(&errors, false);
         print_collect_errors(&errors, true);
     }
