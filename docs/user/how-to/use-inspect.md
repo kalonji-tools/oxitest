@@ -124,8 +124,8 @@ It shows four fixed **Sections** in this order:
    *(phase 1)*
 3. **Declarations** — every declaration file with its fixture count. *(phase 2)*
 4. **Signals** — graph-derived diagnostics: unused fixtures,
-   broken edges, high-fan-in fixtures, deep dependency chains, and scope
-   mismatches. *(phase 2)*
+   high-fan-in fixtures, deep dependency chains, and scope mismatches.
+   *(phase 2)*
 
 Phase-1 data is available immediately from the Rust AST scan. Phase-2 data
 appears once the background Python session finishes fixture and plugin

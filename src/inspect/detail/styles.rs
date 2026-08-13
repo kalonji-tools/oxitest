@@ -5,7 +5,7 @@ use ratatui::{
     text::{Line, Span},
 };
 
-use crate::inspect::graph::{BrokenEdge, InspectGraph, NodeRef};
+use crate::inspect::graph::{InspectGraph, NodeRef};
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -21,10 +21,6 @@ pub fn value_style() -> Style {
 
 pub fn sigil_style() -> Style {
     Style::default().fg(Color::Cyan)
-}
-
-pub fn warning_style() -> Style {
-    Style::default().fg(Color::Yellow)
 }
 
 pub fn header_style() -> Style {
@@ -48,7 +44,7 @@ pub fn bool_field<'a>(label: &str, value: bool) -> Line<'a> {
     field_line(label, if value { "yes" } else { "no" })
 }
 
-/// Render a section header (e.g., "Depends On", "Consumers").
+/// Render a section header (e.g., "Fixture Dependencies", "Consumers").
 pub fn section_header<'a>(title: &str) -> Line<'a> {
     Line::from(Span::styled(format!("  {title}"), header_style()))
 }
@@ -60,27 +56,6 @@ pub fn connection_line<'a>(sigil: char, name: &str) -> Line<'a> {
         Span::styled(format!("{sigil}"), sigil_style()),
         Span::raw(format!(" {name}")),
     ])
-}
-
-/// Render a broken edge entry with warning sigil.
-pub fn broken_edge_line<'a>(qualifier: &str, binding_type: &str) -> Line<'a> {
-    Line::from(vec![
-        Span::raw("    "),
-        Span::styled("!", warning_style()),
-        Span::raw(format!(" {qualifier}")),
-        Span::styled(format!(" ({binding_type}, unresolved)"), warning_style()),
-    ])
-}
-
-/// Collect broken edges for a given node reference.
-pub fn broken_edges_for<'a>(
-    broken_edges: &'a [BrokenEdge],
-    node_ref: &NodeRef,
-) -> Vec<&'a BrokenEdge> {
-    broken_edges
-        .iter()
-        .filter(|e| e.from == *node_ref)
-        .collect()
 }
 
 /// Append up to `max_shown` connection lines from `edges`, then a "N more"
