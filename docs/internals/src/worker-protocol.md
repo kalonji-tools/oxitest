@@ -91,9 +91,10 @@ The coordinator's per-result watchdog deadline resets on each real line regardle
 
 ## Task Schema (stdin)
 
-Each line on stdin is a JSON object. Every task carries `protocol_version` as
-well; it is omitted below so the example stays about the task shape, and
-`PROTOCOL_VERSION` gives its value.
+Each line on stdin is a JSON object. Every task must carry `protocol_version`,
+and the worker refuses a task that omits it — see [Version
+mismatch](#version-mismatch). It is left out of the example below only so the
+example stays about the task shape; `PROTOCOL_VERSION` gives its value.
 
 ```json
 {
@@ -108,7 +109,7 @@ well; it is omitted below so the example stays about the task shape, and
             ]
         }
     ],
-    "fixture_modules": [{"module": "tests.__fixtures__", "anchor": "tests"}],
+    "fixture_modules": [{"module": "tests/__fixtures__.py", "anchor": "tests"}],
     "plugins": {"modules": [], "settings": {}},
     "timeout_secs": 30,
     "keep_tmp": "failed",
@@ -362,8 +363,10 @@ Steps:
    Use `#[serde(skip_serializing_if = "Option::is_none")]` if the field is optional,
    so older workers that do not expect it receive compact JSON.
 
-2. Populate the field in `run_worker_loop()` in `src/worker_session.rs`, where tasks
+2. Populate the field in `build_task()` in `src/worker_session.rs`, where tasks
    are constructed from the `WorkerParams` struct and the scheduler's module groups.
+   It was extracted from `run_worker_loop()` so `cargo test` can reach it — the
+   loop itself needs a live subprocess and a scheduler (#1747).
 
 3. Read the field in the Python worker (`python/oxitest/_bridge/worker.py`).
    Use `.get("field_name", default)` for backwards compatibility with older
