@@ -1,0 +1,4 @@
+[tool.oxitest]
+testpaths = ["arranged_task_identity"]
+python_files = ["test_*.py"]
+strict = "abort"
