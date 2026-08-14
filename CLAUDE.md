@@ -102,6 +102,16 @@ The **user** invokes `grill-with-docs` — it is marked `disable-model-invocatio
 
 **Check for a duplicate with `gh issue list --state all --limit <N>`, never `gh issue list --search`, and filter locally.** The list endpoint is strongly consistent; `--search` reads an asynchronously-populated index and returned **zero rows for an issue filed 33 minutes earlier** by a concurrent session, so #1970 was filed as a duplicate of #1969 and closed the same hour. The mechanism is unconfirmed — both forms return the row now, so the distinguishing experiment is gone — but the list endpoint is authoritative under either candidate. `--limit` is **not optional**: it defaults to **30** against this repo's 1205 issues, so omitting it reproduces the same silent false negative for any duplicate outside the newest 30. Raise `<N>` when the issue count approaches it.
 
+**Not every finding becomes an issue, and the rule that decides has been re-derived 37 times (`artifact`).** Two rules point opposite ways. The workflow-evaluation series has its own trigger for filing a recurring finding; the standing instruction here is to re-scope one issue in place rather than split work into follow-up tickets. They do not conflict, because they key on different things:
+
+| What you found | Disposition |
+|---|---|
+| Work discovered **inside the unit of work in hand** | Fold it in. No new issue. |
+| A class an **existing issue already owns** | Re-scope that issue in place. This is what the duplicate check above is for. |
+| A problem that recurs across **separate sessions** | File it. No single unit of work owns it, so nothing else can. |
+
+The disposition leaves a mark, which is what makes this `artifact` rather than prose: a fold leaves the commit or comment that carried it, and a re-scope leaves the edited issue. Nothing distinguishes an unmarked fold from a finding somebody forgot. Rows 1 and 2 rest on six recorded maintainer decisions; **row 3 rests on none**, because the record holds no case where the maintainer was asked and chose to file (#2130).
+
 At creation, apply exactly one **category** label, **one or more** `area:` labels, and one **triage state** label. Run `gh label list` for the current vocabulary — this file deliberately does not restate it, because the tracker cannot disagree with itself and a restatement can.
 
 **3. Triage issues.** Every issue gets a **state label** reflecting its triage status. See `docs/agents/triage-labels.md` for the state vocabulary. Triage is also where `priority:` and `size:` are applied — they are judgements, not facts known at filing time, and a guessed `size: M` is worse than no label at all.
