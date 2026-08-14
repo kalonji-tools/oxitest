@@ -39,6 +39,13 @@ jobs:
               # reintroduce a quoted interpolation, and without this entry it
               # is the one change CI never checks.
               - 'justfile'
+              # Same reasoning again, for codespell: it declares no `files`, so
+              # `prek run --all-files` reads every Markdown file — but no
+              # pattern above matched one, so a Markdown-only PR skipped the
+              # only prose check and its typo went red later on someone else's
+              # PR. The globstar reaches the repository root too, which is why
+              # a second `'*.md'` entry is redundant (#2129).
+              - '**/*.md'
               - 'Cargo.*'
               - 'rust-toolchain.toml'
               - 'pyproject.toml'
