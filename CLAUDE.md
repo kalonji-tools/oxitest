@@ -215,9 +215,14 @@ git rebase --onto <base> <old-parent> <branch>   # move a middle commit
 GIT_SEQUENCE_EDITOR=true git rebase --autosquash -i <base>   # fold fixup! commits
 
 git diff --quiet "$BASE" HEAD             # 2. empty ⇒ nothing lost or gained
+git diff --stat "$(git merge-base origin/main HEAD)"..HEAD   # 3. read the FILE LIST against the set you meant to touch
 ```
 
-`git rebase -i` works here **provided `GIT_SEQUENCE_EDITOR` is set** — it is only the interactive editor that is unavailable, not the command, so `--autosquash` is usable too. The two bracketing commands are the point: tree equality proves the regroup preserved content whatever the commits became, which means every gate result from before the regroup still applies afterwards. The baseline is **captured, not chosen** — a ref taken before the edits predates the content it protects, so a *correct* regroup reports `TREE DIFFERS`, presentationally identical to one that lost work.
+`git rebase -i` works here **provided `GIT_SEQUENCE_EDITOR` is set** — it is only the interactive editor that is unavailable, not the command, so `--autosquash` is usable too. The bracketing pair — 1 and 2 — is the point: tree equality proves the regroup preserved content whatever the commits became, which means every gate result from before the regroup still applies afterwards. The baseline is **captured, not chosen** — a ref taken before the edits predates the content it protects, so a *correct* regroup reports `TREE DIFFERS`, presentationally identical to one that lost work.
+
+**Check 2 and check 3 answer different questions, and check 2 is blind to what check 3 catches.** Check 2 compares the branch to a backup of *the same branch*, so content the branch acquired from outside its own commits is present in both refs and cancels out — it reports `TREE IDENTICAL`, correctly, while carrying the defect. Check 3 compares against `main`, where such content has nowhere to hide. This is not hypothetical: `2d7186cf`, a change to fixture dispatch phases, also reverted two merged Dependabot bumps — `taiki-e/install-action` in four workflows and `flake.lock`'s nixpkgs revision — and it merged with every gate green. `git diff --quiet backup 2d7186cf` exits **0**; check 3 lists **fourteen** files of which five belong to no fixture change (#2128).
+
+Check 3 returns no verdict of its own. **You** compare its file list to the set the branch meant to touch, so name that set before you read the output — the check gets weaker as the branch gets longer, and an unfamiliar path in a hundred-file list reads as ordinary.
 
 **Disposition at close (`artifact`).** A pull request that closes an issue leaves a **disposition table** on that issue before the merge: one row per acceptance criterion, naming where each went — shipped, discharged by another issue, filed as a new one, or ruled out of scope. The table carries the literal marker `<!-- disposition -->`, and `just merge-ready` refuses the merge without it.
 
