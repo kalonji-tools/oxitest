@@ -25,6 +25,8 @@ __all__ = [
     "OxitestError",
     "OxitestTimeoutError",
     "ParametrizeError",
+    "PluginLoadError",
+    "PluginNotFoundError",
     "SharedFixtureMutationError",
     "TestContextUnavailableError",
     "TestIdentityUnavailableError",
@@ -398,6 +400,34 @@ class ConflictingCoverageError(OxitestError):
         self.providers = providers
 
 
+class PluginLoadError(OxitestError):
+    """Raised when a plugin cannot be loaded or is invalid.
+
+    Deliberately outside ``_USAGE_ERROR_TYPES``. Eleven of the thirteen raise
+    sites describe a *defective* plugin — no ``oxitest_plugin()``, an entry
+    point that raises, a wrong return type. That is the plugin author's bug, and
+    exit 4 would tell the user to correct a request that is already correct
+    (#2185).
+
+    Lives here rather than in ``plugin_loader`` because ``_USAGE_ERROR_TYPES``
+    is in this file. A class in one file and the vote that decides its exit code
+    in another is how the two drift.
+    """
+
+
+class PluginNotFoundError(PluginLoadError):
+    """Raised when the plugin module named in ``plugins`` is not installed.
+
+    In ``_USAGE_ERROR_TYPES``. A ``[tool.oxitest]`` value that names something
+    absent is an invalid request, which is the shape ADR-0014 fixed for a
+    Target and ADR-0008's amendment extends to the configuration surface.
+
+    A subclass rather than a sibling: ``isinstance`` then gives this case the
+    vote while ``PluginLoadError`` stays out of it, so one tuple entry separates
+    the two kinds.
+    """
+
+
 # ─── Parametrize / loading errors ─────────────────────────────────────────────
 
 
@@ -659,11 +689,18 @@ class ArrangeError(OxitestError):
 #: ``FixtureSetupError`` is deliberately absent. It also wraps genuine
 #: exceptions from a user's fixture body, and those are ordinary failures;
 #: only ``AsyncDependencyError`` names the lifetime refusal.
+#:
+#: ``PluginLoadError`` is deliberately absent for the same shape of reason, and
+#: ``PluginNotFoundError`` is present: a plugin the user did not install is a
+#: value naming something absent, and a plugin that is defective is its author's
+#: bug (#2185).
 _USAGE_ERROR_TYPES: tuple[type[BaseException], ...] = (
     AsyncDependencyError,
     AsyncFixtureAccessError,
+    BackendNotFoundError,
     BoundaryError,
     FixtureNotFoundError,
+    PluginNotFoundError,
     TestReturnedValueError,
     UsageError,
 )

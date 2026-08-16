@@ -10,7 +10,14 @@ import os
 from pathlib import Path
 
 from oxitest import TempDir
-from oxitest._bridge._errors import InternalError, UsageError, is_usage_error
+from oxitest._bridge._errors import (
+    BackendNotFoundError,
+    InternalError,
+    PluginLoadError,
+    PluginNotFoundError,
+    UsageError,
+    is_usage_error,
+)
 from tests import helpers
 
 _PLUGIN_ENTRY = """\
@@ -114,6 +121,51 @@ def test_usage_error_votes_the_usage_exit_code() -> None:
         "ADR-0014 fixes exit 4 by the class of the error; a class meaning 'a "
         "user-facing API is used incorrectly' that does not vote it leaves the "
         "two names disagreeing about one concept"
+    )
+
+
+def test_an_absent_plugin_is_a_usage_error() -> None:
+    """A plugin that is not installed is a value naming something absent."""
+    # Arrange
+    absent = PluginNotFoundError('plugin "x" not found. Is it installed?')
+
+    # Act
+    verdict = is_usage_error(absent)
+
+    # Assert
+    assert verdict is True, (
+        "ADR-0008's amendment makes a [tool.oxitest] value that names something "
+        "absent an invalid request, which exit-codes.md fixes at ExitCode 4"
+    )
+
+
+def test_a_defective_plugin_is_not_a_usage_error() -> None:
+    """A plugin author's bug is not the user's invalid request."""
+    # Arrange
+    defective = PluginLoadError('plugin "x" oxitest_plugin() raised: boom')
+
+    # Act
+    verdict = is_usage_error(defective)
+
+    # Assert
+    assert verdict is False, (
+        "exit 4 tells the user to correct their request; a plugin whose entry "
+        "point raises is not something the user's pyproject.toml can correct"
+    )
+
+
+def test_an_absent_async_backend_is_a_usage_error() -> None:
+    """async_backend names a backend that does not exist."""
+    # Arrange
+    absent = BackendNotFoundError("no_such_backend")
+
+    # Act
+    verdict = is_usage_error(absent)
+
+    # Assert
+    assert verdict is True, (
+        "ADR-0014 makes a value naming something absent a usage error; a backend "
+        "name in [tool.oxitest] is that shape one file away from a Target"
     )
 
 
