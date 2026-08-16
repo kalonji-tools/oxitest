@@ -67,7 +67,9 @@ Starting with wire protocol v3, every LDJSON line the worker writes to stdout ca
 | `"diagnostic"` | `WireDiagnostic` | User-facing message (severity, context, message, optional file/lineno) surfaced via the reporter summary block |
 | `"trace"` | `WireTrace` | Developer log event (level, module, message) routed to Rust's `tracing` crate; gated by `RUST_LOG` |
 
-Missing or unknown `"type"` values default to `"result"` for backwards compatibility with pre-v3 workers (see `default_result_type()` in `wire.rs`).
+`"type"` is **required**, and it is the protocol's membership test. A line without it is a non-protocol line: the coordinator logs it, drops it, and counts it toward nothing. An *unknown* `"type"` value is different — it is protocol traffic from a worker this coordinator does not understand, so it is consumed, counted toward nothing, and it does reset the watchdog.
+
+The field carried a `"result"` default for pre-v3 workers until #2143 removed it. The worker ships in the same wheel as the coordinator, so a pre-v3 worker cannot reach a v8 coordinator, and the default made every JSON line a test wrote to fd 1 consume a result slot.
 
 **Diagnostic payload** (`{"type": "diagnostic", ...}`):
 
@@ -87,7 +89,7 @@ Missing or unknown `"type"` values default to `"result"` for backwards compatibi
 | `module` | string | Rust module name for the trace target |
 | `message` | string | Log message body |
 
-The coordinator's per-result watchdog deadline resets on each real line regardless of `"type"`, so diagnostic and trace lines keep the worker "alive" from the deadline's perspective.
+The coordinator's per-result watchdog deadline resets on each line that carries a `"type"` field, whatever its value, so diagnostic and trace lines keep the worker "alive" from the deadline's perspective. A line without the field does not reset it — see [Non-protocol lines on worker stdout](#non-protocol-lines-on-worker-stdout).
 
 ## Task Schema (stdin)
 
@@ -253,27 +255,42 @@ logged as bad output.
 
 A worker's stdout is the protocol pipe, and `_emit` is not its only writer: a test, a
 C extension, or an uncaptured child process inherits fd 1 and can put arbitrary bytes
-on it. Rust classifies each line by whether it is JSON at all.
+on it. Rust classifies each line by whether it carries the `"type"` discriminator.
 
 | Line | Treatment |
 | --- | --- |
 | A valid `WireResult` | Counted. Forwarded to the reporter |
-| Valid JSON, but not a valid result | Counted. `WireMinimal` salvage, or an Error sentinel under node ID `<worker>::malformed_output` |
-| Not JSON at all | **Not counted.** Logged as `ignoring non-protocol line on worker stdout`, then dropped |
+| `"type": "result"`, but not a valid result | Counted. `WireMinimal` salvage, or an Error sentinel under node ID `<worker>::malformed_output` |
+| `"type": "diagnostic"` or `"type": "trace"` | **Not counted.** Handled inline. Resets the watchdog |
+| An unknown `"type"` value | **Not counted.** Logged as `unknown worker message type — skipping`. Resets the watchdog |
+| Valid JSON with no `"type"` field | **Not counted.** Logged as `ignoring non-protocol line on worker stdout`, then dropped. Does not reset the watchdog |
+| Not JSON at all | **Not counted.** Logged as `ignoring non-protocol line on worker stdout`, then dropped. Does not reset the watchdog |
 
-The third row changed in #2010. A line that is not JSON used to count toward the
-expected result count, so one `print()` in a test consumed the slot its own result
-needed. The real result then arrived after the drain had finished and was discarded as
-`unexpected result after the final task group`, so the run reported `no tests ran` and
-exited 0.
+The last row changed in #2010 and the one above it in #2143. A line that is not JSON
+used to count toward the expected result count, so one `print()` in a test consumed the
+slot its own result needed. The real result then arrived after the drain had finished
+and was discarded as `unexpected result after the final task group`, so the run reported
+`no tests ran` and exited 0.
+
+#2010 fixed that for text and left the JSON branch, so `print(json.dumps(...))` kept
+deleting one test per line. Measured before the fix, 3 runs of 3 on a 6-item suite at
+`-n 2`: `5 passed`, exit 0. Two such prints gave `4 passed`.
+
+The `<worker>::malformed_output` sentinel is not reported today. `handle_worker_result`
+looks its node ID up in `item_lookup`, misses, and skips the result, so the sentinel
+consumes the slot and produces no report entry. How a broken worker result should be
+reported is undecided; #2143 records the measurement and does not change it.
 
 The cost of not guessing: a line that *swallows* a result — test output with no
 trailing newline, so the result concatenates onto it — leaves the worker one result
 short. The watchdog or the disconnect reports that shortfall instead of an immediate
 sentinel. That is slower, and it is accurate.
 
-The watchdog deadline is reset by any non-empty line, protocol or not. A worker that is
-producing output is alive.
+The watchdog deadline is reset by any non-empty line that is **protocol traffic**. A
+worker that is answering is alive; a test that is printing is not the worker answering,
+so its output cannot prove liveness. #2010 made that true for text and #2143 for JSON.
+Without it a test looping on `print()` holds the drain open — measured at 4.79M lines
+and still running.
 
 ### Undecodable bytes on worker stdout
 
