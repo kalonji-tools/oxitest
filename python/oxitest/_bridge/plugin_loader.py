@@ -39,6 +39,8 @@ from oxitest._bridge._errors import (
     ConflictingCoverageError,
     ConflictingDebuggerError,
     OxitestError,
+    PluginLoadError,
+    PluginNotFoundError,
     UsageError,
 )
 from oxitest._bridge._namespace_validation import namespace_defect
@@ -88,8 +90,44 @@ LAZY_PROTOCOLS = frozenset(
 )
 
 
-class PluginLoadError(Exception):
-    """Raised when a plugin cannot be loaded or is invalid."""
+def _absent_module_is_the_plugin(missing: str | None, module_name: str) -> bool:
+    """True when the absent module is the plugin itself, or a package holding it.
+
+    ``ImportError.name`` reports the **first** absent segment, not the name that
+    was requested. For a plugin named ``pkg.sub`` whose ``pkg`` is not installed
+    it holds ``pkg``, so an equality test reads that plugin as installed and
+    reports the wrong cause (#2185).
+
+    A dependency that is absent never prefixes the plugin's own dotted name, and
+    the trailing dot stops ``foo_bar`` from reading as a prefix of ``foo``.
+
+    ``missing`` is ``None`` for the ``ImportError`` shapes that name no module.
+    That case takes the defective arm, which states what failed instead of
+    guessing that the plugin is absent.
+    """
+    if missing is None:
+        return False
+    return missing == module_name or module_name.startswith(f"{missing}.")
+
+
+def _import_plugin_module(module_name: str) -> ModuleType:
+    """Import a plugin module, naming what is absent when the import fails.
+
+    Both loading phases import a plugin, so both need the same attribution. One
+    function rather than two arms: the two used to hold one message between
+    them, and that message was wrong for a plugin that is installed (#2185).
+    """
+    try:
+        return importlib.import_module(module_name)
+    except ImportError as e:
+        if _absent_module_is_the_plugin(e.name, module_name):
+            msg = f'plugin "{module_name}" not found. Is it installed?\n  {e}'
+            raise PluginNotFoundError(msg) from e
+        msg = (
+            f'plugin "{module_name}" failed to import.\n'
+            f"  The plugin is installed. An import inside it failed: {e}"
+        )
+        raise PluginLoadError(msg) from e
 
 
 def _coerce_str_list(raw: object) -> list[str]:
@@ -111,11 +149,7 @@ def needs_eager_import(declared_protocols: tuple[str, ...]) -> bool:
 
 def activate_entry(entry: DeferredPluginEntry) -> ActivatedPluginEntry:
     """Import and initialise a deferred entry (no CLI-ext config path)."""
-    try:
-        module = importlib.import_module(entry.module_name)
-    except ImportError as e:
-        msg = f'plugin "{entry.module_name}" not found. Is it installed?\n  {e}'
-        raise PluginLoadError(msg) from e
+    module = _import_plugin_module(entry.module_name)
 
     entry_fn = getattr(module, "oxitest_plugin", None)
     if entry_fn is None:
@@ -330,11 +364,7 @@ def _load_single_plugin(
         return
 
     # Import the module
-    try:
-        module = importlib.import_module(module_name)
-    except ImportError as e:
-        msg = f'plugin "{module_name}" not found. Is it installed?\n  {e}'
-        raise PluginLoadError(msg) from e
+    module = _import_plugin_module(module_name)
 
     # Find the entry point function
     entry_fn = getattr(module, "oxitest_plugin", None)
