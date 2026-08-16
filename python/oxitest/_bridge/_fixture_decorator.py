@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
-from oxitest._bridge._errors import UsageError
+from oxitest._bridge._errors import InternalError
 from oxitest._bridge._fixture_registry import LIFETIME_SCOPES
 from oxitest._bridge._lifetime import Lifetime
 
@@ -67,7 +67,7 @@ def fixture(*, lifetime: str, autouse: bool = False) -> Callable[[_F], _F]:
     Raises:
         ValueError: If *lifetime* is not a recognised :class:`~oxitest.Lifetime`
             member.
-        UsageError: If *lifetime* is a recognised member with no scope mapping.
+        InternalError: If *lifetime* is a recognised member with no scope mapping.
 
     Examples:
         Declare a function-scoped fixture in a ``__fixtures__.py`` module:
@@ -110,7 +110,7 @@ def fixture(*, lifetime: str, autouse: bool = False) -> Callable[[_F], _F]:
             f"Supported: {supported}. This is an oxitest bug — please report it "
             f"at kalonji-tools/oxitest."
         )
-        raise UsageError(msg)
+        raise InternalError(msg)
 
     marker = _FixtureMarker(lifetime=tier, autouse=autouse)
 

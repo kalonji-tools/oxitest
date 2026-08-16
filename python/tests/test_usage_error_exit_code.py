@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 from oxitest import TempDir
+from oxitest._bridge._errors import InternalError, is_usage_error
 from tests import helpers
 
 _PLUGIN_ENTRY = """\
@@ -81,4 +82,20 @@ def test_a_valid_plugin_namespace_exits_success(tmp: TempDir) -> None:
         f"the same project without the reserved namespace must pass; if it does "
         f"not, the test above measures a broken scaffold and not the refusal\n"
         f"stdout:\n{stdout}\nstderr:\n{stderr}"
+    )
+
+
+def test_internal_error_is_not_a_usage_error() -> None:
+    """A broken invariant is not an invalid request, so it must not vote exit 4."""
+    # Arrange
+    broken_invariant = InternalError("a broken invariant")
+
+    # Act
+    verdict = is_usage_error(broken_invariant)
+
+    # Assert
+    assert verdict is False, (
+        "InternalError marks an oxitest bug, not a user's invalid request; if it "
+        "voted exit 4 the user would be told to correct configuration that is "
+        "already correct"
     )
