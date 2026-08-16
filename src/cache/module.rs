@@ -6,16 +6,20 @@ use super::{ModuleCacheEntry, TestCache};
 use crate::types::{NodeId, TestItem};
 
 impl TestCache {
-    /// Returns cached `TestItems` for `path` if the file's mtime matches `current_mtime_secs`.
-    /// Returns None on mtime mismatch or unknown path (caller must run Python collection).
+    /// Returns cached `TestItems` for `path` if the file matches `current`.
+    ///
+    /// Returns None on fingerprint mismatch or unknown path (caller must run
+    /// Python collection). The fingerprint carries nanoseconds and size rather
+    /// than whole seconds: an edit inside the same wall-clock second as the
+    /// previous collection used to leave the key unchanged (#2145).
     pub fn cached_module_items(
         &self,
         path: &Utf8Path,
-        current_mtime_secs: u64,
+        current: super::FileFingerprint,
     ) -> Option<Vec<Arc<TestItem>>> {
         let key = path.as_str();
         let mc = self.inner.modules.get(key)?;
-        if mc.mtime_secs != current_mtime_secs {
+        if mc.fingerprint != current {
             return None;
         }
         let items = mc
@@ -30,12 +34,12 @@ impl TestCache {
         Some(items)
     }
 
-    /// Store the collection result for `path` with the given mtime.
+    /// Store the collection result for `path` with the given fingerprint.
     /// Sets dirty = true.
     pub fn update_module_cache(
         &mut self,
         path: &Utf8Path,
-        mtime_secs: u64,
+        fingerprint: super::FileFingerprint,
         items: &[Arc<TestItem>],
     ) {
         let key = path.as_str().to_string();
@@ -43,7 +47,7 @@ impl TestCache {
         self.inner.modules.insert(
             key,
             ModuleCacheEntry {
-                mtime_secs,
+                fingerprint,
                 items: cached_items,
             },
         );
@@ -69,6 +73,15 @@ mod tests {
 
     use super::*;
     use crate::types::{LineNo, MarkerSet};
+
+    /// A fingerprint standing for one distinct file state.
+    ///
+    /// These tests care only that two states compare unequal, so the size
+    /// tracks the timestamp rather than being varied on its own — the fields
+    /// are compared together and neither has a test of its own here.
+    fn fp(seed: u64) -> super::super::FileFingerprint {
+        super::super::FileFingerprint::from_parts(seed, seed)
+    }
 
     #[test]
     fn update_and_retrieve_module_cache_roundtrip() {
@@ -106,9 +119,9 @@ mod tests {
                 arranged: vec![],
             }),
         ];
-        cache.update_module_cache(module_path, 12345, &items);
+        cache.update_module_cache(module_path, fp(12345), &items);
 
-        let cached = cache.cached_module_items(module_path, 12345).unwrap();
+        let cached = cache.cached_module_items(module_path, fp(12345)).unwrap();
         assert_eq!(cached.len(), 2);
         assert_eq!(&*cached[0].fn_name, "test_a");
         assert_eq!(cached[0].lineno, LineNo::new(5));
@@ -125,7 +138,7 @@ mod tests {
     }
 
     #[test]
-    fn cached_module_items_returns_none_on_mtime_mismatch() {
+    fn cached_module_items_returns_none_on_fingerprint_mismatch() {
         let mut cache = TestCache::empty();
         let module_path = Utf8Path::new("tests/test_foo.py");
         let items: Vec<Arc<TestItem>> = vec![Arc::new(TestItem {
@@ -140,22 +153,22 @@ mod tests {
             fixref_deps: vec![],
             arranged: vec![],
         })];
-        cache.update_module_cache(module_path, 12345, &items);
-        assert!(cache.cached_module_items(module_path, 99999).is_none());
+        cache.update_module_cache(module_path, fp(12345), &items);
+        assert!(cache.cached_module_items(module_path, fp(99999)).is_none());
     }
 
     #[test]
     fn cached_module_items_returns_none_for_unknown_module() {
         let cache = TestCache::empty();
         let module_path = Utf8Path::new("tests/test_unknown.py");
-        assert!(cache.cached_module_items(module_path, 12345).is_none());
+        assert!(cache.cached_module_items(module_path, fp(12345)).is_none());
     }
 
     #[test]
     fn update_module_cache_sets_dirty() {
         let mut cache = TestCache::empty();
         let module_path = Utf8Path::new("tests/test_foo.py");
-        cache.update_module_cache(module_path, 1, &[]);
+        cache.update_module_cache(module_path, fp(1), &[]);
         assert!(cache.dirty);
     }
 
@@ -183,8 +196,8 @@ mod tests {
         let path_a = utf8_dir.join("test_a.py");
         std::fs::write(&path_a, "").unwrap();
         let path_b = utf8_dir.join("test_b.py"); // never created
-        cache.update_module_cache(&path_a, 1, &[]);
-        cache.update_module_cache(&path_b, 2, &[]);
+        cache.update_module_cache(&path_a, fp(1), &[]);
+        cache.update_module_cache(&path_b, fp(2), &[]);
         cache.invalidate_modules();
         assert!(cache.inner.modules.contains_key(path_a.as_str()));
         assert!(!cache.inner.modules.contains_key(path_b.as_str()));
@@ -198,7 +211,7 @@ mod tests {
         let mut cache = TestCache::empty();
         let path_a = utf8_dir.join("test_a.py");
         std::fs::write(&path_a, "").unwrap();
-        cache.update_module_cache(&path_a, 1, &[]);
+        cache.update_module_cache(&path_a, fp(1), &[]);
         cache.dirty = false; // reset
         cache.invalidate_modules(); // path_a exists -> not pruned
         assert!(!cache.dirty); // nothing pruned
@@ -221,12 +234,12 @@ mod tests {
             fixref_deps: vec![],
             arranged: vec![],
         })];
-        cache.update_module_cache(module_path, 9999, &items);
+        cache.update_module_cache(module_path, fp(9999), &items);
         let utf8_dir = Utf8Path::from_path(dir.path()).unwrap();
         cache.save(utf8_dir);
 
         let loaded = TestCache::load(utf8_dir);
-        let cached = loaded.cached_module_items(module_path, 9999).unwrap();
+        let cached = loaded.cached_module_items(module_path, fp(9999)).unwrap();
         assert_eq!(&*cached[0].fn_name, "test_a");
         assert_eq!(cached[0].lineno, LineNo::new(3));
     }

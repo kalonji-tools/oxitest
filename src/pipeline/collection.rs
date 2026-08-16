@@ -7,17 +7,6 @@ use pyo3::prelude::*;
 
 use crate::{bare_asserts, bridge, cache, config, filter, types};
 
-fn file_mtime_secs(path: &camino::Utf8Path) -> u64 {
-    std::fs::metadata(path)
-        .and_then(|m| m.modified())
-        .map(|t| {
-            t.duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs()
-        })
-        .unwrap_or(0)
-}
-
 /// Returns true iff any scope entry could match a subject in `rel`.
 ///
 /// Prefix entries match by `starts_with`; File/Symbol entries match only when
@@ -918,7 +907,9 @@ pub(super) fn collect_items(
         let prescan_us = prescan_start.elapsed().as_micros() as u64;
 
         // `may_declare_inline_fixtures` gates the item cache below — see there.
-        let (may_declare_inline_fixtures, cached_ast) = match prescan {
+        // `fingerprint` is None when the prescan could not read the file, which
+        // is the same set of runs where the cache is refused anyway (#2145).
+        let (may_declare_inline_fixtures, cached_ast, fingerprint) = match prescan {
             crate::prescan::PrescanResult::NoTests => {
                 tracing::debug!(path = file.as_str(), "pre-scan: no tests, skipping");
                 if profile_enabled {
@@ -932,7 +923,7 @@ pub(super) fn collect_items(
             }
             // Could not be parsed: prescan cannot rule inline declarations
             // out, and "we could not tell" must not silently drop registration.
-            crate::prescan::PrescanResult::Unavailable => (true, None),
+            crate::prescan::PrescanResult::Unavailable => (true, None, None),
             crate::prescan::PrescanResult::HasTests(p) => {
                 // ADR-0009 Rule 2's home-kind cap used to be enforced here from
                 // `p.declarations`. It moved to `register_module_source_fixtures`
@@ -944,7 +935,7 @@ pub(super) fn collect_items(
                 } else {
                     None
                 };
-                (p.has_fixture_shaped_decorator, ast)
+                (p.has_fixture_shaped_decorator, ast, Some(p.fingerprint))
             }
         };
 
@@ -971,7 +962,6 @@ pub(super) fn collect_items(
             );
         }
 
-        let mtime = file_mtime_secs(file);
         // The item cache may serve a file only when prescan positively
         // establishes that the file declares no inline fixtures (#1850).
         //
@@ -999,7 +989,7 @@ pub(super) fn collect_items(
         let cached = if collect_violations || may_declare_inline_fixtures {
             None
         } else {
-            cache.cached_module_items(file, mtime)
+            fingerprint.and_then(|fp| cache.cached_module_items(file, fp))
         };
         if let Some(cached_items) = cached {
             items.extend(cached_items);
@@ -1023,8 +1013,10 @@ pub(super) fn collect_items(
             Ok((file_items, file_violations)) => {
                 let arc_items: Vec<Arc<types::TestItem>> =
                     file_items.into_iter().map(Arc::new).collect();
-                if mtime != 0 && !collect_violations {
-                    cache.update_module_cache(file, mtime, &arc_items);
+                if let Some(fp) = fingerprint
+                    && !collect_violations
+                {
+                    cache.update_module_cache(file, fp, &arc_items);
                 }
                 raw_violations.extend(file_violations);
                 // Bare-assert, module-level-definition and test-returns-value
@@ -1959,18 +1951,6 @@ mod tests {
             !out.contains("Slowest files:"),
             "should not show slowest files when all timings are zero"
         );
-    }
-
-    #[test]
-    fn file_mtime_secs_returns_nonzero_for_existing_file() {
-        let mtime = file_mtime_secs(camino::Utf8Path::new(file!()));
-        assert!(mtime > 0, "mtime must be non-zero for an existing file");
-    }
-
-    #[test]
-    fn file_mtime_secs_returns_zero_for_missing_file() {
-        let mtime = file_mtime_secs(camino::Utf8Path::new("/nonexistent/path/xyz.py"));
-        assert_eq!(mtime, 0);
     }
 
     // ── collect_coverage_diagnostics ────────────────────────────────────────
