@@ -310,6 +310,21 @@ If the worker process exits unexpectedly (stdout disconnects before all results 
 Rust synthesizes `WorkerResult::crashed()` for each remaining test item in the group.
 These appear as `"error"` outcomes with message "Worker subprocess exited unexpectedly".
 
+`drain_remaining_into_crashed` does the same for every group still queued in the
+**scheduler** — the tests nobody was left alive to pop. That synthesis runs only when the
+result channel closed on its own, which happens only after every worker thread has
+returned and dropped its `tx` clone.
+
+A run stopped by `--maxfail` or `-x` is a different state, and it now takes a different
+path. The coordinator breaks out of the result loop with every worker still live, and the
+scheduler still holding every group nobody popped. Those tests did not run, so the
+coordinator reports nothing for them, which is what the serial path reports. Before #2142
+it reported them as worker crashes: measured at `1 failed · 36 errors` on a 60-item suite
+at `-n 4` in 5 of 5 runs, against `1 failed · 18 passed` for the same suite run serially.
+Both runs exit `2`, so a pass/fail CI gate could not see the difference, and the CTRF
+report carried it too — `{tests: 37, failed: 37}` against `{tests: 19, passed: 18,
+failed: 1}`.
+
 ### Watchdog timeout
 
 Each worker has a per-result watchdog deadline:
