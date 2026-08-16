@@ -76,11 +76,11 @@ mod tests {
 
     /// A fingerprint standing for one distinct file state.
     ///
-    /// These tests care only that two states compare unequal, so the size
-    /// tracks the timestamp rather than being varied on its own — the fields
-    /// are compared together and neither has a test of its own here.
+    /// These tests care only that two states compare unequal, so the seed is
+    /// arbitrary. What the hash is of belongs to `FileFingerprint::from_source`
+    /// and is tested beside it.
     fn fp(seed: u64) -> super::super::FileFingerprint {
-        super::super::FileFingerprint::from_parts(seed, seed)
+        super::super::FileFingerprint::from_parts(seed)
     }
 
     #[test]
