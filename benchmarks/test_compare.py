@@ -10,8 +10,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from benchmarks.compare import (
     LAZY_RATIO_THRESHOLD,
+    RegressionVerdict,
+    baseline_verdict,
     check_regression,
     dogfood_summary,
+    final_sentence,
     find_commands,
     lazy_summary,
     net_overhead,
@@ -237,3 +240,70 @@ def test_dogfood_summary_empty() -> None:
     """dogfood_summary returns None when no benchmark results are provided."""
     summary = dogfood_summary([])
     assert summary is None, ""
+
+
+def test_final_sentence_reports_a_regression() -> None:
+    """A regression outranks every other state, so the caller sees it first."""
+    sentence = final_sentence(
+        has_regression=True, verdict=RegressionVerdict.NO_REGRESSION
+    )
+    assert sentence == "Regression detected.", (
+        "A run that found a regression must say so, or CI reports a green "
+        "benchmark over a real slowdown."
+    )
+
+
+def test_final_sentence_measured_and_found_nothing() -> None:
+    """A completed comparison that found nothing keeps the original sentence."""
+    sentence = final_sentence(
+        has_regression=False, verdict=RegressionVerdict.NO_REGRESSION
+    )
+    assert sentence == "No regression detected.", (
+        "The measured-clean sentence is the one a reader already knows; changing "
+        "it would make every historical benchmark log ambiguous."
+    )
+
+
+def test_final_sentence_separates_not_measured_from_no_regression() -> None:
+    """ADR-0019 forbids one sentence for 'measured nothing' and 'did not measure'."""
+    measured = final_sentence(
+        has_regression=False, verdict=RegressionVerdict.NO_REGRESSION
+    )
+    not_measured = final_sentence(
+        has_regression=False, verdict=RegressionVerdict.NOT_MEASURED
+    )
+    assert measured != not_measured, (
+        "A missing baseline printed 'No regression detected.' for months, so a "
+        "silent instrument was indistinguishable from a passing one (#2166)."
+    )
+    assert "did not run" in not_measured, (
+        "The unmeasured sentence must name what did not happen, or a reader "
+        "cannot tell which of the three failure modes occurred."
+    )
+
+
+def test_baseline_verdict_zero_comparisons_is_not_a_pass() -> None:
+    """A baseline that exists but compares nothing did not measure anything."""
+    verdict = baseline_verdict(compared=0, has_regression=False)
+    assert verdict is RegressionVerdict.NOT_MEASURED, (
+        "A baseline sharing no tier with the run skips every comparison, so "
+        "reporting NO_REGRESSION would repeat #2166 with the file present."
+    )
+
+
+def test_baseline_verdict_reports_a_measured_regression() -> None:
+    """A comparison that ran and found a regression reports one."""
+    verdict = baseline_verdict(compared=4, has_regression=True)
+    assert verdict is RegressionVerdict.REGRESSION, (
+        "A measured regression must reach the caller, or the workflow cannot "
+        "ever refuse a slowdown."
+    )
+
+
+def test_baseline_verdict_reports_a_measured_pass() -> None:
+    """A comparison that ran over at least one tier and found nothing passes."""
+    verdict = baseline_verdict(compared=1, has_regression=False)
+    assert verdict is RegressionVerdict.NO_REGRESSION, (
+        "One compared tier is a real measurement, so it must not be downgraded "
+        "to NOT_MEASURED alongside the zero-comparison case."
+    )

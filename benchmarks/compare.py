@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from enum import StrEnum, auto
 from pathlib import Path
 
 REGRESSION_THRESHOLD = 0.10  # 10%
@@ -247,14 +248,62 @@ def _print_dogfood(results: list[dict]) -> None:
         print()
 
 
-def _check_regressions(results: list[dict]) -> bool:
+class RegressionVerdict(StrEnum):
+    """The three results the baseline comparison can produce.
+
+    NOT_MEASURED and NO_REGRESSION are different results. ADR-0019 requires an
+    instrument to print a different sentence for each, because a missing
+    baseline, a failed download and a job timeout all used to print
+    "No regression detected." (#2166).
+    """
+
+    NOT_MEASURED = auto()
+    NO_REGRESSION = auto()
+    REGRESSION = auto()
+
+
+def baseline_verdict(*, compared: int, has_regression: bool) -> RegressionVerdict:
+    """Return the verdict for a baseline comparison that ran over `compared` tiers.
+
+    A baseline file can exist and still compare nothing: every tier is skipped
+    when either side lacks it. That path used to reach the same sentence as a
+    clean comparison, which is the defect this module is being repaired for
+    (#2166). Zero comparisons is not a pass.
+    """
+    if compared == 0:
+        return RegressionVerdict.NOT_MEASURED
+    if has_regression:
+        return RegressionVerdict.REGRESSION
+    return RegressionVerdict.NO_REGRESSION
+
+
+def final_sentence(*, has_regression: bool, verdict: RegressionVerdict) -> str:
+    """Return the one-line outcome the run reports.
+
+    Pure, so the three outcomes are testable without a baseline file on disk and
+    without capturing stdout.
+    """
+    if has_regression:
+        return "Regression detected."
+    if verdict is RegressionVerdict.NOT_MEASURED:
+        return (
+            "No regression detected in this run. "
+            "The comparison against a baseline did not run."
+        )
+    return "No regression detected."
+
+
+def _check_regressions(results: list[dict]) -> RegressionVerdict:
     baseline_path = Path("benchmarks/baseline.json")
+    print("REGRESSION CHECK")
     if not baseline_path.exists():
-        return False
+        print("  NOT MEASURED - benchmarks/baseline.json is absent")
+        print()
+        return RegressionVerdict.NOT_MEASURED
     baseline = load_results(str(baseline_path))
     tiers = ["below_threshold", "s", "m", "l"]
     has_regression = False
-    print("REGRESSION CHECK")
+    compared = 0
     for tier in tiers:
         tier_results = find_commands(results, tier=tier)
         base_results = find_commands(baseline, tier=tier)
@@ -267,6 +316,7 @@ def _check_regressions(results: list[dict]) -> bool:
             base_results, "oxitest --serial"
         ) or find_command_mean(base_results, "oxitest")
         if ox_current and ox_baseline:
+            compared += 1
             is_reg, pct = check_regression(
                 ox_current, ox_baseline, REGRESSION_THRESHOLD
             )
@@ -277,8 +327,10 @@ def _check_regressions(results: list[dict]) -> bool:
             )
             if is_reg:
                 has_regression = True
+    if compared == 0:
+        print("  NOT MEASURED - the baseline shares no tier with this run")
     print()
-    return has_regression
+    return baseline_verdict(compared=compared, has_regression=has_regression)
 
 
 def main() -> int:
@@ -290,13 +342,11 @@ def main() -> int:
         has_regression = True
     _print_realistic(results)
     _print_dogfood(results)
-    if _check_regressions(results):
+    verdict = _check_regressions(results)
+    if verdict is RegressionVerdict.REGRESSION:
         has_regression = True
-    if has_regression:
-        print("Regression detected.")
-        return 1
-    print("No regression detected.")
-    return 0
+    print(final_sentence(has_regression=has_regression, verdict=verdict))
+    return 1 if has_regression else 0
 
 
 if __name__ == "__main__":
