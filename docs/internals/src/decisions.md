@@ -66,3 +66,10 @@ requirement is that the _why_ is captured before the _how_ is merged.
 | [0010](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0010-doctest-staleness-is-static.md) | Doctest staleness is static | Accepted |
 | [0011](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0011-no-unhandled-panic-routes.md) | No unhandled panic routes | Accepted |
 | [0012](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0012-block-scoped-forms-belong-on-the-object.md) | Block-scoped forms belong on the object | Accepted |
+| [0013](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0013-platform-support-is-what-ci-tests.md) | Platform support is what CI tests | Accepted |
+| [0014](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0014-target-validation.md) | A Target that does not exist refuses the run | Accepted |
+| [0015](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0015-releases-are-cut-when-earned.md) | Releases are cut when earned, and deprecation waits for users | Accepted |
+| [0016](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0016-the-effective-deadline-is-the-shortest.md) | The effective deadline is the shortest live deadline | Accepted |
+| [0017](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0017-a-test-function-returns-none.md) | A test function returns `None` | Accepted |
+| [0018](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0018-bridge-enforcement-splits-by-what-a-check-reads.md) | Bridge enforcement splits by what a check reads | Accepted |
+| [0019](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0019-a-test-belongs-to-the-band-of-what-it-starts.md) | A test belongs to the band of what it starts | Accepted |

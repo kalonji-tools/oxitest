@@ -1,15 +1,15 @@
 # Testing Strategy
 
-oxitest has three tiers of tests: Rust unit tests (fast, isolated), Python
-integration tests (end-to-end through the bridge), and the external
-`oxitest-consumer` repo (full installed-wheel validation).  This chapter
-explains when to reach for each tier, plus how snapshot testing and
-cross-language sync tests fit in.
+This chapter is a how-to for writing a test in this repository.  It says where
+tests live, what they look like, and which command runs them.  It does not say
+which class of test owns a given test.
+[ADR-0019](../../adr/0019-a-test-belongs-to-the-band-of-what-it-starts.md) is
+the authority on that, and `CONTEXT.md` holds the vocabulary.
 
 ## Rust unit tests
 
 Rust tests live inline in `#[cfg(test)]` modules at the bottom of each source
-file.  56 source files contain test modules.  Use a Rust unit test when:
+file.  Use a Rust unit test when:
 
 - **the logic is pure Rust** -- no Python interpreter needed;
 - **the function is deterministic** -- given the same inputs it always produces
@@ -77,10 +77,9 @@ just test-rust <name>     # a single test by name
 
 ## Python integration tests
 
-Integration tests live in `python/tests/`.  There are roughly 50 test files at
-the top level (unit-style, testing individual bridge modules) and another 40
-inside `python/tests/integration/` (end-to-end, invoking the full runner as a
-subprocess).
+Integration tests live in `python/tests/`.  The top level holds unit-style
+tests of individual bridge modules, and `python/tests/integration/` holds
+end-to-end tests that invoke the full runner as a subprocess.
 
 ### When to write a Python test
 
@@ -170,25 +169,9 @@ coverage subjects is routine, not evidence of a typo. Only `Symbol` and
 See `StalenessInputs::classify` in `src/pipeline/collection.rs` and
 [ADR-0010](../../adr/0010-doctest-staleness-is-static.md).
 
-## oxitest-consumer
-
-The `oxitest-consumer` repository is a separate project that depends on
-`oxitest` as an installed package.  It exercises the full installed pipeline:
-
-- Verifying the built wheel works end-to-end.
-- Testing CLI behavior with real subprocess invocations against a real
-  `pyproject.toml`.
-- Regression testing that spans the Rust/Python boundary in a realistic
-  environment (not a test harness).
-
-This tier catches packaging and distribution issues that the in-repo tests
-cannot.
-
 ## Snapshot testing with insta
 
 oxitest uses the [insta](https://insta.rs) crate for Rust snapshot tests.
-There are 34 snapshot files across three directories and 24 snapshot assertions
-across 9 source files.
 
 ### Where snapshots live
 
@@ -200,6 +183,7 @@ src/reporter/format/snapshots/    # diff, summary, diagnostic, suggestions
 src/reporter/snapshots/           # JUnit XML, CTRF JSON
 src/query/snapshots/              # columnar, tab, JSONL, detail, highlight
 src/inspect/snapshots/            # TUI layout, footer, help overlay
+src/inspect/detail/snapshots/     # detail panes: fixture, test, mark, plugin
 ```
 
 Each `.snap` file is named after the full test path:
@@ -315,5 +299,9 @@ There is also a Rust-side unit test in `src/filter.rs` that asserts the
 expected set of built-in names.  Together, these tests guarantee that adding a
 new built-in marker on either side without updating the other will fail CI.
 
-This pattern -- a cross-language sync test -- should be used whenever a
-constant, enum, or protocol must be identical on both sides of the bridge.
+A cross-language sync test is not the answer for every constant that must be
+identical on both sides of the bridge.
+[ADR-0018](../../adr/0018-bridge-enforcement-splits-by-what-a-check-reads.md)
+splits the enforcement by what the check reads.  A check that reads a running
+program is a test, as this one is.  A check that reads two files as text is a
+script under `scripts/`.
