@@ -17,6 +17,11 @@ grill-with-docs
 triage
 improve
 
+# Named by Track A's entry condition, which points at this skill's rule 6 for
+# the prototype case rather than restating it. A pointer to an absent skill is
+# how #1376 failed, so the pointer and this entry land together (#2140).
+prototype
+
 # Plugin skills
 ponytail:ponytail-review
 superpowers:brainstorming

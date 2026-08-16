@@ -94,6 +94,8 @@ Grill → Issue → Triage → Spec → Draft PR → Plan → Implement → Revi
 
 The numbers are the stages below. Rebase, preflight and waiting for CI are *inside* stage 9 — see its merge sequence.
 
+**Track A governs work that ends in a merge, and saying which kind you are in is the step (prose).** A spike, a prototype, or a research ticket answers a question and produces no merge, so it does not enter here. The `prototype` skill's rule 6 owns that case — throwaway branch, out of `main`, context pointer on the implementation issue — and a spike's artifact is the comment that answers its question. This clause points at that rule rather than restating it; what it adds is the boundary, because nothing else says a pipeline stage can be inapplicable rather than skipped. The failure it prevents is a spike that reads afterwards as a change which silently skipped eight stages, and the reverse: full merge ceremony spent on code that was throwaway from day one.
+
 **1. Grill new ideas.** Any new feature, concept, or design direction MUST be stress-tested against the existing domain model and documented decisions before anything is committed to. A defect whose mechanism is unestablished is not yet grillable. Establish the mechanism first; grilling remedies on an unverified diagnosis produces a decision tree rooted in a guess, and every option inherits the issue's framing. An issue that marks its own mechanism `unverified` is stating that this precondition fails.
 
 The **user** invokes `grill-with-docs` — it is marked `disable-model-invocation`, so an agent cannot call it and this stage will otherwise read as skipped rather than as impossible. An agent that reaches this stage unaided runs `grilling` plus `domain-modeling` (which is what `grill-with-docs` does) and records in the issue that it did so, and that no user-driven grilling took place.
@@ -166,10 +168,15 @@ Assignment is **folded into `gh pr create`** (`fold-in`) — there is no separat
 | runtime behaviour | a command and its real output | **the environment it ran in** — OS, and any platform-dependent switch the claim turns on | a source quote, however exact — reading code is not running it |
 | what a document says | the **whole quoted span** as it appears in your artifact | — | a prefix, a paraphrase, or a fragment proving only that the source discusses the topic |
 | a measured quantity | the measurement, with the command that produced it | **the environment it was measured in** | a remembered or inherited figure |
+| a dependency or release version | the query and its output — `git tag --sort=-creatordate \| head`, `gh release list`, `cargo search <crate> --limit 1`, `curl -s https://pypi.org/pypi/<pkg>/json \| jq -r .info.version` | **the date it was queried** | a version recalled rather than queried, **including one recalled from model training** |
 
 The environment column exists because a ledger can be complete, every row measured, and still authorise a defect the measuring environment cannot express. Three probe results on PR #2002 were measured on Linux for a change about Windows; two defects reached CI, and neither is reachable on Linux by construction. The full suite, `just preflight`, ruff, ty, strict mkdocs and four killed mutants all passed over the first one.
 
 The whole-span clause is not pedantry: a prefix-verified quote once passed its own ledger row and shipped fabricated, because the start of a quote is the part you remember correctly and the tail is where invention happens.
+
+The version row names **model training** as a source because that failure has a direction the others do not, and because it fails *upward*. A remembered measurement is as likely to be stale high as stale low, so it reads as uncertain. A remembered version is confidently specific about a release that may not exist: **#1577 is titled `bump pyo3 from 0.29 to 0.31.x`, closed `COMPLETED`, and `pyo3 0.31` has never been published.** `cargo search pyo3 --limit 1` returns `pyo3 = "0.29.2"`; `Cargo.toml:13` still pins `"0.29"`; `git log --all --grep='#1577'` matches zero commits. An issue was written, triaged and closed against a version number that came from nowhere but recall.
+
+The date is required because the answer expires fast: `git tag --sort=-creatordate` shows **seven releases in the 27 days to 2026-08-09** (`v2.0.0` … `v4.0.0`), so a recalled version is wrong within weeks and the recall carries no signal that it has gone stale. Query the registry, not the API — `https://crates.io/api/v1/crates/<name>` returns a data-access-policy error from this environment, which is why `cargo search` is the form given above.
 
 **A false premise blocks.** If an acceptance criterion changes, the issue is re-scoped and re-enters at stage 4 — the same re-entry point the diagram marks, reached from inside Track A rather than from a backlog sweep. Otherwise amend the plan and record the correction in its row. Never a silent default.
 
@@ -213,6 +220,8 @@ Three different operations in this stage get called "rebase" in ordinary speech.
 2. **The branch emits one changelog entry per change** — counted when stage 8 closes, and re-counted here only if the branch has gained commits since. One branch was emitting two `fix:` entries for a single change; 4 commits → 2 made it one.
 
 Clause 2 exists because clause 1 cannot fail in the case that keeps recurring — a history whose every commit is individually coherent and whose *count against the unit of work* is still wrong.
+
+**Lock churn belongs to the commit that caused it.** `Cargo.lock` and `uv.lock` move because a manifest moved, so a standalone `chore: update lock` is a commit for the half of a change that has no user-visible half. Neither clause reaches it: clause 1 passes because such a commit builds, and clause 2 is blind because `chore:` emits no changelog entry, so a branch can carry any number of them and still count one entry per change.
 
 The tooling is available, contrary to that claim:
 
@@ -374,6 +383,22 @@ Illustrative only, **not exhaustive**. Note that syntax-valid is not verified:
 | `.github/workflows/*` — actionlint for referenced-but-undeclared `needs:`, and `scripts/check_platform_sets.py` for agreement between the required rollup, the wheel targets and `classifiers` (#1950). The reverse direction needed a checker until #2072 made each rollup read its results from `toJSON(needs)`; one literal cannot disagree with itself | `justfile` — `scripts/check_justfile_quoting.py` refuses a quoted interpolation (#2015); nothing else reads it |
 | `docs/internals/**` — mdbook | `.envrc`, `.config/wt.toml` — no gate |
 | `Cargo.lock`, `uv.lock` — lock checks | `*.md` outside the mkdocs nav — codespell only, no link check |
+
+### Where a rule already lives (prose)
+
+An external review sweep proposed seven additions to this file; **five restated rules it already contained**, because the sweep was produced without reading it (#2140). Re-proposing an owned rule is cheap to do and expensive to refuse — the refusal has to re-derive the whole ownership argument each time. This index is the shortcut. It names the fact and its owner and **restates no rule**, so it cannot be the copy the Arity rule refuses.
+
+| Fact | Owner |
+|---|---|
+| Never merge without approval; never `--admin`; never `--delete-branch` | stage 9, *Merge rules* |
+| A claim that subtracts work carries its command, its output, and proof the command ran | *Evidence for analysis outputs* |
+| Establish a mechanism before designing a remedy for it | stage 1 |
+| Regroup commits before the PR; lock churn folds into its cause | *Commit regroup* |
+| Optional fields, `\| None`, and the shapes that replace them | `docs/adr/0007-none-by-exception.md`, Rules 1–7 |
+| A prototype is throwaway, on a branch out of `main`, with no PR | `prototype` skill, rule 6 — see Track A's entry condition |
+| Plans and specs are comments, and their files are gitignored | `docs/agents/skill-contracts.md`, cause A |
+
+When a sweep proposes something here, the answer is a pointer, not a section.
 
 ## Tools
 
