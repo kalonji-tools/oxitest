@@ -77,7 +77,7 @@ What holds each candidate together is its **subject** — published text in the 
 | **Crate** | the behaviour of a Rust item, with no interpreter live | mutation under `just mutate-rust`, where the mutated item returns a value that `cargo test` can read | "the only observation is a side effect" |
 | **Library** | the public Python surface agrees with the published documents | the coverage report of the Library band | — |
 | **Command** | the observable channels of the CLI: stdout, stderr, and the exit code | each test asserts on one channel or more, **and each `ExitCode` value has one test or more** | "the CLI cannot return this value" |
-| **Distribution** | the artifact that goes out behaves as the tree that was tested | each artifact installs, and the import occurs outside the source tree | the band is one exemption today. It names the pre-upload gate in `publish.yml`. |
+| **Distribution** | the artifact that goes out behaves as the tree that was tested | each artifact installs, and the import occurs outside the source tree | the band is one exemption. Its standard is met by the pre-upload gate in `publish.yml`, which [#2177](https://github.com/kalonji-tools/oxitest/issues/2177) built. |
 
 ### Crate
 
@@ -109,9 +109,11 @@ Every site that asserts `returncode == 1` tests a script in `scripts/`, so it ca
 
 The correction is kept here rather than in a new record because the claim is a measurement this document made, not a decision it took. The band contract above is unaffected: `UsageError` still had no Command band test when this was written, and #2172 ships one.
 
-### Distribution — the band with no members
+### Distribution — the band whose members are jobs
 
-Nothing in this repository or its CI has ever imported oxitest from an artifact. `uv sync` writes `oxitest.pth`, which points at the source tree; `RECORD` holds 13 lines and no package file; `maturin build` occurs nowhere, because every invocation is `maturin develop`. `publish.yml` builds wheels, downloads them, and uploads them without an install.
+**Amended by [#2177](https://github.com/kalonji-tools/oxitest/issues/2177).** The gate below is built. The band still holds **no collected test**, and that is its settled shape rather than a gap: the artifacts it examines do not exist until a tag is pushed, so no member of the suite can reach one. Its members are the 21 legs of `publish.yml`'s `gate` and `gate-sdist` jobs, plus the `wheel-manifest` job in `test.yml`. The paragraph below records what was true before that change; the two paragraphs after it record what is true now.
+
+Before #2177, no CI job in this repository had ever imported oxitest from an artifact. `uv sync` writes `oxitest.pth`, which points at the source tree, and `RECORD` holds 13 lines and no package file. `publish.yml` built wheels, downloaded them, and uploaded them without an install. **The repository did describe two such imports and nothing ran them**: `flake.nix:23` runs `maturin build` and `flake.nix:41` installs the wheel with `python -m installer`, under `pythonImportsCheck`; `nix/package.nix` does the same and adds two `passthru.tests` that run the installed CLI. No workflow invokes either. The first version of this section said *"`maturin build` occurs nowhere, because every invocation is `maturin develop`"*, and that sentence was false when it was written.
 
 The band proves the six properties that an editable install cannot reach:
 
@@ -126,9 +128,13 @@ The band proves the six properties that an editable install cannot reach:
 
 Two duties that `testing.md` gives this class of test are **already discharged** by the Command band, and they are removed from the contract. *"Testing CLI behaviour with real subprocess invocations against a real `pyproject.toml`"* is what every Command band test does, and *"regression testing across the Rust and Python boundary"* is what every Library band test does. To state covered work as the duty of an absent class of test is how the document came to describe a repository that nobody made.
 
-**The gate refuses, and it runs before the upload.** PyPI does not permit a filename to be uploaded a second time, so a bad wheel is permanent. The gate is a job in `publish.yml`, between the build matrix and `publish`, and in the `needs:` list of `publish`. All 17 artifacts install, each on a runner that matches its tag, and every such runner already exists in `test.yml`. The `universal2` wheels install on both macOS runners, which is the only proof of property 5. The sdist gets a build, an import, and one CLI run — not the suite, which proves nothing the wheel path has not proved.
+**The gate refuses, and it runs before the upload.** PyPI does not permit a filename to be uploaded a second time, so a bad wheel is permanent. The gate is two jobs in `publish.yml`, between the build matrix and `publish`, and both are in the `needs:` list of `publish`. All 17 artifacts install, each on a runner that matches its tag, and every such runner already existed in `test.yml`. The `universal2` wheels install on both macOS runners, which is the only proof of property 5. The sdist gets a build, an import, and one CLI run — not the suite, which proves nothing the wheel path has not proved.
 
-**A source-controlled subset also runs on a pull request.** Properties 1 and 2 are controlled by the source, so a pull request can break them; properties 3, 4 and 5 are controlled by the release matrix, so a pull request cannot. The pull-request check is therefore one debug `maturin build` on `ubuntu-latest`, installed into a clean environment, asserting properties 1 and 2. It is a subset of the release gate by construction, so it cannot drift into an assertion the release gate does not make.
+**No leg holds a list of the 17 filenames.** Each leg runs `pip install --no-index --only-binary :all: --find-links dist oxitest`, and pip refuses when no wheel matches that runner and that interpreter. The refusal *is* the coverage assertion, so the gate adds no platform literal and no interpreter literal that nothing compares. `--only-binary :all:` is what makes it an assertion: `dist/` holds the sdist beside the wheels, and without that flag a leg with no matching wheel builds from source and passes.
+
+**`scripts/check_artifact.py` asserts the properties, and it reads the installed distribution.** `RECORD` is the file manifest, `WHEEL` holds `Tag:`, and `METADATA` holds `Requires-Python` and every `Classifier`. Reading the installed distribution rather than the wheel file removes the question of which wheel a leg owns, and it asserts what is on the disk. `importlib.metadata` drops a `RECORD` entry whose file is absent, so the manifest property asserts the file **is present**, which is the stronger of the two claims.
+
+**A source-controlled subset also runs on a pull request.** Properties 1 and 2 are controlled by the source, so a pull request can break them; properties 3, 4 and 5 are controlled by the release matrix, so a pull request cannot. The pull-request check is therefore one debug `maturin build` on `ubuntu-latest`, installed into a clean environment, asserting properties 1 and 2. It calls the same script with a shorter `--properties` value, so it is a subset by argument and cannot drift into an assertion the release gate does not make.
 
 **The `oxitest-consumer` repository is refused, not merely absent.** It would live outside `publish.yml` and could not see an artifact that is not yet published, so it cannot gate. The word *consumer* leaves the vocabulary.
 
