@@ -311,33 +311,56 @@ def test_reads_its_own_identity(ident: TestIdentity) -> None:
     assert ident is not None, "the misuse is the subject of this test"
 """
 
-_PADDING = "".join(
-    f'def test_pad_{n}():\n    assert 1 == 1, "padding, to make the run parallel"\n'
-    for n in range(6)
-)
 
-
-def test_the_exit_code_does_not_depend_on_the_execution_mode(tmp: TempDir) -> None:
-    """A UsageError must not exit differently because a worker observed it.
-
-    The plan's premise ledger named execution mode as the dimension none of its
-    premises varied. ``_USAGE_ERROR_TYPES`` is read by the serial path and by
-    ``worker.py`` alike, so a change to it reaches both. This pins that the two
-    agree.
-
-    Measured value today is 1, not 4: the vote is consulted at three sites in
-    ``executor.py`` and ``_diagnostics.py``, and the path from a builtin
-    fixture's refusal reaches none of them. This test deliberately asserts
-    agreement and not a literal, because the literal is a separate defect and
-    freezing it here would make this test refuse its own repair.
-    """
+def test_a_test_that_requests_test_identity_exits_usage_error(tmp: TempDir) -> None:
+    """The refusal reaches the vote through the Rust funnel."""
     # Arrange
     project = Path(str(tmp))
     (project / "tests").mkdir()
     (project / "tests" / "test_identity.py").write_text(
         _IDENTITY_MISUSE, encoding="utf-8"
     )
-    (project / "tests" / "test_pad.py").write_text(_PADDING, encoding="utf-8")
+    (project / "pyproject.toml").write_text(
+        '[tool.oxitest]\ntestpaths = ["tests"]\n', encoding="utf-8"
+    )
+
+    # Act
+    stdout, stderr, rc = helpers.run_oxitest(None, "--serial", cwd=str(project))
+
+    # Assert
+    assert rc == 4, (
+        f"UsageError is in _USAGE_ERROR_TYPES, and ADR-0014 fixes exit 4 by the "
+        f"class of the error; ExitCode::Failure claims a test failed, and this "
+        f"test never ran\n{stdout}{stderr}"
+    )
+
+
+_PAD_ASSERT = 'assert 1 == 1, "the padding must survive the misuse"'
+
+_MISUSE_WITH_PADDING = _IDENTITY_MISUSE + "".join(
+    f"\n\ndef test_pad_{n}():\n    {_PAD_ASSERT}\n" for n in range(5)
+)
+
+
+def test_the_exit_code_does_not_depend_on_the_execution_mode(tmp: TempDir) -> None:
+    """A UsageError exits 4 in both modes, and the misuse costs no other result.
+
+    The plan's premise ledger named execution mode as the dimension none of its
+    premises varied. The vote reaches the serial path through ``bridge.rs`` and
+    the parallel path through ``worker.py``, so both funnels must ask it.
+
+    The misuse and the padding share one module deliberately. When they sat in
+    separate modules, ``-n 2`` sent them to different workers, so a worker that
+    stopped on the misuse stranded nothing this test could see: it reported
+    ``6 errors`` against serial's ``1 error · 5 passed`` and still passed,
+    because both modes exited 1 (#2185).
+    """
+    # Arrange
+    project = Path(str(tmp))
+    (project / "tests").mkdir()
+    (project / "tests" / "test_identity.py").write_text(
+        _MISUSE_WITH_PADDING, encoding="utf-8"
+    )
     (project / "pyproject.toml").write_text(
         '[tool.oxitest]\ntestpaths = ["tests"]\nmin_parallel_tests = 1\n',
         encoding="utf-8",
@@ -350,10 +373,9 @@ def test_the_exit_code_does_not_depend_on_the_execution_mode(tmp: TempDir) -> No
     par_out, par_err, par_rc = helpers.run_oxitest(None, "-n", "2", cwd=str(project))
 
     # Assert
-    assert serial_rc == par_rc, (
-        f"exit-codes.md fixes exit 4 by the class of the error and says nothing "
-        f"about which process observed it; an exit code that depends on the "
-        f"execution mode is the same defect this change removes, in a new place\n"
+    assert serial_rc == par_rc == 4, (
+        f"ExitCode::UsageError is fixed by the class of the error and says "
+        f"nothing about which process observed it\n"
         f"serial={serial_rc} parallel={par_rc}\n"
         f"serial output:\n{serial_out}{serial_err}\n"
         f"parallel output:\n{par_out}{par_err}"
@@ -363,3 +385,10 @@ def test_the_exit_code_does_not_depend_on_the_execution_mode(tmp: TempDir) -> No
         f"comparison above passes on two runs that both did nothing\n"
         f"{par_out}{par_err}"
     )
+    for out, mode in ((serial_out, "serial"), (par_out, "parallel")):
+        assert "5 passed" in out, (
+            f"the misuse must cost one result, not six; a worker that stops "
+            f"reports every test in its group as an error, and no exit-code "
+            f"assertion can see it because both numbers are the same\n"
+            f"{mode}:\n{out}"
+        )

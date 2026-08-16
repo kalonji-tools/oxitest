@@ -427,11 +427,13 @@ def run(task: WorkerTask, session: Any) -> None:
     """
     # Imports are kept lazy — top-level loading adds ~35ms to worker subprocess startup.
     # PLC0415 is suppressed for this file in ruff per-file-ignores.
+    from oxitest._bridge._errors import is_usage_error
     from oxitest._bridge._runners import DebugContext
     from oxitest._bridge._test_kind import from_wire
     from oxitest._bridge._test_meta import TestMeta
     from oxitest._bridge.executor import run_test
     from oxitest._bridge.importer import collect_module
+    from oxitest._bridge.result import _error_result
 
     modules: list[WorkerTaskModule] = task["modules"]
     timeout_secs: int | None = task.get("timeout_secs")
@@ -470,13 +472,30 @@ def run(task: WorkerTask, session: Any) -> None:
                 )
 
                 start = time.perf_counter()
-                result = run_test(
-                    meta,
-                    session=session,
-                    default_timeout=timeout_secs,
-                    keep_tmp=keep_tmp,
-                    debug=debug,
-                )
+                try:
+                    result = run_test(
+                        meta,
+                        session=session,
+                        default_timeout=timeout_secs,
+                        keep_tmp=keep_tmp,
+                        debug=debug,
+                    )
+                except Exception as exc:  # noqa: BLE001 — must not kill the worker
+                    # The serial path funnels this in `bridge.rs`; without the
+                    # same funnel here the worker stops and every remaining test
+                    # in its group reports as an error. One misuse cost six
+                    # results where serial cost one, and the exit codes agreed
+                    # at 1 throughout, so no exit-code assertion could see it
+                    # (#2185).
+                    #
+                    # `Exception` and not `BaseException`, unlike the guards
+                    # above: this one sits in the per-test loop, where a
+                    # KeyboardInterrupt must still reach `main()`'s `finally`
+                    # and drain the process tier.
+                    result = _error_result(
+                        f"{type(exc).__name__}: {exc}",
+                        usage_error=is_usage_error(exc),
+                    )
                 duration_ms = (time.perf_counter() - start) * 1000.0
                 _emit(result.to_wire(meta.node_id, duration_ms))
     finally:

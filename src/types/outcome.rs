@@ -84,6 +84,20 @@ impl FailureDiagnostic {
             vec![],
         )
     }
+
+    /// Sentinel that carries the vote, for an error whose class decides the exit code.
+    ///
+    /// [`sentinel`](Self::sentinel) writes `usage_error: false` and has callers
+    /// throughout the crate, so it keeps its signature. A funnel that asks
+    /// `is_usage_error` uses this instead, so that the class of the error
+    /// reaches the exit code rather than the code of the step that caught it
+    /// (#2185).
+    pub fn sentinel_with_usage(message: String, usage_error: bool) -> Self {
+        Self {
+            usage_error,
+            ..Self::sentinel(message)
+        }
+    }
 }
 
 /// The eight possible results of running a single test.
@@ -334,6 +348,27 @@ pub struct ResolvedOutcome {
 mod outcome_tests {
     use super::*;
     use camino::Utf8PathBuf;
+
+    #[test]
+    fn sentinel_with_usage_carries_the_vote() {
+        let voting = FailureDiagnostic::sentinel_with_usage("boom".to_string(), true);
+        let silent = FailureDiagnostic::sentinel_with_usage("boom".to_string(), false);
+
+        assert!(
+            voting.usage_error,
+            "a funnel that asked is_usage_error must be able to record a True \
+             answer; without this the class of the error cannot reach the exit code"
+        );
+        assert!(
+            !silent.usage_error,
+            "a False answer must stay False, or every error a funnel catches \
+             would raise the run to ExitCode::UsageError"
+        );
+        assert_eq!(
+            voting.message, "boom",
+            "the constructor must not alter the message it is given"
+        );
+    }
 
     #[test]
     fn test_outcome_passed_carries_tips() {
