@@ -117,7 +117,12 @@ PLATFORMS = (
 # `changes` is the paths filter that decides what runs at all. `tmpdir-symlink`
 # runs on ubuntu-latest with TMPDIR pointed at a symlink -- a configuration
 # variant, as the comment above that job says, not a platform.
-NON_PLATFORM_JOBS = frozenset({"changes", "tmpdir-symlink"})
+#
+# `wheel-manifest` builds one wheel on ubuntu-latest and asserts the two
+# source-controlled properties of the Distribution band (#2177). It confers no
+# platform support: it covers what the source puts in a wheel, not where the
+# wheel runs.
+NON_PLATFORM_JOBS = frozenset({"changes", "tmpdir-symlink", "wheel-manifest"})
 
 # Only this prefix is compared. A classifier about licences or topics says
 # nothing about platforms and must not be dragged into the comparison.
