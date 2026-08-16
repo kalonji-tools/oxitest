@@ -63,6 +63,9 @@ jobs:
   # `windows-latest` and that job is required and green. What is not is this
   # job's four-interpreter release build. It is in `publish`'s `needs:` below,
   # so a failure here blocks the upload rather than shipping a partial release.
+  # What this job produces is installed and imported by the `gate` job before
+  # the upload, so the half of this job with no history is the build, not the
+  # artifact (#2177).
   # One job per interpreter, rather than the `macos` job's single job with four
   # versions and `-i python3.11 python3.12 ...`. That spelling is Unix-only:
   # `actions/setup-python` gives each version its own tool-cache directory on
@@ -114,10 +117,149 @@ jobs:
           name: wheels-sdist
           path: dist
 
+  # The Distribution band (ADR-0019). Every artifact installs, imports from
+  # outside the source tree, and runs the CLI once, before anything is
+  # uploaded. PyPI does not permit a filename to be uploaded a second time, so
+  # a bad wheel is permanent; this job refuses rather than reports.
+  #
+  # `--only-binary :all:` is load-bearing, not decoration. `dist/` holds the
+  # sdist beside the 16 wheels, so without it a leg with no matching wheel
+  # builds from source and passes. With it pip refuses, and that refusal is the
+  # artifact-coverage assertion — no list of expected filenames exists
+  # anywhere, so this job adds no platform literal that nothing compares.
+  #
+  # The runner set and the interpreter set are both read by
+  # `scripts/check_platform_sets.py`, so neither can drift from `test.yml` or
+  # from `requires-python`.
+  #
+  # `universal2` is one wheel and two runners: installing it on `macos-latest`
+  # and on `macos-15-intel` is the only proof that both of its slices load.
+  gate:
+    name: Gate (${{ matrix.runner }}, ${{ matrix.python-version }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    needs: [linux, macos, windows, sdist]
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel, windows-latest]
+        python-version: ['3.11', '3.12', '3.13', '3.14']
+        # `properties` is attached per runner rather than crossed, which is
+        # what `include` does when its keys match an existing combination and
+        # add no key that would overwrite one. GitHub's own documented example
+        # is this shape: `animal: cat` selects the combinations and `color` is
+        # added to them. So this is 20 legs, not 25.
+        #
+        # The manylinux property applies to the Linux legs alone. An absent
+        # value is not a silent skip: the checker refuses an empty
+        # `--properties`, so a leg whose key never arrived fails loudly rather
+        # than asserting nothing.
+        include:
+          - runner: ubuntu-latest
+            properties: manifest,import,metadata,tag,manylinux
+          - runner: ubuntu-24.04-arm
+            properties: manifest,import,metadata,tag,manylinux
+          - runner: macos-latest
+            properties: manifest,import,metadata,tag
+          - runner: macos-15-intel
+            properties: manifest,import,metadata,tag
+          - runner: windows-latest
+            properties: manifest,import,metadata,tag
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+
+      # Installed into the runner's interpreter, with no virtual environment.
+      # `actions/setup-python` above already gives this leg a clean one, and
+      # oxitest declares no runtime dependency, so a virtual environment adds
+      # no isolation. It did add a path: an environment keeps its interpreter
+      # in `bin/` on POSIX and `Scripts/` on Windows, and resolving that in
+      # `bash` meant carrying `$RUNNER_TEMP` -- which is `D:\a\_temp` on the
+      # four Windows legs -- through a shell that reads a backslash as an
+      # escape. These three steps now read the same on all five runners.
+      - name: Install the artifact
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check \
+            --no-index --only-binary :all: --find-links dist oxitest
+
+      # `working-directory` puts the source tree outside the working directory,
+      # which is what the import property asserts. `check_artifact.py` refuses
+      # when the working directory is inside `--source-root`, so a change here
+      # that made the property vacuous fails rather than passes.
+      - name: Assert the properties
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          python "$GITHUB_WORKSPACE/scripts/check_artifact.py" \
+            --source-root "$GITHUB_WORKSPACE" \
+            --properties '${{ matrix.properties }}'
+
+      - name: Run the CLI once
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: oxitest --version
+
+  # Property 6: the sdist builds. `pyproject.toml` excludes
+  # `rust-toolchain.toml` from the sdist so a source build uses whatever
+  # toolchain the machine already holds, and no job has ever exercised that.
+  #
+  # A build, an import, and one CLI run. Not the suite: ADR-0019 removed the
+  # two duties the Command and Library bands already discharge, because a suite
+  # run here proves nothing the wheel path has not proved.
+  gate-sdist:
+    name: Gate (sdist)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [sdist]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      # No `rustup` step. `pyproject.toml` excludes `rust-toolchain.toml` from
+      # the sdist so that a source build uses the toolchain the machine already
+      # holds, and the `ubuntu-latest` image ships a stable one. Installing a
+      # chosen toolchain here would replace the thing under test.
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: wheels-sdist
+          merge-multiple: true
+          path: dist
+
+      # `--no-binary :all:` is the mirror of the wheel legs' `--only-binary`.
+      # Without it pip would take a wheel if one were present and this leg
+      # would prove nothing about the sdist.
+      - name: Build and install from source
+        run: |
+          python -m pip install --disable-pip-version-check \
+            --no-index --no-binary :all: --find-links dist oxitest
+
+      - name: Assert the properties
+        working-directory: ${{ runner.temp }}
+        run: |
+          python "$GITHUB_WORKSPACE/scripts/check_artifact.py" \
+            --source-root "$GITHUB_WORKSPACE" --properties manifest,import
+
+      - name: Run the CLI once
+        working-directory: ${{ runner.temp }}
+        run: oxitest --version
+
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [linux, macos, windows, sdist]
+    needs: [linux, macos, windows, sdist, gate, gate-sdist]
     environment: pypi
     permissions:
       id-token: write
