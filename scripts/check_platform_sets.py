@@ -16,7 +16,8 @@ carry no architecture axis at all -- so PLATFORMS below declares one canonical
 (os, arch) identity per platform and the mapping each file takes into it. That
 table is ADR-0013 Rule 3 in machine form.
 
-Five checks, in the order they are reported:
+Six checks, in the order they are reported. Checks 1 to 5 are about the
+platform axis. Check 6 is the same question on the interpreter axis.
 
 1. Nothing undeclared. Every job in the required rollup, every wheel target,
    every OS classifier and every gate runner is accounted for by PLATFORMS or
@@ -34,6 +35,11 @@ Five checks, in the order they are reported:
 5. Install what you ship. Every shipped platform is installed by a gate leg
    before the upload. A wheel that no leg installs reaches PyPI unexamined, and
    PyPI does not permit a filename to be uploaded a second time (#2177).
+6. One interpreter set. The five declarations of `3.11` to `3.14` -- three
+   `publish.yml` build jobs, its gate matrix, and `test.yml`'s `python-tests`
+   matrix -- all state the same set, and every version satisfies
+   `requires-python`. Nothing compared them before #2177, so a build job that
+   produced three wheels where its own matrix declared four was invisible.
 
 Output is pure ASCII. `prek` runs this as a child with stdout piped, so the
 locale codec encodes what it prints -- one em dash sank PR #2019's Windows job.
@@ -65,6 +71,13 @@ REQUIRED_JOB_SUFFIX = " (required)"
 # Only this action produces a wheel, so only its `target:` is a wheel target.
 # The sdist job uses the same action with `command: sdist` and no target.
 MATURIN_ACTION = "PyO3/maturin-action"
+
+# How maturin names the interpreters a build job targets. `-i` is the spelling
+# `publish.yml` uses; the long form is accepted so a rename does not make this
+# parser silently read nothing.
+INTERPRETER_FLAG = "-i"
+INTERPRETER_FLAG_LONG = "--interpreter"
+INTERPRETER_PREFIX = "python3."
 
 
 @dataclass(frozen=True)
@@ -277,6 +290,143 @@ def gate_platforms(workflow: dict[str, Any]) -> set[str]:
     }
 
 
+def _interpreters_from_args(args: str) -> set[str]:
+    """Versions named by `-i python3.11 python3.12 ...` in a maturin args string.
+
+    `-i` takes one or more interpreters and every following token that spells
+    one belongs to it. The first token that does not is the next flag, so the
+    scan stops there rather than reading the rest of the command line.
+    """
+    found: set[str] = set()
+    reading = False
+    for token in args.split():
+        if token in {INTERPRETER_FLAG, INTERPRETER_FLAG_LONG}:
+            reading = True
+            continue
+        if not reading:
+            continue
+        if token.startswith(INTERPRETER_PREFIX):
+            found.add(token.removeprefix("python"))
+        else:
+            reading = False
+    return found
+
+
+def interpreter_sets(workflow: dict[str, Any]) -> dict[str, set[str]]:
+    """Every interpreter declaration in one workflow, keyed by job id.
+
+    Two spellings reach this: a `python-version` matrix axis, and maturin's
+    `-i python3.11 ...`. Both are read, because `publish.yml` uses the first
+    for its Windows and gate jobs and the second for Linux and macOS.
+
+    A job that declares no interpreter is **absent** from the result rather
+    than mapped to an empty set. An empty set is equal to no real declaration,
+    so mapping the sdist job to one would report a disagreement that is not
+    there -- and, in the other direction, an empty set that reached the
+    equality check would make it hold for free (#2177).
+    """
+    sets: dict[str, set[str]] = {}
+    jobs = workflow.get("jobs")
+    if not isinstance(jobs, dict):
+        return sets
+
+    for job_id, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        strategy = job.get("strategy")
+        matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
+        if isinstance(matrix, dict) and matrix.get("python-version"):
+            sets[str(job_id)] = {str(version) for version in matrix["python-version"]}
+            continue
+        for step in _maturin_steps(job):
+            with_block = step.get("with")
+            if not isinstance(with_block, dict):
+                continue
+            found = _interpreters_from_args(str(with_block.get("args", "")))
+            if found:
+                sets[str(job_id)] = found
+    return sets
+
+
+def check_interpreters(sets: dict[str, set[str]], requires_python: str) -> list[str]:
+    """Check 6 -- every interpreter declaration states the same set.
+
+    The interpreter set was written five times and nothing compared them before
+    #2177: three `publish.yml` build jobs, `publish.yml`'s gate matrix, and
+    `test.yml`'s `python-tests` matrix. `requires-python` is a sixth statement
+    of a related fact, and every declared version must satisfy it.
+    """
+    problems: list[str] = []
+    if not sets:
+        problems.append(
+            "no interpreter declaration was found in either workflow. The "
+            "equality below holds over an empty set, so the gate would pass "
+            "having compared nothing."
+        )
+        return problems
+
+    if not requires_python:
+        problems.append(
+            "pyproject.toml declares no `requires-python`. Every interpreter "
+            "below would be compared against nothing, so a build job could "
+            "target a version the metadata never promised."
+        )
+
+    reference_job = min(sets)
+    reference = sets[reference_job]
+    problems.extend(
+        f"{job} declares interpreters {sorted(versions)} and {reference_job} "
+        f"declares {sorted(reference)}. A tested interpreter with no wheel is "
+        f"a supported user with no artifact, and the reverse ships a wheel "
+        f"nothing ran."
+        for job, versions in sorted(sets.items())
+        if versions != reference
+    )
+
+    if not requires_python:
+        return problems
+
+    # Refuse a specifier this parser cannot read, in place of guessing a floor.
+    # `removeprefix(">=")` over `>=3.11,<4.0` leaves `3.11,<4.0`, and
+    # `_version_key` drops every part that is not a digit -- the key becomes
+    # `(3, 0)` and every version above 3.0 satisfies it. The check would keep
+    # reporting success against a floor nobody wrote (#2177).
+    floor = _simple_floor(requires_python)
+    if floor is None:
+        problems.append(
+            f'`requires-python = "{requires_python}"` is not a bare `>=X.Y`. '
+            f"This checker reads that form alone, and it refuses rather than "
+            f"guess a floor. Teach it the new form, or state the floor here."
+        )
+        return problems
+
+    problems.extend(
+        f"{job} declares interpreter {version}, which does not satisfy "
+        f'`requires-python = "{requires_python}"`. pip refuses that wheel, '
+        f"so the build job produces an artifact nobody can install."
+        for job, versions in sorted(sets.items())
+        for version in sorted(versions)
+        if _version_key(version) < floor
+    )
+    return problems
+
+
+def _simple_floor(requires_python: str) -> tuple[int, ...] | None:
+    """The version key of a bare `>=X.Y`, or None for any other specifier."""
+    if not requires_python.startswith(">="):
+        return None
+    rest = requires_python.removeprefix(">=").strip()
+    parts = rest.split(".")
+    if not parts or not all(part.isdigit() for part in parts):
+        return None
+    return tuple(int(part) for part in parts)
+
+
+def _version_key(version: str) -> tuple[int, ...]:
+    """`"3.11"` as `(3, 11)`, so `3.9 < 3.11` rather than the string order."""
+    return tuple(int(part) for part in version.split(".") if part.isdigit())
+
+
 def os_classifiers(pyproject: dict[str, Any]) -> set[str]:
     """`Operating System ::` classifiers declared in `[project]`."""
     project = pyproject.get("project")
@@ -483,24 +633,48 @@ def main() -> int:
     )
     needs = rollup_needs(test_workflow)
     targets = wheel_targets(publish_workflow)
-    classifiers = os_classifiers(
-        tomllib.loads((args.root / "pyproject.toml").read_text(encoding="utf-8"))
+    pyproject = tomllib.loads(
+        (args.root / "pyproject.toml").read_text(encoding="utf-8")
     )
+    classifiers = os_classifiers(pyproject)
+
+    # Both workflows declare interpreters, so both are read into one namespace.
+    # A job id collision between the two files would hide a declaration, so
+    # each key carries its file.
+    interpreters = {
+        f"publish.yml:{job}": versions
+        for job, versions in interpreter_sets(publish_workflow).items()
+    }
+    interpreters |= {
+        f"test.yml:{job}": versions
+        for job, versions in interpreter_sets(test_workflow).items()
+    }
 
     problems = check(
         needs, targets, classifiers, gated=gate_platforms(publish_workflow)
     )
+    # Read defensively. An absent key used to raise here, and a traceback on
+    # stderr with an empty stdout is a gate whose report nobody can read --
+    # `check_interpreters` reports the absence instead.
+    project = pyproject.get("project")
+    requires_python = ""
+    if isinstance(project, dict):
+        requires_python = str(project.get("requires-python", ""))
+    problems += check_interpreters(interpreters, requires_python)
     if not problems:
         return 0
 
-    print("The three platform declarations disagree:\n")
+    print("The platform declarations disagree:\n")
     for problem in problems:
         print(f"  - {problem}")
     print(
         f"\nThis is a decision, not a typo. {ADR} settles the direction: a "
         f"platform is supported when CI runs the full suite on it, and wheel "
-        f"targets and classifiers are derived from that set. Whichever file "
-        f"you just changed, the question is whether that platform is supported."
+        f"targets, classifiers and the gate matrix are derived from that set. "
+        f"An interpreter disagreement is the same question on the other axis: "
+        f"a version is supported when CI tests it, and every build job ships "
+        f"it. Whichever file you just changed, the question is whether that "
+        f"platform or that interpreter is supported."
     )
     return 1
 

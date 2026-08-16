@@ -432,6 +432,140 @@ def test_an_empty_gate_matrix_is_refused_rather_than_passing_vacuously() -> None
     )
 
 
+# ── check 6: every interpreter declaration is the same set ───────────────────
+
+
+def test_interpreter_sets_reads_both_spellings() -> None:
+    """An interpreter set is declared two ways and both must be seen.
+
+    ``publish.yml``'s Linux and macOS jobs pass ``-i python3.11 …`` to maturin.
+    Its Windows and gate jobs use a ``python-version`` matrix, as ``test.yml``
+    does. A parser that read one spelling would compare a smaller set against a
+    smaller set and pass on the drift.
+    """
+    # Arrange
+    module = _load_script_module()
+    workflow = module.load_yaml(
+        textwrap.dedent("""
+            jobs:
+              linux:
+                steps:
+                  - uses: PyO3/maturin-action@v1
+                    with:
+                      args: --release --out dist -i python3.11 python3.12
+              windows:
+                strategy:
+                  matrix:
+                    python-version: ['3.11', '3.12']
+        """)
+    )
+
+    # Act
+    sets = module.interpreter_sets(workflow)
+
+    # Assert
+    assert sets == {"linux": {"3.11", "3.12"}, "windows": {"3.11", "3.12"}}, (
+        "both spellings state the same fact, and a parser blind to one of them "
+        f"cannot compare them; got {sets!r}"
+    )
+
+
+def test_a_job_declaring_no_interpreter_is_absent_rather_than_empty() -> None:
+    """An empty set compares equal to nothing and would pass silently."""
+    # Arrange
+    module = _load_script_module()
+    workflow = module.load_yaml(
+        textwrap.dedent("""
+            jobs:
+              sdist:
+                steps:
+                  - uses: PyO3/maturin-action@v1
+                    with:
+                      command: sdist
+                      args: --out dist
+        """)
+    )
+
+    # Act
+    sets = module.interpreter_sets(workflow)
+
+    # Assert
+    assert sets == {}, (
+        "the sdist job names no interpreter, and mapping it to an empty set "
+        f"would make it disagree with every real declaration; got {sets!r}"
+    )
+
+
+def test_a_build_job_shipping_fewer_interpreters_is_refused() -> None:
+    """A tested interpreter with no wheel is a user with no artifact."""
+    # Arrange
+    module = _load_script_module()
+
+    # Act
+    problems = module.check_interpreters(
+        {"linux": {"3.11", "3.12", "3.13", "3.14"}, "macos": {"3.11", "3.12", "3.13"}},
+        ">=3.11",
+    )
+
+    # Assert
+    assert any("macos" in problem for problem in problems), (
+        "a release that ships no 3.14 macOS wheel while CI tests 3.14 leaves a "
+        f"supported interpreter with no artifact; got {problems!r}"
+    )
+
+
+def test_an_interpreter_below_requires_python_is_refused() -> None:
+    """A wheel built for a version the metadata forbids installs nowhere."""
+    # Arrange
+    module = _load_script_module()
+
+    # Act
+    problems = module.check_interpreters({"linux": {"3.10"}}, ">=3.11")
+
+    # Assert
+    assert any("3.10" in problem for problem in problems), (
+        "pip refuses a wheel whose interpreter is outside requires-python, so "
+        f"that build job produces an artifact nobody can install; got {problems!r}"
+    )
+
+
+def test_a_requires_python_this_parser_cannot_read_is_refused() -> None:
+    """Guessing a floor is worse than refusing one.
+
+    ``removeprefix(">=")`` over ``>=3.11,<4.0`` leaves ``3.11,<4.0``, and a
+    version key built by dropping every non-digit part reads ``(3, 0)``. Every
+    version above 3.0 then satisfies it, so 3.10 would pass and the check would
+    keep reporting success against a floor nobody wrote.
+    """
+    # Arrange
+    module = _load_script_module()
+
+    # Act
+    problems = module.check_interpreters({"linux": {"3.10"}}, ">=3.11,<4.0")
+
+    # Assert
+    assert any("not a bare" in problem for problem in problems), (
+        "the checker must say it cannot read the specifier, because the "
+        f"alternative is a silent floor of (3, 0) that 3.10 satisfies; got "
+        f"{problems!r}"
+    )
+
+
+def test_no_interpreter_declaration_at_all_is_refused() -> None:
+    """A parser that read nothing must fail, not satisfy every comparison."""
+    # Arrange
+    module = _load_script_module()
+
+    # Act
+    problems = module.check_interpreters({}, ">=3.11")
+
+    # Assert
+    assert any("no interpreter" in problem for problem in problems), (
+        "with nothing read, `all sets are equal` holds over the empty set and "
+        f"the gate passes having compared nothing; got {problems!r}"
+    )
+
+
 # ── end to end ───────────────────────────────────────────────────────────────
 
 
