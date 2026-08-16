@@ -29,23 +29,21 @@ PARAMETRIZE_PER_FILE = 2
 PARAMETRIZE_CASES = 4
 
 
-def _oxitest_conftest() -> str:
+def _oxitest_fixtures() -> str:
     return textwrap.dedent("""\
         from __future__ import annotations
 
-        import oxitest as oxi
-
-        bench = oxi.Fixtures()
+        from oxitest import Yields, fixture
 
 
-        @bench.fixture
-        def data() -> dict:
+        @fixture(lifetime="function")
+        def data() -> Yields[dict]:
             d: dict = {}
             yield d
             d.clear()
 
 
-        @bench.fixture(shared=True)
+        @fixture(lifetime="package")
         def seed_data() -> dict:
             return {f"key_{i}": i for i in range(100)}
     """)
@@ -238,7 +236,7 @@ def generate() -> None:
     for tier_name, total_tests in TIERS.items():
         file_count = max(1, total_tests // TESTS_PER_FILE)
 
-        for variant, writer, needs_conftest in [
+        for variant, writer, needs_fixtures in [
             (
                 "oxitest",
                 _oxitest_realistic_file if tier_name == "realistic" else _oxitest_file,
@@ -249,8 +247,8 @@ def generate() -> None:
             tier_dir = GENERATED / tier_name / variant
             tier_dir.mkdir(parents=True, exist_ok=True)
 
-            if needs_conftest:
-                (tier_dir / "conftest.py").write_text(_oxitest_conftest())
+            if needs_fixtures:
+                (tier_dir / "__fixtures__.py").write_text(_oxitest_fixtures())
 
             for i in range(file_count):
                 test_offset = i * TESTS_PER_FILE
