@@ -49,13 +49,15 @@ The three sets cannot be compared as written. `test.yml` names GitHub runner lab
 
 So platform identity is canonically `(os, arch)`, and each file declares a mapping into it:
 
-| Canonical | `test.yml` job id | `publish.yml` target | Classifier |
-|---|---|---|---|
-| `linux-x86_64` | `python-tests`, `rust-tests` | `x86_64` | `Operating System :: POSIX :: Linux` |
-| `linux-aarch64` | `linux-arm` | `aarch64` | `Operating System :: POSIX :: Linux` |
-| `macos-arm64` | `macos-arm` | `universal2-apple-darwin` | `Operating System :: MacOS :: MacOS X` |
-| `macos-x86_64` | `macos-intel` | `universal2-apple-darwin` | `Operating System :: MacOS :: MacOS X` |
-| `windows-x86_64` | `windows` | `x86_64-pc-windows-msvc` | `Operating System :: Microsoft :: Windows` |
+| Canonical | `test.yml` job id | `publish.yml` target | `publish.yml` gate runner | Classifier |
+|---|---|---|---|---|
+| `linux-x86_64` | `python-tests`, `rust-tests` | `x86_64` | `ubuntu-latest` | `Operating System :: POSIX :: Linux` |
+| `linux-aarch64` | `linux-arm` | `aarch64` | `ubuntu-24.04-arm` | `Operating System :: POSIX :: Linux` |
+| `macos-arm64` | `macos-arm` | `universal2-apple-darwin` | `macos-latest` | `Operating System :: MacOS :: MacOS X` |
+| `macos-x86_64` | `macos-intel` | `universal2-apple-darwin` | `macos-15-intel` | `Operating System :: MacOS :: MacOS X` |
+| `windows-x86_64` | `windows` | `x86_64-pc-windows-msvc` | `windows-latest` | `Operating System :: Microsoft :: Windows` |
+
+The gate-runner column arrived with [#2177](https://github.com/kalonji-tools/oxitest/issues/2177). It is the fourth mapping rather than a repeat of the second: `universal2-apple-darwin` is **one** wheel and **two** canonical platforms, so the two macOS rows share a target and carry different runners. Installing that one wheel on both runners is the only evidence that both of its slices load.
 
 Two consequences of the mapping are decisions rather than details. **`universal2-apple-darwin` is one target covering two canonical platforms** — a single wheel holding both slices — so the shipped set is a many-to-one image and the comparison is over canonical identities, not over target strings. And **`classifiers` is compared as the OS projection only**, because there is nothing finer to compare it against; `Operating System :: POSIX :: Linux` is satisfied by either Linux row and carries no claim about architecture.
 
@@ -78,7 +80,7 @@ This ADR governs the platform set and how the three declarations relate. It does
 
 ## Consequences
 
-- **Adding a platform is now a four-file change, and the gate says so.** A new platform job must be mapped in `scripts/check_platform_sets.py`, given a wheel target, and given a classifier. Forgetting any one of them fails the check with a message naming this ADR. That is the intended cost: the drift this ADR exists to prevent was cheap precisely because each file could move alone.
+- **Adding a platform is a five-file change since [#2177](https://github.com/kalonji-tools/oxitest/issues/2177), and the gate says so.** A new platform job must be mapped in `scripts/check_platform_sets.py`, given a wheel target, given a classifier, and given a runner in `publish.yml`'s Distribution band `gate` matrix. Forgetting any one of them fails the check with a message naming this ADR. That is the intended cost: the drift this ADR exists to prevent was cheap precisely because each file could move alone.
 
 - **Removing a platform is symmetrical and is a user-visible break.** Dropping a job from the rollup drops the platform from the supported set, which drops its wheel and its classifier. That is a semver event, and the gate turns it into a deliberate four-file edit rather than a quiet job deletion.
 
@@ -86,8 +88,10 @@ This ADR governs the platform set and how the three declarations relate. It does
 
 - **oxitest ships a Windows wheel that no job has built.** `publish.yml` runs on `v*` tag push only, so the Windows build job cannot be exercised by a pull request. What is established: `.github/actions/platform-test` runs `uv run maturin develop` on `windows-latest` and that job is green, so maturin builds oxitest on that runner. What is not: the release build's four-interpreter `--release --out dist` shape. The Windows job is in the `publish` job's `needs:`, so a failure blocks the upload rather than shipping a partial release.
 
-- **This ADR claims that a suite passed on a platform. It does not claim that a published wheel works there.** No job in this repository downloads a released wheel and imports it; every platform job builds from source with `maturin develop`. A `manylinux2014_aarch64` wheel could fail to load on a real aarch64 machine and every check described here would stay green. The boundary is stated rather than closed — closing it means an install-and-smoke-test job against release artifacts, which is a separate change — so that "supported" is read as *the suite runs there*, which is what it means, rather than as *the artifact is verified there*, which it does not.
+- **This ADR claimed that a suite passed on a platform, and not that a published wheel worked there. [#2177](https://github.com/kalonji-tools/oxitest/issues/2177) closed that boundary.** Every platform job still builds from source with `maturin develop`, so a `manylinux2014_aarch64` wheel could fail to load on a real aarch64 machine and every check *described here* would stay green. What changed is that the artifact is no longer unexamined: ADR-0019's Distribution band gate installs each of the 17 release artifacts on a runner matching its tag, imports it from outside the source tree, and runs the CLI once, before `publish` runs. The separate change this bullet asked for is that gate. So "supported" now carries both readings — the suite runs there, **and** the artifact was installed and imported there — and the two are held equal by check 5 of `scripts/check_platform_sets.py`.
 
 - **The user-facing list lives in `docs/user/reference/stability.md`**, not here, and cites this ADR by absolute GitHub URL because `docs/adr/` sits outside `mkdocs.yml`'s `docs_dir` (`docs/user`) and is not published on the documentation site.
 
 - **This ADR has no structural gate.** Its links are not validated by `mkdocs --strict`, for the reason above. Its *content*, uniquely among this repository's ADRs, is machine-checked — Rule 3's table is mirrored in `scripts/check_platform_sets.py`, so the decision and the code cannot disagree for long.
+
+- **That script now also carries a check this ADR does not own.** Check 6, added by [#2177](https://github.com/kalonji-tools/oxitest/issues/2177), compares the five declarations of the interpreter set and holds each against `requires-python`. It is the same shape of question on a different axis, and it lives beside the platform checks because it reads the same two workflow files. It is not part of Rule 3, and no row of the table above states an interpreter. The script's own docstring is authoritative for what each check does.

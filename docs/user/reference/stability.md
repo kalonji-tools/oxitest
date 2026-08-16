@@ -6,6 +6,8 @@ oxitest follows [semantic versioning](https://semver.org/). This page defines wh
 
 A platform is supported when CI runs the full test suite on it. Wheel targets and PyPI classifiers are derived from this list, never the reverse — see [ADR-0013](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0013-platform-support-is-what-ci-tests.md) for the decision and its rationale.
 
+Every release is also gated on the artifact itself. Before any file reaches PyPI, each wheel in the table below is installed on a runner matching its tag, imported from outside the source tree, and used to run the command once; the source distribution is built from source and gets the same treatment. A failure stops the upload — see [ADR-0019](https://github.com/kalonji-tools/oxitest/blob/main/docs/adr/0019-a-test-belongs-to-the-band-of-what-it-starts.md).
+
 | Platform | Wheel |
 |---|---|
 | Linux x86_64 | `manylinux` x86_64 |
