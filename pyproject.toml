@@ -93,6 +93,10 @@ ignore = [
 "scripts/dispose_finding.py" = ["S603", "S607"]
 "scripts/check_closing_issues.py" = ["S603", "S607"]
 "scripts/check_disposition.py" = ["S603", "S607"]
+# `pin_verdict.py` shells out to `gh` and to `git ls-remote` — the second is the
+# whole point of it, since both GitHub API instruments serve a stale head after
+# a force-push (#2137). Its only argument is a pull request number.
+"scripts/pin_verdict.py" = ["S603", "S607"]
 
 # ── Test data projects ──────────────────────────────────────────────────
 "python/tests/data/**" = ["D100", "D103", "D104"]

@@ -87,6 +87,16 @@ merge-ready *args: (_log _blue "Checking merge readiness...")
     python scripts/check_closing_issues.py {{ args }}
     python scripts/check_disposition.py {{ args }}
 
+# Resolves the head SHA through `git ls-remote`, never through `gh pr view` or
+# the pulls API: measured on #2139, both of those served the PREVIOUS head
+# immediately after a force-push while local git was correct. Exits 2 while any
+# required context is absent or pending, so an incomplete answer is never green.
+#
+# Only the line directly above a recipe becomes its `just --list` description.
+# Report a PR's required CI contexts, pinned to its real head (stage 9)
+verdict pr *args: (_log _blue "Pinning CI verdict...")
+    python scripts/pin_verdict.py {{ quote(pr) }} {{ args }}
+
 # Validates the whole spec against the diff before writing anything.
 #
 # Only the line directly above a recipe becomes its `just --list` description.
