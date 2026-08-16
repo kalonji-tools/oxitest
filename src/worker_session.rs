@@ -35,6 +35,49 @@ fn take_child_pipes(
     ))
 }
 
+/// Read one worker's stdout, forwarding each line to the drain.
+///
+/// Extracted from the spawn closure so the length cap can be exercised against
+/// a `Cursor` rather than a real subprocess. While this lived in a closure the
+/// path had no test at all, and the test module said so: the truncation
+/// "requires a real subprocess write of >10 MB to trigger. That is impractical
+/// in a unit test context." It was — in a closure (#2144).
+///
+/// Returns when stdout closes, when a read fails, or when the receiver is
+/// dropped. The caller detaches the thread on that contract.
+fn pump_worker_lines<R: std::io::BufRead>(
+    mut reader: R,
+    line_tx: &crossbeam_channel::Sender<String>,
+) {
+    let mut buf = Vec::with_capacity(256);
+    loop {
+        buf.clear();
+        match reader.read_until(b'\n', &mut buf) {
+            Ok(0) => break,
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    "worker stdout read failed — abandoning this worker's output"
+                );
+                break;
+            }
+            Ok(_) => {
+                if buf.len() > MAX_LINE_LENGTH {
+                    tracing::warn!(
+                        len = buf.len(),
+                        "Worker stdout line exceeds {} bytes — truncating",
+                        MAX_LINE_LENGTH
+                    );
+                    buf.truncate(MAX_LINE_LENGTH);
+                }
+                if line_tx.send(decode_worker_line(&buf)).is_err() {
+                    break;
+                }
+            }
+        }
+    }
+}
+
 /// Decodes one line of worker stdout, replacing invalid UTF-8 in place.
 ///
 /// A worker's stdout is the protocol pipe, and `_emit` is not its only writer:
@@ -78,7 +121,6 @@ pub fn setup_worker_process(
     std::io::BufWriter<std::process::ChildStdin>,
     crossbeam_channel::Receiver<String>,
 )> {
-    use std::io::BufRead;
     use std::process::{Command, Stdio};
 
     let mut child = match Command::new(python_bin)
@@ -112,36 +154,7 @@ pub fn setup_worker_process(
     // 2. The channel receiver is dropped → send() returns Err → loop breaks
     // The thread cannot outlive the worker process or the channel, so no
     // explicit join is needed.
-    std::thread::spawn(move || {
-        let mut stdout = worker_stdout;
-        let mut buf = Vec::with_capacity(256);
-        loop {
-            buf.clear();
-            match stdout.read_until(b'\n', &mut buf) {
-                Ok(0) => break,
-                Err(e) => {
-                    tracing::error!(
-                        error = %e,
-                        "worker stdout read failed — abandoning this worker's output"
-                    );
-                    break;
-                }
-                Ok(_) => {
-                    if buf.len() > MAX_LINE_LENGTH {
-                        tracing::warn!(
-                            len = buf.len(),
-                            "Worker stdout line exceeds {} bytes — truncating",
-                            MAX_LINE_LENGTH
-                        );
-                        buf.truncate(MAX_LINE_LENGTH);
-                    }
-                    if line_tx.send(decode_worker_line(&buf)).is_err() {
-                        break;
-                    }
-                }
-            }
-        }
-    });
+    std::thread::spawn(move || pump_worker_lines(worker_stdout, &line_tx));
 
     Some((child, worker_stdin, line_rx))
 }
