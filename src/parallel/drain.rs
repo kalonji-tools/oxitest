@@ -92,20 +92,39 @@ fn forward_diagnostic(trimmed: &str, tx: &crossbeam_channel::Sender<WorkerMessag
     ));
 }
 
-/// Handle one worker line that is not a test result.
+/// What one line on a worker's stdout is.
 ///
-/// Returns `true` when the line was consumed, `false` when the caller should
-/// treat it as a result. Shared by both drain loops so the set of recognised
-/// message types cannot drift between them (#1840).
-fn dispatch_non_result(trimmed: &str, tx: &crossbeam_channel::Sender<WorkerMessage>) -> bool {
-    let msg_type = match serde_json::from_str::<crate::worker_result::WireEnvelope>(trimmed) {
-        Ok(env) => env.msg_type,
-        Err(_) => "result".to_string(), // fallback: assume result
+/// The `"type"` discriminator is the wire protocol's membership test (#2143).
+/// A line without it is not the worker answering, whatever else it is.
+enum LineKind {
+    /// Handled here — a diagnostic, a trace, or a type this coordinator does
+    /// not know. Counts toward no result slot.
+    Consumed,
+    /// Protocol traffic that claims to be a test result. The caller parses it.
+    Result,
+    /// Not protocol traffic: a test, a C extension, or an uncaptured child
+    /// writing to fd 1, which is the same pipe. Logged and dropped.
+    NonProtocol,
+}
+
+/// Classify one worker line.
+///
+/// Shared by both drain loops so the set of recognised message types cannot
+/// drift between them (#1840), and so one function decides what protocol
+/// traffic is (#2143). It also logs the `NonProtocol` verdict, so the two
+/// callers hold only the control flow that differs between them.
+fn classify_line(trimmed: &str, tx: &crossbeam_channel::Sender<WorkerMessage>) -> LineKind {
+    let Ok(env) = serde_json::from_str::<crate::worker_result::WireEnvelope>(trimmed) else {
+        tracing::warn!(
+            output = %trimmed,
+            "ignoring non-protocol line on worker stdout"
+        );
+        return LineKind::NonProtocol;
     };
-    match msg_type.as_str() {
+    match env.msg_type.as_str() {
         "diagnostic" => {
             forward_diagnostic(trimmed, tx);
-            true
+            LineKind::Consumed
         }
         "trace" => {
             if let Ok(wt) = serde_json::from_str::<crate::worker_result::WireTrace>(trimmed) {
@@ -117,12 +136,12 @@ fn dispatch_non_result(trimmed: &str, tx: &crossbeam_channel::Sender<WorkerMessa
                     _ => tracing::trace!(module = %wt.module, "{}", wt.message),
                 }
             }
-            true
+            LineKind::Consumed
         }
-        "result" => false,
+        "result" => LineKind::Result,
         other => {
             tracing::warn!(msg_type = %other, "unknown worker message type — skipping");
-            true
+            LineKind::Consumed
         }
     }
 }
@@ -176,11 +195,22 @@ pub fn drain_worker_results(
                     // Empty line: skip without resetting the deadline.
                     continue;
                 }
-                // Dispatch non-result message types first; they don't count
-                // toward `received` and are handled inline.
-                if dispatch_non_result(trimmed, tx) {
-                    result_deadline = Instant::now() + watchdog;
-                    continue;
+                // Classify first. Only a line that claims to be a result can
+                // count toward `received`.
+                match classify_line(trimmed, tx) {
+                    LineKind::Consumed => {
+                        result_deadline = Instant::now() + watchdog;
+                        continue;
+                    }
+                    // Not the worker answering, so it counts toward nothing and
+                    // it does not prove liveness. A test looping on `print(1)`
+                    // would otherwise hold the drain open — the same shape
+                    // `non_protocol_lines_spin_without_progress` pins for text
+                    // (#2010, #2143). `docs/internals/src/worker-protocol.md`
+                    // carries the full classification and what this costs.
+                    // `classify_line` has already logged it.
+                    LineKind::NonProtocol => continue,
+                    LineKind::Result => {}
                 }
 
                 // Result handling — unchanged from pre-v3 protocol.
@@ -208,29 +238,13 @@ pub fn drain_worker_results(
                         );
                     }
                     Err(e) => {
-                        // A line that is not JSON at all is not protocol
-                        // traffic — it is a test, a C extension, or an
-                        // uncaptured child writing to fd 1, which is the same
-                        // pipe. Counting it against `expected` filled the slot
-                        // the real result needed (#2010). See
-                        // `docs/internals/src/worker-protocol.md` for the full
-                        // classification and what not counting it costs.
-                        //
-                        // It does NOT reset the deadline, for the same reason
-                        // an empty line does not: it is not the worker
-                        // answering, and once it stopped counting, nothing else
-                        // bounds this loop. A test looping on `print()` held
-                        // the drain open indefinitely — measured at 4.79M lines
-                        // and still running — where `drain_until_eof` has
-                        // `MAX_TAIL_LINES` for exactly this shape.
-                        if serde_json::from_str::<serde_json::Value>(trimmed).is_err() {
-                            tracing::warn!(
-                                error = %e,
-                                output = %trimmed,
-                                "ignoring non-protocol line on worker stdout"
-                            );
-                            continue;
-                        }
+                        // The line said `"type":"result"` and does not parse as
+                        // one, so it is a worker defect rather than stray
+                        // output. `classify_line` already dropped every line
+                        // that is not protocol traffic (#2010, #2143), so this
+                        // arm counts unconditionally: refusing the slot would
+                        // leave the drain waiting for an answer that never
+                        // comes, until the watchdog killed a healthy worker.
                         received += 1;
                         result_deadline = Instant::now() + watchdog;
                         // Try to salvage node_id + duration_ms for an error sentinel
@@ -342,8 +356,13 @@ pub fn drain_until_eof(
                 // tracking: every group was drained to its expected count
                 // before we got here, so counting it would corrupt the tally
                 // rather than rescue a test.
-                if !dispatch_non_result(trimmed, tx) {
-                    tracing::warn!("unexpected result after the final task group — skipping");
+                match classify_line(trimmed, tx) {
+                    // Both are already handled: a consumed line by
+                    // `classify_line`, a non-protocol line by its log there.
+                    LineKind::Consumed | LineKind::NonProtocol => {}
+                    LineKind::Result => {
+                        tracing::warn!("unexpected result after the final task group — skipping");
+                    }
                 }
             }
             Err(crossbeam_channel::RecvTimeoutError::Timeout) => return,
@@ -619,7 +638,7 @@ mod drain_tests {
 
     fn valid_json(node_id: &str) -> String {
         format!(
-            r#"{{"node_id":"{node_id}","outcome":"passed","duration_ms":1.0,"protocol_version":{}}}"#,
+            r#"{{"type":"result","node_id":"{node_id}","outcome":"passed","duration_ms":1.0,"protocol_version":{}}}"#,
             crate::worker_result::PROTOCOL_VERSION
         )
     }
@@ -952,7 +971,10 @@ mod drain_tests {
         let (result_tx, result_rx) = crossbeam_channel::unbounded();
 
         line_tx
-            .send(r#"{"node_id":"t","outcome":"completely_made_up","duration_ms":0.5}"#.to_string())
+            .send(
+                r#"{"type":"result","node_id":"t","outcome":"completely_made_up","duration_ms":0.5}"#
+                    .to_string(),
+            )
             .unwrap();
         drop(line_tx);
 
@@ -983,7 +1005,7 @@ mod drain_tests {
         // Send a result with protocol_version 99 (mismatch)
         line_tx
             .send(
-                r#"{"node_id":"t","outcome":"passed","duration_ms":1.0,"protocol_version":99}"#
+                r#"{"type":"result","node_id":"t","outcome":"passed","duration_ms":1.0,"protocol_version":99}"#
                     .to_string(),
             )
             .unwrap();
@@ -1103,21 +1125,25 @@ mod drain_tests {
     }
 
     // ── Test 11 ─────────────────────────────────────────────────────────────────
-    // JSON that is not a result (not salvageable via WireMinimal) must still
-    // emit an error sentinel so the test is not silently dropped.
+    // A line that claims `"type":"result"` and is not salvageable via
+    // WireMinimal must still emit an error sentinel, so the test is not
+    // silently dropped.
     //
     // This test used to send `"not json at all"` and assert the same thing.
     // That was the contract #2010 removed: a line which is not JSON at all is
-    // not the worker answering, so counting it deleted the answer. The salvage
-    // path is kept for the case it was written for — a worker that emitted
-    // something structured and wrong.
+    // not the worker answering, so counting it deleted the answer. It then sent
+    // `{"unexpected": true}`, which #2143 removed for the same reason — JSON
+    // without the discriminator is not the worker answering either. The salvage
+    // path is kept for the case it was written for: a worker that emitted
+    // something structured and wrong, which is what the discriminator now
+    // identifies.
     #[test]
     fn json_that_is_not_a_result_emits_error_sentinel() {
         let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
         let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
 
         line_tx
-            .send("{\"unexpected\": true}\n".to_string())
+            .send("{\"type\":\"result\",\"unexpected\":true}\n".to_string())
             .unwrap();
         drop(line_tx);
 
@@ -1198,6 +1224,99 @@ mod drain_tests {
             "the surviving result must be the worker's real one. A \
              `<worker>::malformed_output` sentinel here means the stray line \
              was counted and the real result was discarded behind it"
+        );
+    }
+
+    // ── #2143 ───────────────────────────────────────────────────────────────
+    // A Test Item writes to the same pipe the worker writes results to. A line
+    // that carries no `"type"` field is not the worker answering, whatever else
+    // it is. It used to count, so `print(json.dumps(...))` in one Test Item
+    // deleted another Test Item's result and the run exited 0.
+    //
+    // Two shapes at least, because a one-sided fix passes with one of them.
+    // `42` is not a JSON object, so `WireEnvelope` deserialization fails and
+    // the fallback decided. `{}` IS a JSON object, so the field default
+    // decided. Both must be dropped.
+    #[test]
+    fn json_without_a_type_field_does_not_consume_a_result_slot() {
+        for stray in ["42", "{}", "[1, 2]", r#"{"user": 1}"#, "true"] {
+            let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+            let (result_tx, result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
+
+            line_tx.send(format!("{stray}\n")).unwrap();
+            line_tx.send(valid_json("t::a")).unwrap();
+            drop(line_tx);
+
+            let (outcome, received) =
+                drain_worker_results(&line_rx, 1, Duration::from_secs(5), &result_tx, 0);
+
+            assert_eq!(
+                outcome,
+                DrainOutcome::Complete,
+                "the worker sent the one result it owed, so the drain must \
+                 complete; `{stray}` filled the slot instead"
+            );
+            assert_eq!(
+                received, 1,
+                "only the real result counts — counting `{stray}` too is what \
+                 discarded the real one"
+            );
+            let messages: Vec<WorkerMessage> = result_rx.try_iter().collect();
+            let result = expect_result(
+                messages
+                    .into_iter()
+                    .next()
+                    .expect("the real result must survive"),
+            );
+            assert_eq!(
+                result.resolved.node_id.to_string(),
+                "t::a",
+                "the surviving result must be the worker's real one. A \
+                 `<worker>::malformed_output` sentinel here means `{stray}` was \
+                 counted and the real result was discarded behind it"
+            );
+        }
+    }
+
+    // Once a JSON line stopped counting toward `expected`, nothing else bounds
+    // this loop. A Test Item looping on `print(1)` is the same shape as one
+    // looping on `print("x")`, so one rule must cover both — see
+    // `non_protocol_lines_spin_without_progress`, which pins the text half.
+    #[test]
+    fn json_without_a_type_field_does_not_reset_the_deadline() {
+        const SPAM_WINDOW: Duration = Duration::from_millis(600);
+        const WATCHDOG: Duration = Duration::from_millis(200);
+        const JITTER_SLACK: Duration = Duration::from_millis(400);
+
+        let (line_tx, line_rx) = crossbeam_channel::unbounded::<String>();
+        let (result_tx, _result_rx) = crossbeam_channel::unbounded::<WorkerMessage>();
+
+        std::thread::spawn(move || {
+            let stop = std::time::Instant::now() + SPAM_WINDOW;
+            while std::time::Instant::now() < stop {
+                if line_tx.send("42\n".to_string()).is_err() {
+                    break;
+                }
+            }
+        });
+
+        let start = std::time::Instant::now();
+        let (outcome, received) = drain_worker_results(&line_rx, 1, WATCHDOG, &result_tx, 0);
+
+        assert_eq!(
+            outcome,
+            DrainOutcome::TimedOut,
+            "a worker that answers nothing must time out, whatever else it writes"
+        );
+        assert_eq!(
+            received, 0,
+            "a line with no type discriminator is not an answer, so it counts \
+             toward nothing"
+        );
+        assert!(
+            start.elapsed() <= WATCHDOG + JITTER_SLACK,
+            "a JSON line must not prove liveness, or a spamming test keeps the \
+             coordinator reading forever"
         );
     }
 

@@ -237,16 +237,18 @@ pub struct WireMinimal {
 
 /// Envelope for dispatching worker stdout lines by message type.
 ///
-/// Deserialized first to determine which full type to parse.
-/// Missing `type` field defaults to "result" for backwards compatibility.
+/// Deserialized first to decide which full type to parse. `"type"` is
+/// **required**: it is the wire protocol's membership test, so a line without
+/// it is not the worker answering (#2143).
+///
+/// The field carried a `"result"` default for pre-v3 workers until #2143
+/// removed it. The worker ships in the same wheel as this coordinator, so a
+/// pre-v3 worker cannot reach a v8 coordinator, and the default made every
+/// JSON line a test wrote to fd 1 consume a result slot.
 #[derive(serde::Deserialize)]
 pub struct WireEnvelope {
-    #[serde(rename = "type", default = "default_result_type")]
+    #[serde(rename = "type")]
     pub(crate) msg_type: String,
-}
-
-fn default_result_type() -> String {
-    "result".to_string()
 }
 
 /// A diagnostic message from a worker subprocess.
