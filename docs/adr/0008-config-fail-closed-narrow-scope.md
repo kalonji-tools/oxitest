@@ -23,3 +23,20 @@
 - **`deny_unknown_fields` on `OxitestConfig` becomes load-bearing.** Without it, unknown-field errors never reach the hard-exit path. `PyprojectToml` and `ToolTable` deliberately lack `deny_unknown_fields` (they carry `[project]`, `[build-system]`, `[tool.*]` siblings); doc comments on both structs record why they must stay open, preempting well-meaning "consistency" PRs that would break every user pyproject.
 - **Migration hints for future purged fields remain a manual convention** on `check_no_legacy_keys`. When removing an `OxitestConfig` field with a migration path, add a `LegacyKey` variant so the user sees the specific hint rather than the generic `unknown field 'X'`. No machine-verified enforcement — the surface is small enough that discipline suffices.
 - **`test_invalid_scope_surfaces_deserializer_error` gets tightened.** The docstring's "Until that decision is made" hedge — a placeholder from the #1602 rework — is deleted and the test asserts non-zero exit.
+
+## Amendment — a value that names something absent is an invalid request (#2185)
+
+The decision above covers **deserialization** failures at `[tool.oxitest]`: an unknown field, a wrong type, a malformed value. Two settings deserialize perfectly and name something that does not exist. Neither this ADR nor [ADR-0014](0014-target-validation.md) reached them, and both exited `3`:
+
+| Setting | Before | After |
+|---|---|---|
+| `plugins = ["absent_xyz"]` | 3 | **4** |
+| `async_backend = "no_such_backend"` | 3 | **4** |
+
+**A `[tool.oxitest]` value that deserializes correctly and names something absent is an invalid request, and exits 4.** This is ADR-0014's argument for a Target applied to the configuration surface this ADR already owns: a value naming something absent is a mistake in the request, whatever the request's spelling. Exit `3` is defined as a test file that could not be imported, a declaration inside one that was refused, or a strict violation — and a plugin that was never installed is none of the three.
+
+The narrow scope is unchanged, and the amendment draws a line rather than widening the surface. A plugin that is **defective** — no `oxitest_plugin()`, an entry point that raises, a wrong return type — stays at `3`. That is the plugin author's bug, and exit 4 would tell the user to correct a `pyproject.toml` that is already correct. `PluginNotFoundError` carries the first case and votes; `PluginLoadError` carries the second and does not.
+
+Eleven of `plugin_loader.py`'s thirteen raise sites are the second kind, which is why one verdict for the whole class was refused: it would have been wrong about eleven sites or about two.
+
+`ImportError.name` decides which case a failed import is. It reports the **first absent segment**, so for a plugin named `pkg.sub` whose `pkg` is not installed it holds `pkg` — an equality test would read that plugin as installed. The predicate matches the name or a dotted prefix of it.
