@@ -274,6 +274,36 @@ extract `node_id` and `duration_ms`. If successful, it synthesises an Error sent
 so the test is still recorded in results. If even `WireMinimal` fails, the line is
 logged as bad output.
 
+### How much of a line the coordinator holds
+
+`MAX_LINE_LENGTH` in `src/worker_session.rs` is 10 MiB, and it bounds the **read**, not
+only what is forwarded. `pump_worker_lines` caps each `read_until` with `Read::take`, so
+a line longer than the limit is never fully resident. The prefix is forwarded, and the
+rest of that line is discarded with `BufRead::skip_until`, which allocates nothing.
+
+Both halves are load-bearing:
+
+- **Without the cap**, `read_until` appends until it finds a newline and the length test
+  runs afterwards — so the coordinator held the whole line before deciding it was too
+  long. Measured before #2144, on Linux with a test item writing N MiB to fd 1 with no
+  newline at `-n 2`: coordinator peak RSS was 54,060 KB at 0 MiB, 150,636 KB at 64 MiB
+  and 347,240 KB at 256 MiB — **1024 KB per MiB**, and 29 times the limit at the top end.
+- **Without the discard**, the remainder of an over-long line returns as further capped
+  lines, and the drain classifies every one of them. One 256 MiB line would become 26
+  forwarded lines instead of one.
+
+The prefix is forwarded *before* the discard runs. The discard is unbounded in time — it
+runs to the next newline, however far away that is — and a line the coordinator already
+has must not wait behind it.
+
+**This does not rescue the run.** The worker's result line follows the long output on the
+same logical line, so it is inside the discarded remainder, exactly as it was inside the
+truncated tail before. The drain reports `ignoring non-protocol line on worker stdout`
+and waits for the watchdog. What changes is that the coordinator survives to do so.
+
+The bound is **per reader**, and there is one reader per worker. At `-n 16` the worst
+case is 16 × 10 MiB; nothing here caps their sum.
+
 ### Non-protocol lines on worker stdout
 
 A worker's stdout is the protocol pipe, and `_emit` is not its only writer: a test, a
