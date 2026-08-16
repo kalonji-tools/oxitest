@@ -219,6 +219,8 @@ This section is about oxitest's own tests, not a user's. ADR-0019 is the authori
 
 **Distribution band** — The test installs the wheel and imports it from outside the source tree.
 
+**Band record** — The committed derivation of which band each test belongs to, at `scripts/band_record.tsv`. Keyed on a test. `just check` refuses when the tree and the record disagree. Distinct from the obligation record, which keys on a region of product code.
+
 **Attribute** — A property of a test that names its subject rather than its liveness. Cuts across the bands, so it is not a partition. Three exist: `documentation`, `regression`, `tooling`.
 
 **Specimen** — A test-shaped function that a band test writes into a project as input. No band collects a Specimen.
