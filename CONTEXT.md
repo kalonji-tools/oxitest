@@ -119,6 +119,8 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 
 **Flaky** — A test that failed on the initial run but passed on retry. Not a hard failure.
 
+**Usage Error** — One concept in two languages. `ExitCode::UsageError` is exit code 4; `oxitest._bridge._errors.UsageError` is the exception class. Both mean the request itself was invalid. The exit code is fixed by the **class** of the error and never by the transition that caught it, so a startup failure keeps the class it was raised with rather than reporting as a collection error (ADR-0014, #2172). `is_usage_error` is the single source of truth for the vote, and both the Rust startup funnels and the Python execution funnels ask it. A broken oxitest invariant is an **Internal Error**, which is not a usage error: it means oxitest failed to hold a property of its own, so telling the user their request was invalid would name the wrong culprit.
+
 ## Diagnostic System
 
 **Diagnostic** — A user-facing message emitted by the Python bridge and rendered by the Rust reporter. Carries severity (error, warning, notice), context (e.g. "fixture teardown"), message, and optional file/lineno. Frozen dataclass in `result.py`, `DiagnosticEntry` struct in `stats.rs`. Every path a Diagnostic prints is shown against the **Rootdir**, and the run announces the Rootdir once at its start so a reader can resolve one (#1851). The base is never the worker's current directory, which is process-global and may be moved by `patch.chdir`. A path outside the Rootdir stays absolute, and `<plugin:…>` and `<builtin>` are origin labels rather than paths. Paths stay canonical **internally**: the relative form is display only.
