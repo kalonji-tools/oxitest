@@ -672,6 +672,133 @@ def test_patcher_setattr_restores_on_teardown() -> None:
     )
 
 
+def test_patcher_setattr_removes_an_attribute_the_object_did_not_own() -> None:
+    """An inherited attribute is removed on teardown, not written onto the object."""
+    # Arrange
+    ctx, teardowns = _make_builtin_ctx()
+    patch = _PatcherFixture().create(ctx=ctx)
+
+    class Base:
+        attr = "base"
+
+    class Child(Base):
+        pass
+
+    # Act
+    patch.setattr(Child, "attr", "patched")
+    teardowns[0]()
+
+    # Assert
+    assert "attr" not in vars(Child), (
+        "Child inherited attr, so restoring it with setattr writes it onto "
+        "Child and hides Base for every later test in this worker — the state "
+        f"is process-global (#2146); vars={list(vars(Child))}"
+    )
+
+
+def test_patcher_setattr_keeps_the_base_reachable_through_the_mro() -> None:
+    """A shadow entry on the subclass defeats every later assignment on the base."""
+    # Arrange
+    ctx, teardowns = _make_builtin_ctx()
+    patch = _PatcherFixture().create(ctx=ctx)
+
+    class Base:
+        attr = "base"
+
+    class Child(Base):
+        pass
+
+    patch.setattr(Child, "attr", "patched")
+    teardowns[0]()
+
+    # Act
+    Base.attr = "reconfigured"
+
+    # Assert
+    assert Child.attr == "reconfigured", (
+        "this is what the shadow costs: Child stops following Base, so a later "
+        f"test reconfiguring Base silently has no effect; got {Child.attr!r}"
+    )
+
+
+def test_patcher_setattr_leaves_no_bound_method_in_an_instance_dict() -> None:
+    """Restoring a method onto an instance would store a bound method."""
+    # Arrange
+    ctx, teardowns = _make_builtin_ctx()
+    patch = _PatcherFixture().create(ctx=ctx)
+
+    class Thing:
+        def meth(self) -> str:
+            return "class method"
+
+    thing = Thing()
+
+    # Act
+    patch.setattr(thing, "meth", lambda: "patched")
+    teardowns[0]()
+
+    # Assert
+    assert "meth" not in vars(thing), (
+        "a bound method in the instance dict holds a strong reference from the "
+        "instance back to itself, and it defeats any later assignment on the "
+        f"class; vars={vars(thing)}"
+    )
+
+
+def test_patcher_setattr_restores_an_attribute_on_an_object_without_a_dict() -> None:
+    """An object with __slots__ cannot answer ownership, so it is restored."""
+    # Arrange
+    ctx, teardowns = _make_builtin_ctx()
+    patch = _PatcherFixture().create(ctx=ctx)
+
+    class Slotted:
+        __slots__ = ("x",)
+        x: int
+
+    slotted = Slotted()
+    slotted.x = 1
+
+    # Act
+    patch.setattr(slotted, "x", 99)
+    teardowns[0]()
+
+    # Assert
+    assert slotted.x == 1, (
+        "a slot has no __dict__ entry to read ownership from, so deleting it "
+        "would clear a value the object really had; restoring is what every "
+        f"object got before #2146. Got {slotted.x!r}"
+    )
+
+
+def test_patcher_setattr_leaves_getattr_serving_the_attribute() -> None:
+    """An attribute served by __getattr__ lives in no namespace, so it is removed."""
+    # Arrange
+    ctx, teardowns = _make_builtin_ctx()
+    patch = _PatcherFixture().create(ctx=ctx)
+
+    class ViaGetattr:
+        def __getattr__(self, name: str) -> str:
+            if name == "dynamic":
+                return "computed"
+            raise AttributeError(name)
+
+    obj = ViaGetattr()
+
+    # Act
+    patch.setattr(obj, "dynamic", "patched")
+    teardowns[0]()
+
+    # Assert
+    assert "dynamic" not in vars(obj), (
+        "__getattr__ is consulted only when the instance dict misses, so "
+        "restoring the computed value into that dict stops __getattr__ being "
+        f"called for the rest of the worker; vars={vars(obj)}"
+    )
+    assert obj.dynamic == "computed", (
+        f"__getattr__ must serve the attribute again; got {obj.dynamic!r}"
+    )
+
+
 def test_patcher_setenv_sets_and_restores() -> None:
     """patch.setenv() sets an env var during the test and removes it on teardown."""
     key = "_OXITEST_PATCHER_TEST"
