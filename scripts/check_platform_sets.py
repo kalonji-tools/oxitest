@@ -1,40 +1,44 @@
 #!/usr/bin/env python3
-"""Check that the three platform declarations agree with each other.
+"""Check that the platform declarations agree with each other.
 
 Three files each encode oxitest's platform set and nothing compared them, so
 they disagreed for the project's whole life: `classifiers` was absent entirely,
-`publish.yml` shipped three targets, and `test.yml` tested one (#1946).
+`publish.yml` shipped three targets, and `test.yml` tested one (#1946). #2177
+added a fourth declaration, the Distribution band gate's runner matrix.
 
 ADR-0013 settles the direction. `supported(X)` means CI runs the full suite on
 X; wheel targets and `classifiers` are derived from that set, never the reverse.
 This checker holds the derivation.
 
-The three files share no vocabulary -- `test.yml` names runner jobs,
-`publish.yml` names maturin targets, and trove classifiers carry no
-architecture axis at all -- so PLATFORMS below declares one canonical (os, arch)
-identity per platform and the mapping each file takes into it. That table is
-ADR-0013 Rule 3 in machine form.
+The files share no vocabulary -- `test.yml` names runner jobs, `publish.yml`
+names maturin targets and, in the gate, runner labels, and trove classifiers
+carry no architecture axis at all -- so PLATFORMS below declares one canonical
+(os, arch) identity per platform and the mapping each file takes into it. That
+table is ADR-0013 Rule 3 in machine form.
 
-Four checks, in the order they are reported:
+Five checks, in the order they are reported:
 
-1. Nothing undeclared. Every job in the required rollup, every wheel target and
-   every OS classifier is accounted for by PLATFORMS or by NON_PLATFORM_JOBS.
-   This runs first because the other three read the table, and a file entry the
-   table cannot see is invisible to a set comparison rather than caught by it.
+1. Nothing undeclared. Every job in the required rollup, every wheel target,
+   every OS classifier and every gate runner is accounted for by PLATFORMS or
+   by NON_PLATFORM_JOBS. This runs first because the others read the table, and
+   a file entry the table cannot see is invisible to a set comparison rather
+   than caught by it.
 2. Ship what you test. The canonical set from `test.yml` equals the canonical
    set from `publish.yml`.
 3. Promise what you test. The OS projection of the tested set equals the
    classifier set.
-4. Vacuity. All three derived sets are non-empty, and every allowlist entry
+4. Vacuity. All four derived sets are non-empty, and every allowlist entry
    really appears in the rollup. A parser that silently returns nothing passes
    a set comparison while guarding nothing, and a standing exemption for a job
    that no longer exists is the same hazard from the other side.
+5. Install what you ship. Every shipped platform is installed by a gate leg
+   before the upload. A wheel that no leg installs reaches PyPI unexamined, and
+   PyPI does not permit a filename to be uploaded a second time (#2177).
 
 Output is pure ASCII. `prek` runs this as a child with stdout piped, so the
 locale codec encodes what it prints -- one em dash sank PR #2019's Windows job.
 
-Exits 0 when the three declarations agree, 1 with a report naming each
-disagreement.
+Exits 0 when the declarations agree, 1 with a report naming each disagreement.
 """
 
 from __future__ import annotations
@@ -74,6 +78,11 @@ class Platform:
     test_jobs: tuple[str, ...]
     publish_target: str
     classifier: str
+    # The runner the Distribution band gate installs this platform's artifact
+    # on (#2177). `universal2` is one wheel and two canonical platforms, so two
+    # rows share a `publish_target` and carry different runners -- installing
+    # that one wheel on both macOS runners is the only proof both slices load.
+    gate_runner: str
 
 
 # ADR-0013 Rule 3. Changing this table is changing the decision.
@@ -83,12 +92,14 @@ PLATFORMS = (
         test_jobs=("rust-tests", "python-tests"),
         publish_target="x86_64",
         classifier="Operating System :: POSIX :: Linux",
+        gate_runner="ubuntu-latest",
     ),
     Platform(
         canonical="linux-aarch64",
         test_jobs=("linux-arm",),
         publish_target="aarch64",
         classifier="Operating System :: POSIX :: Linux",
+        gate_runner="ubuntu-24.04-arm",
     ),
     # One wheel, two canonical platforms: `universal2` carries both slices, so
     # the shipped set is a many-to-one image of the target tokens.
@@ -97,18 +108,21 @@ PLATFORMS = (
         test_jobs=("macos-arm",),
         publish_target="universal2-apple-darwin",
         classifier="Operating System :: MacOS :: MacOS X",
+        gate_runner="macos-latest",
     ),
     Platform(
         canonical="macos-x86_64",
         test_jobs=("macos-intel",),
         publish_target="universal2-apple-darwin",
         classifier="Operating System :: MacOS :: MacOS X",
+        gate_runner="macos-15-intel",
     ),
     Platform(
         canonical="windows-x86_64",
         test_jobs=("windows",),
         publish_target="x86_64-pc-windows-msvc",
         classifier="Operating System :: Microsoft :: Windows",
+        gate_runner="windows-latest",
     ),
 )
 
@@ -235,6 +249,34 @@ def wheel_targets(workflow: dict[str, Any]) -> set[str]:
     return targets
 
 
+def gate_platforms(workflow: dict[str, Any]) -> set[str]:
+    """Canonical platforms the Distribution band gate installs an artifact on.
+
+    Read from the `gate` job's `strategy.matrix.runner` axis. A runner the
+    table cannot see is returned verbatim rather than dropped, so check 1
+    reports it as undeclared -- dropping it would leave the compared sets equal
+    and the gate would pass on the drift it exists to find (#2177).
+    """
+    jobs = workflow.get("jobs")
+    if not isinstance(jobs, dict):
+        return set()
+    gate = jobs.get("gate")
+    if not isinstance(gate, dict):
+        return set()
+    strategy = gate.get("strategy")
+    if not isinstance(strategy, dict):
+        return set()
+    matrix = strategy.get("matrix")
+    if not isinstance(matrix, dict):
+        return set()
+
+    by_runner = {platform.gate_runner: platform.canonical for platform in PLATFORMS}
+    return {
+        by_runner.get(str(runner), str(runner))
+        for runner in matrix.get("runner", []) or []
+    }
+
+
 def os_classifiers(pyproject: dict[str, Any]) -> set[str]:
     """`Operating System ::` classifiers declared in `[project]`."""
     project = pyproject.get("project")
@@ -250,7 +292,12 @@ def os_classifiers(pyproject: dict[str, Any]) -> set[str]:
     }
 
 
-def _undeclared(needs: set[str], targets: set[str], classifiers: set[str]) -> list[str]:
+def _undeclared(
+    needs: set[str],
+    targets: set[str],
+    classifiers: set[str],
+    gated: set[str],
+) -> list[str]:
     """Check 1 -- entries in the three files that PLATFORMS cannot see.
 
     Runs before every comparison below it. An entry the table does not know is
@@ -278,11 +325,21 @@ def _undeclared(needs: set[str], targets: set[str], classifiers: set[str]) -> li
         f"Classifiers are derived from the tested set, not chosen."
         for classifier in sorted(classifiers - known_classifiers)
     )
+    known_canonical = {platform.canonical for platform in PLATFORMS}
+    problems.extend(
+        f"publish.yml: gate runner `{runner}` is not in PLATFORMS. The gate "
+        f"installs the artifact of a platform, so every runner names one."
+        for runner in sorted(gated - known_canonical)
+    )
     return problems
 
 
 def _vacuity(
-    needs: set[str], tested: set[str], shipped: set[str], classifiers: set[str]
+    needs: set[str],
+    tested: set[str],
+    shipped: set[str],
+    classifiers: set[str],
+    gated: set[str],
 ) -> list[str]:
     """Check 4 -- a set that is empty makes every comparison hold for free.
 
@@ -305,6 +362,12 @@ def _vacuity(
         problems.append(
             "pyproject.toml: no `Operating System ::` classifier was found. "
             "Every comparison would hold vacuously and guard nothing."
+        )
+    if not gated:
+        problems.append(
+            "publish.yml: no gate runner was found. Every artifact would be "
+            "uploaded with no install behind it, and the comparison would hold "
+            "having read nothing."
         )
     problems.extend(
         f"NON_PLATFORM_JOBS exempts `{job}`, which is not in any required "
@@ -330,6 +393,27 @@ def _ship_what_you_test(tested: set[str], shipped: set[str]) -> list[str]:
     return problems
 
 
+def _install_what_you_ship(shipped: set[str], gated: set[str]) -> list[str]:
+    """Check 5 -- every shipped platform is installed before the upload.
+
+    ADR-0019's Distribution band. A wheel that no leg installs reaches PyPI
+    unexamined, and PyPI does not permit a filename to be uploaded a second
+    time, so that mistake is permanent (#2177).
+    """
+    problems = [
+        f"{canonical} ships a wheel that the Distribution band gate does not "
+        f"install. That artifact would reach PyPI unexamined, and PyPI makes "
+        f"a filename permanent."
+        for canonical in sorted(shipped - gated)
+    ]
+    problems.extend(
+        f"{canonical} is in the gate matrix but ships no wheel. The gate would "
+        f"wait on a runner for an artifact that is never built."
+        for canonical in sorted(gated - shipped)
+    )
+    return problems
+
+
 def _promise_what_you_test(promised: set[str], classifiers: set[str]) -> list[str]:
     """Check 3 -- the classifiers are the OS projection of the tested set."""
     problems = [
@@ -344,8 +428,20 @@ def _promise_what_you_test(promised: set[str], classifiers: set[str]) -> list[st
     return problems
 
 
-def check(needs: set[str], targets: set[str], classifiers: set[str]) -> list[str]:
-    """Every disagreement between the three declarations, in report order."""
+def check(
+    needs: set[str],
+    targets: set[str],
+    classifiers: set[str],
+    *,
+    gated: set[str],
+) -> list[str]:
+    """Every disagreement between the four declarations, in report order.
+
+    `gated` is the canonical set `gate_platforms` returns. It is
+    keyword-only and has no default: a default would let a caller compare
+    three files while believing it compared four, which is the silent-skip
+    shape every guard in this file exists to refuse.
+    """
     tested = {
         platform.canonical for platform in PLATFORMS if set(platform.test_jobs) <= needs
     }
@@ -359,10 +455,11 @@ def check(needs: set[str], targets: set[str], classifiers: set[str]) -> list[str
     }
 
     return [
-        *_undeclared(needs, targets, classifiers),
-        *_vacuity(needs, tested, shipped, classifiers),
+        *_undeclared(needs, targets, classifiers, gated),
+        *_vacuity(needs, tested, shipped, classifiers, gated),
         *_ship_what_you_test(tested, shipped),
         *_promise_what_you_test(promised, classifiers),
+        *_install_what_you_ship(shipped, gated),
     ]
 
 
@@ -380,17 +477,19 @@ def main() -> int:
     args = parser.parse_args()
 
     workflows = args.root / ".github" / "workflows"
-    needs = rollup_needs(
-        load_yaml((workflows / "test.yml").read_text(encoding="utf-8"))
+    test_workflow = load_yaml((workflows / "test.yml").read_text(encoding="utf-8"))
+    publish_workflow = load_yaml(
+        (workflows / "publish.yml").read_text(encoding="utf-8")
     )
-    targets = wheel_targets(
-        load_yaml((workflows / "publish.yml").read_text(encoding="utf-8"))
-    )
+    needs = rollup_needs(test_workflow)
+    targets = wheel_targets(publish_workflow)
     classifiers = os_classifiers(
         tomllib.loads((args.root / "pyproject.toml").read_text(encoding="utf-8"))
     )
 
-    problems = check(needs, targets, classifiers)
+    problems = check(
+        needs, targets, classifiers, gated=gate_platforms(publish_workflow)
+    )
     if not problems:
         return 0
 

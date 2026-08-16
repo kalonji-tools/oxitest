@@ -51,7 +51,9 @@ def _load_script_module() -> ModuleType:
     return module
 
 
-def _agreeing_sets(module: ModuleType) -> tuple[set[str], set[str], set[str]]:
+def _agreeing_sets(
+    module: ModuleType,
+) -> tuple[set[str], set[str], set[str], set[str]]:
     """Three sets built from ``PLATFORMS``, so they agree by construction.
 
     Derived from the table rather than read from the three files. Reading the
@@ -70,7 +72,8 @@ def _agreeing_sets(module: ModuleType) -> tuple[set[str], set[str], set[str]]:
     needs |= set(module.NON_PLATFORM_JOBS)
     targets = {platform.publish_target for platform in module.PLATFORMS}
     classifiers = {platform.classifier for platform in module.PLATFORMS}
-    return needs, targets, classifiers
+    gated = {platform.canonical for platform in module.PLATFORMS}
+    return needs, targets, classifiers, gated
 
 
 # ── parsing `publish.yml` ────────────────────────────────────────────────────
@@ -277,7 +280,7 @@ def test_each_drift_is_reported(case: DriftCase) -> None:
     """
     # Arrange
     module = _load_script_module()
-    needs, targets, classifiers = _agreeing_sets(module)
+    needs, targets, classifiers, gated = _agreeing_sets(module)
     if case.drop_job is not None:
         needs = needs - {case.drop_job}
     if case.add_job is not None:
@@ -288,7 +291,7 @@ def test_each_drift_is_reported(case: DriftCase) -> None:
         classifiers = classifiers - {case.drop_classifier}
 
     # Act
-    problems = module.check(needs, targets, classifiers)
+    problems = module.check(needs, targets, classifiers, gated=gated)
 
     # Assert
     assert any(case.expected in problem for problem in problems), (
@@ -306,10 +309,10 @@ def test_empty_target_set_is_refused_rather_than_passing_vacuously() -> None:
     """
     # Arrange
     module = _load_script_module()
-    needs, _, classifiers = _agreeing_sets(module)
+    needs, _, classifiers, gated = _agreeing_sets(module)
 
     # Act
-    problems = module.check(needs, set(), classifiers)
+    problems = module.check(needs, set(), classifiers, gated=gated)
 
     # Assert
     assert any("no wheel target was found" in problem for problem in problems), (
@@ -326,15 +329,106 @@ def test_stale_allowlist_entry_is_refused() -> None:
     """
     # Arrange
     module = _load_script_module()
-    needs, targets, classifiers = _agreeing_sets(module)
+    needs, targets, classifiers, gated = _agreeing_sets(module)
 
     # Act
-    problems = module.check(needs - {"tmpdir-symlink"}, targets, classifiers)
+    problems = module.check(
+        needs - {"tmpdir-symlink"}, targets, classifiers, gated=gated
+    )
 
     # Assert
     assert any("NON_PLATFORM_JOBS exempts" in problem for problem in problems), (
         f"a standing exemption for a deleted job silently widens what the gate "
         f"tolerates; got {problems!r}"
+    )
+
+
+# ── check 5: the Distribution band gate installs every shipped platform ──────
+
+
+def test_gate_platforms_reads_the_matrix_runner_axis() -> None:
+    """The gate names runners; PLATFORMS maps each one to a canonical name."""
+    # Arrange
+    module = _load_script_module()
+    workflow = module.load_yaml(
+        textwrap.dedent("""
+            jobs:
+              gate:
+                strategy:
+                  matrix:
+                    runner: [ubuntu-latest, windows-latest]
+                    python-version: ['3.12']
+        """)
+    )
+
+    # Act
+    canonical = module.gate_platforms(workflow)
+
+    # Assert
+    assert canonical == {"linux-x86_64", "windows-x86_64"}, (
+        "the gate matrix names runners and PLATFORMS names canonical "
+        f"platforms; without the mapping the two sets can never compare; "
+        f"got {canonical!r}"
+    )
+
+
+def test_an_unknown_gate_runner_is_returned_verbatim() -> None:
+    """A runner PLATFORMS cannot see must reach check 1, not vanish."""
+    # Arrange
+    module = _load_script_module()
+    workflow = module.load_yaml(
+        textwrap.dedent("""
+            jobs:
+              gate:
+                strategy:
+                  matrix:
+                    runner: [ubuntu-latest, freebsd-14]
+        """)
+    )
+
+    # Act
+    canonical = module.gate_platforms(workflow)
+
+    # Assert
+    assert "freebsd-14" in canonical, (
+        "a runner the table does not know must survive into the compared set "
+        "— dropping it makes the sets agree and the gate passes on the drift "
+        f"it exists to find; got {canonical!r}"
+    )
+
+
+def test_a_gate_that_skips_a_shipped_platform_is_refused() -> None:
+    """A wheel nobody installs is a wheel that reaches PyPI unexamined."""
+    # Arrange
+    module = _load_script_module()
+    needs, targets, classifiers, gated = _agreeing_sets(module)
+
+    # Act
+    problems = module.check(
+        needs, targets, classifiers, gated=gated - {"windows-x86_64"}
+    )
+
+    # Assert
+    assert any("windows-x86_64" in problem for problem in problems), (
+        "the Windows wheel would be uploaded with no install behind it, which "
+        "PyPI makes permanent; the check must name the platform the gate "
+        f"skipped; got {problems!r}"
+    )
+
+
+def test_an_empty_gate_matrix_is_refused_rather_than_passing_vacuously() -> None:
+    """A gate that installs nothing satisfies every comparison for free."""
+    # Arrange
+    module = _load_script_module()
+    needs, targets, classifiers, _ = _agreeing_sets(module)
+
+    # Act
+    problems = module.check(needs, targets, classifiers, gated=set())
+
+    # Assert
+    assert any("no gate runner was found" in problem for problem in problems), (
+        "an empty gate set makes the comparison hold having read nothing, so "
+        f"the upload would proceed with no artifact examined; got {problems!r}"
     )
 
 
