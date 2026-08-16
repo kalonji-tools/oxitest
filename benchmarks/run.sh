@@ -11,6 +11,17 @@ RESULTS_DIR="benchmarks"
 WARMUP=3
 RUNS="${BENCH_RUNS:-10}"
 
+# The dogfood arm times oxitest's own suite, which costs about 60 s per
+# execution. At the synthetic tiers' sample size it is (3+10)*2 = 26 executions.
+# That ran 19 min 28 s and did not finish inside the workflow's
+# `timeout-minutes: 30` at v4.0.0, so the job was cancelled before it compared
+# anything (#2166). Its sample size is therefore its own knob.
+#
+# This changes how many times the arm runs. It does not change what the arm
+# reports, which is still a total; #2178 changes that to milliseconds per test.
+DOGFOOD_WARMUP=1
+DOGFOOD_RUNS=3
+
 # Build pytest comparison commands only if pytest is available
 PYTEST_CMDS=()
 if command -v pytest &>/dev/null; then
@@ -122,8 +133,8 @@ DOGFOOD_CMDS=(
 )
 hyperfine \
     --ignore-failure \
-    --warmup "$WARMUP" \
-    --runs "$RUNS" \
+    --warmup "$DOGFOOD_WARMUP" \
+    --runs "$DOGFOOD_RUNS" \
     --export-json "$RESULTS_DIR/results_dogfood.json" \
     "${DOGFOOD_CMDS[@]}"
 
