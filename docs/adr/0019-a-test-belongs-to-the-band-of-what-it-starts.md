@@ -177,13 +177,34 @@ The bands classify tests. A benchmark run is not a test, and the axis does not r
 
 Three live defects of the current workflow are filed as [#2166](https://github.com/kalonji-tools/oxitest/issues/2166), which is open: the corpus has not collected since 2026-08-10, the dogfood arm ran 19 min 28 s at `v4.0.0` and did not finish, and a missing baseline prints `No regression detected.`
 
+## Amendment 1 — 23 tests attach the GIL, not 6, and the rule moves them
+
+**Added by [#2175](https://github.com/kalonji-tools/oxitest/issues/2175), which built the band record this document specifies.**
+
+The Crate section above says *"**6** touch pyo3 or the GIL — 4 in `src/assert_rewriter.rs` and 2 in `src/prescan.rs`"*. Deriving membership mechanically measured **23**, and the two files holding most of them appear nowhere in this record:
+
+| File | `#[test]` attaching the GIL |
+|---|---:|
+| `src/pipeline_phase_tests.rs` | 12 |
+| `src/pipeline_contract_tests.rs` | 8 |
+| `src/prescan.rs` | 2 |
+| `src/assert_rewriter.rs` | 1 |
+
+Measured by brace-matching each `#[test]` body and searching it for `with_gil` or `Python::attach`. A raw `grep -c` for those two names agrees file for file. The stated 4 in `assert_rewriter.rs` is 1; the file holds 3 call sites and 2 of them sit outside any test.
+
+**The placement rule is applied, and it moves them.** Step 1 asks whether the test starts no Python. These 23 start an interpreter, so step 1 does not place them and they fall through to step 4: the **Library band**, where both languages are live in one process. The Crate table above therefore reads **1 752**, not 1 773, and the Library band gains 23.
+
+This is a correction to a count, not a change of decision. The decision that the Crate band does not split further stands — but the argument for it above rests on *"Six members of 1 773 do not make a band"*, and 23 is a different number. What settles it is that the 23 are not a class of their own: they are ordinary Library band tests that happen to be written in Rust, and the band already holds tests of both languages by construction.
+
+**The general rule this instance illustrates:** a derived record may contradict a count in prose, and when it does the derivation wins. A record that special-cased a language to preserve a number written here would be `codecov.yml` again — a hand-written claim that nothing reads, drifting against the tree it describes.
+
 ## Two records, and what each one keys on
 
 Membership is derived and committed. Each record has a different key, so they are two records and not one.
 
 | Record | Keys on | The check refuses when |
 |---|---|---|
-| **the band record** | a test | the tree and the record disagree |
+| **the band record** | a test | the tree and the record disagree — **built by [#2175](https://github.com/kalonji-tools/oxitest/issues/2175)** at `scripts/band_record.tsv`, derived by `scripts/check_band_record.py` and refused by `just check` |
 | **the obligation record** | a region of product code | a region is `unowned`, or the emitted `ignore:` differs from the committed one |
 
 Both copy ADR-0018, which is Accepted, and its working precedent `scripts/wire_protocol.lock.json`: **the refusal is the enforcement, not the file.**
