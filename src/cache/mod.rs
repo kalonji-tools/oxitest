@@ -51,7 +51,12 @@ use crate::types::{DurationMs, OutcomeKind};
 /// already does that — but it would do so by accident of the parse rather than
 /// by the version check, and a later field that happens to stay compatible
 /// would then be served against the wrong comparison.
-const CACHE_VERSION: u32 = 5;
+///
+/// Bumped 5 → 6 by #2169, the second shape change and for the same reason as
+/// the first: [`FileFingerprint`] lost a field, so a two-field entry written at
+/// version 5 cannot deserialize into a one-field one. The bump is what makes
+/// that a cold start by decision rather than by a parse failure.
+const CACHE_VERSION: u32 = 6;
 
 /// Timing and outcome record for a single test, stored by node ID.
 ///
@@ -86,31 +91,32 @@ pub struct CacheEntry {
 /// prescan already reads and parses every test file on every run, before this
 /// comparison happens. Only the hashing is new.
 ///
-/// `size` rides along as a cheap second field, so a hash collision needs two
-/// sources of equal length as well.
+/// **The guard is the hash, and nothing else.** A source length rode along as a
+/// second field until #2169 removed it. It could not be tested: the type is
+/// compared and never inspected, so any *consistent* change to that field
+/// shifted both sides of the comparison and changed no outcome. A mutant
+/// turning it into `len() + 1` SURVIVED, and `* 2` and `= 0` were equally
+/// unobservable — it shipped untested by construction rather than by omission.
+///
+/// Dropping it weakens the collision guard from "equal hash **and** equal
+/// length" to "equal hash", and a collision serves one stale item list. That is
+/// a real if tiny cost, accepted deliberately: the length was never what made
+/// the rate small, 64 bits over one project's test files was.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize)]
-pub struct FileFingerprint {
-    /// FNV-1a over the module source.
-    source_hash: u64,
-    /// Source length in bytes.
-    size: u64,
-}
+pub struct FileFingerprint(u64);
 
 impl FileFingerprint {
     /// Fingerprint a module from the source the prescan already read.
     #[must_use]
     pub fn from_source(source: &str) -> Self {
-        Self {
-            source_hash: fnv1a(source.as_bytes()),
-            size: source.len() as u64,
-        }
+        Self(fnv1a(source.as_bytes()))
     }
 
-    /// Build a fingerprint from its parts. For tests.
+    /// Build a fingerprint from a raw hash. For tests.
     #[cfg(test)]
     #[must_use]
-    pub(crate) const fn from_parts(source_hash: u64, size: u64) -> Self {
-        Self { source_hash, size }
+    pub(crate) const fn from_parts(source_hash: u64) -> Self {
+        Self(source_hash)
     }
 }
 
