@@ -57,6 +57,29 @@ Two consequences worth keeping in mind when changing this code:
 Workers are **persistent** — one subprocess handles multiple module groups sequentially.
 This amortizes Python interpreter startup cost across many tests.
 
+## Which descriptor carries the protocol
+
+The worker writes protocol lines to a **private duplicate of file descriptor 1**, taken by
+`main()` before the first task and held in `worker.py`'s `_protocol_stream`. The duplicate
+reaches the same pipe the coordinator reads, so the coordinator sees no difference.
+
+The duplicate exists because fd 1 is not the worker's to keep. `FdCapture` calls
+`os.dup2` on fd 1 and `StdCapture` replaces `sys.stdout`, and either one used to take the
+protocol with it (#2147): a diagnostic emitted while such a fixture was active went into
+the capture file and never reached the user, and the captured output came back holding
+protocol lines that a test asserting on its own output could read. Measured before the
+change, 3 runs at `-n 2`, the diagnostic under `FdCapture` was reported 0 times against 1
+for the control; the same suite run serially reported both, because the serial path calls
+into Python over PyO3 and has no pipe.
+
+A capture fixture can name fd 1 and it can name `sys.stdout`. It can name neither the
+duplicate nor `_protocol_stream`, so one change closed both surfaces.
+
+**File descriptor 1 is still the pipe** for everything else the worker process writes —
+a test's `print()`, a C extension, an uncaptured child. Nothing here moves it, and the
+[Non-protocol lines](#non-protocol-lines-on-worker-stdout) section below says what the
+coordinator does with those.
+
 ## Message Envelope
 
 Starting with wire protocol v3, every LDJSON line the worker writes to stdout carries a top-level `"type"` discriminator. The Rust coordinator deserializes an envelope first (`WireEnvelope` in `src/worker_result/wire.rs`) and routes the full line to the correct payload type based on the `"type"` value:
