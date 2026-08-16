@@ -1,7 +1,8 @@
 """Generate bench test files for all tiers.
 
 Creates test files in benchmarks/generated/ with oxitest and pytest variants.
-Each file has ~12 tests: ~50% trivial, ~30% fixture, ~20% parametrize.
+Each file declares 12 functions and collects 18 items: 6 trivial, 4 fixture,
+and 2 parametrized into 4 cases each.
 All tests use only stdlib operations — no external dependencies.
 """
 
@@ -27,6 +28,15 @@ TRIVIAL_PER_FILE = 6
 FIXTURE_PER_FILE = 4
 PARAMETRIZE_PER_FILE = 2
 PARAMETRIZE_CASES = 4
+
+# A file declares TESTS_PER_FILE functions, but @oxi.parametrize expands
+# PARAMETRIZE_PER_FILE of them into PARAMETRIZE_CASES items each. The item count
+# is what oxitest collects, and it is what #2178's Performance Gate asserts, so
+# the summary prints it rather than the function count. Derived from the three
+# constants above so a later edit to any of them cannot make the summary lie.
+ITEMS_PER_FILE = (
+    TRIVIAL_PER_FILE + FIXTURE_PER_FILE + PARAMETRIZE_PER_FILE * PARAMETRIZE_CASES
+)
 
 
 def _oxitest_fixtures() -> str:
@@ -258,9 +268,12 @@ def generate() -> None:
     # Summary
     for tier_name, total_tests in TIERS.items():
         file_count = max(1, total_tests // TESTS_PER_FILE)
-        actual = file_count * TESTS_PER_FILE
-        print(f"  {tier_name}: {file_count} files, {actual} tests")
-    print("  startup: 1 file, 1 test")
+        functions = file_count * TESTS_PER_FILE
+        items = file_count * ITEMS_PER_FILE
+        print(
+            f"  {tier_name}: {file_count} files, {functions} functions, {items} items"
+        )
+    print("  startup: 1 file, 1 function, 1 item")
     print("done.")
 
 
