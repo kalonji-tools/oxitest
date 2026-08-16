@@ -86,6 +86,39 @@ except ImportError:
     _coverage: types.ModuleType | None = None
 
 
+#: The worker's own handle on the protocol pipe, opened by :func:`main`.
+#:
+#: A duplicate of file descriptor 1, so it reaches the same pipe the coordinator
+#: reads. It exists because fd 1 is not the worker's to keep: ``FdCapture``
+#: calls ``os.dup2`` on fd 1 and ``StdCapture`` replaces ``sys.stdout``, and
+#: either one used to take the protocol with it — a diagnostic emitted while
+#: such a fixture was active went into the capture file, and the captured output
+#: came back holding protocol lines (#2147). A fixture can name fd 1 and it can
+#: name ``sys.stdout``; it can name neither of these.
+#:
+#: ``None`` until :func:`main` runs, so importing this module changes nothing and
+#: `_emit` keeps its old target.
+_protocol_stream: io.TextIOBase | None = None
+
+
+def _open_protocol_stream() -> io.TextIOBase:
+    """Duplicate file descriptor 1 into a stream only this module holds.
+
+    UTF-8 and line buffering are declared here rather than inherited.
+    ``force_utf8_streams`` reconfigures ``sys.stdin``, ``sys.stdout`` and
+    ``sys.stderr`` and reaches nothing else, and #2004 is the recorded cost of a
+    worker stream left on the locale codec: on Windows that is cp1252, and one
+    non-ASCII character in a path made every result come back under a node id
+    the coordinator never issued. Line buffering is what flushes one result line
+    per test, which the coordinator's watchdog depends on.
+    """
+    return io.TextIOWrapper(
+        io.FileIO(os.dup(1), mode="w", closefd=True),
+        encoding="utf-8",
+        line_buffering=True,
+    )
+
+
 def _emit(
     obj: dict[str, object],
     out: io.TextIOBase | None = None,
@@ -93,9 +126,11 @@ def _emit(
     """Write a JSON object as a single line to the worker IPC channel.
 
     All worker → Rust communication flows through this function.
-    The ``out`` parameter exists for testing; production uses ``sys.stdout``.
+    The ``out`` parameter exists for testing; production uses the private
+    duplicate of file descriptor 1 that :func:`main` opens, falling back to
+    ``sys.stdout`` when this module is imported without ``main`` running.
     """
-    target = out or sys.stdout
+    target = out or _protocol_stream or sys.stdout
     target.write(json.dumps(obj) + "\n")
     target.flush()
 
@@ -501,6 +536,11 @@ def main() -> None:
     from oxitest._bridge._streams import force_utf8_streams
 
     force_utf8_streams()
+    # Take the worker's own handle on the pipe before any fixture can redirect
+    # fd 1 or replace sys.stdout (#2147). Before the first task, so a diagnostic
+    # emitted during session setup already goes through it.
+    global _protocol_stream  # noqa: PLW0603 — one process-wide handle, set once
+    _protocol_stream = _open_protocol_stream()
     # Force line buffering on stdout so each print() flushes on newline.
     # Piped stdout defaults to block buffering (8KB), which starves the
     # Rust watchdog — it expects one result line per test.
