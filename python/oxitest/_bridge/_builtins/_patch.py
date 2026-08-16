@@ -68,6 +68,18 @@ class Patcher:
     def setattr(self, obj: Any, name: str, value: Any) -> None:
         """Temporarily set an attribute on *obj*, restoring the original after the test.
 
+        If *obj* does not own *name* — the attribute is reached through a base
+        class or through the type — the undo **removes** it rather than writing
+        the inherited value onto *obj*. Writing it back made *obj* own an
+        attribute it did not own before, and that entry hid the base for every
+        later test in the same worker, because the state is process-global
+        (#2146). ``setenv`` and ``delenv`` already make the same distinction.
+
+        An object with ``__slots__`` has no ``__dict__``, so ownership cannot be
+        read there. Such an object is restored with ``setattr``, which is what
+        every object got before: ``delattr`` on a set slot would clear a value
+        the object really had.
+
         Args:
             obj: The object whose attribute is being patched.
             name: Attribute name on *obj*.
@@ -78,10 +90,16 @@ class Patcher:
 
         """
         old = getattr(obj, name)
+        # Read before the write, or the write is what the test finds.
+        namespace = getattr(obj, "__dict__", None)
+        owned = namespace is None or name in namespace
         setattr(obj, name, value)
-        self._undos.append(
-            lambda _obj=obj, _name=name, _old=old: setattr(_obj, _name, _old)
-        )
+        if owned:
+            self._undos.append(
+                lambda _obj=obj, _name=name, _old=old: setattr(_obj, _name, _old)
+            )
+        else:
+            self._undos.append(lambda _obj=obj, _name=name: delattr(_obj, _name))
 
     def setenv(self, name: str, value: str) -> None:
         """Temporarily set an environment variable, restoring it after the test.
