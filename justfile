@@ -58,6 +58,7 @@ check: (_log _blue "Running static checks...")
     actionlint
     python scripts/check_subprocess_encoding.py
     python scripts/check_justfile_quoting.py
+    python scripts/check_band_record.py
 
 # Validate lock files match manifests (matches prek pre-push hooks)
 check-locks: (_log _blue "Checking lock files...")
