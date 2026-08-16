@@ -180,13 +180,93 @@ def test_a_failed_resolution_does_not_leak_identity_into_a_wide_teardown(
     back a context for a test that never ran.
     """
     # Arrange / Act
-    run = helpers.run_with_event_log(_LEAK_PROJECT, tmp, "TCL_LOG", "--serial")
+    # The selection is load-bearing: the project holds a second failing test
+    # that leaves through the raise instead, and the process fixture reports
+    # only the last test it saw. Without it this test stops naming its path.
+    run = helpers.run_with_event_log(
+        _LEAK_PROJECT,
+        tmp,
+        "TCL_LOG",
+        "--serial",
+        "-E",
+        "name(test_uses_probe) | name(test_z_last_fails_in_resolution)",
+    )
 
     # Assert
+    # The control for the selection above. A selection that matches only
+    # test_uses_probe exits 0, passes, and reports WIDE_TEARDOWN raised for a
+    # run that held no failure at all — which reads exactly like a pass here.
+    assert run.rc == 1, (
+        "the selected failing test must have run; a returning resolution "
+        f"failure exits 1 and the probe alone exits 0. rc={run.rc}\n{run.stdout}"
+    )
     assert "WIDE_TEARDOWN raised" in run.events, (
         "after a failed fixture resolution there is no running test, so a "
         "wider-lifetime teardown must still refuse — a leaked identity here "
         f"names a test that never executed; got {run.events}"
+    )
+
+
+def test_a_raised_resolution_does_not_leak_identity_into_a_wide_teardown(
+    tmp: TempDir,
+) -> None:
+    """A raise out of fixture resolution must reset the identity too (#2189).
+
+    The early return has its own reset and the body has a try/finally. A
+    raise reaches neither, so the identity of a test that never ran used to
+    outlive run_test and the wide-teardown position handed it back.
+    """
+    # Arrange / Act
+    run = helpers.run_with_event_log(
+        _LEAK_PROJECT,
+        tmp,
+        "TCL_LOG",
+        "--serial",
+        "-E",
+        "name(test_uses_probe) | name(test_z_last_raises_in_resolution)",
+        log_name="raise.log",
+    )
+
+    # Assert
+    # The control for the selection above — the probe alone exits 0 and still
+    # reports WIDE_TEARDOWN raised, so the event assertion cannot see an empty
+    # selection. A UsageError out of resolution exits 4 (#2185).
+    assert run.rc == 4, (
+        f"the selected raising test must have run; rc={run.rc}\n{run.stdout}"
+    )
+    assert "WIDE_TEARDOWN raised" in run.events, (
+        "a raise during resolution ends the test as surely as a failed one, "
+        "so the wider teardown must refuse there too — every exception class "
+        "no except in _load_and_resolve names travels this path, and each one "
+        f"would otherwise name a test that never executed; got {run.events}"
+    )
+
+
+def test_a_raised_resolution_does_not_leak_identity_in_a_worker(
+    tmp: TempDir,
+) -> None:
+    """A worker takes the same raise, and it is where most suites meet it."""
+    # Arrange / Act
+    run = helpers.run_with_event_log(
+        _LEAK_PROJECT,
+        tmp,
+        "TCL_LOG",
+        "-n",
+        "2",
+        "-E",
+        "name(test_uses_probe) | name(test_z_last_raises_in_resolution)",
+        log_name="raise-parallel.log",
+    )
+
+    # Assert
+    # The same control as the serial test above.
+    assert run.rc == 4, (
+        f"the selected raising test must have run; rc={run.rc}\n{run.stdout}"
+    )
+    assert "WIDE_TEARDOWN raised" in run.events, (
+        "a fix that resets only in the parent process is inert for every "
+        "parallel run, and the in-process assertion above would stay green "
+        f"regardless; got {run.events}"
     )
 
 

@@ -49,6 +49,7 @@ from oxitest._bridge._fixture_context import (
     _current_teardown_node_id,
     _in_teardown,
     _test_run_context,
+    _test_run_scope,
     _warn_callback_teardown,
 )
 from oxitest._bridge._fixture_registry import FixtureScope
@@ -697,80 +698,75 @@ def _run_test_impl(
         result_cell=[None] if keep_tmp != "cleanup" else [],
         meta=meta,
     )
-    _run_ctx_token = _test_run_context.set(_run_ctx)
-    backend = _resolve_debugger_backend(effective_session, debug.mode)
-    # Enrich debug context with resolved backend and test node_id
-    debug = replace(debug, node_id=meta.node_id, backend=backend)
-    unique_name = _exec_unique_name(meta.module_path)
-    resolved = _load_and_resolve(meta, effective_session, unique_name)
-    if not isinstance(resolved, _ResolvedTest):
-        # The one return that escapes the try/finally below. Without this
-        # reset the failed test's identity outlives run_test, and a later
-        # TestContext.current() — in a wider fixture's teardown, say — hands
-        # back a context for a test that never ran (#1949).
-        _test_run_context.reset(_run_ctx_token)
-        return resolved
-    fn_raw = resolved.fn_raw
-    fn_teardowns = resolved.fn_teardowns
-    # resolve_for_test builds the teardown list, so the set above could not
-    # carry it — keep_tmp is read *during* fixture setup, so that set cannot
-    # move later either. Re-set now that resolution is done (#1949).
-    _run_ctx_token2 = _test_run_context.set(
-        replace(_run_ctx, fn_teardowns=fn_teardowns)
-    )
+    # Three exits sit inside this scope: the early return below, the raise no
+    # except in _load_and_resolve names, and the body's own returns. The scope
+    # is what makes that list complete rather than enumerated (#1949, #2189).
+    with _test_run_scope(_run_ctx):
+        backend = _resolve_debugger_backend(effective_session, debug.mode)
+        # Enrich debug context with resolved backend and test node_id
+        debug = replace(debug, node_id=meta.node_id, backend=backend)
+        unique_name = _exec_unique_name(meta.module_path)
+        resolved = _load_and_resolve(meta, effective_session, unique_name)
+        if not isinstance(resolved, _ResolvedTest):
+            return resolved
+        fn_raw = resolved.fn_raw
+        fn_teardowns = resolved.fn_teardowns
+        # resolve_for_test builds the teardown list, so the scope above could
+        # not carry it — keep_tmp is read *during* fixture setup, so that scope
+        # cannot open later either. Re-enter now that resolution is done
+        # (#1949). The inner scope closes first, so the two nest in order.
+        with _test_run_scope(replace(_run_ctx, fn_teardowns=fn_teardowns)):
+            try:
+                marks = get_marks(fn_raw)
+                marks_outcome = _evaluate_marks_phase(
+                    effective_session,
+                    marks,
+                    # Same expression _build_execution_plan uses for
+                    # ExecutionPlan.is_async. Marks are evaluated before the
+                    # plan exists, so this cannot read it — deriving it from
+                    # the same source keeps the two in agreement.
+                    is_async=inspect.iscoroutinefunction(resolved.fn),
+                )
+                match marks_outcome:
+                    case MarksHalt(result=short_circuit_result):
+                        return short_circuit_result
+                    case MarksProceed(wrappers=mark_wrappers):
+                        pass
+                    case _:
+                        assert_never(marks_outcome)
 
-    try:
-        marks = get_marks(fn_raw)
-        marks_outcome = _evaluate_marks_phase(
-            effective_session,
-            marks,
-            # Same expression _build_execution_plan uses for ExecutionPlan.is_async.
-            # Marks are evaluated before the plan exists, so this cannot read it —
-            # deriving it from the same source is what keeps the two in agreement.
-            is_async=inspect.iscoroutinefunction(resolved.fn),
-        )
-        match marks_outcome:
-            case MarksHalt(result=short_circuit_result):
-                return short_circuit_result
-            case MarksProceed(wrappers=mark_wrappers):
-                pass
-            case _:
-                assert_never(marks_outcome)
+                # --- Arrange phase (side-effect-only @oxi.arrange fixtures) ---
+                arrange_result = _run_arrange_phase(
+                    fn_raw, effective_session, meta.module_path, fn_teardowns
+                )
+                match arrange_result:
+                    case ArrangeFailed(error=arrange_err):
+                        return arrange_err
+                    case ArrangeReadyAsync(session=acquired_session, pending=queued):
+                        arrange_session: AsyncSession | None = acquired_session
+                        arrange_pending: tuple[ArrangedStep, ...] = queued
+                    case ArrangeReady():
+                        arrange_session = None
+                        arrange_pending = ()
+                    case _:
+                        assert_never(arrange_result)
 
-        # --- Arrange phase (side-effect-only fixtures declared via @oxi.arrange) ---
-        arrange_result = _run_arrange_phase(
-            fn_raw, effective_session, meta.module_path, fn_teardowns
-        )
-        match arrange_result:
-            case ArrangeFailed(error=arrange_err):
-                return arrange_err
-            case ArrangeReadyAsync(session=acquired_session, pending=queued):
-                arrange_session: AsyncSession | None = acquired_session
-                arrange_pending: tuple[ArrangedStep, ...] = queued
-            case ArrangeReady():
-                arrange_session = None
-                arrange_pending = ()
-            case _:
-                assert_never(arrange_result)
-
-        mark_result = _MarkResult(marks=tuple(marks), wrappers=mark_wrappers)
-        plan = _build_execution_plan(resolved, mark_result)
-        chain_ctx = _ChainContext(
-            default_timeout=default_timeout,
-            session=effective_session,
-            arrange_session=arrange_session,
-            arrange_pending=arrange_pending,
-        )
-        execute = _build_execution_chain(
-            resolved, plan, mark_result, chain_ctx, debug=debug
-        )
-        result = execute()
-        _active_ctx = _test_run_context.get()
-        if _active_ctx.result_cell:
-            _active_ctx.result_cell[0] = result
-        return result
-    finally:
-        sys.modules.pop(unique_name, None)
-        _run_teardowns(fn_teardowns, meta.node_id)
-        _test_run_context.reset(_run_ctx_token2)
-        _test_run_context.reset(_run_ctx_token)
+                mark_result = _MarkResult(marks=tuple(marks), wrappers=mark_wrappers)
+                plan = _build_execution_plan(resolved, mark_result)
+                chain_ctx = _ChainContext(
+                    default_timeout=default_timeout,
+                    session=effective_session,
+                    arrange_session=arrange_session,
+                    arrange_pending=arrange_pending,
+                )
+                execute = _build_execution_chain(
+                    resolved, plan, mark_result, chain_ctx, debug=debug
+                )
+                result = execute()
+                _active_ctx = _test_run_context.get()
+                if _active_ctx.result_cell:
+                    _active_ctx.result_cell[0] = result
+                return result
+            finally:
+                sys.modules.pop(unique_name, None)
+                _run_teardowns(fn_teardowns, meta.node_id)
