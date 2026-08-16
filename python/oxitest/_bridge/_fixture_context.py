@@ -16,6 +16,7 @@ __all__ = [
     "_fixture_scope",
     "_in_teardown",
     "_test_run_context",
+    "_test_run_scope",
     "_warn_teardown",
 ]
 from collections.abc import Callable, Iterator
@@ -73,6 +74,24 @@ _DEFAULT_TEST_RUN_CONTEXT: TestRunContext = TestRunContext()
 _test_run_context: ContextVar[TestRunContext] = ContextVar(
     "_test_run_context", default=_DEFAULT_TEST_RUN_CONTEXT
 )
+
+
+@contextmanager
+def _test_run_scope(run_ctx: TestRunContext) -> Iterator[None]:
+    """Carry the ambient test identity for one region, and always drop it.
+
+    A scope rather than a set/reset pair at the call site. The executor used
+    to reset on two of its exits, and the raise no ``except`` in
+    ``_load_and_resolve`` names reached neither — so a test that never ran
+    kept its identity, and a wider fixture's teardown read it (#1949, #2189).
+    A reset the caller cannot forget is the whole point of the shape.
+    """
+    token = _test_run_context.set(run_ctx)
+    try:
+        yield
+    finally:
+        _test_run_context.reset(token)
+
 
 # ── Fixture resolution context ───────────────────────────────────────────────
 
