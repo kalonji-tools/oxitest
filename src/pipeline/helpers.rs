@@ -112,13 +112,13 @@ fn register_plugin_fixture_homes(
     py: Python<'_>,
     session: &crate::bridge::FixtureSession,
     cfg: &crate::config::Config,
-) -> Result<(), Vec<crate::types::CollectError>> {
+) -> Result<(), (Vec<crate::types::CollectError>, bool)> {
     let homes = crate::bridge::plugin_fixture_homes(
         py,
         &cfg.features.plugins,
         &cfg.features.plugin_settings,
     )
-    .map_err(|e| vec![e])?;
+    .map_err(|e| (vec![e.error], e.usage))?;
 
     let mut errors = Vec::new();
     for home in &homes {
@@ -131,8 +131,37 @@ fn register_plugin_fixture_homes(
     if errors.is_empty() {
         Ok(())
     } else {
-        Err(errors)
+        // `register_plugin_home` and `record_plugin_anchor` build a
+        // `CollectError` internally, so the Python class is already gone by
+        // here. `false` keeps the previous exit code for that half.
+        Err((errors, false))
     }
+}
+
+/// Report `errors`, then choose the exit code from the class of the error.
+///
+/// `early_exit_with_error` derives its code from the reporter, and a
+/// `CollectError` there always votes 3 (`reporter::exit::compute_exit_code`
+/// reaches `ExitCode::UsageError` only through `usage_error_ids`, which is
+/// keyed by test node id and so cannot hold a startup failure).
+///
+/// ADR-0014 fixes exit 4 by the class of the error and not by when oxitest
+/// detects it, so a startup failure keeps the class it was raised with rather
+/// than inheriting the exit code of the transition that caught it. This is the
+/// shape `Collected::refuse_fx_boundaries` already uses: report through the
+/// helper, discard its code, return the class's code (#2172).
+///
+/// Takes the verdict rather than the `PyErr` so that every funnel can call it.
+/// `register_plugin_fixture_homes` holds a `Vec` and no `PyErr` by the time it
+/// returns, and a helper that asked the predicate itself would leave that one
+/// site repeating these two lines.
+fn early_exit_with_class(
+    errors: &[types::CollectError],
+    usage: bool,
+    make_rep: &dyn Fn() -> Box<dyn reporter::Reporter>,
+) -> ExitCode {
+    let code = early_exit_with_error(errors, make_rep);
+    if usage { ExitCode::UsageError } else { code }
 }
 
 /// Initialize a `FixtureSession`: create the session, load plugins, and wire the async backend.
@@ -153,7 +182,8 @@ pub(super) fn init_session(
             let err = crate::types::CollectError::PyError(format!(
                 "Failed to initialize the fixture session: {e}"
             ));
-            return Err(early_exit_with_error(&[err], &make_reporter));
+            let usage = bridge::is_usage_error(py, &e);
+            return Err(early_exit_with_class(&[err], usage, &make_reporter));
         }
     };
 
@@ -162,7 +192,8 @@ pub(super) fn init_session(
             session.load_plugins(py, &cfg.features.plugins, &cfg.features.plugin_settings)
         {
             let err = crate::types::CollectError::PyError(format!("Plugin loading failed: {e}"));
-            return Err(early_exit_with_error(&[err], &make_reporter));
+            let usage = bridge::is_usage_error(py, &e);
+            return Err(early_exit_with_class(&[err], usage, &make_reporter));
         }
 
         // Activate deferred plugins (those with CLI extensions that were
@@ -176,21 +207,23 @@ pub(super) fn init_session(
             let err = crate::types::CollectError::PyError(format!(
                 "Deferred plugin activation failed: {e}"
             ));
-            return Err(early_exit_with_error(&[err], &make_reporter));
+            let usage = bridge::is_usage_error(py, &e);
+            return Err(early_exit_with_class(&[err], usage, &make_reporter));
         }
 
         // Static plugin fixtures (#1717). Runs here, after activation, for two
         // reasons: every plugin module is imported by this point, and plugin
         // defs must be registered *before* collection so a colliding user
         // declaration shadows them rather than the other way round.
-        if let Err(e) = register_plugin_fixture_homes(py, &session, cfg) {
-            return Err(early_exit_with_error(&e, &make_reporter));
+        if let Err((e, usage)) = register_plugin_fixture_homes(py, &session, cfg) {
+            return Err(early_exit_with_class(&e, usage, &make_reporter));
         }
     }
 
     if let Err(e) = session.init_async_backend(py, &cfg.features.async_backend) {
         let err = crate::types::CollectError::PyError(format!("Async backend init failed: {e}"));
-        return Err(early_exit_with_error(&[err], &make_reporter));
+        let usage = bridge::is_usage_error(py, &e);
+        return Err(early_exit_with_class(&[err], usage, &make_reporter));
     }
 
     Ok((session, fixture_violations))
