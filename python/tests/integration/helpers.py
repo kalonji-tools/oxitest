@@ -90,6 +90,11 @@ def assert_collection_error(out: str, rc: int) -> None:
     assert rc == 3, f"expected exit 3 (collection error), got {rc}\n{out}"
 
 
+def assert_usage_error(out: str, rc: int) -> None:
+    """Assert usage error (exit 4)."""
+    assert rc == 4, f"expected exit 4 (usage error), got {rc}\n{out}"
+
+
 def assert_contains(out: str, *terms: str) -> None:
     """Assert all terms are present in output."""
     for term in terms:

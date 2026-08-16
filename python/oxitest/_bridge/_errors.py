@@ -442,10 +442,9 @@ class TestReturnedValueError(OxitestError):
     one of them, because ``isgeneratorfunction`` answers False on the wrapper
     while the call still returns a generator.
 
-    Its own class rather than ``UsageError`` so it can be enrolled in
-    ``_USAGE_ERROR_TYPES`` alone. ``UsageError`` is also raised from places
-    that run during a test — ``_fixture_session.py`` among them — and
-    enrolling the whole class would re-vote those to exit 4 as a side effect.
+    Its own class rather than ``UsageError`` so that the message names the
+    defect. ``UsageError`` is in ``_USAGE_ERROR_TYPES`` too since #2172, so both
+    vote exit 4; the split is about what the user is told, not about the vote.
     """
 
 
@@ -666,6 +665,7 @@ _USAGE_ERROR_TYPES: tuple[type[BaseException], ...] = (
     BoundaryError,
     FixtureNotFoundError,
     TestReturnedValueError,
+    UsageError,
 )
 
 

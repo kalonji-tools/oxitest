@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 from oxitest import TempDir
-from oxitest._bridge._errors import InternalError, is_usage_error
+from oxitest._bridge._errors import InternalError, UsageError, is_usage_error
 from tests import helpers
 
 _PLUGIN_ENTRY = """\
@@ -98,4 +98,20 @@ def test_internal_error_is_not_a_usage_error() -> None:
         "InternalError marks an oxitest bug, not a user's invalid request; if it "
         "voted exit 4 the user would be told to correct configuration that is "
         "already correct"
+    )
+
+
+def test_usage_error_votes_the_usage_exit_code() -> None:
+    """The class named UsageError must vote the exit code named UsageError."""
+    # Arrange
+    invalid_request = UsageError("an invalid request")
+
+    # Act
+    verdict = is_usage_error(invalid_request)
+
+    # Assert
+    assert verdict is True, (
+        "ADR-0014 fixes exit 4 by the class of the error; a class meaning 'a "
+        "user-facing API is used incorrectly' that does not vote it leaves the "
+        "two names disagreeing about one concept"
     )

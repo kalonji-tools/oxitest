@@ -237,12 +237,17 @@ def test_a_declared_plugin_namespace_that_cannot_be_written_is_refused(
 
     out, err, rc = helpers.run_oxitest(tmp, "--warnings", cwd=".")
 
-    # 3, not 4. `plugin_fixture_homes` runs during collection, so a UsageError
-    # raised there surfaces as a collection error whatever its type. Measured
-    # against the reserved-namespace neighbour in the same function, which
-    # also exits 3 — this arm is consistent with the errors it sits beside,
-    # which is the thing worth pinning.
-    integ.assert_collection_error(out + err, rc)
+    # 4, not 3 (#2172). This comment used to read "3, not 4", on the ground
+    # that `plugin_fixture_homes` runs during collection so a UsageError
+    # raised there surfaces as a collection error whatever its type. That was
+    # a measurement of the defect, not of a decision: ADR-0014 fixes exit 4 by
+    # the class of the error and not by when oxitest detects it, and
+    # exit-codes.md defines exit 3 as a test file that could not be imported,
+    # a declaration inside one that was refused, or a strict violation. A
+    # namespace nobody can write is none of those. The reserved-namespace
+    # neighbour in the same function moved with it, so the two stay
+    # consistent — which is what the previous comment was really pinning.
+    integ.assert_usage_error(out + err, rc)
     integ.assert_contains(out + err, "my-plugin", "not a Python identifier")
 
 

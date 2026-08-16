@@ -19,6 +19,60 @@ fn py_collect_err(e: PyErr) -> CollectError {
     CollectError::PyError(e.to_string())
 }
 
+/// A startup failure, and whether its Python class means the request was
+/// invalid.
+///
+/// Exists so a failure can carry its class out of the bridge. The exit code is
+/// fixed by that class (ADR-0014), and the funnel that catches the failure is
+/// too far from the raise to ask (#2172).
+///
+/// `From<CollectError>` answers `usage: false`, which is what makes every
+/// infrastructure failure in a converting function keep its previous exit code
+/// without an edit: `?` applies the conversion.
+pub struct StartupError {
+    pub error: CollectError,
+    pub usage: bool,
+}
+
+impl From<CollectError> for StartupError {
+    fn from(error: CollectError) -> Self {
+        Self {
+            error,
+            usage: false,
+        }
+    }
+}
+
+/// Ask the Python vote whether `err` means the request itself was invalid.
+///
+/// `_errors.is_usage_error` is the single source of truth for this vote, and it
+/// documents itself as such. Asking it here, rather than testing the type in
+/// Rust, is what stops a second definition from drifting against the first
+/// (#2172).
+///
+/// The startup funnels in `pipeline::helpers` need this because they hold a
+/// `PyErr` and used to substitute the exit code of the transition that caught
+/// it. ADR-0014 fixes exit 4 by the class of the error instead.
+///
+/// Answers `false` in two cases, and deliberately does not tell them apart. The
+/// predicate may be unreachable, which means a run that cannot import the
+/// bridge and has a larger problem than its exit code. The predicate may also
+/// run and raise, which one `isinstance` call makes improbable. Neither case
+/// establishes that the request was invalid, so neither may produce exit 4, and
+/// `false` keeps the previous behaviour for both.
+pub fn is_usage_error(py: Python<'_>, err: &PyErr) -> bool {
+    let Ok(errors) = py.import("oxitest._bridge._errors") else {
+        return false;
+    };
+    let Ok(predicate) = errors.getattr("is_usage_error") else {
+        return false;
+    };
+    predicate
+        .call1((err.value(py),))
+        .and_then(|answer| answer.extract::<bool>())
+        .unwrap_or(false)
+}
+
 /// What `@oxi.arrange` resolves to: the connected components, and a map from
 /// each resolved fixture name back to the spelling the user wrote.
 ///
@@ -612,7 +666,7 @@ pub fn plugin_fixture_homes(
     py: Python<'_>,
     plugins: &[String],
     plugin_settings: &HashMap<String, toml::Value>,
-) -> Result<Vec<PluginFixtureHome>, CollectError> {
+) -> Result<Vec<PluginFixtureHome>, StartupError> {
     let loader = py
         .import("oxitest._bridge.plugin_loader")
         .map_err(py_collect_err)?;
@@ -644,9 +698,16 @@ pub fn plugin_fixture_homes(
         .set_item("plugin_settings", settings)
         .map_err(py_collect_err)?;
 
+    // The only call in this function that can raise the *user's* error: a
+    // reserved or duplicated namespace, or a `package` lifetime declaration.
+    // Every other failure here is infrastructure and converts with `usage:
+    // false` (#2172).
     let homes = loader
         .call_method("plugin_fixture_homes", (), Some(&kwargs))
-        .map_err(|e| CollectError::PyError(e.to_string()))?;
+        .map_err(|e| StartupError {
+            usage: is_usage_error(py, &e),
+            error: CollectError::PyError(e.to_string()),
+        })?;
 
     let mut out = Vec::new();
     for home in homes.try_iter().map_err(py_collect_err)? {
