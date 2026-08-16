@@ -932,11 +932,21 @@ pub fn run_test_with_session_obj(
     default_timeout: Option<u64>,
     opts: crate::pipeline::execution::DebugOptions<'_>,
 ) -> TestOutcome {
+    // Every error that leaves `run_test` arrives here, so this is a funnel and
+    // it asks the vote. #2172 gave the five startup funnels the same treatment
+    // — four in `pipeline/helpers.rs` and `plugin_fixture_homes` above — and
+    // did not reach this one, so a `UsageError` raised while a test ran exited
+    // 1: the code of the step that caught it, not the class of the error
+    // ADR-0014 fixes it by (#2185).
     try_run_test_with_session_obj(py, item, session_obj, default_timeout, opts).unwrap_or_else(
         |e| {
-            TestOutcome::Error(Box::new(crate::types::FailureDiagnostic::sentinel(
-                format!("{} — {}", item.node_id, e),
-            )))
+            let usage = is_usage_error(py, &e);
+            TestOutcome::Error(Box::new(
+                crate::types::FailureDiagnostic::sentinel_with_usage(
+                    format!("{} — {}", item.node_id, e),
+                    usage,
+                ),
+            ))
         },
     )
 }
