@@ -12,7 +12,7 @@
 | `1` | One or more tests failed or errored |
 | `2` | Run interrupted (e.g. `-x` or `--maxfail` reached) |
 | `3` | Collection error — a test file could not be imported, **or a declaration inside it was refused** (see [Malformed test declarations](#malformed-test-declarations)) — or strict violations detected under `strict = "abort"` |
-| `4` | `UsageError` — the request itself was invalid. Defined by the **class** of the error, not by when oxitest detects it. Sources: invalid CLI arguments; **a target that does not exist** (a path, a directory, or a literal node ID matching no test); `--json` output file cannot be written; `[tool.oxitest]` in `pyproject.toml` has unknown fields, wrong types, or values pointing at removed options; **a fixture wiring error found while a test runs** (see below). See [Error reference — Configuration errors](errors.md#configuration-errors), [ADR-0008](../../adr/0008-config-fail-closed-narrow-scope.md) and [ADR-0014](../../adr/0014-target-validation.md). |
+| `4` | `UsageError` — the request itself was invalid. Defined by the **class** of the error, not by when oxitest detects it. Sources: invalid CLI arguments; **a target that does not exist** (a path, a directory, or a literal node ID matching no test); `--json` output file cannot be written; `[tool.oxitest]` in `pyproject.toml` has unknown fields, wrong types, or values pointing at removed options; **a fixture wiring error found while a test runs** (see below); **a plugin fixture home that oxitest refuses as a usage error** — a namespace that is reserved, that two plugins claim, or that cannot be written. See [Error reference — Configuration errors](errors.md#configuration-errors), [ADR-0008](../../adr/0008-config-fail-closed-narrow-scope.md) and [ADR-0014](../../adr/0014-target-validation.md). |
 
 ## Targets
 
@@ -56,6 +56,16 @@ Three kinds count:
 A misspelt fixture name on a `Fixture[T]` parameter is different: it is refused at collection and exits `3`, because the collection validator checks names before anything runs.
 
 Exit `4` outranks both `1` and `3`. A run that holds a wiring error *and* a failed assertion exits `4`: a suite that is wired wrong makes its own assertion results untrustworthy.
+
+## Plugin configuration against plugin declarations
+
+A plugin can fail in two ways, and they carry different codes. The line is the same one that separates `3` from `4` everywhere else: what was invalid, not when oxitest found out.
+
+A **plugin setting** in `pyproject.toml` that oxitest refuses is a usage error, so it exits `4`. A namespace that is reserved, that two plugins claim, or that cannot be written as `fx.<name>` are the three cases.
+
+A **declaration inside a plugin's `__fixtures__.py`** that oxitest refuses is a declaration refusal, so it exits `3` — the same code the identical declaration gets in your own test tree. A `lifetime="package"` fixture in a plugin is the case you are most likely to meet, because package lifetime binds to a directory in your test tree and a plugin has none.
+
+Both print `UsageError:` in the report, because both raise the same Python class. The exit code follows the kind of mistake, not the message.
 
 ## Malformed test declarations
 

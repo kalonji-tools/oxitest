@@ -187,7 +187,7 @@ on what you call the parameter.
 | Error | Raised | When |
 |---|---|---|
 | `ValueError` | Decoration time | `lifetime` is not one of the four tier names |
-| `UsageError` | Decoration time | A recognised tier has no scope mapping — an oxitest bug, not a usage error in your code |
+| `InternalError` | Decoration time | A recognised tier has no scope mapping. This is an oxitest bug, not a usage error in your code |
 | `UsageError` | Registration time | An `async` factory declared `autouse=True` with `lifetime="function"`, or a declaration exceeding [the lifetime cap](#the-lifetime-cap). Every offender in the file is named by one run |
 | `BoundaryError` | Access time, `fx` proxy | The fixture is outside the reading test's anchor chain |
 | `FixtureNotFoundError` | Access time, either route | Nothing reachable declares it — and also what the `Fixture[T]` route reports for an out-of-anchor fixture, since it has no namespace segment to attribute the failure to |
