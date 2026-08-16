@@ -124,6 +124,140 @@ def test_usage_error_votes_the_usage_exit_code() -> None:
     )
 
 
+_BROKEN_DEP_PLUGIN = "import nonexistent_dependency_xyz\n"
+
+_RAISING_PLUGIN = (
+    'def oxitest_plugin(config=None):\n    raise RuntimeError("author bug")\n'
+)
+
+
+def _project_with_plugins(tmp: TempDir, plugins: str) -> Path:
+    """Build a project whose pyproject names *plugins*. Return its root."""
+    project = Path(str(tmp))
+    (project / "tests").mkdir()
+    (project / "tests" / "test_ok.py").write_text(_CONTROL_TEST, encoding="utf-8")
+    (project / "pyproject.toml").write_text(
+        f'[tool.oxitest]\ntestpaths = ["tests"]\nplugins = [{plugins}]\n',
+        encoding="utf-8",
+    )
+    return project
+
+
+def test_an_absent_plugin_exits_usage_error(tmp: TempDir) -> None:
+    """A plugin that is not installed exits ExitCode::UsageError."""
+    # Arrange
+    project = _project_with_plugins(tmp, '"absent_plugin_xyz_12345"')
+
+    # Act
+    stdout, stderr, rc = _run(project)
+
+    # Assert
+    assert rc == 4, (
+        f"a plugins entry naming a module that is not installed is an invalid "
+        f"request, which is ExitCode::UsageError; exit 3 claims a test file "
+        f"could not be imported, and this run imported none\n{stdout}{stderr}"
+    )
+
+
+def test_an_absent_parent_package_exits_usage_error(tmp: TempDir) -> None:
+    """A dotted plugin name whose parent package is absent.
+
+    ``ImportError.name`` reports the first absent segment, so it holds
+    ``absent_pkg_xyz`` and not ``absent_pkg_xyz.sub``. A predicate comparing the
+    two for equality sends this down the defective-plugin arm and exits 3.
+    """
+    # Arrange
+    project = _project_with_plugins(tmp, '"absent_pkg_xyz.sub"')
+
+    # Act
+    stdout, stderr, rc = _run(project)
+
+    # Assert
+    assert rc == 4, (
+        f"the plugin is not installed, whatever segment of its dotted name is "
+        f"the absent one; ExitCode::UsageError is decided by the plugin being "
+        f"absent, not by the shape of its name\n{stdout}{stderr}"
+    )
+
+
+def test_a_defective_plugin_exits_collect_error(tmp: TempDir) -> None:
+    """A plugin whose entry point raises keeps ExitCode::CollectError."""
+    # Arrange
+    project = _project_with_plugins(tmp, '"raising_plugin"')
+    (project / "raising_plugin").mkdir()
+    (project / "raising_plugin" / "__init__.py").write_text(
+        _RAISING_PLUGIN, encoding="utf-8"
+    )
+
+    # Act
+    stdout, stderr, rc = _run(project)
+
+    # Assert
+    assert rc == 3, (
+        f"a plugin entry point that raises is the plugin author's bug; "
+        f"ExitCode::UsageError would tell the user to correct a pyproject.toml "
+        f"that is already correct\n{stdout}{stderr}"
+    )
+
+
+def test_an_installed_plugin_with_an_absent_dependency_names_it(tmp: TempDir) -> None:
+    """The message names the dependency, not the plugin."""
+    # Arrange
+    project = _project_with_plugins(tmp, '"dep_plugin"')
+    (project / "dep_plugin").mkdir()
+    (project / "dep_plugin" / "__init__.py").write_text(
+        _BROKEN_DEP_PLUGIN, encoding="utf-8"
+    )
+
+    # Act
+    stdout, stderr, rc = _run(project)
+
+    # Assert
+    combined = stdout + stderr
+    assert "Is it installed?" not in combined, (
+        f"the plugin is installed; asking whether it is installed sends the "
+        f"user to check the one thing that is already true\n{combined}"
+    )
+    assert "nonexistent_dependency_xyz" in combined, (
+        f"the message must name the module that is absent, which is the "
+        f"plugin's dependency and not the plugin\n{combined}"
+    )
+    assert rc == 3, (
+        f"a plugin whose own import fails is defective, which is "
+        f"ExitCode::CollectError\n{combined}"
+    )
+
+
+def test_a_plugin_raising_a_bare_import_error_is_defective(tmp: TempDir) -> None:
+    """An ImportError naming no module takes the defective arm, not the absent one.
+
+    ``ImportError.name`` is ``None`` when a plugin's own body raises
+    ``ImportError`` directly. The plugin is installed, so claiming it is not
+    would send the user to check the one thing that is already true.
+    """
+    # Arrange
+    project = _project_with_plugins(tmp, '"bare_plugin"')
+    (project / "bare_plugin").mkdir()
+    (project / "bare_plugin" / "__init__.py").write_text(
+        'raise ImportError("the plugin raises a bare ImportError")\n', encoding="utf-8"
+    )
+
+    # Act
+    stdout, stderr, rc = _run(project)
+
+    # Assert
+    combined = stdout + stderr
+    assert "Is it installed?" not in combined, (
+        f"the plugin is installed and raised on import; ImportError.name being "
+        f"None says nothing about whether the plugin is present\n{combined}"
+    )
+    assert rc == 3, (
+        f"an ImportError that names no module cannot show the plugin is absent, "
+        f"so the run keeps ExitCode::CollectError rather than claiming the "
+        f"user's pyproject.toml is wrong\n{combined}"
+    )
+
+
 def test_an_absent_plugin_is_a_usage_error() -> None:
     """A plugin that is not installed is a value naming something absent."""
     # Arrange
