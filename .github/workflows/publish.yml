@@ -247,13 +247,39 @@ jobs:
           merge-multiple: true
           path: dist
 
+      # The toolchain is printed rather than installed. `pyproject.toml`
+      # excludes `rust-toolchain.toml` from the sdist so that a source build
+      # uses whatever the machine already holds, and this step records which
+      # one that was. It fails loudly if there is none, which is the answer to
+      # the same question.
+      - name: Record the toolchain this build uses
+        run: rustc --version && cargo --version
+
+      # Two installs, and the split is load-bearing.
+      #
+      # `--no-index` on the second command is what keeps oxitest sourced from
+      # `dist/` alone -- without it pip may resolve the name from PyPI and this
+      # leg would examine the *released* sdist rather than the one just built.
+      # But `--no-index` also blocks the build backend, and a source build needs
+      # one: `[build-system] requires = ["maturin>=1.7,<2"]`. The first run of
+      # this job failed exactly there, with `ERROR: Could not find a version
+      # that satisfies the requirement maturin<2,>=1.7 (from versions: none)`.
+      #
+      # So the backend is installed first, from the index, and the second
+      # command adds `--no-build-isolation` to make pip use it instead of
+      # building an isolated environment it cannot populate.
+      #
       # `--no-binary :all:` is the mirror of the wheel legs' `--only-binary`.
       # Without it pip would take a wheel if one were present and this leg
       # would prove nothing about the sdist.
+      - name: Install the build backend
+        run: python -m pip install --disable-pip-version-check "maturin>=1.7,<2"
+
       - name: Build and install from source
         run: |
           python -m pip install --disable-pip-version-check \
-            --no-index --no-binary :all: --find-links dist oxitest
+            --no-index --no-binary :all: --no-build-isolation \
+            --find-links dist oxitest
 
       - name: Assert the properties
         working-directory: ${{ runner.temp }}
