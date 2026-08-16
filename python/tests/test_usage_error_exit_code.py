@@ -115,3 +115,65 @@ def test_usage_error_votes_the_usage_exit_code() -> None:
         "user-facing API is used incorrectly' that does not vote it leaves the "
         "two names disagreeing about one concept"
     )
+
+
+_IDENTITY_MISUSE = """\
+from oxitest import TestIdentity
+
+
+def test_reads_its_own_identity(ident: TestIdentity) -> None:
+    assert ident is not None, "the misuse is the subject of this test"
+"""
+
+_PADDING = "".join(
+    f'def test_pad_{n}():\n    assert 1 == 1, "padding, to make the run parallel"\n'
+    for n in range(6)
+)
+
+
+def test_the_exit_code_does_not_depend_on_the_execution_mode(tmp: TempDir) -> None:
+    """A UsageError must not exit differently because a worker observed it.
+
+    The plan's premise ledger named execution mode as the dimension none of its
+    premises varied. ``_USAGE_ERROR_TYPES`` is read by the serial path and by
+    ``worker.py`` alike, so a change to it reaches both. This pins that the two
+    agree.
+
+    Measured value today is 1, not 4: the vote is consulted at three sites in
+    ``executor.py`` and ``_diagnostics.py``, and the path from a builtin
+    fixture's refusal reaches none of them. This test deliberately asserts
+    agreement and not a literal, because the literal is a separate defect and
+    freezing it here would make this test refuse its own repair.
+    """
+    # Arrange
+    project = Path(str(tmp))
+    (project / "tests").mkdir()
+    (project / "tests" / "test_identity.py").write_text(
+        _IDENTITY_MISUSE, encoding="utf-8"
+    )
+    (project / "tests" / "test_pad.py").write_text(_PADDING, encoding="utf-8")
+    (project / "pyproject.toml").write_text(
+        '[tool.oxitest]\ntestpaths = ["tests"]\nmin_parallel_tests = 1\n',
+        encoding="utf-8",
+    )
+
+    # Act
+    serial_out, serial_err, serial_rc = helpers.run_oxitest(
+        None, "--serial", cwd=str(project)
+    )
+    par_out, par_err, par_rc = helpers.run_oxitest(None, "-n", "2", cwd=str(project))
+
+    # Assert
+    assert serial_rc == par_rc, (
+        f"exit-codes.md fixes exit 4 by the class of the error and says nothing "
+        f"about which process observed it; an exit code that depends on the "
+        f"execution mode is the same defect this change removes, in a new place\n"
+        f"serial={serial_rc} parallel={par_rc}\n"
+        f"serial output:\n{serial_out}{serial_err}\n"
+        f"parallel output:\n{par_out}{par_err}"
+    )
+    assert "TestIdentity is for a fixture" in (par_out + par_err), (
+        f"the parallel arm must actually reach the refusal; without this the "
+        f"comparison above passes on two runs that both did nothing\n"
+        f"{par_out}{par_err}"
+    )
