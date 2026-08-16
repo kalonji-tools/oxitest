@@ -97,6 +97,15 @@ merge-ready *args: (_log _blue "Checking merge readiness...")
 verdict pr *args: (_log _blue "Pinning CI verdict...")
     python scripts/pin_verdict.py {{ quote(pr) }} {{ args }}
 
+# Reports what every `path:line` citation resolves to NOW, and refuses the three
+# cases that need no intent. It cannot know what a citation claims, so a clean
+# result means "every citation was shown to its author", not "all are correct".
+#
+# Only the line directly above a recipe becomes its `just --list` description.
+# Resolve citations in a file, stdin, or an issue before publishing (stage 4/8)
+check-citations target *args: (_log _blue "Resolving citations...")
+    python scripts/check_citations.py {{ quote(target) }} {{ args }}
+
 # Validates the whole spec against the diff before writing anything.
 #
 # Only the line directly above a recipe becomes its `just --list` description.

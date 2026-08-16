@@ -95,8 +95,16 @@ ignore = [
 "scripts/check_disposition.py" = ["S603", "S607"]
 # `pin_verdict.py` shells out to `gh` and to `git ls-remote` — the second is the
 # whole point of it, since both GitHub API instruments serve a stale head after
-# a force-push (#2137). Its only argument is a pull request number.
+# a force-push (#2137). `check_citations.py` shells out to `gh` to read an
+# issue's comments (#2138). Arguments are a PR number and an issue number.
 "scripts/pin_verdict.py" = ["S603", "S607"]
+"scripts/check_citations.py" = ["S603", "S607"]
+# `_markdown.py` is imported by its siblings rather than run, so it has no
+# shebang and INP001 sees a module in a directory with no `__init__.py`. Adding
+# one would make `scripts/` a package and change how every script resolves its
+# own imports, for a module that exists only to stop two gates keeping separate
+# copies of one regex (#2138).
+"scripts/_markdown.py" = ["INP001"]
 
 # ── Test data projects ──────────────────────────────────────────────────
 "python/tests/data/**" = ["D100", "D103", "D104"]

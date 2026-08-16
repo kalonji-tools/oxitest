@@ -44,11 +44,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
+
+from _markdown import strip_quoted
 
 EXIT_OK = 0
 EXIT_MISSING = 1
@@ -56,22 +57,10 @@ EXIT_CANNOT_ANSWER = 2
 
 DISPOSITION_MARKER = "<!-- disposition -->"
 
-# Every span where an HTML comment renders as visible text. The fence pattern
-# backreferences its own opening run, so a ``` block cannot be closed by a ~~~
-# one; an unclosed fence runs to the end of the text, which is how GitHub
-# renders it too.
-#
-# The closing run may be LONGER than the opening one — CommonMark allows it, and
-# a bare backreference does not. That mismatch made the pattern miss the close
-# and strip to end of text, which removed a real table posted after the block
-# and refused an author who had complied. The error direction decides the shape
-# here: stripping too much is a false refusal, stripping too little is only a
-# false pass, and AC4 forbids refusing a correct merge.
-_FENCED = re.compile(
-    r"^[ \t]*(`{3,}|~{3,}).*?(?:^[ \t]*\1[`~]*[ \t]*$|\Z)",
-    re.DOTALL | re.MULTILINE,
-)
-_CODE_SPAN = re.compile(r"`[^`\n]*`")
+# The span rule — what renders as visible text, and so does not count — lives in
+# `_markdown.py`. `check_citations.py` needs the same fact, and a second copy of
+# a regex whose subtlety already cost one false refusal is a defect waiting to
+# happen.
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,15 +74,6 @@ class Report:
 
     checked: frozenset[int]
     missing: frozenset[int]
-
-
-def strip_quoted(text: str) -> str:
-    """Remove every span where the marker would render as visible text.
-
-    Fences first. A code-span pass run first would eat backtick runs out of the
-    fence delimiters and leave the block body exposed.
-    """
-    return _CODE_SPAN.sub("", _FENCED.sub("", text))
 
 
 def has_disposition(body: str, comments: list[str]) -> bool:

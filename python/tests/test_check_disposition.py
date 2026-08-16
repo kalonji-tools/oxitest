@@ -40,6 +40,14 @@ def _load_script_module() -> ModuleType:
     ``sys.modules.get(cls.__module__).__dict__``. Executing without registering
     first makes that ``None`` and the decorator dies with ``AttributeError``.
     """
+    # `scripts/` is not a package, so a script run directly finds its siblings
+    # through `sys.path[0]`. Loading one by path gets no such entry, and
+    # `check_disposition.py` imports `_markdown` for the span rule it shares
+    # with `check_citations.py`.
+    scripts_dir = str(_SCRIPT_PATH.parent)
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+
     spec = importlib.util.spec_from_file_location(
         "check_disposition_under_test", _SCRIPT_PATH
     )
