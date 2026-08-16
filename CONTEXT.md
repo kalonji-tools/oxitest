@@ -202,3 +202,29 @@ The public surface contains four kinds of thing. They are spelled alike — `oxi
 **Declared Test Tree** — The test surface a project declares in its configuration.
 
 **Effective Run Set** — The paths a single invocation actually walks.
+
+## Test Bands
+
+This section is about oxitest's own tests, not a user's. ADR-0019 is the authority.
+
+**Band** — A class of test. The classifying axis is how much of the system is live. A test belongs to exactly one band, and the unit is the test, not the file. _Avoid_: tier (in this glossary that names a **Lifetime** and its **Scope**; elsewhere in this repository it names a benchmark size class, an enforcement mechanism, and a pipeline phase).
+
+**Crate band** — The test starts no Python.
+
+**Library band** — The test starts no product process. Both languages are live in one process, because `import oxitest` loads `oxitest._oxitest`.
+
+**Command band** — The test starts a product process: the CLI or the **Worker**.
+
+**Distribution band** — The test installs the wheel and imports it from outside the source tree.
+
+**Attribute** — A property of a test that names its subject rather than its liveness. Cuts across the bands, so it is not a partition. Three exist: `documentation`, `regression`, `tooling`.
+
+**Specimen** — A test-shaped function that a band test writes into a project as input. No band collects a Specimen.
+
+**Performance Gate** — The instrument that refuses a change on a measured regression. Not a band: a benchmark run is not a test, so the liveness axis does not reach it.
+
+**Release Performance Report** — The instrument that describes a release and refuses nothing. Not a band, for the same reason.
+
+**Baseline** — The measurement an instrument compares against. For the **Performance Gate** it is the merge-base, built in the same job. The **Release Performance Report** has none.
+
+**Calibration run** — One revision measured twice in one job, which states the noise floor as a measurement instead of an assumption.
