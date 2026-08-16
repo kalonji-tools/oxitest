@@ -529,19 +529,35 @@ pub(super) fn handle_worker_result(
     Some(resolved.outcome)
 }
 
-/// Drain any groups still queued in `sched` after all workers have exited and
-/// emit `TestOutcome::crashed_sentinel` for each item via the reporter.
+/// Emit `TestOutcome::crashed_sentinel` for every item still queued in `sched`,
+/// **unless the coordinator stopped the phase on purpose**.
 ///
-/// Called from `run_phase_parallel` after its result channel is exhausted — at
-/// that point every worker thread has already returned (they drop their `tx`
-/// clone on exit, which is what causes the channel to close), so no live worker
-/// will race us for remaining scheduler entries.
+/// `interrupted` is why `run_phase_parallel` stopped reading results, and it
+/// selects between two states that are otherwise indistinguishable here:
+///
+/// * `false` — the result channel closed, so every worker thread has already
+///   returned (they drop their `tx` clone on exit, which is what causes the
+///   channel to close). A group still in the scheduler was never popped because
+///   no worker was left alive to pop it, and every item in it is a real loss.
+/// * `true` — `--maxfail` or `-x` broke the loop. The workers are still live,
+///   `cancelled` stops them a moment later, and a group still in the scheduler
+///   simply did not run. A test that did not run has no outcome, and the serial
+///   path reports nothing for it (#2142).
+///
+/// The decision lives here rather than at the call site because
+/// `run_phase_parallel` spawns real subprocesses, so no unit test can reach it.
+/// At the call site the branch that preserves the sentinels would be
+/// unobservable, and a mutant deleting it would survive the whole suite.
 pub(super) fn drain_remaining_into_crashed(
     sched: &scheduler::Scheduler,
     item_lookup: &ahash::AHashMap<types::NodeId, std::sync::Arc<types::TestItem>>,
     rep: &mut dyn reporter::Reporter,
     timings: &mut Vec<types::TestTiming>,
+    interrupted: bool,
 ) {
+    if interrupted {
+        return;
+    }
     while let Some(group) = sched.pop() {
         for item in group.items() {
             let resolved = types::ResolvedOutcome {
@@ -828,6 +844,25 @@ mod drain_tests {
         );
     }
 
+    /// One `TestItem` with nothing but an identity.
+    ///
+    /// Shared by the scheduler-drain tests, which care only about which items
+    /// reach the reporter and never about a marker, a parameter or a fixture.
+    fn make_test_item(path: &str, fn_name: &str) -> std::sync::Arc<types::TestItem> {
+        std::sync::Arc::new(types::TestItem {
+            node_id: types::NodeId::new(path, fn_name, None),
+            fn_name: std::sync::Arc::from(fn_name),
+            lineno: crate::types::LineNo::new(1),
+            markers: crate::types::MarkerSet::new(),
+            param_id: None,
+            param_values: vec![],
+            is_async: false,
+            fixture_deps: vec![],
+            fixref_deps: vec![],
+            arranged: vec![],
+        })
+    }
+
     // ── Test 7 ──────────────────────────────────────────────────────────────────
     // After all workers crash, groups never popped from the scheduler must appear
     // as crashed ERROR results rather than being silently dropped.
@@ -838,21 +873,6 @@ mod drain_tests {
     fn drain_remaining_into_crashed_emits_error_for_every_item() {
         use crate::types::{CollectError, NodeId, TestItem, TestOutcome};
         use std::sync::Arc;
-
-        fn make_test_item(path: &str, fn_name: &str) -> Arc<TestItem> {
-            Arc::new(TestItem {
-                node_id: NodeId::new(path, fn_name, None),
-                fn_name: Arc::from(fn_name),
-                lineno: crate::types::LineNo::new(1),
-                markers: crate::types::MarkerSet::new(),
-                param_id: None,
-                param_values: vec![],
-                is_async: false,
-                fixture_deps: vec![],
-                fixref_deps: vec![],
-                arranged: vec![],
-            })
-        }
 
         let all_items = [
             make_test_item("tests/a.py", "test_alpha"),
@@ -912,7 +932,7 @@ mod drain_tests {
         };
         let mut timings: Vec<crate::types::TestTiming> = vec![];
 
-        drain_remaining_into_crashed(&sched, &item_lookup, &mut rep, &mut timings);
+        drain_remaining_into_crashed(&sched, &item_lookup, &mut rep, &mut timings, false);
 
         assert_eq!(rep.started.len(), 3, "all 3 items must be started");
         assert_eq!(rep.completed.len(), 3, "all 3 items must be completed");
@@ -958,8 +978,83 @@ mod drain_tests {
 
         let mut rep = NullReporter;
         let mut timings: Vec<crate::types::TestTiming> = vec![];
-        drain_remaining_into_crashed(&sched, &item_lookup, &mut rep, &mut timings);
+        drain_remaining_into_crashed(&sched, &item_lookup, &mut rep, &mut timings, false);
         assert!(timings.is_empty());
+    }
+
+    // ── #2142 ───────────────────────────────────────────────────────────────────
+    // Two states used to share one code path and one message: every worker died,
+    // and the coordinator stopped on purpose. On the `--maxfail` break the
+    // workers are still live and the scheduler still holds every group nobody
+    // popped. Those tests did not run, and a test that did not run has no
+    // outcome — the serial path reports nothing for them.
+    //
+    // Measured before the fix on a 60-item suite at `-n 4`, 5 of 5 runs:
+    // `1 failed · 36 errors`, every error reading "Worker subprocess exited
+    // unexpectedly", against `1 failed · 18 passed` for the same suite serially.
+    //
+    // The scheduler here is NOT empty, which is what separates this test from
+    // `drain_remaining_into_crashed_is_noop_on_empty_scheduler`: that one passes
+    // whatever `interrupted` does, because there is nothing to drain either way.
+    #[test]
+    fn an_interrupted_phase_reports_nothing_for_an_undispatched_item() {
+        use crate::types::{CollectError, NodeId, TestItem};
+        use std::sync::Arc;
+
+        let item = make_test_item("tests/a.py", "test_never_dispatched");
+        let sched = Arc::new(crate::scheduler::Scheduler::new(vec![
+            crate::scheduler::TaskGroup::single(crate::scheduler::ModuleGroup::new(
+                camino::Utf8PathBuf::from("tests/a.py"),
+                vec![Arc::clone(&item)],
+            )),
+        ]));
+        let item_lookup: ahash::AHashMap<NodeId, Arc<TestItem>> =
+            std::iter::once((item.node_id.clone(), Arc::clone(&item))).collect();
+
+        struct RefusingReporter;
+        impl crate::reporter::Reporter for RefusingReporter {
+            fn test_started(&mut self, item: &TestItem) {
+                panic!(
+                    "the coordinator stopped on purpose, so {} never ran and must \
+                     reach no reporter",
+                    item.node_id
+                );
+            }
+            fn test_completed(
+                &mut self,
+                item: &TestItem,
+                outcome: &crate::types::TestOutcome,
+                _: types::DurationMs,
+                _: Option<&crate::parallel_context::ParallelContext>,
+            ) {
+                panic!(
+                    "{} was never dispatched, so reporting it as {} says a worker \
+                     died when none did",
+                    item.node_id,
+                    outcome.as_str()
+                );
+            }
+            fn finish(
+                &mut self,
+                _: &[CollectError],
+                _: bool,
+                _: &crate::reporter::ReporterSession,
+            ) -> crate::reporter::ExitVote {
+                crate::reporter::ExitVote::Abstain
+            }
+        }
+
+        let mut rep = RefusingReporter;
+        let mut timings: Vec<crate::types::TestTiming> = vec![];
+
+        drain_remaining_into_crashed(&sched, &item_lookup, &mut rep, &mut timings, true);
+
+        assert!(
+            timings.is_empty(),
+            "a test the coordinator never dispatched did not run, so it has no \
+             timing; a row here is the phantom error #2142 reports, and it also \
+             reaches the CTRF report"
+        );
     }
 
     // ── Test 9 ──────────────────────────────────────────────────────────────────

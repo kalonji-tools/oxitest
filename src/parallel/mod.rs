@@ -217,11 +217,13 @@ pub fn run_phase_parallel(
         }
     }
 
-    // Drain any groups the scheduler still holds after all workers have exited.
-    // This surfaces tests that were never assigned because every worker crashed
-    // before popping them.  Safe here: the rx loop above only completes once all
-    // worker threads have dropped their `tx` clone (i.e., returned).
-    drain_remaining_into_crashed(&sched, &item_lookup, rep, &mut timings);
+    // Drain any groups the scheduler still holds. On the normal path the rx loop
+    // above completes only once every worker thread has dropped its `tx` clone,
+    // so this surfaces tests nobody was left alive to run. On the `--maxfail`
+    // break it does nothing: the workers are still live and those tests did not
+    // run, so reporting them as worker crashes says a worker died when none did
+    // (#2142).
+    drain_remaining_into_crashed(&sched, &item_lookup, rep, &mut timings, interrupted);
 
     cancelled.store(true, Ordering::Relaxed);
     for h in handles {
