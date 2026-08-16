@@ -23,11 +23,30 @@ Pick the command that answers *the claim*, not a neighbouring question.
 |---|---|---|
 | released version | `git tag --sort=-v:refname \| head` · `gh release list -L 5` | `--sort=-creatordate` (surfaces `backup2`) |
 | a pinned dependency | `cargo tree -i <crate>` · `grep <crate> Cargo.lock` | crates.io `max_version` — that is what is *published* |
+| a published version exists | crates.io: the API **with a `User-Agent` header** (below) · PyPI: `.releases` from the same JSON · inside `devenv shell`, `cargo info <crate>@<ver>` | `cargo search --limit 1`, bare `cargo info <crate>`, `jq -r .info.version` — each answers what is *newest*, which is not evidence about any other version |
 | a path exists | `rg --files \| rg <name>` | — |
 | a string is absent | `rg`, **plus** read the emitting site — templates and wrapped lines defeat a rendered-text grep | `rg` alone |
 | a diff size | `git diff --stat $(git merge-base origin/main HEAD)..HEAD` | bare `git diff --stat` (two-dot: #1840 read 902 phantom deletions) |
 | runtime behaviour | minimal repro; paste output, **the OS**, and **N of M runs** | one green run |
 | an issue's state | `gh issue list --state all --limit <N>`, filtered locally | `--search` — the index is asynchronous |
+
+The crates.io API refuses a request that carries no `User-Agent` header, with a
+data-access-policy error. Send one:
+
+```bash
+curl -s -H "User-Agent: <name> (<address>)" https://crates.io/api/v1/crates/<crate> \
+  | jq -r '[.versions[] | select(.num == "<version>")]
+           | if length == 0 then "absent" else "present yanked=\(.[0].yanked)" end'
+curl -s https://pypi.org/pypi/<pkg>/json \
+  | jq -r '.releases["<version>"]
+           | if . == null then "absent" else "present yanked=\(map(.yanked) | any)" end'
+```
+
+Each answer separates three states that a newest-version query collapses into
+one: **absent**, **present**, and **present but yanked**. A yanked version
+exists and must not be pinned, so the existence answer alone is not enough to
+act on. Do not filter the yanked ones out — that hides the third state behind
+the first.
 
 Every command must be **scoped so it cannot match your own scratch**. An
 unscoped `rg` finds the finding that asserts the claim, and confirms it.
