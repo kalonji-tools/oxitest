@@ -72,6 +72,12 @@ pub struct PrescanPayload {
     pub(crate) items: Vec<PrescanItem>,
     pub(crate) has_dynamic_collection: bool,
     pub(crate) module_markers: Vec<String>,
+    /// Content fingerprint of the module source.
+    ///
+    /// Computed here because this is where the source is read, and because
+    /// `source` below is emptied when the caller does not want the AST. The
+    /// module item cache uses it as its freshness key (#2145).
+    pub(crate) fingerprint: crate::cache::FileFingerprint,
     /// Whether any top-level function carries a decorator *shaped* like a
     /// fixture declaration, under any import spelling (#1850).
     ///
@@ -822,9 +828,12 @@ pub fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult {
     // the declarations was the inline cap's job, and #1859 moved that to the
     // Python registrar, which sees every import spelling rather than three.
     let fixture_shaped = has_fixture_shaped_decorator(&parsed.1);
+    // Before the branch below, which may drop the source to save memory.
+    let fingerprint = crate::cache::FileFingerprint::from_source(&parsed.0);
 
     if keep_ast {
         PrescanResult::HasTests(PrescanPayload {
+            fingerprint,
             source: parsed.0,
             stmts: parsed.1,
             items,
@@ -834,6 +843,7 @@ pub fn prescan_with_ast(path: &Utf8Path, keep_ast: bool) -> PrescanResult {
         })
     } else {
         PrescanResult::HasTests(PrescanPayload {
+            fingerprint,
             source: String::new(),
             stmts: Vec::new(),
             items,

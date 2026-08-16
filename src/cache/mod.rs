@@ -43,7 +43,15 @@ use crate::types::{DurationMs, OutcomeKind};
 /// covers the steady state, because adding a method fixture edits the file, and
 /// a refused file writes no entry. Only the pre-upgrade entry is unreachable by
 /// mtime, and that is exactly what this discards.
-const CACHE_VERSION: u32 = 4;
+///
+/// Bumped 4 → 5 by #2145, for a different reason from the three above: the
+/// entry's **shape** changed. `mtime_secs: u64` became a [`FileFingerprint`],
+/// so an existing entry cannot deserialize. Without the bump `load()` would
+/// still return an empty cache — `serde_json::from_str` fails and the `Err` arm
+/// already does that — but it would do so by accident of the parse rather than
+/// by the version check, and a later field that happens to stay compatible
+/// would then be served against the wrong comparison.
+const CACHE_VERSION: u32 = 5;
 
 /// Timing and outcome record for a single test, stored by node ID.
 ///
@@ -59,17 +67,84 @@ pub struct CacheEntry {
     flaky_count: u32,
 }
 
+/// What the module item cache compares to decide a file is unchanged.
+///
+/// **The content, not the clock.** The key was the modification time truncated
+/// to whole seconds, so an edit inside the same wall-clock second as the
+/// previous collection left it unchanged: a new Test Item did not run, the run
+/// reported a lower count, and it exited 0 (#2145). Measured on ext4 at 3 of 6
+/// attempts with natural timing.
+///
+/// Nanoseconds were tried first and are **not enough**. On Windows two writes
+/// microseconds apart receive the same timestamp — measured byte-identical on
+/// CI, `mtime_nanos: 1786875318097772800` on both sides — because the value
+/// advances with the system timer tick rather than continuously. A timestamp
+/// key is therefore only as fine as the platform's clock, and the platform is
+/// not something a test suite gets to choose.
+///
+/// A content hash has no such dependency, and it costs no extra read: the
+/// prescan already reads and parses every test file on every run, before this
+/// comparison happens. Only the hashing is new.
+///
+/// `size` rides along as a cheap second field, so a hash collision needs two
+/// sources of equal length as well.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ::serde::Serialize, ::serde::Deserialize)]
+pub struct FileFingerprint {
+    /// FNV-1a over the module source.
+    source_hash: u64,
+    /// Source length in bytes.
+    size: u64,
+}
+
+impl FileFingerprint {
+    /// Fingerprint a module from the source the prescan already read.
+    #[must_use]
+    pub fn from_source(source: &str) -> Self {
+        Self {
+            source_hash: fnv1a(source.as_bytes()),
+            size: source.len() as u64,
+        }
+    }
+
+    /// Build a fingerprint from its parts. For tests.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) const fn from_parts(source_hash: u64, size: u64) -> Self {
+        Self { source_hash, size }
+    }
+}
+
+/// FNV-1a, written out rather than taken from a hasher.
+///
+/// This value is **persisted** to `.oxitest_cache/timings.json` and compared
+/// against a later run's. `ahash` documents that its output is not stable
+/// across versions, and `std::hash::DefaultHasher` is not stable across Rust
+/// releases — either one silently changes every key on an upgrade, which reads
+/// as a mysterious cold start rather than as a change anyone made. Eight lines
+/// that cannot drift are cheaper than a stability promise nobody gave.
+fn fnv1a(bytes: &[u8]) -> u64 {
+    const OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    let mut hash = OFFSET_BASIS;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(PRIME);
+    }
+    hash
+}
+
 /// Per-module collection cache keyed by file path.
 ///
 /// Stores the list of [`TestItem`](crate::types::TestItem) collected from a module, tagged
-/// with the file's mtime at collection time. When `mtime_secs` no longer matches
-/// the file on disk, the cache entry is stale and Python collection runs again.
+/// with the file's [`FileFingerprint`] at collection time. When the fingerprint no
+/// longer matches the file on disk, the cache entry is stale and Python collection
+/// runs again.
 ///
 /// `node_id` and `module_path` are reconstructed from the map key on deserialization
 /// (they are `#[serde(skip)]` on `TestItem`).
 #[derive(Debug, ::serde::Serialize, ::serde::Deserialize)]
 pub struct ModuleCacheEntry {
-    mtime_secs: u64,
+    fingerprint: FileFingerprint,
     items: Vec<crate::types::TestItem>,
 }
 
@@ -170,6 +245,53 @@ mod tests {
 
     use super::test_helpers::make_timing;
     use super::*;
+
+    // ── #2145 ───────────────────────────────────────────────────────────────
+    // These three tests read no clock and touch no filesystem, which is the
+    // point. The first two forms of this key did both, and the second one
+    // failed on Windows CI: two writes microseconds apart received the same
+    // timestamp, `mtime_nanos: 1786875318097772800` on each side, because that
+    // value advances with the system timer tick. A key derived from the source
+    // has no platform in it to vary.
+
+    #[test]
+    fn two_sources_of_equal_length_fingerprint_differently() {
+        let first = FileFingerprint::from_source("def test_one(): pass\n");
+        let second = FileFingerprint::from_source("def test_uno(): pass\n");
+
+        assert_ne!(
+            first, second,
+            "these two differ by one character and are the same length, so \
+             neither a timestamp nor a size separates them. The item cache \
+             would serve the old item list and the edited test would not run \
+             (#2145)"
+        );
+    }
+
+    #[test]
+    fn adding_a_test_changes_the_fingerprint() {
+        let before = FileFingerprint::from_source("def test_one(): pass\n");
+        let after = FileFingerprint::from_source("def test_one(): pass\ndef test_two(): pass\n");
+
+        assert_ne!(
+            before, after,
+            "this is the defect's own shape: a test added to a module must make \
+             the cached item list stale, whatever the clock says"
+        );
+    }
+
+    #[test]
+    fn the_same_source_fingerprints_identically() {
+        let first = FileFingerprint::from_source("def test_one(): pass\n");
+        let second = FileFingerprint::from_source("def test_one(): pass\n");
+
+        assert_eq!(
+            first, second,
+            "an unchanged file must still hit the cache. A key that never \
+             matches passes every staleness test above and silently turns the \
+             cache off"
+        );
+    }
 
     #[test]
     fn load_missing_file_returns_empty() {
