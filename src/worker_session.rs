@@ -49,10 +49,22 @@ fn pump_worker_lines<R: std::io::BufRead>(
     mut reader: R,
     line_tx: &crossbeam_channel::Sender<String>,
 ) {
+    // In scope for the method calls on `Take` below: a trait bound brings a
+    // method into scope for the bounded type itself, not for a wrapper around it.
+    use std::io::{BufRead, Read};
+
     let mut buf = Vec::with_capacity(256);
     loop {
         buf.clear();
-        match reader.read_until(b'\n', &mut buf) {
+        // `take` bounds the READ. Without it `read_until` appends until it
+        // finds a newline and the length test below runs afterwards, so the
+        // whole line was already resident before it could be judged too long —
+        // measured at 1 MB of coordinator RSS per MiB of newline-free worker
+        // output, 293 MB for a 256 MiB line against a 10 MiB limit (#2144).
+        match (&mut reader)
+            .take(MAX_LINE_LENGTH as u64)
+            .read_until(b'\n', &mut buf)
+        {
             Ok(0) => break,
             Err(e) => {
                 tracing::error!(
@@ -62,16 +74,33 @@ fn pump_worker_lines<R: std::io::BufRead>(
                 break;
             }
             Ok(_) => {
-                if buf.len() > MAX_LINE_LENGTH {
-                    tracing::warn!(
-                        len = buf.len(),
-                        "Worker stdout line exceeds {} bytes — truncating",
-                        MAX_LINE_LENGTH
-                    );
-                    buf.truncate(MAX_LINE_LENGTH);
-                }
+                // The cap was reached with no newline, so the rest of this
+                // logical line is still in the stream.
+                let over_long = buf.len() >= MAX_LINE_LENGTH && buf.last() != Some(&b'\n');
+
+                // Forward BEFORE draining the remainder. The drain is unbounded
+                // in time — it runs to the next newline, however far away that
+                // is — and holding a line the coordinator already has behind it
+                // would stall the watchdog for a result that was ready.
                 if line_tx.send(decode_worker_line(&buf)).is_err() {
                     break;
+                }
+
+                // Discard the rest without buffering it. Leaving it turns one
+                // over-long line into many capped ones, and the drain would
+                // classify every one of them. `skip_until` allocates nothing,
+                // which is the whole point: these bytes stream past rather than
+                // accumulate (#2144).
+                if over_long {
+                    tracing::warn!(
+                        cap = MAX_LINE_LENGTH,
+                        "Worker stdout line reached {} bytes — forwarded the prefix \
+                         and discarding the rest of the line",
+                        MAX_LINE_LENGTH
+                    );
+                    if reader.skip_until(b'\n').is_err() {
+                        break;
+                    }
                 }
             }
         }
@@ -886,15 +915,155 @@ mod worker_session_tests {
 mod line_length_tests {
     use super::*;
 
-    // NOTE: The truncation path (buf.len() > MAX_LINE_LENGTH) is embedded in a
-    // closure inside setup_worker_process and requires a real subprocess write of
-    // >10 MB to trigger. That is impractical in a unit test context. The constant
-    // value and channel capacity are verified here; normal operation is covered by
-    // the integration tests via `just test`.
+    // This note used to say the cap path "requires a real subprocess write of
+    // >10 MB to trigger. That is impractical in a unit test context." It was
+    // true of a loop living inside a closure in `setup_worker_process`, and it
+    // stopped being true when #2144 lifted that loop into `pump_worker_lines`.
+    // The tests below drive it with a `Cursor` and a payload past the real
+    // constant — no subprocess, no `just build`.
     //
-    // Being untested matters less than it did: `buf` is a `Vec<u8>`, so the
-    // truncate is infallible. It used to be a `String`, whose `truncate` panics
-    // off a character boundary — this path could kill the reader thread (#2010).
+    // The constant is still asserted separately: it is the one thing here that
+    // a reader might change without meaning to change behaviour.
+    // ── #2144 ───────────────────────────────────────────────────────────────
+    // These drive `pump_worker_lines` with a `Cursor`, which is why it was
+    // lifted out of the spawn closure. The payload really is >10 MiB — the cap
+    // under test is the production constant, not a stand-in.
+
+    fn pump(input: Vec<u8>) -> Vec<String> {
+        let (tx, rx) = crossbeam_channel::unbounded::<String>();
+        pump_worker_lines(std::io::Cursor::new(input), &tx);
+        drop(tx);
+        rx.into_iter().collect()
+    }
+
+    /// One over-long line, then a short one.
+    fn over_long_then_short() -> Vec<u8> {
+        let mut input = vec![b'x'; MAX_LINE_LENGTH + 4096];
+        input.push(b'\n');
+        input.extend_from_slice(b"short\n");
+        input
+    }
+
+    /// A reader that refuses to hand out more than `budget` bytes.
+    ///
+    /// The defect #2144 fixes is invisible in the forwarded output — the bytes
+    /// sent are the same prefix either way. What changes is how much had to be
+    /// **resident** to produce them, and a `Vec`'s peak length is not
+    /// observable from outside the loop. So the reader enforces the bound
+    /// instead of measuring it: ask it past the budget and it errors, which the
+    /// pump reports and treats as end of stream.
+    ///
+    /// This is deterministic and synchronous on purpose. A first version timed
+    /// a rendezvous channel against a counter and passed alone while failing in
+    /// the full suite, because the pump thread runs on after `send` returns.
+    struct BudgetedReader {
+        inner: std::io::Cursor<Vec<u8>>,
+        budget: usize,
+    }
+
+    impl std::io::Read for BudgetedReader {
+        fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+            if self.budget == 0 {
+                return Err(std::io::Error::other(
+                    "the reader was asked past its budget: the read is not bounded by the cap",
+                ));
+            }
+            let want = out.len().min(self.budget);
+            let n = std::io::Read::read(&mut self.inner, &mut out[..want])?;
+            self.budget -= n;
+            Ok(n)
+        }
+    }
+
+    #[test]
+    fn the_read_stops_at_the_cap_rather_than_at_the_newline() {
+        // One line four times the cap. Before #2144 `read_until` pulled all of
+        // it into `buf` before the length was even tested; the coordinator's
+        // RSS grew 1 MB per MiB of such output — measured at 293 MB for a
+        // 256 MiB line, against a 10 MiB limit.
+        let mut payload = vec![b'x'; MAX_LINE_LENGTH * 4];
+        payload.push(b'\n');
+
+        // The cap, plus one 8 KiB refill window of slack.
+        let reader = std::io::BufReader::new(BudgetedReader {
+            inner: std::io::Cursor::new(payload),
+            budget: MAX_LINE_LENGTH + 8192,
+        });
+
+        let (tx, rx) = crossbeam_channel::unbounded::<String>();
+        pump_worker_lines(reader, &tx);
+        drop(tx);
+        let lines: Vec<String> = rx.into_iter().collect();
+
+        assert_eq!(
+            lines.len(),
+            1,
+            "the read must stop at the cap rather than at the newline. An \
+             unbounded `read_until` asks past the budget, the reader errors, \
+             and nothing is forwarded at all — which is what those surplus \
+             bytes cost in memory when the reader does not refuse (#2144)"
+        );
+        assert_eq!(
+            lines[0].len(),
+            MAX_LINE_LENGTH,
+            "the forwarded prefix is the cap, unchanged by #2144"
+        );
+    }
+
+    #[test]
+    fn an_over_long_line_forwards_the_capped_prefix() {
+        let lines = pump(over_long_then_short());
+
+        assert_eq!(
+            lines[0].len(),
+            MAX_LINE_LENGTH,
+            "the forwarded prefix must be exactly the cap. The bytes forwarded \
+             do not change with #2144 — only the bytes allocated do"
+        );
+    }
+
+    #[test]
+    fn an_over_long_line_forwards_exactly_one_message() {
+        let lines = pump(over_long_then_short());
+
+        assert_eq!(
+            lines.len(),
+            2,
+            "the rest of an over-long line must be discarded, not returned as \
+             further capped lines. Without that, one 256 MiB line becomes 26 \
+             forwarded lines and the drain classifies every one of them"
+        );
+        assert_eq!(
+            lines[1], "short\n",
+            "the line after the over-long one must arrive intact, or the \
+             discard ate a real line as well"
+        );
+    }
+
+    #[test]
+    fn ordinary_lines_are_unaffected() {
+        let lines = pump(b"one\ntwo\nthree\n".to_vec());
+
+        assert_eq!(
+            lines,
+            vec!["one\n", "two\n", "three\n"],
+            "the cap must not change the common path, which is every line a \
+             healthy worker writes"
+        );
+    }
+
+    #[test]
+    fn a_final_line_without_a_newline_is_forwarded() {
+        let lines = pump(b"one\ntrailing".to_vec());
+
+        assert_eq!(
+            lines,
+            vec!["one\n", "trailing"],
+            "a worker that dies mid-line still has its last bytes read; \
+             dropping them would lose a result that had already been written"
+        );
+    }
+
     #[test]
     fn max_line_length_is_ten_mebibytes() {
         assert_eq!(
