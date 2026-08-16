@@ -1,9 +1,18 @@
 name: Publish to PyPI
 
+# The Distribution band gate below can only be exercised by running this
+# workflow, and a tag push is the one thing you cannot rehearse: the version is
+# on `main` before any wheel is built, so a gate that is wrong is discovered
+# after the tag exists and the correction is a new version (#2177).
+#
+# `workflow_dispatch` makes the whole matrix runnable on demand from any ref,
+# with no tag and no upload. `publish` and `release` are guarded on the ref
+# being a tag, so no path other than a `v*` push can reach PyPI.
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions: {}
 
@@ -256,7 +265,12 @@ jobs:
         working-directory: ${{ runner.temp }}
         run: oxitest --version
 
+  # The upload runs for a tag and for nothing else. This guard is what makes
+  # `workflow_dispatch` and any branch trigger safe: both build the artifacts
+  # and run the gate, and neither can reach PyPI. `release` needs this job, so
+  # a skip here skips that too.
   publish:
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [linux, macos, windows, sdist, gate, gate-sdist]
