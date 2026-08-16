@@ -26,8 +26,8 @@ from oxitest._bridge._errors import (
     FixtureError,
     FixtureNotFoundError,
     FixtureTypeNotFoundError,
+    InternalError,
     UnannotatedFixtureParamError,
-    UsageError,
 )
 from oxitest._bridge._fixture_context import (
     _callback_name,
@@ -599,7 +599,7 @@ class FixtureSession:
                 f"{type(source).__name__} source, which carries no anchor "
                 f"package. This is an oxitest bug — please report it."
             )
-            raise UsageError(msg)
+            raise InternalError(msg)
         return source.anchor_package_path
 
     def _scope_for(self, defn: FixtureDef, module_path: str) -> ScopeRefs | None:

@@ -20,6 +20,7 @@ __all__ = [
     "FixtureNotFoundError",
     "FixtureSetupError",
     "FixtureTypeNotFoundError",
+    "InternalError",
     "LoadError",
     "OxitestError",
     "OxitestTimeoutError",
@@ -42,7 +43,7 @@ if TYPE_CHECKING:
 
 
 class OxitestError(Exception):
-    """Base for all oxitest internal errors."""
+    """Base for every exception oxitest raises."""
 
 
 class FixtureError(OxitestError):
@@ -406,6 +407,16 @@ class ParametrizeError(OxitestError):
 
 class UsageError(OxitestError):
     """Raised when a user-facing API is used incorrectly."""
+
+
+class InternalError(OxitestError):
+    """Raised when an oxitest invariant is broken.
+
+    Not a usage error: the request was valid and oxitest failed to hold a
+    property of its own. Deliberately outside ``_USAGE_ERROR_TYPES`` — exit 4
+    tells the user that their request was invalid, which is the wrong thing to
+    tell someone who has found a bug (#2172).
+    """
 
 
 class LoadError(OxitestError):
