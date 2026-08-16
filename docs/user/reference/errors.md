@@ -206,8 +206,9 @@ plugin "<name>" not found. Is it installed?
   <ImportError>
 ```
 
-**Cause:** A module listed in `plugins = [...]` in `pyproject.toml` cannot be
-imported.
+**Cause:** A module listed in `plugins = [...]` in `pyproject.toml` is not
+installed. A dotted name reports this when any package on the path to it is
+absent, not only the last segment.
 
 **Fix:** Ensure the package is installed in the active environment and that the
 module name is spelled correctly:
@@ -215,6 +216,25 @@ module name is spelled correctly:
 ```console
 $ python -c "import <name>"
 ```
+
+**Exit code:** `4`. A setting naming something absent is an invalid request —
+see [Exit codes](exit-codes.md#plugin-configuration-against-plugin-declarations).
+
+---
+
+```text
+plugin "<name>" failed to import.
+  The plugin is installed. An import inside it failed: <ImportError>
+```
+
+**Cause:** The plugin module itself is installed, but something it imports is
+not. The absent module named in the message is the plugin's dependency.
+
+**Fix:** Install the missing dependency, or report it to the plugin's author —
+a plugin should declare what it imports.
+
+**Exit code:** `3`. The plugin is defective rather than absent, so this is not
+your `pyproject.toml`'s mistake.
 
 ---
 

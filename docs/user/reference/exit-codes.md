@@ -11,7 +11,7 @@
 | `0` | All tests passed, or a **valid** target collected no tests. A target that does not exist exits `4`, not `0` — see below. Also exits with 0 when `oxitest env` is used (no tests are run). Flaky tests (failed on first attempt, passed on retry) are not counted as failures and do not affect this code. |
 | `1` | One or more tests failed or errored |
 | `2` | Run interrupted (e.g. `-x` or `--maxfail` reached) |
-| `3` | Collection error — a test file could not be imported, **or a declaration inside it was refused** (see [Malformed test declarations](#malformed-test-declarations)) — or strict violations detected under `strict = "abort"` |
+| `3` | Collection error — a test file could not be imported, **or a declaration inside it was refused** (see [Malformed test declarations](#malformed-test-declarations)) — or strict violations detected under `strict = "abort"`, **or a plugin is defective** (see [Plugin configuration against plugin declarations](#plugin-configuration-against-plugin-declarations)) |
 | `4` | `UsageError` — the request itself was invalid. Defined by the **class** of the error, not by when oxitest detects it. Sources: invalid CLI arguments; **a target that does not exist** (a path, a directory, or a literal node ID matching no test); `--json` output file cannot be written; `[tool.oxitest]` in `pyproject.toml` has unknown fields, wrong types, or values pointing at removed options; **a fixture wiring error found while a test runs** (see below); **a plugin fixture home that oxitest refuses as a usage error** — a namespace that is reserved, that two plugins claim, or that cannot be written. See [Error reference — Configuration errors](errors.md#configuration-errors), [ADR-0008](../../adr/0008-config-fail-closed-narrow-scope.md) and [ADR-0014](../../adr/0014-target-validation.md). |
 
 ## Targets
@@ -63,6 +63,21 @@ A plugin can fail in two ways, and they carry different codes. The line is the s
 
 A **plugin setting** in `pyproject.toml` that oxitest refuses is a usage error, so it exits `4`. A namespace that is reserved, that two plugins claim, or that cannot be written as `fx.<name>` are the three cases.
 
+A **plugin that is not installed** is the same shape — a setting naming something absent — so it also exits `4`:
+
+```bash
+oxitest                      # exit 4 — plugins = ["typo_in_the_name"]
+```
+
+A **plugin that is defective** exits `3`. It has no `oxitest_plugin()` function, or its entry point raises, or it returns something that is not an `oxitest.Plugin`. The split is who made the mistake: the first is your `pyproject.toml`, and the second is a bug in the plugin, where exit 4 would ask you to correct configuration that is already correct.
+
+A plugin that **is** installed and whose own imports fail is defective, not absent. The message names the module that is missing, which is the plugin's dependency rather than the plugin:
+
+```
+Plugin loading failed: PluginLoadError: plugin "my_plugin" failed to import.
+  The plugin is installed. An import inside it failed: No module named 'some_dependency'
+```
+
 A **declaration inside a plugin's `__fixtures__.py`** that oxitest refuses is a declaration refusal, so it exits `3` — the same code the identical declaration gets in your own test tree. A `lifetime="package"` fixture in a plugin is the case you are most likely to meet, because package lifetime binds to a directory in your test tree and a plugin has none.
 
 Both print `UsageError:` in the report, because both raise the same Python class. The exit code follows the kind of mistake, not the message.
@@ -83,6 +98,17 @@ oxitest                      # exit 4 — "1 error · 1 passed"
 ```
 
 A **`return <value>`** in a test body is different again, and milder: the body did run. It is reported only under `strict` as `test-returns-value`, and exits `3` in abort mode with the other strict violations. See [Strict Mode](../explanation/strict-mode.md) and [ADR-0017](../../adr/0017-a-test-function-returns-none.md).
+
+## Where the exit code is decided
+
+Exit `4` is fixed by the **class** of the error, not by when oxitest detects it ([ADR-0014](../../adr/0014-target-validation.md)). oxitest catches errors at several points — five while the run starts, one around each test, and one in each parallel worker — and every one of them asks the same question about the error it caught, rather than substituting the code of the step that was running.
+
+Two consequences you can rely on:
+
+- A `[tool.oxitest]` mistake exits `4` whether oxitest finds it before collection or while a test runs.
+- The exit code is the same in serial and under `-n`. A misuse caught inside a worker also costs one result, not the whole group the worker was running.
+
+An `async_backend` naming a backend that does not exist is the third case in this family, alongside the two plugin cases above. It exits `4`.
 
 ## See also
 
