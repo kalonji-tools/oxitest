@@ -8,8 +8,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from oxitest import TempDir
 
 from benchmarks.compare import (
@@ -462,30 +460,40 @@ def test_baseline_verdict_reports_a_measured_pass() -> None:
     )
 
 
-def _write_results(root: Path, *, lazy_mean: float) -> None:
-    """Write a ``results.json`` whose lazy ratio decides the verdict.
-
-    The lazy tier needs no baseline file, so a regression is reachable from one
-    file. The ``l`` entry fixes the denominator at 1.0, so ``lazy_mean`` is the
-    ratio the threshold is compared against.
-    """
+def _write_bench(
+    root: Path, *, results: list[dict], baseline: list[dict] | None = None
+) -> None:
+    """Write the two files ``compare.py`` reads, relative to ``root``."""
     bench = root / "benchmarks"
-    bench.mkdir(parents=True, exist_ok=True)
+    bench.mkdir(parents=True)
     (bench / "results.json").write_text(
-        json.dumps(
-            {
-                "results": [
-                    {"command": "oxitest l", "tier": "l", "mean": 1.0},
-                    {
-                        "command": "oxitest lazy",
-                        "tier": "lazy_node_id",
-                        "mean": lazy_mean,
-                    },
-                ]
-            }
-        ),
-        encoding="utf-8",
+        json.dumps({"results": results}), encoding="utf-8"
     )
+    if baseline is not None:
+        (bench / "baseline.json").write_text(
+            json.dumps({"results": baseline}), encoding="utf-8"
+        )
+
+
+def _lazy_entries(lazy_mean: float) -> list[dict]:
+    """Return results reaching the lazy arm, with ``lazy_mean`` as the ratio.
+
+    The ``l`` entry fixes the denominator at 1.0, so the caller sets the ratio
+    that ``LAZY_RATIO_THRESHOLD`` is compared against directly.
+    """
+    return [
+        {"command": "oxitest l", "tier": "l", "mean": 1.0},
+        {"command": "oxitest lazy", "tier": "lazy_node_id", "mean": lazy_mean},
+    ]
+
+
+def _tier_entries(serial_mean: float) -> list[dict]:
+    """Return results reaching the baseline arm, and no other arm.
+
+    The lazy tiers are absent, so ``_print_lazy`` reports nothing and the
+    verdict can only come from the comparison against ``baseline.json``.
+    """
+    return [{"command": "oxitest --serial s", "tier": "s", "mean": serial_mean}]
 
 
 def _run_compare(cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -500,8 +508,8 @@ def _run_compare(cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_compare_exits_nonzero_on_a_regression(tmp: TempDir) -> None:
-    """The detector refuses a regression and accepts a clean run.
+def test_compare_refuses_a_lazy_regression(tmp: TempDir) -> None:
+    """The detector refuses a lazy-tier regression and accepts a clean run.
 
     This is the ``tooling`` obligation of ADR-0019: a test with that attribute
     makes its tool fail.
@@ -509,8 +517,8 @@ def test_compare_exits_nonzero_on_a_regression(tmp: TempDir) -> None:
     # Arrange -- 0.90 is far above LAZY_RATIO_THRESHOLD, 0.10 far below it.
     regressed_root = tmp.path / "regressed"
     clean_root = tmp.path / "clean"
-    _write_results(regressed_root, lazy_mean=0.90)
-    _write_results(clean_root, lazy_mean=0.10)
+    _write_bench(regressed_root, results=_lazy_entries(0.90))
+    _write_bench(clean_root, results=_lazy_entries(0.10))
 
     # Act
     regressed = _run_compare(regressed_root)
@@ -525,5 +533,37 @@ def test_compare_exits_nonzero_on_a_regression(tmp: TempDir) -> None:
     assert clean.returncode == 0, (
         "A detector that always exits non-zero would satisfy the assertion above "
         "while detecting nothing. This control is what separates the two. "
+        f"stdout was:\n{clean.stdout}"
+    )
+
+
+def test_compare_refuses_a_baseline_regression(tmp: TempDir) -> None:
+    """The detector refuses a tier that got slower than its recorded baseline.
+
+    The lazy arm and the baseline arm are the only two that reach the exit
+    code. This pins the second one, so a change that breaks only the baseline
+    comparison cannot pass by way of the lazy arm.
+    """
+    # Arrange -- 0.20 against a 0.10 baseline is 100% slower, far past the 10%
+    # threshold. 0.10 against 0.10 has not moved at all.
+    regressed_root = tmp.path / "regressed"
+    clean_root = tmp.path / "clean"
+    baseline = _tier_entries(0.10)
+    _write_bench(regressed_root, results=_tier_entries(0.20), baseline=baseline)
+    _write_bench(clean_root, results=_tier_entries(0.10), baseline=baseline)
+
+    # Act
+    regressed = _run_compare(regressed_root)
+    clean = _run_compare(clean_root)
+
+    # Assert
+    assert regressed.returncode == 1, (
+        "A tier slower than its baseline is the regression the Performance Gate "
+        "was built to catch, and it reaches the exit code by a different route "
+        f"than the lazy arm. stdout was:\n{regressed.stdout}"
+    )
+    assert clean.returncode == 0, (
+        "An unchanged tier must compare and pass. If this exits non-zero the "
+        "baseline arm refuses every run, and the gate blocks all work. "
         f"stdout was:\n{clean.stdout}"
     )
