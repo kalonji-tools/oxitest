@@ -3,10 +3,14 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from oxitest import TempDir
 
 from benchmarks.compare import (
     LAZY_RATIO_THRESHOLD,
@@ -455,4 +459,71 @@ def test_baseline_verdict_reports_a_measured_pass() -> None:
     assert verdict is RegressionVerdict.NO_REGRESSION, (
         "One compared tier is a real measurement, so it must not be downgraded "
         "to NOT_MEASURED alongside the zero-comparison case."
+    )
+
+
+def _write_results(root: Path, *, lazy_mean: float) -> None:
+    """Write a ``results.json`` whose lazy ratio decides the verdict.
+
+    The lazy tier needs no baseline file, so a regression is reachable from one
+    file. The ``l`` entry fixes the denominator at 1.0, so ``lazy_mean`` is the
+    ratio the threshold is compared against.
+    """
+    bench = root / "benchmarks"
+    bench.mkdir(parents=True, exist_ok=True)
+    (bench / "results.json").write_text(
+        json.dumps(
+            {
+                "results": [
+                    {"command": "oxitest l", "tier": "l", "mean": 1.0},
+                    {
+                        "command": "oxitest lazy",
+                        "tier": "lazy_node_id",
+                        "mean": lazy_mean,
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _run_compare(cwd: Path) -> subprocess.CompletedProcess[str]:
+    """Run ``compare.py`` as the Performance Gate runs it, from ``cwd``."""
+    script = Path(__file__).resolve().parent / "compare.py"
+    return subprocess.run(
+        [sys.executable, str(script)],
+        cwd=cwd,
+        capture_output=True,
+        encoding="utf-8",
+        check=False,
+    )
+
+
+def test_compare_exits_nonzero_on_a_regression(tmp: TempDir) -> None:
+    """The detector refuses a regression and accepts a clean run.
+
+    This is the ``tooling`` obligation of ADR-0019: a test with that attribute
+    makes its tool fail.
+    """
+    # Arrange -- 0.90 is far above LAZY_RATIO_THRESHOLD, 0.10 far below it.
+    regressed_root = tmp.path / "regressed"
+    clean_root = tmp.path / "clean"
+    _write_results(regressed_root, lazy_mean=0.90)
+    _write_results(clean_root, lazy_mean=0.10)
+
+    # Act
+    regressed = _run_compare(regressed_root)
+    clean = _run_compare(clean_root)
+
+    # Assert
+    assert regressed.returncode == 1, (
+        "compare.py is the only refusal the Performance Gate has. If it exits 0 "
+        "on a regression the gate reports a pass it never measured. "
+        f"stdout was:\n{regressed.stdout}"
+    )
+    assert clean.returncode == 0, (
+        "A detector that always exits non-zero would satisfy the assertion above "
+        "while detecting nothing. This control is what separates the two. "
+        f"stdout was:\n{clean.stdout}"
     )
