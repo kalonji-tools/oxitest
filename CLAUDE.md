@@ -483,7 +483,6 @@ prek run --all-files
 
 *Collection:*
 - `importer.py` — `collect_module()`: imports test file, discovers `test_*` functions, returns `CollectedItem` list
-- `conftest_loader.py` — loads `conftest.py` files, registers their `Fixtures()` instances
 - `_loader.py` — module loading infrastructure
 
 *Infrastructure:*

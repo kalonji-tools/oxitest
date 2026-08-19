@@ -614,12 +614,12 @@ def _extract_depends_on(func: Any) -> tuple[tuple[str, type], ...]:
     ``Fixture[T]``. Unannotated parameters are NOT included — they are caught at
     resolve time by ``UnannotatedFixtureParamError``.
 
-    Mirrors ``conftest_loader._extract_depends_on``. Without it a declaration's
-    ``FixtureDef`` carries no dependencies at all, so the fixture dependency
-    graph is empty for every ``@oxi.fixture``: ``query fixtures -E uses(x)``
-    answers "no results" and ``--tree`` draws no edges, while the same project
-    runs green (#1720). The duplication is deliberate and short-lived — the
-    conftest copy goes with ``conftest_loader.py``, and this is the survivor.
+    Without this extraction a declaration's ``FixtureDef`` carries no
+    dependencies at all, so the fixture dependency graph is empty for every
+    ``@oxi.fixture``: ``query fixtures -E uses(x)`` answers "no results" and
+    ``--tree`` draws no edges, while the same project runs green (#1720).
+    This was one of two copies; the ``conftest.py`` one went with its module,
+    and this is the survivor.
     """
     hints = safe_type_hints(func, include_extras=True)
     if hints is None:

@@ -404,8 +404,8 @@ class FixtureSession:
     the `FixtureRegistry`.  Async fixtures are delegated to the configured
     `AsyncBackend`.
 
-    The session is constructed once by `conftest_loader` and passed into every
-    `run_test` call for the duration of the run.
+    The session is constructed once by `_session_factory` and passed into
+    every `run_test` call for the duration of the run.
     """
 
     def __init__(

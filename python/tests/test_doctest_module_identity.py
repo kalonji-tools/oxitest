@@ -167,9 +167,12 @@ class SyntheticRouteCase:
     synthetic_name: str
 
 
-# Each case pins one of oxitest's five sys.modules write sites by name
+# Each case pins one synthetic sys.modules name. The guard under test is a
+# single prefix comparison, so every case exercises one branch; the cases are
+# distinct names rather than distinct code paths. Four name live write sites
 # (executor._exec_unique_name, importer.collect_module, _doctest_module_name,
-# conftest_loader._load_conftest_module, importer's fixture-module route).
+# importer's fixture-module route). The conftest one names a route #1720
+# retired, and is kept: the guard must still refuse the prefix.
 # Installing under only one route — _oxitest_exec_, say — would pass against
 # the earlier three-item enumeration too, since that route was one of the
 # three it already listed; the point of this test is the two routes that
@@ -194,9 +197,10 @@ def test_import_doctest_module_ignores_a_synthetic_sys_modules_entry(
     any ``sys.modules`` entry as a real import as long as its ``__file__``
     resolves to the target path — including another oxitest route's own
     private copy. A probe against this exact defect got back
-    ``sys.modules["conftest"]`` for a doctest inside a conftest.py; a hand-
-    enumerated prefix list here (an earlier revision of this file) still
-    missed two of the five write sites on the day it was written (#1962).
+    ``sys.modules["conftest"]`` for a doctest inside a conftest.py, on a tree
+    where oxitest still loaded one; a hand-enumerated prefix list here (an
+    earlier revision of this file) still missed two of the write sites that
+    existed on the day it was written (#1962).
     """
     # Arrange — a real file on disk, so the resolved-path comparison in
     # already_imported can succeed, with a fake module installed under a

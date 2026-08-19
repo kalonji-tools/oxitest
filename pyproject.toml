@@ -142,7 +142,6 @@ ignore = [
 "python/tests/test_importer.py" = ["S102"]
 
 # ── S603: subprocess calls in test infrastructure ───────────────────────
-"python/tests/conftest.py" = ["S603"]
 "python/tests/integration/*" = ["S603"]
 "python/tests/test_worker.py" = ["S603"]
 # The Command band test starts compare.py the way the Performance Gate does.
