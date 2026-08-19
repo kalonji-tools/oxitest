@@ -199,7 +199,7 @@ fn rootdir_package(
 /// same answer as an empty declared list, and the honest one.
 fn implied_declared_dirs(cfg: &config::Config) -> Vec<camino::Utf8PathBuf> {
     match crate::collector::collect_files_in(std::slice::from_ref(&cfg.rootdir), cfg) {
-        Ok((files, _)) => files
+        Ok(files) => files
             .iter()
             .filter_map(|file| file.parent())
             .map(camino::Utf8Path::to_owned)
@@ -241,7 +241,7 @@ fn declared_dirs_holding_tests(cfg: &config::Config) -> Vec<camino::Utf8PathBuf>
         .iter()
         .filter(|dir| {
             match crate::collector::collect_files_in(std::slice::from_ref(*dir), cfg) {
-                Ok((files, _)) => !files.is_empty(),
+                Ok(files) => !files.is_empty(),
                 // A glob-set failure keeps the entry. Collection is about to
                 // report that same failure for real, and dropping a declaration
                 // on it would answer Rule 4 from a set the user never wrote.

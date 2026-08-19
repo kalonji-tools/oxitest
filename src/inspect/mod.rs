@@ -44,7 +44,6 @@ pub fn build_phase1_graph(
     args: &InspectArgs,
     cfg: &config::Config,
     mut test_files: Vec<Utf8PathBuf>,
-    _conftest_files: &[Utf8PathBuf],
 ) -> Result<InspectGraph, Box<dyn std::error::Error>> {
     use crate::query::extract;
     use graph::builder::GraphBuilder;
@@ -251,8 +250,7 @@ pub fn spawn_phase2(args: Phase2Args, tx: mpsc::Sender<Phase2Data>) {
 /// collect fixture and plugin data from the Python session, which is
 /// merged into the graph when ready.
 pub fn run(args: &InspectArgs, cfg: &config::Config) -> Result<(), Box<dyn std::error::Error>> {
-    // Collect files first so conftest paths are available before AST work begins.
-    let (test_files, conftest_files) = crate::collector::collect_files(cfg)?;
+    let test_files = crate::collector::collect_files(cfg)?;
 
     // Clone test files for phase 2 before phase 1 consumes the original.
     let test_files_for_phase2 = test_files.clone();
@@ -263,7 +261,7 @@ pub fn run(args: &InspectArgs, cfg: &config::Config) -> Result<(), Box<dyn std::
     spawn_phase2(phase2_args(cfg, test_files_for_phase2), tx);
 
     // Phase 1: instant-tier graph (synchronous, runs concurrently with Phase 2).
-    let mut graph = build_phase1_graph(args, cfg, test_files, &conftest_files)?;
+    let mut graph = build_phase1_graph(args, cfg, test_files)?;
     graph.relativize_paths(cfg.rootdir.as_str());
 
     let timeout = std::time::Duration::from_secs(cfg.exec.inspect_timeout_secs);
