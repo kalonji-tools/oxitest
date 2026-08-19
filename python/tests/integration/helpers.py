@@ -5,7 +5,7 @@ There is no helper registry — #1700 retired the concept; mediation is
 justified by lifecycle, never by visibility. Split out of
 ``integration/conftest.py`` by #1787.
 
-A flat module, not a package: seven functions do not need submodules.
+A flat module, not a package: nine functions do not need submodules.
 """
 
 from __future__ import annotations
@@ -21,6 +21,8 @@ __all__ = [
     "assert_excludes",
     "assert_failed",
     "assert_passed",
+    "assert_test_failure",
+    "assert_usage_error",
     "clean_git_env",
     "write_project",
 ]
@@ -83,6 +85,14 @@ def assert_failed(out: str, rc: int, *, count: int | None = None) -> None:
     assert rc != 0, f"expected non-zero exit, got {rc}\n{out}"
     if count is not None:
         assert f"{count} failed" in out, f"expected '{count} failed' in:\n{out}"
+
+
+def assert_test_failure(out: str, rc: int) -> None:
+    """Assert a test failure (exit 1)."""
+    assert rc == 1, (
+        f"expected exit 1 (ExitCode::Failure), got {rc} — exit 3 would mean "
+        f"collection failed and the test never ran\n{out}"
+    )
 
 
 def assert_collection_error(out: str, rc: int) -> None:
