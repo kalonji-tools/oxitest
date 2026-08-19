@@ -188,7 +188,7 @@ oxitest query fixtures [OPTIONS] [PATHS...]
 |------|-------|------|---------|-------------|
 | `--tree` | — | flag | `false` | Show fixture dependency tree instead of a flat list. Visualises which fixtures depend on which. Detects circular dependencies. |
 | `-E` | — | `EXPR` | — | DSL filter (see [Query DSL](#query-dsl)). Predicates: `name()`, `autouse()`, `async()`. |
-| `--verbose` | `-v` | `LEVEL` | `normal` | Verbosity level. With `--tree`: `-v` adds tags (`shared`, `async`, `autouse`); `-vv` also adds origin (`conftest.py` path). |
+| `--verbose` | `-v` | `LEVEL` | `normal` | Verbosity level. With `--tree`: `-v` adds tags (`shared`, `async`, `autouse`); `-vv` also adds origin (declaration file path). |
 | `--quiet` | `-q` | flag | `false` | Quiet output (minimal detail). |
 | `--jsonl` | — | flag | `false` | Output as JSON Lines. |
 | `--fzf` | — | flag | `false` | Interactive fuzzy-finder. |
@@ -225,7 +225,7 @@ Verbosity controls the amount of detail per node:
 |-------|-------|
 | *(default)* | Fixture names only. |
 | `-v` | Names + tags (`shared`, `async`, `autouse`). |
-| `-vv` | Names + tags + origin (`conftest.py` path). |
+| `-vv` | Names + tags + origin (declaration file path). |
 
 When a circular dependency is detected, `oxitest query fixtures --tree` prints
 an error and exits with a non-zero exit code:
@@ -293,7 +293,7 @@ Expressions can be combined with `and`, `or`, `not`, and parentheses:
 ## `oxitest inspect`
 
 Interactive terminal UI for exploring test project metadata — tests, fixtures,
-marks, conftests, and plugins — without running any tests.
+marks, and plugins — without running any tests.
 
 ```text
 oxitest inspect [NAME] [OPTIONS]

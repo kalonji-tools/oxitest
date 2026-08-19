@@ -13,18 +13,6 @@ Collection errors prevent oxitest from discovering tests. They produce
 ---
 
 ```text
-Failed to load conftest fixtures: ModuleNotFoundError: No module named '<name>'
-```
-
-**Cause:** A `conftest.py` file imports a module that is not installed or not
-on `PYTHONPATH`.
-
-**Fix:** Install the missing dependency (`pip install <name>`) or verify your
-import paths and virtual environment are correct.
-
----
-
-```text
 Failed to import test module: <path>: <error>
 ```
 
@@ -981,9 +969,9 @@ markers = [
 missing-return-annotation   <fixture_name>
 ```
 
-**Cause:** A fixture function in `conftest.py` does not have a return type
-annotation. Strict mode requires explicit return types on all fixtures for
-clarity and type safety.
+**Cause:** A fixture function does not have a return type annotation. Strict
+mode requires explicit return types on all fixtures for clarity and type
+safety.
 
 **Fix:** Add a return type annotation to the fixture function:
 

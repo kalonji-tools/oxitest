@@ -606,9 +606,8 @@ pub fn resolve_target(base: &Utf8Path, path: &Utf8Path) -> Utf8PathBuf {
 /// the two are compared. On Windows `std::fs::canonicalize` returns the
 /// extended-length `\\?\D:\…` form while `std::env::current_dir` returns the
 /// plain `D:\…` one, so an uncanonicalised base would give `testpaths` a
-/// different spelling from `Config::rootdir`. `collect_from` stops its
-/// conftest walk at `d == config.rootdir`; with two spellings that test never
-/// matches, and the walk climbs past the project root. Linux cannot show this,
+/// different spelling from `Config::rootdir`. Every comparison between the
+/// two then fails, however equal the paths are. Linux cannot show this,
 /// because `getcwd` already returns the canonical path (#2018 is the same
 /// asymmetry seen from the other side).
 pub fn invocation_dir() -> Utf8PathBuf {

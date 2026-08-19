@@ -126,14 +126,6 @@ def already_imported(module_path: str) -> ModuleType | None:
     mutates module state at import now leaks into the rest of the run;
     accepted.
 
-    ``conftest_loader`` also registers each conftest.py under the bare key
-    ``"conftest"``. That is a legitimate match — the comparison below is on
-    the resolved path, so it can never return the wrong file — but the key is
-    last-writer-wins across siblings, and which conftest wins varies with the
-    modules a run selects (``-k``, positional paths, ``--affected``). So in a
-    multi-conftest project one conftest's doctests get canonical reuse and its
-    siblings' get a fresh execution, and which is which is not fixed.
-
     Identity is compared, not spelling. Raw ``__file__`` strings can differ for
     one file (``/var`` vs ``/private/var`` and similar symlink spellings,
     #1957), and resolving both sides does not reconcile them: on Windows the

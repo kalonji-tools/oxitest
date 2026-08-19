@@ -114,9 +114,9 @@ def session_from_declarations(
     """Build a session from a written ``__fixtures__.py``, as the pipeline does.
 
     Imports the declaration file, registers it against its anchor, and hands the
-    resulting defs to a session. This is the ``@oxi.fixture`` counterpart of
-    ``conftest_loader.create_session``, which takes conftest paths and goes with
-    ``conftest.py`` (#1720).
+    resulting defs to a session. #1720 retired the ``conftest.py`` counterpart
+    of this helper, so this is the only route that builds a session from a
+    declaration file.
 
     Args:
         declarations: Path to the written declaration file.

@@ -566,11 +566,11 @@ def main() -> None:
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(line_buffering=True)
     # Install before the first task, not per task. Every collector downstream
-    # defers to an already-active one: conftest_loader only installs a temporary
-    # list when none exists, FixtureSession.__init__ only claims the var when
-    # none is active, and end_process only clears it when that session was the
-    # one that set it. So this single set survives every task — which is right,
-    # because a worker's pipe lives exactly as long as the process (#1840).
+    # defers to an already-active one: FixtureSession.__init__ only claims
+    # the var when none is active, and end_process only clears it when that
+    # session was the one that set it. So this single set survives every task
+    # — which is right, because a worker's pipe lives exactly as long as the
+    # process (#1840).
     from oxitest._bridge._diagnostic_collector import _diagnostic_collector_var
 
     _diagnostic_collector_var.set(_StreamingDiagnosticSink())
