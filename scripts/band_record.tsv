@@ -2356,6 +2356,7 @@ Library	benchmarks/test_compare.py::test_baseline_verdict_zero_comparisons_is_no
 Library	benchmarks/test_compare.py::test_check_regression_at_threshold_is_not_regression	tooling
 Library	benchmarks/test_compare.py::test_check_regression_exceeds_threshold	tooling
 Library	benchmarks/test_compare.py::test_check_regression_improvement	tooling
+Library	benchmarks/test_compare.py::test_compare_exits_nonzero_on_a_regression	tooling
 Library	benchmarks/test_compare.py::test_dogfood_summary_empty	tooling
 Library	benchmarks/test_compare.py::test_dogfood_summary_serial_and_parallel	tooling
 Library	benchmarks/test_compare.py::test_dogfood_summary_serial_only	tooling
