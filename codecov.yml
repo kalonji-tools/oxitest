@@ -1,12 +1,13 @@
+# The project status is deliberately absent (ADR-0019, #2176). Coverage is a
+# report; the obligation record refuses instead. A control of one file and one
+# test whose body is `assert True` scores 24.1% against the denominator codecov
+# uses, because oxitest runs its own suite and the harness executes product code
+# no test observes — so an 80% project target sat on a scale whose zero is 24.1%.
+#
+# Patch coverage stays. It measures the lines a pull request adds, so the floor
+# above does not inflate it.
 coverage:
   status:
-    project:
-      rust:
-        target: 80%
-        flags: [rust]
-      python:
-        target: 80%
-        flags: [python]
     patch:
       rust:
         target: 80%
@@ -23,46 +24,27 @@ flags:
     paths: [python/oxitest/]
     carryforward: true
 
+# Emitted by scripts/check_coverage_record.py from scripts/coverage_record.tsv.
+# Do not edit by hand — `just check` refuses when the two disagree.
+# A region is here because the record says `exempt`: the instrument that
+# reads it cannot enter it, so its lines distort the denominator. A region
+# the record calls `uncovered` is NOT here — it is real untested product
+# code and the report should say so.
 ignore:
-  # Rust: PyO3 entry points — only testable through Python integration tests
-  - "src/assert_rewriter.rs"
   - "src/bridge.rs"
+  - "src/cache/mod.rs"
+  - "src/config/cli/inspect.rs"
+  - "src/config/cli/query.rs"
+  - "src/config/mod.rs"
+  - "src/doctest/mod.rs"
+  - "src/inspect/graph/nodes.rs"
+  - "src/inspect/overview.rs"
+  - "src/lib.rs"
+  - "src/parallel/drain.rs"
+  - "src/query/ast.rs"
   - "src/query/bridge.rs"
   - "src/reporter/bridge.rs"
-  - "src/lib.rs"
-  # Pipeline orchestration: only exercised through Python integration tests (subprocess)
-  - "src/pipeline/mod.rs"
-  - "src/pipeline/transitions/"
-  - "src/pipeline/execution.rs"
-  # collect_items() takes Python<'_> + a live FixtureSession and is reachable
-  # only from transitions/session_ready.rs, so `cargo llvm-cov` (which runs
-  # cargo test alone) can never enter it. Its behaviour is covered end to end
-  # by python/tests/test_fixtures_redesign_slice1.py, which drives the runner
-  # as a subprocess and contributes nothing to the Rust flag.
-  - "src/pipeline/collection.rs"
-  # init_session() meets the same criteria as collection.rs above: it takes
-  # Python<'_>, calls FixtureSession::new (which imports oxitest into the
-  # interpreter), and is reachable only from transitions/session_ready.rs.
-  # Listed after #1780, when a one-argument change caused `cargo fmt` to reflow
-  # the surrounding match block — re-stamping eleven already-uncovered lines as
-  # "added" and dropping patch coverage to 53% with no change in tested
-  # behaviour. Reflow of untestable code should not read as coverage rot.
-  - "src/pipeline/helpers.rs"
-  # Python: only exercised through the Rust pipeline, not by Python unit tests
-  - "python/oxitest/_bridge/worker.py"
-  - "python/oxitest/__main__.py"
-  - "python/oxitest/__init__.py"
-  # Fixture internals: exercised via fixtures.py re-exports, not directly by test imports
-  - "python/oxitest/_bridge/_fixture_registry.py"
-  - "python/oxitest/_bridge/_fixture_session.py"
-  # Plugin loader: bridge-layer orchestration exercised via subprocess integration tests
-  - "python/oxitest/_bridge/plugin_loader.py"
-  # Middleware internals: async paths run inside asyncio.run(), plugin paths need real plugins
-  - "python/oxitest/_bridge/_middleware.py"
-  # Protocol stubs — method bodies are `...`, never executed
-  - "python/oxitest/plugin.py"
-  - "python/oxitest/_bridge/_async_backend.py"
-  # Import graph: only called from Rust via --affected, has own test suite
-  - "python/oxitest/_bridge/import_graph.py"
-  # Query bridge: only called from Rust pipeline, uses simple dict returns (no typed wire format)
-  - "python/oxitest/_bridge/query_bridge.py"
+  - "src/reporter/format/mod.rs"
+  - "src/reporter/mod.rs"
+  - "src/types/mod.rs"
+  - "src/worker_result/mod.rs"

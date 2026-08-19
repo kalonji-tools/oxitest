@@ -1,0 +1,191 @@
+state	region	instrument	reason
+measured	python/oxitest/__init__.py	python	-
+measured	python/oxitest/__main__.py	python	-
+measured	python/oxitest/_bridge/__init__.py	python	-
+measured	python/oxitest/_bridge/_approx.py	python	-
+measured	python/oxitest/_bridge/_arrange_api.py	python	-
+measured	python/oxitest/_bridge/_assert_error.py	python	-
+measured	python/oxitest/_bridge/_async_backend.py	python	-
+measured	python/oxitest/_bridge/_async_fixture_handle.py	python	-
+measured	python/oxitest/_bridge/_async_orchestrator.py	python	-
+measured	python/oxitest/_bridge/_async_session_guard.py	python	-
+measured	python/oxitest/_bridge/_boundary.py	python	-
+measured	python/oxitest/_bridge/_builtin_context.py	python	-
+measured	python/oxitest/_bridge/_builtins/__init__.py	python	-
+measured	python/oxitest/_bridge/_builtins/_base.py	python	-
+measured	python/oxitest/_bridge/_builtins/_capture.py	python	-
+measured	python/oxitest/_bridge/_builtins/_logcapture.py	python	-
+measured	python/oxitest/_bridge/_builtins/_patch.py	python	-
+measured	python/oxitest/_bridge/_builtins/_tempdir.py	python	-
+measured	python/oxitest/_bridge/_builtins/_warncapture.py	python	-
+measured	python/oxitest/_bridge/_coverage.py	python	-
+measured	python/oxitest/_bridge/_cwd_guard.py	python	-
+measured	python/oxitest/_bridge/_debugger.py	python	-
+measured	python/oxitest/_bridge/_diagnostic_collector.py	python	-
+measured	python/oxitest/_bridge/_diagnostics.py	python	-
+measured	python/oxitest/_bridge/_doctest_runner.py	python	-
+measured	python/oxitest/_bridge/_errors.py	python	-
+measured	python/oxitest/_bridge/_fixture_context.py	python	-
+measured	python/oxitest/_bridge/_fixture_decorator.py	python	-
+measured	python/oxitest/_bridge/_fixture_instantiator.py	python	-
+measured	python/oxitest/_bridge/_fixture_registry.py	python	-
+measured	python/oxitest/_bridge/_fixture_session.py	python	-
+measured	python/oxitest/_bridge/_fixture_type.py	python	-
+measured	python/oxitest/_bridge/_fixture_validator.py	python	-
+measured	python/oxitest/_bridge/_fixtures.py	python	-
+measured	python/oxitest/_bridge/_fn_metadata.py	python	-
+measured	python/oxitest/_bridge/_importorskip.py	python	-
+measured	python/oxitest/_bridge/_lifetime.py	python	-
+measured	python/oxitest/_bridge/_loader.py	python	-
+measured	python/oxitest/_bridge/_mark_api.py	python	-
+measured	python/oxitest/_bridge/_mark_registry.py	python	-
+measured	python/oxitest/_bridge/_metadata.py	python	-
+measured	python/oxitest/_bridge/_middleware.py	python	-
+measured	python/oxitest/_bridge/_module_identity.py	python	-
+measured	python/oxitest/_bridge/_module_source_registrar.py	python	-
+measured	python/oxitest/_bridge/_namespace_validation.py	python	-
+measured	python/oxitest/_bridge/_paths.py	python	-
+measured	python/oxitest/_bridge/_plugin_config.py	python	-
+measured	python/oxitest/_bridge/_plugin_entry.py	python	-
+measured	python/oxitest/_bridge/_raises.py	python	-
+measured	python/oxitest/_bridge/_read_fixtures.py	python	-
+measured	python/oxitest/_bridge/_runners.py	python	-
+measured	python/oxitest/_bridge/_session_factory.py	python	-
+measured	python/oxitest/_bridge/_streams.py	python	-
+measured	python/oxitest/_bridge/_syspath.py	python	-
+measured	python/oxitest/_bridge/_test_identity.py	python	-
+measured	python/oxitest/_bridge/_test_kind.py	python	-
+measured	python/oxitest/_bridge/_test_meta.py	python	-
+measured	python/oxitest/_bridge/_timeout.py	python	-
+measured	python/oxitest/_bridge/_violation_checkers.py	python	-
+measured	python/oxitest/_bridge/_visibility.py	python	-
+measured	python/oxitest/_bridge/_warns.py	python	-
+measured	python/oxitest/_bridge/executor.py	python	-
+measured	python/oxitest/_bridge/fixture_lister.py	python	-
+measured	python/oxitest/_bridge/importer.py	python	-
+measured	python/oxitest/_bridge/parametrize.py	python	-
+measured	python/oxitest/_bridge/plugin_loader.py	python	-
+measured	python/oxitest/_bridge/proxy.py	python	-
+measured	python/oxitest/_bridge/proxy_ns.py	python	-
+measured	python/oxitest/_bridge/query_bridge.py	python	-
+measured	python/oxitest/_bridge/result.py	python	-
+measured	python/oxitest/_bridge/worker.py	python	-
+measured	python/oxitest/_exit_code.py	python	-
+measured	python/oxitest/plugin.py	python	-
+measured	src/affected.rs	rust	-
+measured	src/assert_rewriter.rs	rust	-
+measured	src/bare_asserts.rs	rust	-
+exempt	src/bridge.rs	rust	PyO3 entry point, reachable only from the interpreter; 0 #[test], 0.0% of 125 production lines
+exempt	src/cache/mod.rs	rust	no instrumented line; declarations, re-exports or type definitions only
+measured	src/cache/module.rs	rust	-
+measured	src/cache/outcome.rs	rust	-
+measured	src/cache/serde.rs	rust	-
+measured	src/cache/timing.rs	rust	-
+measured	src/collector.rs	rust	-
+measured	src/colors.rs	rust	-
+measured	src/config/cli/debug.rs	rust	-
+measured	src/config/cli/enums.rs	rust	-
+exempt	src/config/cli/inspect.rs	rust	no instrumented line; declarations, re-exports or type definitions only
+measured	src/config/cli/mod.rs	rust	-
+measured	src/config/cli/plugin.rs	rust	-
+exempt	src/config/cli/query.rs	rust	no instrumented line; declarations, re-exports or type definitions only
+measured	src/config/cli/run.rs	rust	-
+measured	src/config/cli/shared.rs	rust	-
+measured	src/config/merge.rs	rust	-
+exempt	src/config/mod.rs	rust	no instrumented line; declarations, re-exports or type definitions only
+measured	src/config/pyproject.rs	rust	-
+measured	src/doctest/alias.rs	rust	-
+measured	src/doctest/coverage.rs	rust	-
+exempt	src/doctest/mod.rs	rust	no instrumented line; declarations, re-exports or type definitions only
+measured	src/doctest/scanner.rs	rust	-
+measured	src/doctest/subjects.rs	rust	-
+measured	src/edit_distance.rs	rust	-
+measured	src/filter.rs	rust	-
+measured	src/import_graph.rs	rust	-
+measured	src/inspect/app.rs	rust	-
+measured	src/inspect/detail/declaration.rs	rust	-
+measured	src/inspect/detail/fixture.rs	rust	-
+measured	src/inspect/detail/mark.rs	rust	-
+measured	src/inspect/detail/mod.rs	rust	-
+measured	src/inspect/detail/plugin.rs	rust	-
+measured	src/inspect/detail/styles.rs	rust	-
+measured	src/inspect/detail/test.rs	rust	-
+measured	src/inspect/graph/builder.rs	rust	-
+measured	src/inspect/graph/mod.rs	rust	-
+exempt	src/inspect/graph/nodes.rs	rust	no instrumented line; declarations, re-exports or type definitions only
+measured	src/inspect/input.rs	rust	-
+measured	src/inspect/mod.rs	rust	-
+measured	src/inspect/nav.rs	rust	-
+exempt	src/inspect/overview.rs	rust	no instrumented line; declarations, re-exports or type definitions only
+measured	src/inspect/search.rs	rust	-
+measured	src/inspect/signals.rs	rust	-
+measured	src/inspect/source.rs	rust	-
+measured	src/inspect/ui.rs	rust	-
+exempt	src/lib.rs	rust	PyO3 module root, reachable only from the interpreter; 0 #[test], 0.0% of 35 production lines
+measured	src/module_defs.rs	rust	-
+exempt	src/parallel/drain.rs	rust	no instrumented line; declarations, re-exports or type definitions only
+measured	src/parallel/mod.rs	rust	-
+measured	src/parallel/pool.rs	rust	-
+measured	src/parallel_context.rs	rust	-
+measured	src/pipeline/arrange.rs	rust	-
+measured	src/pipeline/collection.rs	rust	-
+measured	src/pipeline/execution.rs	rust	-
+measured	src/pipeline/helpers.rs	rust	-
+measured	src/pipeline/mod.rs	rust	-
+measured	src/pipeline/transitions/collected.rs	rust	-
+uncovered	src/pipeline/transitions/empty.rs	rust	0.0% of 11 instrumented lines; the instrument runs and no test reaches it
+uncovered	src/pipeline/transitions/executed.rs	rust	0.0% of 68 instrumented lines; the instrument runs and no test reaches it
+uncovered	src/pipeline/transitions/files_collected.rs	rust	0.0% of 145 instrumented lines; the instrument runs and no test reaches it
+measured	src/pipeline/transitions/mod.rs	rust	-
+uncovered	src/pipeline/transitions/prescanned.rs	rust	0.0% of 50 instrumented lines; the instrument runs and no test reaches it
+uncovered	src/pipeline/transitions/ready.rs	rust	0.0% of 81 instrumented lines; the instrument runs and no test reaches it
+uncovered	src/pipeline/transitions/session_ready.rs	rust	0.0% of 144 instrumented lines; the instrument runs and no test reaches it
+measured	src/prescan.rs	rust	-
+measured	src/python_ast.rs	rust	-
+exempt	src/query/ast.rs	rust	no instrumented line; declarations, re-exports or type definitions only
+exempt	src/query/bridge.rs	rust	PyO3 entry point, reachable only from the interpreter; 0 #[test], 0.0% of 61 production lines
+measured	src/query/compile.rs	rust	-
+measured	src/query/detail.rs	rust	-
+measured	src/query/eval.rs	rust	-
+measured	src/query/extract.rs	rust	-
+measured	src/query/format.rs	rust	-
+measured	src/query/fzf.rs	rust	-
+measured	src/query/highlight.rs	rust	-
+measured	src/query/mod.rs	rust	-
+measured	src/query/resource.rs	rust	-
+exempt	src/reporter/bridge.rs	rust	PyO3 entry point, reachable only from the interpreter; 0 #[test], 0.0% of 32 production lines
+measured	src/reporter/ci.rs	rust	-
+measured	src/reporter/composite.rs	rust	-
+measured	src/reporter/exit.rs	rust	-
+measured	src/reporter/format/diagnostic.rs	rust	-
+measured	src/reporter/format/diff.rs	rust	-
+exempt	src/reporter/format/mod.rs	rust	no instrumented line; declarations, re-exports or type definitions only
+measured	src/reporter/format/suggestions.rs	rust	-
+measured	src/reporter/format/summary.rs	rust	-
+measured	src/reporter/json.rs	rust	-
+measured	src/reporter/junit.rs	rust	-
+exempt	src/reporter/mod.rs	rust	no instrumented line; declarations, re-exports or type definitions only
+measured	src/reporter/options.rs	rust	-
+measured	src/reporter/outcome_fmt.rs	rust	-
+measured	src/reporter/parametrize_buffer.rs	rust	-
+uncovered	src/reporter/plugin.rs	rust	0.0% of 43 instrumented lines; the instrument runs and no test reaches it
+measured	src/reporter/print.rs	rust	-
+measured	src/reporter/session.rs	rust	-
+measured	src/reporter/stats.rs	rust	-
+measured	src/reporter/tracing_writer.rs	rust	-
+measured	src/reporter/traits.rs	rust	-
+measured	src/reporter/tty.rs	rust	-
+measured	src/retry.rs	rust	-
+measured	src/scheduler.rs	rust	-
+measured	src/strict.rs	rust	-
+measured	src/target.rs	rust	-
+measured	src/test_returns.rs	rust	-
+measured	src/types/exit.rs	rust	-
+measured	src/types/item.rs	rust	-
+exempt	src/types/mod.rs	rust	no instrumented line; declarations, re-exports or type definitions only
+measured	src/types/node_id.rs	rust	-
+measured	src/types/outcome.rs	rust	-
+measured	src/worker_result/convert.rs	rust	-
+exempt	src/worker_result/mod.rs	rust	no instrumented line; declarations, re-exports or type definitions only
+measured	src/worker_result/wire.rs	rust	-
+measured	src/worker_session.rs	rust	-
