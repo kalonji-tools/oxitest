@@ -27,21 +27,36 @@ from benchmarks.compare import (
 def test_check_regression_improvement() -> None:
     """A current time faster than baseline is not a regression."""
     is_reg, pct = check_regression(current=0.042, baseline=0.045, threshold=0.10)
-    assert not is_reg, ""
-    assert abs(pct - (-0.0667)) < 0.001, ""
+    assert not is_reg, (
+        "A run faster than its baseline must never be flagged, or the gate "
+        "refuses the improvements it exists to encourage."
+    )
+    assert abs(pct - (-0.0667)) < 0.001, (
+        "The percentage is what the report prints next to the verdict. A wrong "
+        "sign or magnitude tells a reader the opposite of what was measured."
+    )
 
 
 def test_check_regression_at_threshold_is_not_regression() -> None:
     """A time exactly at the threshold boundary is not flagged as a regression."""
     is_reg, _ = check_regression(current=0.0495, baseline=0.045, threshold=0.10)
-    assert not is_reg, ""
+    assert not is_reg, (
+        "The threshold is the highest passing value, not the lowest failing one. "
+        "A strict comparison here makes the gate fire on ordinary timing noise."
+    )
 
 
 def test_check_regression_exceeds_threshold() -> None:
     """A current time more than threshold percent above baseline is a regression."""
     is_reg, pct = check_regression(current=0.052, baseline=0.045, threshold=0.10)
-    assert is_reg, ""
-    assert abs(pct - 0.1556) < 0.001, ""
+    assert is_reg, (
+        "Detecting a slowdown past the threshold is the single job of this "
+        "function. If it stays silent the whole Performance Gate is decorative."
+    )
+    assert abs(pct - 0.1556) < 0.001, (
+        "The percentage is the evidence a reader uses to judge whether a "
+        "regression is worth acting on, so it must match the measurement."
+    )
 
 
 def test_find_commands_filters_by_tier() -> None:
@@ -65,26 +80,43 @@ def test_find_commands_filters_by_tier() -> None:
         },
     ]
     s_results = find_commands(results, tier="s")
-    assert len(s_results) == 3, ""
-    assert all(r["tier"] == "s" for r in s_results), ""
+    assert len(s_results) == 3, (
+        "Every entry of a tier must reach that tier's summary. A short result "
+        "silently drops a measurement, and the mean then describes a subset."
+    )
+    assert all(r["tier"] == "s" for r in s_results), (
+        "An entry from another tier would be averaged into this tier's mean and "
+        "move a number that nothing actually changed."
+    )
 
 
 def test_speedup_ratio() -> None:
     """speedup_ratio divides slow by fast to produce a times-faster multiplier."""
     ratio = speedup_ratio(fast=0.042, slow=0.180)
-    assert abs(ratio - 4.286) < 0.001, ""
+    assert abs(ratio - 4.286) < 0.001, (
+        "The speedup multiplier is the headline number of the benchmark report. "
+        "Inverting the division turns a 4x win into a 0.23x loss."
+    )
 
 
 def test_net_overhead_subtracts_startup() -> None:
     """net_overhead returns the difference between full run and startup cost."""
     result = net_overhead(full_mean=0.186, startup_mean=0.162)
-    assert abs(result - 0.024) < 1e-9, ""
+    assert abs(result - 0.024) < 1e-9, (
+        "Net overhead separates the cost of running tests from the cost of "
+        "starting the interpreter, which is the only way to compare runners "
+        "whose startup differs."
+    )
 
 
 def test_net_overhead_clamps_to_zero() -> None:
     """net_overhead clamps to 0.0 when startup exceeds full run time."""
     result = net_overhead(full_mean=0.100, startup_mean=0.150)
-    assert result == 0.0, ""
+    assert result == 0.0, (
+        "Startup can measure slower than the whole run under timing noise. "
+        "Clamping at zero keeps a negative cost out of the report, where it "
+        "would read as the runner giving time back."
+    )
 
 
 def test_tier_summary_serial_parallel() -> None:
@@ -95,12 +127,30 @@ def test_tier_summary_serial_parallel() -> None:
         {"command": "pytest benchmarks/generated/s/pytest/", "mean": 0.30},
     ]
     summary = tier_summary("s", tier_results)
-    assert summary["tier"] == "s", ""
-    assert abs(summary["oxitest_serial"] - 0.15) < 1e-9, ""
-    assert abs(summary["oxitest_parallel"] - 0.08) < 1e-9, ""
-    assert abs(summary["pytest"] - 0.30) < 1e-9, ""
-    assert abs(summary["speedup_serial"] - 2.0) < 0.01, ""
-    assert abs(summary["speedup_parallel"] - 3.75) < 0.01, ""
+    assert summary["tier"] == "s", (
+        "The tier name labels the row in the report. A wrong label attributes a "
+        "measurement to the wrong workload size."
+    )
+    assert abs(summary["oxitest_serial"] - 0.15) < 1e-9, (
+        "Serial and parallel are told apart by the --serial flag in the command "
+        "string. Matching the wrong entry swaps the two columns."
+    )
+    assert abs(summary["oxitest_parallel"] - 0.08) < 1e-9, (
+        "The parallel mean is the denominator of the speedup below, so an entry "
+        "picked from the wrong command corrupts every derived number."
+    )
+    assert abs(summary["pytest"] - 0.30) < 1e-9, (
+        "The pytest mean is the comparison this project publishes. Reading it "
+        "from an oxitest entry would compare the runner against itself."
+    )
+    assert abs(summary["speedup_serial"] - 2.0) < 0.01, (
+        "Speedup is derived rather than measured, so it is the first thing to "
+        "break silently when the extraction above picks a wrong entry."
+    )
+    assert abs(summary["speedup_parallel"] - 3.75) < 0.01, (
+        "The parallel speedup is the number that justifies the scheduler. It "
+        "must be derived from the parallel mean, not the serial one."
+    )
 
 
 def test_tier_summary_serial_only() -> None:
@@ -116,9 +166,18 @@ def test_tier_summary_serial_only() -> None:
         },
     ]
     summary = tier_summary("below_threshold", tier_results)
-    assert summary["oxitest_serial"] is not None, ""
-    assert summary["oxitest_parallel"] is None, ""
-    assert abs(summary["speedup_serial"] - 2.286) < 0.01, ""
+    assert summary["oxitest_serial"] is not None, (
+        "A tier that ran serially must report its serial mean. Losing it would "
+        "leave the tier with no oxitest measurement at all."
+    )
+    assert summary["oxitest_parallel"] is None, (
+        "A tier below the parallel threshold never runs in parallel. It must "
+        "report None so the report can tell 'not measured' from 'took no time'."
+    )
+    assert abs(summary["speedup_serial"] - 2.286) < 0.01, (
+        "The serial speedup must still be computed when the parallel arm is "
+        "absent, or a missing measurement suppresses a present one."
+    )
 
 
 def test_lazy_summary_under_threshold() -> None:
@@ -130,11 +189,26 @@ def test_lazy_summary_under_threshold() -> None:
         }
     ]
     summary = lazy_summary("lazy_node_id", lazy_results, l_parallel_mean=1.0)
-    assert summary is not None, ""
-    assert summary["tier"] == "lazy_node_id", ""
-    assert abs(summary["mean"] - 0.08) < 1e-9, ""
-    assert abs(summary["ratio"] - 0.08) < 1e-9, ""
-    assert not summary["is_regression"], ""
+    assert summary is not None, (
+        "A tier with results must produce a summary. Returning None here would "
+        "drop the lazy tier out of the report without any refusal."
+    )
+    assert summary["tier"] == "lazy_node_id", (
+        "The three lazy tiers select tests by different means, so the label is "
+        "what tells a reader which selection route was measured."
+    )
+    assert abs(summary["mean"] - 0.08) < 1e-9, (
+        "The mean is the measurement; the ratio below is derived from it. An "
+        "error here propagates into the regression verdict."
+    )
+    assert abs(summary["ratio"] - 0.08) < 1e-9, (
+        "The ratio compares a single-test run against a full parallel run. It is "
+        "the quantity the threshold is defined against."
+    )
+    assert not summary["is_regression"], (
+        "A ratio far below the threshold means lazy collection is working. "
+        "Flagging it would make the gate refuse correct behaviour."
+    )
 
 
 def test_lazy_summary_over_threshold() -> None:
@@ -146,27 +220,45 @@ def test_lazy_summary_over_threshold() -> None:
         }
     ]
     summary = lazy_summary("lazy_name", lazy_results, l_parallel_mean=1.0)
-    assert summary is not None, ""
-    assert abs(summary["ratio"] - 0.40) < 1e-9, ""
-    assert summary["is_regression"], ""
+    assert summary is not None, (
+        "A tier with results must produce a summary even when that summary "
+        "reports a regression, or the failure is lost rather than raised."
+    )
+    assert abs(summary["ratio"] - 0.40) < 1e-9, (
+        "The ratio is what the threshold is compared against, so the verdict "
+        "below is only as trustworthy as this number."
+    )
+    assert summary["is_regression"], (
+        "A lazy run above the ratio threshold means lazy collection stopped "
+        "being lazy, which is the whole property this tier exists to protect."
+    )
 
 
 def test_lazy_summary_empty_results() -> None:
     """lazy_summary returns None when no results are provided."""
     summary = lazy_summary("lazy_mark", [], l_parallel_mean=1.0)
-    assert summary is None, ""
+    assert summary is None, (
+        "A tier that produced no results must report None rather than a summary "
+        "of nothing, which would render as a measured zero in the report."
+    )
 
 
 def test_lazy_summary_zero_l_parallel() -> None:
     """lazy_summary returns None when the parallel baseline mean is zero."""
     lazy_results = [{"command": "oxitest ...", "mean": 0.08}]
     summary = lazy_summary("lazy_node_id", lazy_results, l_parallel_mean=0.0)
-    assert summary is None, ""
+    assert summary is None, (
+        "The parallel mean is the divisor of the ratio. Refusing a zero here is "
+        "what stops a ZeroDivisionError from ending the whole comparison run."
+    )
 
 
 def test_lazy_ratio_threshold_value() -> None:
     """LAZY_RATIO_THRESHOLD is pinned to 0.35 so accidental changes are caught."""
-    assert LAZY_RATIO_THRESHOLD == 0.35, ""
+    assert LAZY_RATIO_THRESHOLD == 0.35, (
+        "The threshold is a published contract of the lazy tier. Moving it "
+        "silently re-scores every historical result against a new bar."
+    )
 
 
 def test_realistic_summary_full() -> None:
@@ -191,24 +283,54 @@ def test_realistic_summary_full() -> None:
         },
     ]
     summary = realistic_summary(tier_results)
-    assert summary is not None, ""
-    assert len(summary["entries"]) == 5, ""
+    assert summary is not None, (
+        "The realistic tier is the one that models a real suite. Losing its "
+        "summary removes the only workload a user would recognise."
+    )
+    assert len(summary["entries"]) == 5, (
+        "Each worker count is a separate row in the scaling table. A missing "
+        "entry hides the point where adding workers stops helping."
+    )
     serial_entry = summary["entries"][0]
-    assert serial_entry["label"] == "serial", ""
-    assert abs(serial_entry["mean"] - 9.0) < 1e-9, ""
-    assert serial_entry["speedup"] is None, ""
+    assert serial_entry["label"] == "serial", (
+        "The entries are ordered so a reader sees the baseline first. Reordering "
+        "them makes every speedup below read against the wrong row."
+    )
+    assert abs(serial_entry["mean"] - 9.0) < 1e-9, (
+        "The serial mean is the baseline every other entry divides into, so an "
+        "error here rescales the entire table."
+    )
+    assert serial_entry["speedup"] is None, (
+        "The baseline has no speedup against itself. Reporting 1.0 would imply a "
+        "measurement was taken where none exists."
+    )
     auto_entry = summary["entries"][1]
-    assert auto_entry["label"] == "auto", ""
-    assert abs(auto_entry["speedup"] - 3.0) < 0.01, ""
+    assert auto_entry["label"] == "auto", (
+        "The automatic worker count is what a user gets without flags, so it "
+        "must be identified separately from the fixed counts below it."
+    )
+    assert abs(auto_entry["speedup"] - 3.0) < 0.01, (
+        "This is the speedup a user sees by default. It is the number the "
+        "project quotes, so it must come from the auto entry and no other."
+    )
     w4_entry = summary["entries"][4]
-    assert w4_entry["label"] == "--workers 4", ""
-    assert abs(w4_entry["speedup"] - 2.8125) < 0.01, ""
+    assert w4_entry["label"] == "--workers 4", (
+        "The fixed-worker labels carry the flag that produced them, so a reader "
+        "can reproduce any row directly."
+    )
+    assert abs(w4_entry["speedup"] - 2.8125) < 0.01, (
+        "Four workers scoring below auto is the evidence that the scheduler "
+        "picks a better count than a user guessing, so the value must be exact."
+    )
 
 
 def test_realistic_summary_empty() -> None:
     """realistic_summary returns None when no benchmark results are provided."""
     summary = realistic_summary([])
-    assert summary is None, ""
+    assert summary is None, (
+        "An absent tier must produce None, not an empty summary. An empty "
+        "summary renders as a measured zero in the report."
+    )
 
 
 def test_dogfood_summary_serial_and_parallel() -> None:
@@ -218,10 +340,22 @@ def test_dogfood_summary_serial_and_parallel() -> None:
         {"command": "oxitest python/tests/", "mean": 2.0},
     ]
     summary = dogfood_summary(tier_results)
-    assert summary is not None, ""
-    assert abs(summary["serial"] - 5.0) < 1e-9, ""
-    assert abs(summary["parallel"] - 2.0) < 1e-9, ""
-    assert abs(summary["speedup"] - 2.5) < 0.01, ""
+    assert summary is not None, (
+        "The dogfood tier measures oxitest running its own suite. Losing it "
+        "removes the only benchmark taken over real, non-generated tests."
+    )
+    assert abs(summary["serial"] - 5.0) < 1e-9, (
+        "Serial and parallel are told apart by the --serial flag alone, so "
+        "matching the wrong command swaps the two values silently."
+    )
+    assert abs(summary["parallel"] - 2.0) < 1e-9, (
+        "The parallel mean is the divisor of the speedup below, so an entry read "
+        "from the wrong command corrupts the derived number too."
+    )
+    assert abs(summary["speedup"] - 2.5) < 0.01, (
+        "This speedup is measured on a real suite rather than a generated one, "
+        "which is what makes it the honest figure to publish."
+    )
 
 
 def test_dogfood_summary_serial_only() -> None:
@@ -230,16 +364,31 @@ def test_dogfood_summary_serial_only() -> None:
         {"command": "oxitest --serial python/tests/", "mean": 5.0},
     ]
     summary = dogfood_summary(tier_results)
-    assert summary is not None, ""
-    assert abs(summary["serial"] - 5.0) < 1e-9, ""
-    assert summary["parallel"] is None, ""
-    assert summary["speedup"] is None, ""
+    assert summary is not None, (
+        "A tier with one measurement still has something to report. Returning "
+        "None would discard the serial run that did happen."
+    )
+    assert abs(summary["serial"] - 5.0) < 1e-9, (
+        "The serial mean is present and must survive, or an absent parallel arm "
+        "would suppress a measurement that was actually taken."
+    )
+    assert summary["parallel"] is None, (
+        "An absent parallel run must report None rather than zero, so the report "
+        "can tell 'not run' from 'took no time'."
+    )
+    assert summary["speedup"] is None, (
+        "A speedup needs both arms. Deriving one from a missing value would "
+        "publish a ratio against nothing."
+    )
 
 
 def test_dogfood_summary_empty() -> None:
     """dogfood_summary returns None when no benchmark results are provided."""
     summary = dogfood_summary([])
-    assert summary is None, ""
+    assert summary is None, (
+        "An absent tier must produce None, not an empty summary, or the report "
+        "shows a dogfood row for a run that never happened."
+    )
 
 
 def test_final_sentence_reports_a_regression() -> None:
