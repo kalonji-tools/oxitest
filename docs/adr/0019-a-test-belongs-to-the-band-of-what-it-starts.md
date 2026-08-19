@@ -230,9 +230,30 @@ The seed is not the current `ignore:` list, because that list is false where it 
 | `cargo llvm-cov` can never enter `src/pipeline/collection.rs` | **70** `#[test]` enter it. The claim is true of `collect_items()` and is applied to 1 550 product lines. |
 | the excluded Rust files are unreachable from the crate | **96** `#[test]` sit inside the excluded set. The set that no in-crate test reaches is `src/pipeline/transitions/` — 1 266 lines and **0** tests, where [#2107](https://github.com/kalonji-tools/oxitest/issues/2107) put 52 of its 53 mutation misses. |
 | the excluded Python modules are testable only through the integration tests | `_fixture_registry` is imported directly at **26** sites, `_fixture_session` at 20, `plugin_loader` at 16. |
-| `worker.py` is untestable in process | It is **unmeasured**, not untestable: 0 % as `test.yml` runs it, and **80.5 %** with an absolute `COVERAGE_FILE`. The subprocess writes its data file into the test's temporary directory, and `combine()` never reads it. |
+| `worker.py` is untestable in process | It is **measured, and well covered: 92.7 %** as `test.yml` runs it. ⚠️ **This row previously read "0 % as `test.yml` runs it, and 80.5 % with an absolute `COVERAGE_FILE`". That was wrong when written, not stale** — see the correction below. |
 
 A smaller exclusion is not available on the Rust side. `#[coverage(off)]` is `error[E0658]` on `rustc 1.97.1`, which `rust-toolchain.toml` pins. The Python side has `# pragma: no cover`, and `python/oxitest/` already holds 3.
+
+#### Amendment 1 — a fourth state, and a corrected row ([#2176](https://github.com/kalonji-tools/oxitest/issues/2176))
+
+Building the record measured every region it describes. Two results change this section.
+
+**The `worker.py` row above was false when this record merged.** It reads 0 % as `test.yml` runs it. The command `test.yml` issues is `uv run python -m oxitest --cov --cov-report xml`, with no `COVERAGE_FILE` set anywhere in the repository, and `worker.py` measures **92.7 %** under it — reproduced on two consecutive clean runs. The row is corrected in place rather than left with a note, because it is a wrong measurement and not a dated one: three other rows of the same table were re-measured by the same audit and all three hold. A dated snapshot is left alone; a false one is corrected.
+
+**Property 2 gains a fourth state.** The three states have no slot for a region the instrument reaches and no test does, and **seven Rust regions are in exactly that position**. `src/pipeline/transitions/` is entered by `cargo llvm-cov` on every run and reports 0.0 % over 499 instrumented lines. Recording that as `exempt` would claim a measurement problem over code that is measured; recording it as `unowned` would make the gate refuse `main` on the day the record landed.
+
+| State | Means | Refuses |
+|---|---|---|
+| `measured` | a test reaches the region and the instrument reports it | no |
+| `exempt` | **the instrument cannot reach the region**, and the reason says why | no |
+| `uncovered` | **the instrument reaches it and no test does**, and the reason gives the rate | no |
+| `unowned` | nothing has been decided for this region | **yes** |
+
+Property 5 widens with it: an `exempt` row names the absent instrument, and an `uncovered` row names the measured rate. The two are different facts and the record keeps them apart.
+
+**`ignore:` emits from `exempt` alone.** An `uncovered` region stays in the coverage report. Once the project status refuses nothing — which the next section decides — excluding untested code from a report that cannot fail serves only to flatter the number, and `CLAUDE.md` already names that anti-pattern.
+
+**Property 4's "shrinks only" is replaced by completeness.** The record holds a row for **every** product region, not only the excluded ones, because a record of exclusions alone can never reach the `unowned` state and its gate would be unreachable. A new product file with no row is `unowned`, and `just check` refuses. That is the only failure the record catches which a reader of `codecov.yml` could not.
 
 ### Coverage reports, and the obligation record refuses
 
