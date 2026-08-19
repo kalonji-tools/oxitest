@@ -528,8 +528,7 @@ impl InspectApp {
         };
 
         // Re-collect files.
-        let Ok((test_files, conftest_files)) = crate::collector::collect_files(&rargs.config)
-        else {
+        let Ok(test_files) = crate::collector::collect_files(&rargs.config) else {
             self.flash("Refresh failed: file collection error");
             return;
         };
@@ -538,12 +537,9 @@ impl InspectApp {
         let test_files_for_phase2 = test_files.clone();
 
         // Rebuild phase-1 graph.
-        let Ok(mut graph) = super::build_phase1_graph(
-            &rargs.inspect_args,
-            &rargs.config,
-            test_files,
-            &conftest_files,
-        ) else {
+        let Ok(mut graph) =
+            super::build_phase1_graph(&rargs.inspect_args, &rargs.config, test_files)
+        else {
             self.flash("Refresh failed: graph build error");
             return;
         };

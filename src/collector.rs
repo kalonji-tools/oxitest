@@ -1,13 +1,12 @@
-//! File discovery — walks the filesystem to find test files and conftest files.
+//! File discovery — walks the filesystem to find test files.
 //!
 //! Uses `testpaths`, `python_files`, and `norecursedirs` from [`Config`] to
-//! match files via glob patterns. Returns deduplicated, sorted lists of
-//! test file paths and conftest paths.
+//! match files via glob patterns. Returns a deduplicated, sorted list of
+//! test file paths.
 
 use camino::{Utf8Path, Utf8PathBuf};
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use ignore::WalkBuilder;
-use std::collections::HashSet;
 
 use crate::config::Config;
 
@@ -38,11 +37,8 @@ pub fn build_glob_set(patterns: &[String]) -> Result<GlobSet, globset::Error> {
     builder.build()
 }
 
-/// Returns `(test_files, conftest_files)` sorted by path.
-/// `conftest_files` are deduplicated and sorted shallow-first.
-pub fn collect_files(
-    config: &Config,
-) -> Result<(Vec<Utf8PathBuf>, Vec<Utf8PathBuf>), globset::Error> {
+/// Returns the test files, sorted by path.
+pub fn collect_files(config: &Config) -> Result<Vec<Utf8PathBuf>, globset::Error> {
     collect_files_in(&config.paths.testpaths, config)
 }
 
@@ -54,34 +50,37 @@ pub fn collect_files(
 /// declared tree. Each of them used to clone the whole `Config` and overwrite
 /// one field to say so (#1798).
 ///
-/// Everything else — `python_files`, `norecursedirs`, `use_gitignore`, the
-/// rootdir `conftest.py` — still comes from `config`, so a caller can change
-/// *where* the walk starts and nothing about what counts as a test file.
+/// Everything else — `python_files`, `norecursedirs`, `use_gitignore` — still
+/// comes from `config`, so a caller can change *where* the walk starts and
+/// nothing about what counts as a test file.
 pub fn collect_files_in(
     roots: &[Utf8PathBuf],
     config: &Config,
-) -> Result<(Vec<Utf8PathBuf>, Vec<Utf8PathBuf>), globset::Error> {
-    let glob_set = build_glob_set(&config.paths.python_files)?;
+) -> Result<Vec<Utf8PathBuf>, globset::Error> {
+    walk_matching(roots, config, &config.paths.python_files)
+}
+
+/// Walk `roots` and return every file matching `patterns`, sorted.
+///
+/// The two public walks differ only in where their patterns come from —
+/// `python_files` for test collection, `*.py` for doctests. They were distinct
+/// bodies while each also built a `conftest.py` set; retiring that walk (#2168)
+/// left them identical, so the shared half lives here.
+fn walk_matching(
+    roots: &[Utf8PathBuf],
+    config: &Config,
+    patterns: &[String],
+) -> Result<Vec<Utf8PathBuf>, globset::Error> {
+    let glob_set = build_glob_set(patterns)?;
     let mut files = Vec::new();
-    let mut conftest_set: HashSet<Utf8PathBuf> = HashSet::new();
 
-    // Always check the rootdir itself for a conftest.py (covers the case where
-    // testpaths point to a subdirectory and conftest.py lives at the project root).
-    let rootdir_conftest = config.rootdir.join("conftest.py");
-    if rootdir_conftest.exists() {
-        conftest_set.insert(normalize_path(&rootdir_conftest));
-    }
-
-    for testpath in roots {
-        collect_from(testpath, config, &glob_set, &mut files, &mut conftest_set);
+    for root in roots {
+        collect_from(root, config, &glob_set, &mut files);
     }
 
     files.sort();
 
-    let mut conftests: Vec<Utf8PathBuf> = conftest_set.into_iter().collect();
-    conftests.sort_by_key(|p| p.components().count());
-
-    Ok((files, conftests))
+    Ok(files)
 }
 
 /// Collect all `.py` files for doctest scanning.
@@ -103,22 +102,7 @@ fn collect_doctest_files_in(
     roots: &[Utf8PathBuf],
     config: &Config,
 ) -> Result<Vec<Utf8PathBuf>, globset::Error> {
-    let glob_set = build_glob_set(&["*.py".to_string()])?;
-    let mut files = Vec::new();
-    let mut dummy_conftests = HashSet::new();
-
-    for testpath in roots {
-        collect_from(
-            testpath,
-            config,
-            &glob_set,
-            &mut files,
-            &mut dummy_conftests,
-        );
-    }
-
-    files.sort();
-    Ok(files)
+    walk_matching(roots, config, &["*.py".to_string()])
 }
 
 /// The roots the doctest coverage audit walks — the project's *declared*
@@ -180,32 +164,12 @@ pub fn coverage_roots(config: &Config) -> &[Utf8PathBuf] {
 pub fn collect_declared_doctest_files(config: &Config) -> Result<Vec<Utf8PathBuf>, globset::Error> {
     collect_doctest_files_in(coverage_roots(config), config)
 }
-fn collect_from(
-    path: &Utf8Path,
-    config: &Config,
-    glob_set: &GlobSet,
-    out: &mut Vec<Utf8PathBuf>,
-    conftests: &mut HashSet<Utf8PathBuf>,
-) {
+fn collect_from(path: &Utf8Path, config: &Config, glob_set: &GlobSet, out: &mut Vec<Utf8PathBuf>) {
     if path.is_file() {
         if let Some(filename) = path.file_name()
             && glob_set.is_match(filename)
         {
             out.push(normalize_path(path));
-        }
-        // Walk from the file's directory up to rootdir, collecting conftest.py at each level.
-        // This ensures intermediate conftests (e.g. tests/conftest.py between rootdir and
-        // tests/integration/test_foo.py) are discovered when targeting a single file.
-        let mut dir = path.parent();
-        while let Some(d) = dir {
-            let conftest = d.join("conftest.py");
-            if conftest.exists() {
-                conftests.insert(normalize_path(&conftest));
-            }
-            if d == config.rootdir {
-                break;
-            }
-            dir = d.parent();
         }
         return;
     }
@@ -230,17 +194,7 @@ fn collect_from(
         let Some(ft) = entry.file_type() else {
             continue;
         };
-        if ft.is_dir() {
-            let conftest_std = entry.path().join("conftest.py");
-            if conftest_std.exists() {
-                match Utf8PathBuf::from_path_buf(conftest_std) {
-                    Ok(utf8) => {
-                        conftests.insert(normalize_path(&utf8));
-                    }
-                    Err(p) => tracing::warn!(path = ?p, "skipping non-UTF-8 conftest path"),
-                }
-            }
-        } else if ft.is_file() {
+        if ft.is_file() {
             let filename = entry.file_name();
             if glob_set.is_match(filename) {
                 match Utf8PathBuf::from_path_buf(entry.into_path()) {
@@ -301,9 +255,8 @@ mod tests {
     fn test_collect_empty_dir() {
         let dir = assert_fs::TempDir::new().unwrap();
         let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (files, conftests) = collect_files(&config).unwrap();
+        let files = collect_files(&config).unwrap();
         assert!(files.is_empty());
-        assert!(conftests.is_empty());
     }
 
     #[test]
@@ -311,7 +264,7 @@ mod tests {
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("test_foo.py").touch().unwrap();
         let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (files, _) = collect_files(&config).unwrap();
+        let files = collect_files(&config).unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].file_name().unwrap(), "test_foo.py");
     }
@@ -322,7 +275,7 @@ mod tests {
         dir.child("helper.py").touch().unwrap();
         dir.child("test_real.py").touch().unwrap();
         let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (files, _) = collect_files(&config).unwrap();
+        let files = collect_files(&config).unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].file_name().unwrap(), "test_real.py");
     }
@@ -333,7 +286,7 @@ mod tests {
         dir.child("__pycache__/test_hidden.py").touch().unwrap();
         dir.child("test_visible.py").touch().unwrap();
         let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (files, _) = collect_files(&config).unwrap();
+        let files = collect_files(&config).unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].file_name().unwrap(), "test_visible.py");
     }
@@ -353,7 +306,7 @@ mod tests {
             },
             ..make_config(utf8_dir)
         };
-        let (files, _) = collect_files(&config).unwrap();
+        let files = collect_files(&config).unwrap();
         assert_eq!(files.len(), 1);
         assert!(
             files[0].as_str().ends_with("test_specific.py"),
@@ -377,50 +330,9 @@ mod tests {
             },
             ..make_config(utf8_dir)
         };
-        let (files, _) = collect_files(&config).unwrap();
+        let files = collect_files(&config).unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].file_name().unwrap(), "test_foo_integration.py");
-    }
-
-    #[test]
-    fn test_collect_finds_conftest_in_directory() {
-        let dir = assert_fs::TempDir::new().unwrap();
-        dir.child("conftest.py").touch().unwrap();
-        dir.child("test_foo.py").touch().unwrap();
-        let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (_, conftests) = collect_files(&config).unwrap();
-        assert_eq!(conftests.len(), 1);
-        assert_eq!(conftests[0].file_name().unwrap(), "conftest.py");
-    }
-
-    #[test]
-    fn test_collect_conftest_in_subdirectory() {
-        let dir = assert_fs::TempDir::new().unwrap();
-        dir.child("tests/conftest.py").touch().unwrap();
-        dir.child("tests/test_foo.py").touch().unwrap();
-        let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (_, conftests) = collect_files(&config).unwrap();
-        assert_eq!(conftests.len(), 1);
-    }
-
-    #[test]
-    fn test_collect_no_conftest_returns_empty_vec() {
-        let dir = assert_fs::TempDir::new().unwrap();
-        dir.child("test_foo.py").touch().unwrap();
-        let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (_, conftests) = collect_files(&config).unwrap();
-        assert!(conftests.is_empty());
-    }
-
-    #[test]
-    fn test_collect_deduplicates_conftest_paths() {
-        let dir = assert_fs::TempDir::new().unwrap();
-        dir.child("conftest.py").touch().unwrap();
-        dir.child("test_a.py").touch().unwrap();
-        dir.child("test_b.py").touch().unwrap();
-        let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (_, conftests) = collect_files(&config).unwrap();
-        assert_eq!(conftests.len(), 1);
     }
 
     #[test]
@@ -436,7 +348,7 @@ mod tests {
         dir.child("test_visible.py").touch().unwrap();
 
         let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (files, _) = collect_files(&config).unwrap();
+        let files = collect_files(&config).unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].file_name().unwrap(), "test_visible.py");
     }
@@ -457,7 +369,7 @@ mod tests {
         let mut config = make_config(utf8_dir);
         config.paths.use_gitignore = false;
         let config = config;
-        let (files, _) = collect_files(&config).unwrap();
+        let files = collect_files(&config).unwrap();
         assert_eq!(files.len(), 2);
     }
 
@@ -466,7 +378,7 @@ mod tests {
         let dir = assert_fs::TempDir::new().unwrap();
         dir.child("test_foo.py").touch().unwrap();
         let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (files, _) = collect_files(&config).unwrap();
+        let files = collect_files(&config).unwrap();
         assert_eq!(files.len(), 1);
     }
 
@@ -491,28 +403,9 @@ mod tests {
             "custom_ignored".to_string(),
         ];
         let config = config;
-        let (files, _) = collect_files(&config).unwrap();
+        let files = collect_files(&config).unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].file_name().unwrap(), "test_visible.py");
-    }
-
-    #[test]
-    fn test_collect_gitignore_filters_conftest_too() {
-        let dir = assert_fs::TempDir::new().unwrap();
-        std::process::Command::new("git")
-            .args(["init"])
-            .current_dir(dir.path())
-            .output()
-            .unwrap();
-        dir.child(".gitignore").write_str("ignored_dir/\n").unwrap();
-        dir.child("ignored_dir/conftest.py").touch().unwrap();
-        dir.child("ignored_dir/test_hidden.py").touch().unwrap();
-        dir.child("test_visible.py").touch().unwrap();
-
-        let config = make_config(camino::Utf8Path::from_path(dir.path()).unwrap());
-        let (files, conftests) = collect_files(&config).unwrap();
-        assert_eq!(files.len(), 1);
-        assert!(conftests.is_empty());
     }
 
     #[test]
@@ -521,7 +414,7 @@ mod tests {
         dir.child("test_foo.py").touch().unwrap();
         let utf8_dir = camino::Utf8Path::from_path(dir.path()).unwrap();
         let config = make_config(utf8_dir);
-        let (files, _) = collect_files(&config).unwrap();
+        let files = collect_files(&config).unwrap();
         assert_eq!(files.len(), 1);
         let path_str = files[0].as_str();
         let path = camino::Utf8Path::new(path_str);
@@ -559,12 +452,12 @@ mod tests {
         let mut config_dot = make_config(utf8_dir);
         config_dot.rootdir = canonical_root.clone();
         config_dot.paths.testpaths = vec![canonical_root.join("./sub/test_foo.py")];
-        let (files_dot, _) = collect_files(&config_dot).unwrap();
+        let files_dot = collect_files(&config_dot).unwrap();
 
         let mut config_plain = make_config(utf8_dir);
         config_plain.rootdir = canonical_root.clone();
         config_plain.paths.testpaths = vec![canonical_root.join("sub/test_foo.py")];
-        let (files_plain, _) = collect_files(&config_plain).unwrap();
+        let files_plain = collect_files(&config_plain).unwrap();
 
         assert_eq!(files_dot.len(), 1);
         assert_eq!(files_plain.len(), 1);
