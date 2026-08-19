@@ -15,10 +15,10 @@ def test_all_pass_exits_zero(tmp: TempDir) -> None:
 
 
 def test_failure_exits_one(tmp: TempDir) -> None:
-    """A failing assertion should cause oxitest to exit with a non-zero code."""
+    """A failing assertion exits 1, which is ExitCode::Failure."""
     (tmp / "test_fail.py").write_text("def test_x(): assert 1 == 2\n", encoding="utf-8")
     out, _, rc = helpers.run_oxitest(tmp)
-    integ.assert_failed(out, rc)
+    integ.assert_test_failure(out, rc)
 
 
 def test_all_skip_exits_zero(tmp: TempDir) -> None:
