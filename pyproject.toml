@@ -178,7 +178,7 @@ unresolved-attribute = "ignore"
 unresolved-import = "ignore"
 
 [tool.oxitest]
-testpaths = ["python/tests", "python/oxitest"]
+testpaths = ["python/tests", "python/oxitest", "benchmarks"]
 norecursedirs = ["docs", "fixtures", "data"]
 python_files = ["test_*.py"]
 strict = "abort"
