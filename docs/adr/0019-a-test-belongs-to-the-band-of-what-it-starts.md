@@ -173,7 +173,11 @@ The bands classify tests. A benchmark run is not a test, and the axis does not r
 
 **The Report stops measuring what the Gate measures.** It drops the synthetic sizes, keeps the dogfood arm as milliseconds per test rather than as a total, and makes the pytest comparison real. The speedup against pytest is the headline claim of this project, and no run has ever computed it: all six downloadable artifacts hold zero pytest commands.
 
-`benchmarks/test_compare.py` holds 19 tests of the detector. They are ordinary tests, the placement rule places them, and they carry the `tooling` attribute — so the `tooling` obligation applies, and one of them must make `compare.py` refuse. Nothing runs them today. `testpaths` does not name `benchmarks/`, and a bare addition also collects 359 generated files, because `norecursedirs` does not hold `generated`.
+`benchmarks/test_compare.py` holds 27 tests of the detector. They are ordinary tests, the placement rule places them, and they carry the `tooling` attribute — so the `tooling` obligation applies, and two of them make `compare.py` refuse — one for each arm that reaches its exit code. `testpaths` names `benchmarks/`, so the suite collects them (#2180).
+
+All 27 sit in the **Library** band, the two refusal tests included. The placement rule reads what a test starts, and `compare.py` is a tool rather than the product, so starting it does not reach step 3. The obligation belongs to the `tooling` attribute and not to a band, so it is discharged from the Library band without difficulty.
+
+The generated corpus under `benchmarks/generated/` needs no `norecursedirs` entry. `.gitignore` excludes it and the collector reads `.gitignore`, so admitting `benchmarks/` collects the 27 tests and nothing else (#2180).
 
 Three live defects of the current workflow are filed as [#2166](https://github.com/kalonji-tools/oxitest/issues/2166), which is open: the corpus has not collected since 2026-08-10, the dogfood arm ran 19 min 28 s at `v4.0.0` and did not finish, and a missing baseline prints `No regression detected.`
 
