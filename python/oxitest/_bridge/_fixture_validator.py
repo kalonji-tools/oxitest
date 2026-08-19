@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from oxitest._bridge._boundary import safe_type_hints
 from oxitest._bridge._builtins._base import BuiltinFixture
-from oxitest._bridge._fixture_registry import _fixture_inner_type
+from oxitest._bridge._fixture_registry import ModuleSource, _fixture_inner_type
 
 if TYPE_CHECKING:
     from oxitest._bridge._fixture_registry import FixtureRegistry
@@ -156,12 +156,19 @@ class FixtureValidator:
             defn = defs[-1]  # most-local
             if defn.autouse:
                 continue
-            # Skip builtins (declaration_path starts with "<")
-            if defn.declaration_path.startswith("<"):
-                continue
-            # Only flag fixtures from conftest files; module-level Fixtures()
-            # instances may be used solely via FixtureRef in parametrize.
-            if not defn.declaration_path.endswith("conftest.py"):
+            # Flag only what the user declared. `ModuleSource` is the one source
+            # of five that means a user declaration, so it covers all three of
+            # ADR-0009 Rule 5's homes, and it excludes the builtin, plugin and
+            # framework sources whose declaration_path is a `<...>` sentinel.
+            #
+            # This is the Python form of the `!home.is_empty()` test that
+            # `src/inspect/signals.rs` already carries. It replaces a filename
+            # test that asked `endswith("conftest.py")` — unsatisfiable after
+            # #1720 retired conftest.py, so the check could never fire — and
+            # that a rename would have narrowed to `__fixtures__.py`, silently
+            # skipping a declaration in an `__init__.py` or inline in a test
+            # module (#1722, #2200).
+            if not isinstance(defn.source, ModuleSource):
                 continue
             if name in all_used:
                 continue
