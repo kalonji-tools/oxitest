@@ -184,7 +184,6 @@ python_files = ["test_*.py"]
 strict = "abort"
 timeout = 30
 markers = [
-    "docs: documentation example tests",
     "slow: marks tests that take more than a second",
 ]
 affected_base = "main"
