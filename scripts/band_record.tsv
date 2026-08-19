@@ -720,6 +720,9 @@ Crate	src/collector.rs::tests::test_collect_respects_norecursedirs
 Crate	src/collector.rs::tests::test_collect_specific_file
 Crate	src/collector.rs::tests::test_collect_with_invalid_glob_pattern_returns_error
 Crate	src/config/cli/debug.rs::tests::debug_default_is_post_mortem
+Crate	src/config/cli/mod.rs::tests::a_bad_argument_after_a_path_names_the_argument_not_the_path
+Crate	src/config/cli/mod.rs::tests::a_bad_argument_after_a_real_subcommand_keeps_the_subcommand_error
+Crate	src/config/cli/mod.rs::tests::a_mistyped_subcommand_with_a_bad_argument_loses_the_suggestion
 Crate	src/config/cli/mod.rs::tests::bare_oxitest_defaults_to_run
 Crate	src/config/cli/mod.rs::tests::debug_subcommand
 Crate	src/config/cli/mod.rs::tests::debug_with_always

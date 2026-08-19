@@ -29,14 +29,15 @@ def test_an_unrecognised_flag_exits_usage_error(tmp: TempDir) -> None:
     A valid and an invalid expression give the same result here, which is why
     this test asserts the flag is refused rather than the expression.
 
-    The message names the positional path rather than the flag. Dropping the
-    positional changes it to ``unexpected argument '-m' found``, so the text
-    asserted here belongs to this invocation and not to ``-m`` alone.
+    The message names the flag. It used to name the positional path, because
+    the implicit ``run`` fallback returned its first parse error rather than
+    its second (#2183).
     """
     (tmp / "test_ok.py").write_text("def test_ok(): assert True\n", encoding="utf-8")
     _, stderr, rc = helpers.run_oxitest(tmp, "-m", "not and or")
     integ.assert_usage_error(stderr, rc)
-    integ.assert_contains(stderr, "unrecognized subcommand")
+    integ.assert_contains(stderr, "unexpected argument", "'-m'")
+    integ.assert_excludes(stderr, "unrecognized subcommand")
 
 
 def test_an_invalid_filter_expression_exits_collect_error(tmp: TempDir) -> None:

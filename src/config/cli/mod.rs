@@ -201,7 +201,31 @@ impl OxitestCli {
                             }
                             None => Err(e),
                         },
-                        Err(_) => Err(e), // Return the original error for better UX
+                        // Both parses failed. The phase 1 error is usually the
+                        // better message, because it is about the subcommand the
+                        // user named. `InvalidSubcommand` is the exception: it
+                        // says the first positional is not a subcommand, which is
+                        // the exact condition this fallback exists to handle. Its
+                        // complaint is therefore about a reading already rejected,
+                        // and it names the user's path rather than the argument
+                        // that is wrong — `oxitest <dir> -m x` reported
+                        // `unrecognized subcommand '<dir>'` for a directory that
+                        // runs correctly without `-m` (#2183).
+                        //
+                        // The cost, measured and accepted: `oxitest quer
+                        // --bogus` loses clap's `a similar subcommand exists:
+                        // 'query'` tip, because that tip rides the phase 1
+                        // error. It appears only when the user mistypes a
+                        // subcommand *and* passes a bad argument. A lone
+                        // `oxitest quer` never had it — phase 2 succeeds and
+                        // the run reports `no such path`.
+                        Err(fallback) => {
+                            Err(if e.kind() == clap::error::ErrorKind::InvalidSubcommand {
+                                fallback
+                            } else {
+                                e
+                            })
+                        }
                     }
                 } else {
                     Err(e)
@@ -619,6 +643,71 @@ mod tests {
         assert!(
             err.to_string().contains("oxitest"),
             "output should contain the program name"
+        );
+    }
+
+    #[test]
+    fn a_bad_argument_after_a_path_names_the_argument_not_the_path() {
+        // Phase 1 refuses `tests/` as a subcommand; phase 2 refuses `-m`. The
+        // phase 1 complaint is about a reading the fallback has replaced, and
+        // reporting it tells the user their directory is wrong when the
+        // directory is fine (#2183).
+        let err = OxitestCli::resolve(&s(["oxitest", "tests/", "-m", "slow"])).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("-m"),
+            "the message must name the argument that is wrong; a user whose \
+             path is correct cannot act on a complaint about the path. Got: {msg}"
+        );
+        assert!(
+            !msg.contains("unrecognized subcommand"),
+            "`tests/` is a path under the implicit `run`, not a subcommand the \
+             user got wrong, so naming it sends the user to the wrong place. \
+             Got: {msg}"
+        );
+    }
+
+    #[test]
+    fn a_bad_argument_after_a_real_subcommand_keeps_the_subcommand_error() {
+        // The exception has to stay narrow. Phase 1 knows `query`, so its
+        // error is the specific one; phase 2 would reduce `query` to a path
+        // and report a vaguer complaint.
+        let err = OxitestCli::resolve(&s(["oxitest", "query", "--bogus-flag"])).unwrap_err();
+        assert_eq!(
+            err.kind(),
+            clap::error::ErrorKind::UnknownArgument,
+            "a real subcommand keeps its own parse error — swapping in the \
+             fallback error here would lose the subcommand's own diagnostics"
+        );
+        assert!(
+            err.to_string().contains("--bogus-flag"),
+            "the message must still name the flag the user got wrong"
+        );
+    }
+
+    #[test]
+    fn a_mistyped_subcommand_with_a_bad_argument_loses_the_suggestion() {
+        // The measured cost of the rule above, pinned so it stays a decision
+        // rather than becoming an accident. Before #2183 this reported
+        // `unrecognized subcommand 'quer'` with clap's tip `a similar
+        // subcommand exists: 'query'`. The tip rides the phase 1 error, so
+        // preferring the phase 2 error drops it.
+        //
+        // Accepted because it needs two mistakes at once. A lone `oxitest
+        // quer` never had the tip either: phase 2 succeeds, `quer` becomes a
+        // path, and the run reports `no such path`.
+        let err = OxitestCli::resolve(&s(["oxitest", "quer", "--bogus-flag"])).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("--bogus-flag"),
+            "the argument that cannot be parsed is still named, which is the \
+             half a user can act on. Got: {msg}"
+        );
+        assert!(
+            !msg.contains("similar subcommand"),
+            "if this tip comes back, the rule above changed and the trade-off \
+             it records is stale — re-read it rather than editing this test. \
+             Got: {msg}"
         );
     }
 }
