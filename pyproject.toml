@@ -145,6 +145,10 @@ ignore = [
 "python/tests/conftest.py" = ["S603"]
 "python/tests/integration/*" = ["S603"]
 "python/tests/test_worker.py" = ["S603"]
+# The Command band test starts compare.py the way the Performance Gate does.
+# Scoped to this file rather than added to `benchmarks/*.py` below, because the
+# other three benchmark files spawn nothing (#2180).
+"benchmarks/test_compare.py" = ["S603"]
 
 # ── Scripts and benchmarks ──────────────────────────────────────────────
 "scripts/*" = ["T201"]
