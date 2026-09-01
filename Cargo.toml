@@ -33,7 +33,7 @@ ratatui = { version = "0.30", features = ["crossterm"] }
 crossterm = "0.29"
 rand = "0.10.1"
 similar = "3"
-quick-xml = { version = "0.41", features = ["serialize"] }
+quick-xml = { version = "0.42", features = ["serialize"] }
 rustpython-parser = "0.4"
 rayon = "1"
 regex = "1"
