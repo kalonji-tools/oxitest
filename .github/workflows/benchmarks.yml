@@ -48,7 +48,7 @@ jobs:
       - name: Build oxitest
         run: uv run maturin develop --release
 
-      - uses: taiki-e/install-action@v2.86.1
+      - uses: taiki-e/install-action@v2.87.1
         with:
           tool: hyperfine@1.19.0
 
